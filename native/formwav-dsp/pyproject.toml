@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "formwav-dsp"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dynamic = ["version"]
+
+[tool.maturin]
+features = ["python"]
+module-name = "formwav_dsp"

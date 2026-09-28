@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.1.0
-Last updated: 2026-09-28 · formwav-dsp crate with the graph port model
+Current build version: v0.2.0
+Last updated: 2026-09-28 · WAV decoding, peak pyramid, Python binding
 
 ---
 
@@ -12,11 +12,15 @@ Last updated: 2026-09-28 · formwav-dsp crate with the graph port model
 ```
 native/
 └── formwav-dsp/
-    ├── Cargo.toml               crate manifest, version site, no dependencies yet
+    ├── Cargo.toml               crate manifest, version site; rlib and cdylib; optional pyo3 behind the python feature
     ├── Cargo.lock               lockfile, version site
+    ├── pyproject.toml           maturin build of the Python module formwav_dsp, python feature on
     └── src/
         ├── lib.rs               public surface and CRATE_VERSION
-        └── graph.rs             node and port model, connection rules, processing order
+        ├── graph.rs             node and port model, connection rules, processing order
+        ├── wav.rs               RIFF WAVE probe and decode to planar f32
+        ├── peaks.rs             min and max peak pyramid for waveform drawing
+        └── python.rs            pyo3 module: probe() and peaks() (python feature only)
 ```
 
 ---
@@ -24,8 +28,12 @@ native/
 ## Table of contents
 
 - [formwav-dsp/Cargo.toml](#cargo-toml)
+- [formwav-dsp/pyproject.toml](#pyproject)
 - [formwav-dsp/src/lib.rs](#src-lib)
 - [formwav-dsp/src/graph.rs](#src-graph)
+- [formwav-dsp/src/wav.rs](#src-wav)
+- [formwav-dsp/src/peaks.rs](#src-peaks)
+- [formwav-dsp/src/python.rs](#src-python)
 
 ---
 
@@ -80,3 +88,68 @@ Kahn's algorithm over node indegrees gives the processing order, sources first. 
 - logged: v0.1.0 · 2026-09-28
 
 `cargo check` passes on Rust 1.98.1. A scratch crate outside the repo exercised the rules once: event to instrument, instrument to bus and bus to master accepted; stereo into 5.1, event into audio, a duplicate edge, a cycle, a zero-channel port and a missing port refused with the matching error; `order()` returned a valid topological order. Clippy was not run: the minimal toolchain lacks the component.
+
+### Cargo.toml · v0.2.0 crate types and the python feature
+- refers-to: Cargo.toml :: `[lib]`, `[features]`, `[dependencies]`
+- kind: rationale
+- logged: v0.2.0 · 2026-09-28
+
+The crate now builds as `rlib` and `cdylib`. The `python` feature pulls in pyo3 0.29.2 (abi3 for Python 3.10 and newer, so one wheel serves every later Python) and compiles `src/python.rs`; without the feature the crate has no dependencies. Every crate the feature resolves was checked with `cargo metadata` before adding: MIT or Apache-2.0 throughout, plus target-lexicon (Apache-2.0 with LLVM exception) and unicode-ident (adds Unicode-3.0), both build-time. The wasm32 build and the native Tauri build still arrive later in Phase 2.
+
+---
+
+## formwav-dsp/pyproject.toml {#pyproject}
+
+### pyproject.toml · maturin build
+- refers-to: pyproject.toml :: `[tool.maturin]`
+- kind: explainer
+- logged: v0.2.0 · 2026-09-28
+
+`backend/oc_install` runs `maturin develop --release -m ../native/formwav-dsp/Cargo.toml` inside the engine's venv; this file turns the `python` feature on and names the module `formwav_dsp`. The version is dynamic, read from Cargo.toml, so it is not a separate version site.
+
+---
+
+## formwav-dsp/src/wav.rs {#src-wav}
+
+### src/wav.rs · what it reads
+- refers-to: src/wav.rs :: `layout`, `decode_wav`, `to_f32`
+- kind: explainer
+- logged: v0.2.0 · 2026-09-28
+
+RIFF WAVE with a `fmt ` and a `data` chunk: PCM 8 (unsigned), 16, 24 and 32 bit, IEEE float 32 and 64 bit, and the extensible header (format tag read from the sub-format GUID). Output is planar f32, one vector per channel, PCM scaled by 2 to the power of (bits minus 1). Chunks are walked with even-byte padding; unknown chunks are skipped.
+
+### src/wav.rs · streaming writers
+- refers-to: src/wav.rs :: `layout`, the `data` branch
+- kind: warning-context
+- logged: v0.2.0 · 2026-09-28
+
+Recorders that stream to disk often leave the data size at 0 or at 0xFFFFFFFF. A size of 0, or one larger than the bytes present, is read as "to the end of the file", then rounded down to whole frames. Verified v0.2.0 with a size-0 file: all 4,800 frames recovered.
+
+### src/wav.rs · not yet
+- refers-to: src/wav.rs :: module
+- kind: todo
+- logged: v0.2.0 · 2026-09-28
+
+RF64 and BW64 (WAV files over 4 GB), and every other container, arrive with the LGPL ffmpeg sidecar import in Phase 7. Rejected encodings name their format tag and bit depth in the error so the engine can say why.
+
+---
+
+## formwav-dsp/src/peaks.rs {#src-peaks}
+
+### src/peaks.rs · layout of a level
+- refers-to: src/peaks.rs :: `PeakLevel`, `peak_pyramid`
+- kind: explainer
+- logged: v0.2.0 · 2026-09-28
+
+Level 0 takes the min and max of every `base` samples (256 by default); each next level folds `factor` blocks of the previous one (4 by default) until a level has `min_blocks` or fewer (64 by default). A level's `data` is per block, then per channel, a min then a max. Higher levels are built from the level below, never from the samples, so a whole pyramid costs little more than level 0.
+
+---
+
+## formwav-dsp/src/python.rs {#src-python}
+
+### src/python.rs · module surface
+- refers-to: src/python.rs :: `probe`, `peaks`, `formwav_dsp`
+- kind: explainer
+- logged: v0.2.0 · 2026-09-28
+
+`probe(bytes)` returns `(sample_rate, channels, frames, format_name)`; `peaks(bytes, base=256, factor=4, min_blocks=64)` returns one `(samples_per_peak, channels, blocks, payload)` tuple per level, where `payload` is little-endian f32 in the level layout above. Decode errors raise `ValueError` with the decoder's message. `__version__` is the crate version. The engine does not yet release the GIL around decoding; that comes with the jobs surface.
