@@ -9,10 +9,12 @@ It includes third-party components under their own licences:
 - NodeMode design system: design tokens, the fourteen theme profiles, the pre-paint
   theme boot, the DOM-stable helpers and an icon subset, taken from the
   stylized-nodemode pack v1.0.0, which mirrors the NodeMode v7.1.0 frontend.
-  MIT licence. Files: frontend/src/styles/tokens.css, frontend/src/ui/themes.ts,
-  frontend/src/ui/dom.ts, frontend/src/ui/icons.ts, the inline boot in
-  frontend/index.html. Modifications: storage key, a formwav icon subset, and the
-  shell rules in frontend/src/styles/shell.css, which are formwav's own.
+  MIT licence. Files copied unmodified: frontend/src/vendor/nodemode/tokens.css,
+  frontend/src/vendor/nodemode/themes.ts, frontend/src/vendor/nodemode/dom-stable.ts,
+  and the theme boot inlined verbatim in frontend/index.html. frontend/src/ui/icons.ts
+  carries twelve icons copied byte for byte from the NodeMode icon module, with a
+  formwav helper around them. The shell rules in frontend/src/styles/shell.css are
+  formwav's own.
 - Inter and JetBrains Mono fonts, installed through @fontsource: SIL Open Font
   License 1.1 for the fonts, MIT for the packaging. Bundled into the built interface.
 - The formwav logomark and favicons in assets/ and frontend/public/ are the
