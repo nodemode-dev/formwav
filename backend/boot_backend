@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+# shellcheck disable=SC1091
+source venv/bin/activate
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+exec uvicorn app.main:app --reload --host "${HOST:-127.0.0.1}" --port "${FORMWAV_PORT:-8060}"

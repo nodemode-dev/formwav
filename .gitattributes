@@ -1,0 +1,7 @@
+*.bat text eol=crlf
+formwav text eol=lf
+formwav_oc_install text eol=lf
+oc_install text eol=lf
+boot_backend text eol=lf
+boot_frontend text eol=lf
+*.sh text eol=lf
