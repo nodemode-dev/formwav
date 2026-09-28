@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import cors_origins
 from .core.version import VERSION
-from .routers import health, media
+from .routers import health, media, projects
 
 app = FastAPI(title="formwav engine", version=VERSION)
 app.add_middleware(
@@ -15,3 +15,4 @@ app.add_middleware(
 )
 app.include_router(health.router, prefix="/api")
 app.include_router(media.router, prefix="/api")
+app.include_router(projects.router, prefix="/api")

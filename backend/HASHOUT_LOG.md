@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v0.2.0
-Last updated: 2026-09-28 · media import and peaks through the audio core
+Current build version: v0.6.0
+Last updated: 2026-09-28 · .fmw save, open, list and download (header was left at v0.2.0 through v0.5.0 and is corrected here)
 
 ---
 
@@ -25,9 +25,11 @@ backend/
     │   └── version.py           VERSION, one of the version sites
     ├── routers/
     │   ├── health.py            GET /api/health, with the audio core's version
-    │   └── media.py             POST /api/media, GET /api/media/{id}, GET /api/media/{id}/peaks, GET /api/media/{id}/audio
+    │   ├── media.py             POST /api/media, GET /api/media/{id}, GET /api/media/{id}/peaks, GET /api/media/{id}/audio
+    │   └── projects.py          GET /api/projects, PUT and GET /api/projects/{name}, GET /api/projects/{name}/file
     └── services/
-        └── media.py             import, probe, atomic storage, peak levels through formwav_dsp
+        ├── media.py             import, probe, atomic storage, peak levels through formwav_dsp
+        └── projects.py          .fmw packages in data/projects: atomic save, verified open, list
 ```
 
 ---
@@ -43,6 +45,8 @@ backend/
 - [app/routers/health.py](#app-routers-health)
 - [app/routers/media.py](#app-routers-media)
 - [app/services/media.py](#app-services-media)
+- [app/routers/projects.py](#app-routers-projects)
+- [app/services/projects.py](#app-services-projects)
 
 ---
 
@@ -184,3 +188,39 @@ The full pyramid for the eight most recent media ids is kept in memory. Levels a
 - logged: v0.4.0 · 2026-09-28
 
 Serves the stored WAV bytes unchanged so the interface decodes them with the same Rust decoder, compiled to WebAssembly, that the engine uses; the engine never decodes for playback. Validated like the other media routes (400 malformed id, 404 unknown). Content never changes for an id, hence the immutable cache header. Verified v0.4.0: 200, `audio/wav`, 576,044 bytes for the 3 s stereo test file.
+
+---
+
+## app/routers/projects.py {#app-routers-projects}
+
+### app/routers/projects.py · routes and codes
+- refers-to: app/routers/projects.py :: all routes
+- kind: explainer
+- logged: v0.6.0 · 2026-09-28
+
+`GET /api/projects` lists saved sessions newest first (name, savedAt, tracks, bytes, appVersion), skipping unreadable files. `PUT /api/projects/{name}` takes the session document as the JSON body and saves it. `GET /api/projects/{name}` opens a session: its media are verified and stored in the media store, and the document is returned. `GET /api/projects/{name}/file` downloads the `.fmw`. Codes: 400 for a bad name, a malformed document, media the engine no longer has, or a damaged or foreign file; 404 for an unknown name; 503 when the audio core is missing.
+
+---
+
+## app/services/projects.py {#app-services-projects}
+
+### app/services/projects.py · the .fmw format, version 1
+- refers-to: app/services/projects.py :: `save`, `FORMAT`, `FORMAT_VERSION`
+- kind: rationale
+- logged: v0.6.0 · 2026-09-28
+
+A zip holding `manifest.json` (format `formwav-session`, format version, app version, name, UTC save time), `session.json` (the interface's document as it is) and `media/<sha256>.wav` for every media id the session lists, stored uncompressed because audio does not deflate usefully. The file is self-contained: it opens on another machine with an empty media store. Written to a temporary file in the same folder, flushed, fsynced and renamed into place, so a crash leaves either the old file or the new one. Names allow letters, digits, spaces and `. , ' ( ) - _`, start with a letter or digit, and cannot contain a path separator. Sessions live in `data/projects/`, beside `data/media/`, both untracked.
+
+### app/services/projects.py · opening verifies every byte
+- refers-to: app/services/projects.py :: `open_project`, `_read`, `_media_ids`
+- kind: warning-context
+- logged: v0.6.0 · 2026-09-28
+
+Opening checks the format name and refuses a newer format version, checks that every clip names listed media, and hashes every media file against its name before importing it through `media.import_wav`, which probes it with the audio core. A file with one flipped byte in its audio was refused as damaged (400) in v0.6.0.
+
+### app/services/projects.py · verification v0.6.0
+- refers-to: app/services/projects.py :: module
+- kind: explainer
+- logged: v0.6.0 · 2026-09-28
+
+A two-track session (an imported WAV at -6 dB and a recorded take at 48,000 samples) saved to 965,403 bytes with both media hashes matching their names and no temporary files left; after a page reload it reopened with identical tracks, gains and positions, and its offline bounce equalled the pre-save bounce exactly (maximum difference 0 on both channels). Bad name 400, unknown 404, damaged 400, download 200 with the full file.
