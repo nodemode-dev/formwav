@@ -11,7 +11,7 @@
 
 ## What it is
 
-formwav is an open-source audio editor that runs on your own machine: record, edit, repair, mix & export w/o an account, an upload or a usage meter. It is built to sit beside formcut (video, `.fmc`) & formvis (image, `.fmv`) w/ the same architecture & design system, & it saves `.fmw` projects. Its target is a measured 90% on a sourced parity scoreboard against the leading audio editors. This is v0.4.0: import or drop a WAV & it lands as a track w/ its waveform; play it through the Rust core running as WebAssembly in the browser's audio thread; undo & redo every change. Recording & editing follow.
+formwav is an open-source audio editor that runs on your own machine: record, edit, repair, mix & export w/o an account, an upload or a usage meter. It is built to sit beside formcut (video, `.fmc`) & formvis (image, `.fmv`) w/ the same architecture & design system, & it saves `.fmw` projects. Its target is a measured 90% on a sourced parity scoreboard against the leading audio editors. This is v0.4.1: import or drop a WAV & it lands as a track w/ its waveform, loaded for playback in the background; play it through the Rust core running as WebAssembly in the browser's audio thread; undo & redo every change. Recording & editing follow.
 
 **Stack.** Vanilla TypeScript 7 & Vite 8 · Python 3.12 & FastAPI · Rust (`formwav-dsp`, also built into the engine as a Python module) · about 1,710 lines of formwav's own TypeScript, CSS, Python & Rust in v0.3.0, vendored design-system files excluded.
 
