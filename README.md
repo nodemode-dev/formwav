@@ -11,9 +11,9 @@
 
 ## What it is
 
-formwav is an open-source audio editor that runs on your own machine: record, edit, repair, mix & export w/o an account, an upload or a usage meter. It is built to sit beside formcut (video, `.fmc`) & formvis (image, `.fmv`) w/ the same architecture & design system, & it saves `.fmw` projects. Its target is a measured 90% on a sourced parity scoreboard against the leading audio editors. This is v0.2.0: the engine imports WAV audio & serves waveform peaks through the Rust audio core; the interface shows neither yet, & playback, recording & editing follow.
+formwav is an open-source audio editor that runs on your own machine: record, edit, repair, mix & export w/o an account, an upload or a usage meter. It is built to sit beside formcut (video, `.fmc`) & formvis (image, `.fmv`) w/ the same architecture & design system, & it saves `.fmw` projects. Its target is a measured 90% on a sourced parity scoreboard against the leading audio editors. This is v0.3.0: import or drop a WAV & it lands as a track w/ its waveform, w/ undo & redo; playback, recording & editing follow.
 
-**Stack.** Vanilla TypeScript 7 & Vite 8 · Python 3.12 & FastAPI · Rust (`formwav-dsp`, also built into the engine as a Python module) · about 1,080 lines of formwav's own TypeScript, CSS, Python & Rust in v0.2.0, vendored design-system files excluded.
+**Stack.** Vanilla TypeScript 7 & Vite 8 · Python 3.12 & FastAPI · Rust (`formwav-dsp`, also built into the engine as a Python module) · about 1,710 lines of formwav's own TypeScript, CSS, Python & Rust in v0.3.0, vendored design-system files excluded.
 
 ## Highlights
 
@@ -21,6 +21,7 @@ formwav is an open-source audio editor that runs on your own machine: record, ed
 - **Zero-flash shell.** Mounted once & patched in place. Under 4x CPU throttling & a Fast 3G profile: layout shift 0, only the status chip's text & state change after mount, & the first frames are already the theme's background in dark & light profiles.
 - **NodeMode design system.** Tokens, the 14 theme profiles & the pre-paint theme boot, vendored verbatim, so formwav matches formvis & NodeMode surface for surface.
 - **Audio graph built for the whole plan.** Ports are N-channel audio or events from the first build, so MIDI, surround & ambisonics add nodes rather than reshape the graph. Kind mismatches, cycles & duplicate edges are refused.
+- **Import, see, undo.** Import or drop a WAV (PCM 8 to 32 bit, float 32 & 64) & it lands as a track w/ a waveform drawn from peaks the Rust core computes; every change is an undo step, 200 deep, on Cmd or Ctrl Z.
 - **Loopback only.** The interface & the engine bind 127.0.0.1; nothing listens on the network unless `HOST` says so.
 
 ## Quick Start
@@ -85,7 +86,7 @@ Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoni
 
 ## Not built or not verified yet
 
-- **Editing.** The interface has no import, playback, recording or editing yet (the engine's import & peaks routes exist); the transport is shown disabled so its layout is fixed from the start.
+- **Editing.** Import, lanes & undo work; there is no playback, recording, clip editing or saving yet. The transport is shown disabled so its layout is fixed from the start.
 - **Windows scripts.** Written, not run on Windows yet.
 - **Desktop app.** The Tauri shell arrives w/ packaging; v0.1.0 runs in the browser only.
 - **Native core in the interface.** The engine loads `formwav-dsp` for import & peaks; the interface's WebAssembly build & the desktop build of the core come later in Phase 2.
@@ -97,7 +98,7 @@ Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoni
 
 ## Status
 
-v0.2.0 is Phase 2's first step: media import & waveform peaks through the Rust core, verified against six WAV encodings. Next: the session document, command history & waveform lanes in the interface, then playback & recording.
+v0.3.0 is Phase 2's second step: the session document, undo history & waveform lanes in the interface, on top of v0.2.0's import & peaks. Next: playback & recording through the Rust core, then `.fmw` save & open.
 
 ## Contributors
 
