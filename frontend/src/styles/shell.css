@@ -1,4 +1,4 @@
-html, body { height: 100%; }
+html, body, #app { height: 100%; }
 
 .fw-shell {
   display: grid;
@@ -116,3 +116,92 @@ html, body { height: 100%; }
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
 }
+
+.fw-topbar-mid {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.fw-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.fw-ibtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  block-size: var(--ctl-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+
+.fw-ibtn-icon { inline-size: var(--ctl-md); padding: 0; justify-content: center; }
+.fw-ibtn:disabled { color: var(--text-muted); cursor: default; }
+.fw-ibtn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+
+.fw-notice {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+}
+
+.fw-stage[data-view="session"] { place-items: stretch; align-content: start; overflow: auto; }
+.fw-stage[data-view="session"] .fw-empty,
+.fw-stage[data-view="empty"] .fw-lanes { display: none; }
+
+.fw-lanes {
+  --fw-head-w: calc(var(--space-8) * 6);
+  display: grid;
+  grid-auto-rows: calc(var(--space-8) * 3);
+  align-content: start;
+  inline-size: max(100%, calc(var(--fw-head-w) + var(--fw-timeline-w, 0px)));
+}
+
+.fw-lane {
+  display: grid;
+  grid-template-columns: var(--fw-head-w) 1fr;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.fw-lane-head {
+  position: sticky;
+  left: 0;
+  z-index: var(--z-raised);
+  display: grid;
+  align-content: center;
+  row-gap: var(--space-1);
+  min-inline-size: 0;
+  padding: 0 var(--space-3);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+}
+
+.fw-lane-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
+.fw-lane-meta { font-size: var(--fs-11); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.fw-lane-body { position: relative; overflow: hidden; }
+
+.fw-clip {
+  position: absolute;
+  top: var(--space-1);
+  bottom: var(--space-1);
+  overflow: hidden;
+  border: 1px solid var(--accent-color-dim);
+  border-radius: var(--radius-sm);
+  background: var(--accent-tint);
+  color: var(--accent-color);
+}
+
+.fw-wave { display: block; inline-size: 100%; block-size: 100%; }

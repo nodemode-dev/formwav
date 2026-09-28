@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.1.0
-Last updated: 2026-09-28 · shell, engine link, themes, first throttled verification
+Current build version: v0.3.0
+Last updated: 2026-09-28 · session document, command history, import, waveform lanes; #app height fix
 
 ---
 
@@ -22,16 +22,23 @@ frontend/
 └── src/
     ├── main.ts                  entry: fonts, styles, theme, engine, extensions, shell, reveal
     ├── engine/
-    │   └── index.ts             headless state with granular events (link, transport)
+    │   ├── index.ts             headless state with granular events; dispatch, undo, redo, setSelection
+    │   ├── document.ts          session model and the pure command reducer
+    │   └── history.ts           snapshot undo and redo, 200 steps
     ├── extensions/
     │   ├── registry.ts          register, activateAll, disposeAll
     │   └── engine-link/
     │       └── index.ts         asks the engine for health, sets link state
     ├── io/
-    │   └── engine-client.ts     fetchHealth with timeout
+    │   ├── engine-client.ts     fetchHealth with timeout
+    │   └── media-client.ts      importFile, fetchPeaks
     ├── ui/
-    │   ├── icons.ts             twelve NodeMode icons plus the icon() helper
-    │   └── shell.ts             mounts the shell once, patches status and clock in place
+    │   ├── icons.ts             fourteen NodeMode icons plus the icon() helper
+    │   ├── shell.ts             mounts the shell once, patches status and clock in place
+    │   ├── session.ts           wires lanes, import, undo and redo buttons, shortcuts
+    │   ├── lanes.ts             keyed track lanes, clip boxes, canvas waveforms
+    │   ├── import.ts            Import button, file picker, drop on the stage, notice line
+    │   └── shortcuts.ts         Cmd or Ctrl with Z, Shift Z and Y
     ├── styles/
     │   └── shell.css            formwav shell, tokens only, no z-index
     └── vendor/
@@ -55,6 +62,13 @@ frontend/
 - [src/ui/icons.ts](#src-ui-icons)
 - [src/ui/shell.ts](#src-ui-shell)
 - [src/styles/shell.css](#src-styles-shell)
+- [src/engine/document.ts](#src-engine-document)
+- [src/engine/history.ts](#src-engine-history)
+- [src/io/media-client.ts](#src-io-media-client)
+- [src/ui/session.ts](#src-ui-session)
+- [src/ui/lanes.ts](#src-ui-lanes)
+- [src/ui/import.ts](#src-ui-import)
+- [src/ui/shortcuts.ts](#src-ui-shortcuts)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -219,3 +233,119 @@ Three fixed grid rows (top bar, stage, transport) so no region can resize anothe
 - logged: v0.1.0 · 2026-09-28
 
 Verbatim copies of `assets/site/` from the stylized-nodemode pack v1.0.0 (NodeMode v7.1.0), MIT, confirmed byte-identical with `cmp` when copied. Do not edit them here; resync from the pack and re-run the comparison. Not copied, deliberately: the mirror's `light-mode.css` and `scrollbars.css` style NodeMode app selectors the shell does not use, and light profiles already switch through the token values and the `body.theme-light` block in tokens.css (verified in the `sand` profile, v0.1.0).
+
+---
+
+## src/engine/document.ts {#src-engine-document}
+
+### src/engine/document.ts · units and identity
+- refers-to: src/engine/document.ts :: `Clip`, `SessionDoc`, `sessionLength`
+- kind: rationale
+- logged: v0.3.0 · 2026-09-28
+
+`start` and `length` of a clip are integer samples at the session rate; `sourceIn` is in the source file's own frames. The first import sets the session rate to that file's rate, so a single-rate project never resamples; a later file at another rate gets a length converted to session samples (playback resampling arrives with the Rust playback path). The document is immutable: every command returns a new object or the same object when nothing changed, which is what makes snapshot undo cheap and lets subscribers compare by identity.
+
+### src/engine/document.ts · Selection
+- refers-to: src/engine/document.ts :: `Selection`, `FrequencyBand`
+- kind: rationale
+- logged: v0.3.0 · 2026-09-28
+
+Every selection carries a time range and an optional frequency band from the start, per the plan's Audacity finding, so spectral editing in Phase 6 reuses the same selection. Selection is engine state but not part of the document, so undo does not move it.
+
+---
+
+## src/engine/history.ts {#src-engine-history}
+
+### src/engine/history.ts · History
+- refers-to: src/engine/history.ts :: `History`
+- kind: explainer
+- logged: v0.3.0 · 2026-09-28
+
+Stores whole document snapshots, which share every unchanged track and clip with their neighbours. 200 steps (`HISTORY_LIMIT` in index.ts); a new command clears the redo stack. `Engine.dispatch` records only when the reducer returned a different object, so no-op commands never create an undo step.
+
+---
+
+## src/io/media-client.ts {#src-io-media-client}
+
+### src/io/media-client.ts · importFile and fetchPeaks
+- refers-to: src/io/media-client.ts :: `importFile`, `fetchPeaks`
+- kind: explainer
+- logged: v0.3.0 · 2026-09-28
+
+The file goes as the raw body with its name URL-encoded in `X-Filename`, matching the engine route; an error reply's `detail` becomes the error message. Peaks arrive as little-endian f32 read straight into a `Float32Array` (every target platform is little-endian).
+
+---
+
+## src/ui/session.ts {#src-ui-session}
+
+### src/ui/session.ts · mountSession
+- refers-to: src/ui/session.ts :: `mountSession`
+- kind: explainer
+- logged: v0.3.0 · 2026-09-28
+
+Called once from main.ts after the shell mounts. The undo and redo buttons change only their `disabled` property, and only when it differs.
+
+---
+
+## src/ui/lanes.ts {#src-ui-lanes}
+
+### src/ui/lanes.ts · rendering without rebuilds
+- refers-to: src/ui/lanes.ts :: `mountLanes`, `updateLane`, `updateClip`
+- kind: rationale
+- logged: v0.3.0 · 2026-09-28
+
+Lanes and clips are reconciled by key with the vendored `patchList`: an existing lane or clip is updated in place, only new ones are created and only gone ones removed. The empty state and the lanes both exist from first paint; `data-view` on the stage chooses which shows. Clip position and width are written only when their values change (tracked in `data-left` and `data-width`). Verified v0.3.0 under 4x CPU and Fast 3G: an import mutated only the notice text, `data-view`, the lanes container's width variable, one new lane, the undo button's `disabled` and the canvas size, with layout shift 0 in dark and `sand`.
+
+### src/ui/lanes.ts · zoom and canvas limits
+- refers-to: src/ui/lanes.ts :: `samplesPerPixel`, `MAX_TIMELINE_PX`
+- kind: todo
+- logged: v0.3.0 · 2026-09-28
+
+100 pixels per second, coarsened only when the session would exceed 16,000 pixels (browsers cap canvas size). Zoom controls come with editing. Each clip has one canvas as wide as the clip, so very long clips at close zoom will need tiling.
+
+### src/ui/lanes.ts · peaks and painting
+- refers-to: src/ui/lanes.ts :: `peaksFor`, `paint`, `schedulePaint`
+- kind: explainer
+- logged: v0.3.0 · 2026-09-28
+
+The finest level (256 samples per peak) is fetched once per media id and shared; each canvas column folds the blocks under it into one min and max per channel, one row per channel. The colour is the canvas's computed `color`, which CSS sets to `--accent-color`, so theme and accent changes repaint through the `nm:ui-settings-changed` listener without reading tokens in script. A canvas paints once, when its peaks are ready, into a box whose size was set before the fetch, so nothing moves.
+
+---
+
+## src/ui/import.ts {#src-ui-import}
+
+### src/ui/import.ts · queue and notice
+- refers-to: src/ui/import.ts :: `importOne`, `importAll`
+- kind: explainer
+- logged: v0.3.0 · 2026-09-28
+
+Files import one after another through a promise queue, each as its own undo step. The notice shows "Importing" only after 300 ms and holds it for 250 ms before the result, the same pattern as the engine chip. The input's value is cleared after reading so choosing the same file again still fires `change`.
+
+---
+
+## src/ui/shortcuts.ts {#src-ui-shortcuts}
+
+### src/ui/shortcuts.ts · scope
+- refers-to: src/ui/shortcuts.ts :: `bindShortcuts`
+- kind: warning-context
+- logged: v0.3.0 · 2026-09-28
+
+Ignored while focus is in an input, textarea, select or editable element, so typing a name never undoes the session.
+
+---
+
+## src/styles/shell.css · v0.3.0
+
+### src/styles/shell.css · #app height, defect fixed
+- refers-to: src/styles/shell.css :: first rule, `html, body, #app`
+- kind: warning-context
+- logged: v0.3.0 · 2026-09-28
+
+From v0.1.0 to v0.3.0's first pass, `#app` had no height, so the shell was only as tall as its content and the transport bar sat mid-window. v0.1.0 measured no layout shift because nothing changed size; its screenshots, which were not looked at, would have shown it. v0.3.0's import swapped a tall empty state for a short lane and the transport jumped 107 px (layout shift 0.0116, traced through the entry's sources). Adding `#app` to the full-height rule pins the transport to the window bottom: y=744 of 800 before and after an import, layout shift 0.
+
+### src/styles/shell.css · lane head stacking
+- refers-to: src/styles/shell.css :: `.fw-lane-head`
+- kind: rationale
+- logged: v0.3.0 · 2026-09-28
+
+The head is sticky on the left so names stay visible when the timeline scrolls; clips are absolutely positioned later in the DOM and would paint over it, so the head takes `--z-raised` from the declared scale. No raw z-index.

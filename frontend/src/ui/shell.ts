@@ -25,7 +25,14 @@ function shellHtml(): string {
       <img class="fw-logo" src="/favicon-32.png" width="20" height="20" alt="">
       <span class="fw-name">formwav</span>
     </div>
-    <div class="fw-topbar-mid"></div>
+    <div class="fw-topbar-mid">
+      <div class="fw-tools" role="group" aria-label="Session">
+        <button class="fw-ibtn" type="button" data-action="import">${icon("upload", ICON_SIZE.control)}<span>Import</span></button>
+        <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="undo" aria-label="Undo" title="Undo" disabled>${icon("undo", ICON_SIZE.control)}</button>
+        <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="redo" aria-label="Redo" title="Redo" disabled>${icon("redo", ICON_SIZE.control)}</button>
+      </div>
+      <span class="fw-notice" role="status" aria-live="polite"></span>
+    </div>
     <div class="fw-topbar-actions">
       <span class="fw-engine" data-state="pending" role="status" aria-live="polite">
         <span class="fw-engine-dot"></span>
@@ -33,12 +40,14 @@ function shellHtml(): string {
       </span>
     </div>
   </header>
-  <main class="fw-stage">
+  <main class="fw-stage" data-view="empty">
     <section class="fw-empty">
       <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>
       <h1 class="fw-empty-title">No session open</h1>
-      <p class="fw-empty-body">Importing, recording and editing arrive in v0.2.0. This build brings up the shell, the engine link and the themes.</p>
+      <p class="fw-empty-body">Import a WAV file or drop one here to start a session. Playback and recording arrive in the next builds.</p>
     </section>
+    <div class="fw-lanes"></div>
+    <input class="fw-file" type="file" accept=".wav,audio/wav,audio/x-wav,audio/wave" multiple hidden>
   </main>
   <footer class="fw-transport">
     <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>
