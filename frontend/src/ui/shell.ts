@@ -6,7 +6,7 @@ const TRANSPORT: { name: IconName; label: string; action: string; built: boolean
   { name: "skipBack", label: "Go to start", action: "to-start", built: true },
   { name: "play", label: "Play", action: "play", built: true },
   { name: "stop", label: "Stop", action: "stop", built: true },
-  { name: "record", label: "Record", action: "record", built: false },
+  { name: "record", label: "Record", action: "record", built: true },
   { name: "loop", label: "Loop", action: "loop", built: false },
 ];
 
@@ -44,7 +44,7 @@ function shellHtml(): string {
     <section class="fw-empty">
       <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>
       <h1 class="fw-empty-title">No session open</h1>
-      <p class="fw-empty-body">Import a WAV file or drop one here to start a session. Playback and recording arrive in the next builds.</p>
+      <p class="fw-empty-body">Import a WAV file, drop one here, or press Record to start a session.</p>
     </section>
     <div class="fw-lanes"></div>
     <input class="fw-file" type="file" accept=".wav,audio/wav,audio/x-wav,audio/wave" multiple hidden>

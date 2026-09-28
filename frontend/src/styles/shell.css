@@ -221,3 +221,21 @@ html, body, #app { height: 100%; }
 
 .fw-lane-body { cursor: text; }
 .fw-tbtn[aria-pressed="true"] { color: var(--accent-color); border-color: var(--accent-color-dim); }
+.fw-tbtn[data-action="record"][aria-pressed="true"] { color: var(--danger); border-color: var(--danger); }
+
+.fw-meter {
+  flex: none;
+  inline-size: calc(var(--space-8) * 3);
+  block-size: var(--space-1);
+  margin-inline-start: var(--space-3);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+}
+
+.fw-meter-bar {
+  block-size: 100%;
+  background: var(--accent-color);
+  transform-origin: left center;
+  will-change: transform;
+}

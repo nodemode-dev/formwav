@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.4.1
-Last updated: 2026-09-28 · prefetch on import, loading notice, cached worklet views, data-action on transport buttons
+Current build version: v0.5.0
+Last updated: 2026-09-28 · recording with an input meter; playing state owned by the main thread
 
 ---
 
@@ -39,10 +39,13 @@ frontend/
     │   ├── lanes.ts             keyed track lanes, clip boxes, canvas waveforms
     │   ├── import.ts            Import button, file picker, drop on the stage, notice line
     │   ├── shortcuts.ts         Cmd or Ctrl with Z, Shift Z and Y
-    │   └── transport.ts         transport buttons, playhead, click to seek, Space and Home
+    │   ├── transport.ts         transport buttons, playhead, click to seek, Space and Home
+    │   └── record.ts            Record button and R key, input meter, takes into the session
     ├── audio/
     │   ├── player.ts            AudioContext at the session rate, media into the worklet, bounce()
-    │   └── player-worklet.ts    AudioWorklet hosting the wasm player (public/core, built at install)
+    │   ├── player-worklet.ts    AudioWorklet hosting the wasm player (public/core, built at install)
+    │   ├── recorder.ts          microphone into the player's context, take assembly, float32 WAV encoder
+    │   └── recorder-worklet.ts  AudioWorklet capturing input chunks and peak levels
     ├── styles/
     │   └── shell.css            formwav shell, tokens only, no z-index
     └── vendor/
@@ -76,6 +79,9 @@ frontend/
 - [src/ui/transport.ts](#src-ui-transport)
 - [src/audio/player.ts](#src-audio-player)
 - [src/audio/player-worklet.ts](#src-audio-player-worklet)
+- [src/ui/record.ts](#src-ui-record)
+- [src/audio/recorder.ts](#src-audio-recorder)
+- [src/audio/recorder-worklet.ts](#src-audio-recorder-worklet)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -449,3 +455,68 @@ Each transport button carries `data-action` (to-start, play, stop, record, loop)
 - logged: v0.4.1 · 2026-09-28
 
 The two output views are kept and rebuilt only when wasm memory grows (its buffer changes) or the block size changes, so the steady-state render loop allocates nothing. The offline null test runs through this loop and stayed bit-identical.
+
+---
+
+## src/ui/record.ts {#src-ui-record}
+
+### src/ui/record.ts · flow
+- refers-to: src/ui/record.ts :: `begin`, `finish`, `toggle`
+- kind: explainer
+- logged: v0.5.0 · 2026-09-28
+
+Record, or R, asks for the microphone, starts the session playing open-ended (so the clock runs and existing tracks are heard) and arms the recorder at the current position. Record again, R, or Stop ends it: the take is assembled, encoded as a float32 WAV named "Take N", stored through the ordinary import route and dispatched as `import-media` at the position recording began, so it is one undo step like any import. Refused access and other failures are named in the notice. Verified v0.5.0 with Chromium's fake capture device playing a 440 Hz sine at 0.5: the take bounced back at peak 0.5000 and 440 Hz, a take started after seeking to 0.5 s landed at 24,000 samples, and undo removed it.
+
+### src/ui/record.ts · meter and button states
+- refers-to: src/ui/record.ts :: `showLevel`, `renderRecording`
+- kind: rationale
+- logged: v0.5.0 · 2026-09-28
+
+The meter is created once at mount; its bar moves by `scaleX` on a -60 to 0 dBFS scale, written only when the value changes, and `aria-valuenow` changes only in tenths. A 0.5 input (about -6 dBFS) read `scaleX(0.9)`. Record's `aria-pressed` is rendered at mount, not on the first transport event: the lazy version wrote the attribute after reveal. Stop is enabled while recording even in an empty session, where `transport.ts` alone would keep it disabled until the first take lands; both screenshots of the first take found this.
+
+### src/ui/record.ts · not yet
+- refers-to: src/ui/record.ts :: module
+- kind: todo
+- logged: v0.5.0 · 2026-09-28
+
+No latency compensation: a take is placed where recording started, not shifted by input and output latency, so overdubs sit late by the round trip until spike A measures it. No live lane while recording (the empty state stays until the first take lands). Take numbers restart with each page load.
+
+---
+
+## src/audio/recorder.ts {#src-audio-recorder}
+
+### src/audio/recorder.ts · capture in the player's context
+- refers-to: src/audio/recorder.ts :: `startRecording`
+- kind: rationale
+- logged: v0.5.0 · 2026-09-28
+
+The microphone joins the player's AudioContext, so capture and playback share one clock and one sample rate (the session's); the browser converts the device's rate. Echo cancellation, noise suppression and automatic gain are off, because a recording tool must take the signal as it is. The recorder node has one silent output connected to the destination so it is always processed. `encodeWav` writes IEEE float 32 (format tag 3), which the Rust decoder reads, so a take loses no resolution.
+
+---
+
+## src/audio/recorder-worklet.ts {#src-audio-recorder-worklet}
+
+### src/audio/recorder-worklet.ts · chunks and levels
+- refers-to: src/audio/recorder-worklet.ts :: `process`, `flush`
+- kind: explainer
+- logged: v0.5.0 · 2026-09-28
+
+Input is copied into 8,192-frame chunks per channel and transferred, not copied, to the main thread when a chunk fills and when recording stops; `stopped` follows the last chunk, so the take is complete when the main thread resolves. The peak is reported every 8 render quanta. One chunk buffer is allocated per 8,192 frames, not per quantum.
+
+---
+
+## src/audio/player.ts · v0.5.0
+
+### src/audio/player.ts · playing is owned by the main thread (defect fixed)
+- refers-to: src/audio/player.ts :: `onReply`
+- kind: warning-context
+- logged: v0.5.0 · 2026-09-28
+
+Since v0.4.0, `play()` set playing true and then the worklet's reply to the preceding `seek` arrived saying `playing: false`, so the Play button un-pressed for one report interval (about 20 ms) before the next report pressed it again. v0.4.0's verification logged 3 `aria-pressed` changes on starting playback and it was not questioned; v0.5.0's recording run logged 5 where 2 were expected and the cause was traced. Position reports now update the position only; playing changes only through `play`, `stop` and the worklet's `ended`. Verified: 1 change on starting playback, 2 on starting a recording.
+
+### src/audio/player.ts · open-ended play and context()
+- refers-to: src/audio/player.ts :: `play(open)`, `sendPlan`, `context`
+- kind: explainer
+- logged: v0.5.0 · 2026-09-28
+
+`play(true)` sends no end position, so the clock keeps running past the last clip while recording; `stop` clears it. `context()` gives the recorder the running context.

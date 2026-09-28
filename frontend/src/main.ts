@@ -10,6 +10,7 @@ import "./extensions/engine-link";
 import { mountShell } from "./ui/shell";
 import { mountSession } from "./ui/session";
 import { mountTransport } from "./ui/transport";
+import { mountRecord } from "./ui/record";
 import { Player } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
 import { applyTheme } from "./vendor/nodemode/themes";
@@ -22,6 +23,7 @@ if (host) {
   mountShell(host, engine);
   mountSession(host, engine);
   mountTransport(host, engine, player);
+  mountRecord(host, engine, player);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player } });
 activateAll(engine);

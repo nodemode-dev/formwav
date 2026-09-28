@@ -130,12 +130,12 @@ export class Player {
 
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.lastPlan.end });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open ? 0 : this.lastPlan.end });
   }
 
   private onReply = (e: MessageEvent<WorkletReply>): void => {
     const reply = e.data;
-    if (reply.type === "position") this.engine.setTransport({ positionSamples: reply.position, playing: reply.playing });
+    if (reply.type === "position") this.engine.setTransport({ positionSamples: reply.position });
     else if (reply.type === "ended") this.engine.setTransport({ positionSamples: reply.position, playing: false });
   };
 
@@ -168,7 +168,10 @@ export class Player {
     return node;
   }
 
-  async play(): Promise<void> {
+  private open = false;
+
+  async play(open = false): Promise<void> {
+    this.open = open;
     const node = await this.ensure();
     await this.ctx?.resume();
     const doc = this.engine.get("document");
@@ -180,8 +183,15 @@ export class Player {
   }
 
   stop(): void {
+    this.open = false;
     if (this.node) send(this.node, { type: "stop" });
     this.engine.setTransport({ playing: false });
+  }
+
+  async context(): Promise<AudioContext> {
+    await this.ensure();
+    if (!this.ctx) throw new Error("the audio context did not start");
+    return this.ctx;
   }
 
   toggle(): Promise<void> {
