@@ -95,6 +95,13 @@ export class Engine {
     this.update("selection", selection);
   }
 
+  setTransport(patch: Partial<TransportState>): void {
+    const current = this.state.transport;
+    const next = { ...current, ...patch };
+    const changed = (Object.keys(patch) as (keyof TransportState)[]).some((k) => next[k] !== current[k]);
+    if (changed) this.update("transport", next);
+  }
+
   private commit(doc: SessionDoc): void {
     this.update("document", doc);
     this.update("history", this.past.state());

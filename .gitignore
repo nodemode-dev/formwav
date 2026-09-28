@@ -8,6 +8,7 @@ __pycache__/
 *.pyo
 target/
 native/formwav-dsp/target/
+frontend/public/core/
 
 .env
 .env.*

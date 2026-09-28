@@ -205,3 +205,19 @@ html, body, #app { height: 100%; }
 }
 
 .fw-wave { display: block; inline-size: 100%; block-size: 100%; }
+
+.fw-lanes { position: relative; }
+
+.fw-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--fw-head-w);
+  inline-size: 1px;
+  background: var(--text-primary);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.fw-lane-body { cursor: text; }
+.fw-tbtn[aria-pressed="true"] { color: var(--accent-color); border-color: var(--accent-color-dim); }

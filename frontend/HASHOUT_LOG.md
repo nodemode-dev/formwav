@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.3.0
-Last updated: 2026-09-28 · session document, command history, import, waveform lanes; #app height fix
+Current build version: v0.4.0
+Last updated: 2026-09-28 · playback through the wasm core in an AudioWorklet, transport, playhead, bounce
 
 ---
 
@@ -38,7 +38,11 @@ frontend/
     │   ├── session.ts           wires lanes, import, undo and redo buttons, shortcuts
     │   ├── lanes.ts             keyed track lanes, clip boxes, canvas waveforms
     │   ├── import.ts            Import button, file picker, drop on the stage, notice line
-    │   └── shortcuts.ts         Cmd or Ctrl with Z, Shift Z and Y
+    │   ├── shortcuts.ts         Cmd or Ctrl with Z, Shift Z and Y
+    │   └── transport.ts         transport buttons, playhead, click to seek, Space and Home
+    ├── audio/
+    │   ├── player.ts            AudioContext at the session rate, media into the worklet, bounce()
+    │   └── player-worklet.ts    AudioWorklet hosting the wasm player (public/core, built at install)
     ├── styles/
     │   └── shell.css            formwav shell, tokens only, no z-index
     └── vendor/
@@ -69,6 +73,9 @@ frontend/
 - [src/ui/lanes.ts](#src-ui-lanes)
 - [src/ui/import.ts](#src-ui-import)
 - [src/ui/shortcuts.ts](#src-ui-shortcuts)
+- [src/ui/transport.ts](#src-ui-transport)
+- [src/audio/player.ts](#src-audio-player)
+- [src/audio/player-worklet.ts](#src-audio-player-worklet)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -349,3 +356,64 @@ From v0.1.0 to v0.3.0's first pass, `#app` had no height, so the shell was only 
 - logged: v0.3.0 · 2026-09-28
 
 The head is sticky on the left so names stay visible when the timeline scrolls; clips are absolutely positioned later in the DOM and would paint over it, so the head takes `--z-raised` from the declared scale. No raw z-index.
+
+---
+
+## src/ui/transport.ts {#src-ui-transport}
+
+### src/ui/transport.ts · what changes during playback
+- refers-to: src/ui/transport.ts :: `placePlayhead`, `renderTransport`
+- kind: rationale
+- logged: v0.4.0 · 2026-09-28
+
+The playhead moves by `transform` only, written when the value changes, so playback never touches layout; the clock changes its text; Play reflects state through `aria-pressed`. Verified v0.4.0 under 4x CPU and Fast 3G: layout shift 0 during playback, and the only mutations were the clock text, the playhead's style and `aria-pressed` (plus a `style` write on the hidden file input made by Playwright's file chooser, not by formwav). Buttons are found by their `aria-label`, which ties them to the English labels until the interface is translated; a `data-action` on the transport buttons replaces that when the shell next changes.
+
+### src/ui/transport.ts · keys and seeking
+- refers-to: src/ui/transport.ts :: keydown listener, lanes click listener
+- kind: explainer
+- logged: v0.4.0 · 2026-09-28
+
+Space toggles play and Home goes to the start, both ignored in form fields and on focused buttons (where Space already activates the button). A click in a lane body seeks to that point: 150 px at 100 px per second landed on 72,000 samples, 1.500 s, in v0.4.0.
+
+---
+
+## src/audio/player.ts {#src-audio-player}
+
+### src/audio/player.ts · contexts and loading
+- refers-to: src/audio/player.ts :: `Player.ensure`, `loadInto`, `planClips`
+- kind: rationale
+- logged: v0.4.0 · 2026-09-28
+
+The AudioContext runs at the session rate, so the core never resamples and the browser converts to the device rate. Media bytes come from `/api/media/{id}/audio` and are transferred, not copied, into the worklet, which decodes them with the Rust decoder. `planClips` turns the document into worklet clips: mute and solo honoured, gains in dB made linear, clips at another sample rate left out and counted (the notice says so). A document change while a context exists re-sends the plan, so gain changes are heard live.
+
+### src/audio/player.ts · first play waits for the transfer
+- refers-to: src/audio/player.ts :: `Player.play`
+- kind: todo
+- logged: v0.4.0 · 2026-09-28
+
+The first play of a file waits for its bytes to reach the worklet: under the Fast 3G profile the 576 KB test file took about 3 s. Prefetching into the worklet on import, and a delayed "Loading audio" indicator, come next.
+
+### src/audio/player.ts · bounce and the offline race
+- refers-to: src/audio/player.ts :: `Player.bounce`
+- kind: warning-context
+- logged: v0.4.0 · 2026-09-28
+
+Renders the session through the same worklet and core in an OfflineAudioContext. The first version posted `clips`, `seek` and `play` and started rendering at once; offline rendering finished before those messages were handled and the result was silent (null-test error equal to the signal peak). Messages are handled in order, so it now posts `clips` and `play`, then waits for the worklet's reply to a final `seek` before rendering. Verified: bit-identical to the source at unity gain, within 3.7e-8 at -6 dB.
+
+---
+
+## src/audio/player-worklet.ts {#src-audio-player-worklet}
+
+### src/audio/player-worklet.ts · starting the core
+- refers-to: src/audio/player-worklet.ts :: `PlayerProcessor` constructor, the `init` branch
+- kind: warning-context
+- logged: v0.4.0 · 2026-09-28
+
+The first version posted a compiled `WebAssembly.Module` to the worklet; Chromium delivered no `init` and gave no error on the page, so playback stalled silently. The worklet now receives the wasm bytes (an ArrayBuffer always clones) and compiles them itself, and every message is handled inside a try that sends any failure back as an `error` reply, which `makeNode` turns into a thrown error.
+
+### src/audio/player-worklet.ts · render loop
+- refers-to: src/audio/player-worklet.ts :: `process`
+- kind: todo
+- logged: v0.4.0 · 2026-09-28
+
+Renders into two wasm-side buffers sized for 4,096 frames and copies them out; posts the position every 8 render quanta and `ended` at the session end. It creates two small typed-array views per quantum, which allocates on the audio thread; caching the views (rebuilt only when memory grows) is the next refinement.
