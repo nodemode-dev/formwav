@@ -98,7 +98,7 @@ Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoni
 
 ## Status
 
-v0.6.0 completes Phase 2's build steps: sessions save as self-contained `.fmw` files (manifest, session & every media file, verified by hash when opened) & reopen bit-identical, on top of import, playback & recording. Next: Phase 2's exit check, then the editing surface & mixer (Phase 3).
+v0.6.1 is Phase 2 in progress: import, waveform lanes, 100-step undo, playback, recording & `.fmw` save & open work (a reopened session renders bit-identical). Phase 2 still needs fades & crossfades, regions & a loop range, pan, meters & buses in the core, an offline render through the engine, & revision checks on save before it closes; the editing surface & mixer (Phase 3) follow.
 
 ## Contributors
 
