@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v0.6.0
-Last updated: 2026-09-28 · .fmw save, open, list and download (header was left at v0.2.0 through v0.5.0 and is corrected here)
+Current build version: v0.7.0
+Last updated: 2026-09-28 · POST /api/render: the session mixed natively to a float32 WAV
 
 ---
 
@@ -26,10 +26,12 @@ backend/
     ├── routers/
     │   ├── health.py            GET /api/health, with the audio core's version
     │   ├── media.py             POST /api/media, GET /api/media/{id}, GET /api/media/{id}/peaks, GET /api/media/{id}/audio
-    │   └── projects.py          GET /api/projects, PUT and GET /api/projects/{name}, GET /api/projects/{name}/file
+    │   ├── projects.py          GET /api/projects, PUT and GET /api/projects/{name}, GET /api/projects/{name}/file
+    │   └── render.py            POST /api/render: session document in, float32 stereo WAV out
     └── services/
         ├── media.py             import, probe, atomic storage, peak levels through formwav_dsp
-        └── projects.py          .fmw packages in data/projects: atomic save, verified open, list
+        ├── projects.py          .fmw packages in data/projects: atomic save, verified open, list
+        └── render.py            clip plan from the document, native render, WAV encoding
 ```
 
 ---
@@ -47,6 +49,8 @@ backend/
 - [app/services/media.py](#app-services-media)
 - [app/routers/projects.py](#app-routers-projects)
 - [app/services/projects.py](#app-services-projects)
+- [app/routers/render.py](#app-routers-render)
+- [app/services/render.py](#app-services-render)
 
 ---
 
@@ -224,3 +228,32 @@ Opening checks the format name and refuses a newer format version, checks that e
 - logged: v0.6.0 · 2026-09-28
 
 A two-track session (an imported WAV at -6 dB and a recorded take at 48,000 samples) saved to 965,403 bytes with both media hashes matching their names and no temporary files left; after a page reload it reopened with identical tracks, gains and positions, and its offline bounce equalled the pre-save bounce exactly (maximum difference 0 on both channels). Bad name 400, unknown 404, damaged 400, download 200 with the full file.
+
+---
+
+## app/routers/render.py {#app-routers-render}
+
+### app/routers/render.py · POST /api/render
+- refers-to: app/routers/render.py :: `render_session`
+- kind: explainer
+- logged: v0.7.0 · 2026-09-28
+
+Takes a session document as the JSON body and returns the mix as a float32 stereo WAV (`attachment; filename="mix.wav"`), with `X-Frames`, `X-Peak-Left-dBFS`, `X-Peak-Right-dBFS` and `X-Skipped-Clips`. 400 for a malformed document or media id, 404 when a listed media file is missing, 503 when the audio core is not built. It is both the offline renderer of Phase 2's exit check and the basis of export; the interface has no Export button yet.
+
+---
+
+## app/services/render.py {#app-services-render}
+
+### app/services/render.py · plan mirrors the interface
+- refers-to: app/services/render.py :: `plan`
+- kind: warning-context
+- logged: v0.7.0 · 2026-09-28
+
+The clip plan repeats `planClips` in `frontend/src/audio/player.ts` rule for rule: mute and solo, track plus clip gain in dB made linear with `10 ** (dB / 20)`, track pan defaulting to 0 for sessions saved before pan existed, and clips at another sample rate skipped and counted. Two copies of one rule set can drift; the null test between the two renderers is what guards them, so change both together and rerun `verify_render.py`. Verified v0.7.0: identical output (0.0) on a two-track session with gains and pans, and a v0.6 session without pan fields rendered.
+
+### app/services/render.py · output
+- refers-to: app/services/render.py :: `wav_float32_stereo`, `dbfs`
+- kind: explainer
+- logged: v0.7.0 · 2026-09-28
+
+The WAV is IEEE float 32 (format tag 3), two channels, at the session rate, so nothing is lost to quantisation; peaks are reported in dBFS to two decimals (`-inf` for silence). The whole mix is built in memory; long sessions will need a streamed render with the jobs surface.
