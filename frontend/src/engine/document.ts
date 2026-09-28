@@ -23,6 +23,7 @@ export interface Track {
   gainDb: number;
   mute: boolean;
   solo: boolean;
+  pan?: number;
   clips: readonly Clip[];
 }
 
@@ -56,6 +57,7 @@ export type Command =
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
+  | { type: "set-track-pan"; trackId: string; pan: number }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "add-marker"; at: number; label: string };
 
@@ -117,6 +119,10 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "set-track-gain":
       return mapTrack(doc, cmd.trackId, (t) => (t.gainDb === cmd.gainDb ? t : { ...t, gainDb: cmd.gainDb }));
+    case "set-track-pan": {
+      const pan = Math.max(-1, Math.min(1, cmd.pan));
+      return mapTrack(doc, cmd.trackId, (t) => ((t.pan ?? 0) === pan ? t : { ...t, pan }));
+    }
     case "move-clip": {
       const start = Math.max(0, Math.round(cmd.start));
       return mapTrack(doc, cmd.trackId, (t) => {

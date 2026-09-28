@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.6.0
-Last updated: 2026-09-28 · session name, save and open with an Open popover; loadDocument
+Current build version: v0.7.0
+Last updated: 2026-09-28 · track pan in the document and the worklet
 
 ---
 
@@ -567,3 +567,21 @@ Names are URL-encoded into the path; the document travels as JSON; an error repl
 - logged: v0.6.0 · 2026-09-28
 
 Opening a session is not an undoable edit: history is cleared, so Ctrl Z cannot step back into the previous session. Verified: undo disabled after opening.
+
+---
+
+## v0.7.0 · track pan
+
+### src/engine/document.ts · pan and set-track-pan
+- refers-to: src/engine/document.ts :: `Track.pan`, `set-track-pan`
+- kind: rationale
+- logged: v0.7.0 · 2026-09-28
+
+Pan runs from -1 (left) to 1 (right) and is optional on `Track`, so sessions saved before v0.7.0 open unchanged and read as centred. The command clamps to the range and is a no-op when the value is unchanged, so it never creates an empty undo step; it is undoable like every edit (verified). There is no pan control in the interface yet: the mixer arrives in Phase 3.
+
+### src/audio/player.ts and player-worklet.ts · pan to the core
+- refers-to: src/audio/player.ts :: `planClips`; src/audio/player-worklet.ts :: `WorkletClip`, `fw_add_clip`
+- kind: warning-context
+- logged: v0.7.0 · 2026-09-28
+
+Each clip carries its track's pan (`?? 0`) to `fw_add_clip`; the pan law itself lives only in `render.rs`. `planClips` has a twin in `backend/app/services/render.py`: change both together, and rerun `verify_render.py`, whose null test between the browser's render and the engine's caught nothing in v0.7.0 (0.0 on both channels).

@@ -29,7 +29,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         skipped++;
         continue;
       }
-      clips.push({ source, start: clip.start, sourceIn: clip.sourceIn, length: clip.length, gain: dbToGain(track.gainDb + clip.gainDb) });
+      clips.push({ source, start: clip.start, sourceIn: clip.sourceIn, length: clip.length, gain: dbToGain(track.gainDb + clip.gainDb), pan: track.pan ?? 0 });
       end = Math.max(end, clip.start + clip.length);
     }
   }
