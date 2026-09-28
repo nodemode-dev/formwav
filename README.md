@@ -11,9 +11,9 @@
 
 ## What it is
 
-formwav is an open-source audio editor that runs on your own machine: record, edit, repair, mix & export w/o an account, an upload or a usage meter. It is built to sit beside formcut (video, `.fmc`) & formvis (image, `.fmv`) w/ the same architecture & design system, & it saves `.fmw` projects. Its target is a measured 90% on a sourced parity scoreboard against the leading audio editors. This is v0.1.0: the scaffold. It boots, links the interface to the engine & carries the audio graph's port model; editing arrives from v0.2.0.
+formwav is an open-source audio editor that runs on your own machine: record, edit, repair, mix & export w/o an account, an upload or a usage meter. It is built to sit beside formcut (video, `.fmc`) & formvis (image, `.fmv`) w/ the same architecture & design system, & it saves `.fmw` projects. Its target is a measured 90% on a sourced parity scoreboard against the leading audio editors. This is v0.2.0: the engine imports WAV audio & serves waveform peaks through the Rust audio core; the interface shows neither yet, & playback, recording & editing follow.
 
-**Stack.** Vanilla TypeScript 7 & Vite 8 · Python 3.12 & FastAPI · Rust (`formwav-dsp`) · about 610 lines of formwav's own TypeScript, CSS, Python & Rust in v0.1.0, vendored design-system files excluded.
+**Stack.** Vanilla TypeScript 7 & Vite 8 · Python 3.12 & FastAPI · Rust (`formwav-dsp`, also built into the engine as a Python module) · about 1,080 lines of formwav's own TypeScript, CSS, Python & Rust in v0.2.0, vendored design-system files excluded.
 
 ## Highlights
 
@@ -25,7 +25,7 @@ formwav is an open-source audio editor that runs on your own machine: record, ed
 
 ## Quick Start
 
-Requirements: Node 20.19 or newer, Python 3.12 (the tested version), git. Rust stable is needed only to work on `native/`; the app does not build it yet.
+Requirements: Node 20.19 or newer, Python 3.12 (the tested version), Rust stable (the installer builds the audio core into the engine; get it from https://rustup.rs), git.
 
 ### macOS & Linux
 
@@ -60,6 +60,8 @@ The engine reads `backend/.env`, which is never committed; `backend/.env.example
 | `HOST` | Engine bind address; loopback when unset |
 | `FORMWAV_PORT` | Engine port |
 | `FORMWAV_CORS_ORIGINS` | Browser origins allowed to call the engine directly |
+| `FORMWAV_DATA_DIR` | Where imported media is stored; `backend/data` when unset |
+| `FORMWAV_MAX_IMPORT_MB` | Largest file the engine accepts for import |
 
 ## Architecture
 
@@ -76,17 +78,18 @@ formwav/
 │   ├── src/ui/                        shell & icons
 │   ├── src/styles/                    formwav's own styles, tokens only
 │   └── src/vendor/nodemode/           verbatim NodeMode tokens, themes, DOM helpers (MIT)
-└── native/formwav-dsp/                Rust audio core: graph & port model
+└── native/formwav-dsp/                Rust audio core: graph & port model, WAV decoding, peaks, Python module
 ```
 
 Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoning the code would otherwise carry as comments. Read it before editing.
 
 ## Not built or not verified yet
 
-- **Editing.** No import, playback, recording or editing in v0.1.0; the transport is shown disabled so its layout is fixed from the start.
+- **Editing.** The interface has no import, playback, recording or editing yet (the engine's import & peaks routes exist); the transport is shown disabled so its layout is fixed from the start.
 - **Windows scripts.** Written, not run on Windows yet.
 - **Desktop app.** The Tauri shell arrives w/ packaging; v0.1.0 runs in the browser only.
-- **Native core in the app.** `formwav-dsp` compiles (`cargo check`) but is not yet built into the engine or the interface.
+- **Native core in the interface.** The engine loads `formwav-dsp` for import & peaks; the interface's WebAssembly build & the desktop build of the core come later in Phase 2.
+- **Formats beyond WAV.** Import reads WAV (PCM 8 to 32 bit, float 32 & 64, extensible headers); other formats arrive w/ the ffmpeg sidecar.
 
 ## Development
 
@@ -94,7 +97,7 @@ Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoni
 
 ## Status
 
-v0.1.0 closes Phase 1 of 10, the scaffold. Phase 2 builds the session document, the command history & the Rust core's playback & recording, w/ the core compiled native, as a Python module & to WebAssembly.
+v0.2.0 is Phase 2's first step: media import & waveform peaks through the Rust core, verified against six WAV encodings. Next: the session document, command history & waveform lanes in the interface, then playback & recording.
 
 ## Contributors
 
