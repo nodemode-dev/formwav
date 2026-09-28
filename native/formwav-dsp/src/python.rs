@@ -3,7 +3,36 @@ use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
 use crate::peaks::peak_pyramid;
+use crate::render::{PlayClip, Player};
 use crate::wav::{decode_wav, probe_wav};
+
+const RENDER_BLOCK: usize = 128;
+
+type RenderClip = (u32, u64, u64, u64, f32, f32);
+
+#[pyfunction]
+fn render<'py>(py: Python<'py>, sources: Vec<(u32, Bound<'py, PyBytes>)>, clips: Vec<RenderClip>, frames: usize) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
+    let mut player = Player::new();
+    for (id, bytes) in &sources {
+        let buf = decode_wav(bytes.as_bytes()).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        player.load_source(*id, buf);
+    }
+    for (source, start, source_in, length, gain, pan) in clips {
+        player.add_clip(PlayClip { source, start, source_in, length, gain, pan });
+    }
+    let mut left = vec![0.0f32; frames];
+    let mut right = vec![0.0f32; frames];
+    for (l, r) in left.chunks_mut(RENDER_BLOCK).zip(right.chunks_mut(RENDER_BLOCK)) {
+        player.render(l, r);
+    }
+    let (peak_left, peak_right) = player.take_peaks();
+    let mut interleaved = Vec::with_capacity(frames * 8);
+    for i in 0..frames {
+        interleaved.extend_from_slice(&left[i].to_le_bytes());
+        interleaved.extend_from_slice(&right[i].to_le_bytes());
+    }
+    Ok((PyBytes::new(py, &interleaved), peak_left, peak_right))
+}
 
 type LevelTuple<'py> = (u32, u16, usize, Bound<'py, PyBytes>);
 
@@ -34,6 +63,7 @@ fn peaks<'py>(py: Python<'py>, data: &[u8], base: u32, factor: u32, min_blocks: 
 fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(probe, m)?)?;
     m.add_function(wrap_pyfunction!(peaks, m)?)?;
+    m.add_function(wrap_pyfunction!(render, m)?)?;
     m.add("__version__", crate::CRATE_VERSION)?;
     Ok(())
 }

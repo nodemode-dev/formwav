@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.2.0
-Last updated: 2026-09-28 · WAV decoding, peak pyramid, Python binding
+Current build version: v0.7.0
+Last updated: 2026-09-28 · pan and master peaks in render.rs, native render() for the engine (header was left at v0.2.0 through v0.6.1 and is corrected here)
 
 ---
 
@@ -186,3 +186,35 @@ A plain C ABI, compiled only for `wasm32`, so the module has no imports and need
 - logged: v0.4.0 · 2026-09-28
 
 Built with `cargo build --release --locked --target wasm32-unknown-unknown --lib`; Node listed exactly the ten `fw_*` exports plus `memory` and no imports. In Chromium, an offline render of a 3 s stereo 16-bit WAV through the AudioWorklet and this module matched the source samples exactly (maximum difference 0.0 on both channels) and, at -6 dB track gain, within 3.7e-8.
+
+---
+
+## v0.7.0 · pan, master peaks, native render
+
+### src/render.rs · pan law
+- refers-to: src/render.rs :: `pan_gains`, `PlayClip::pan`
+- kind: rationale
+- logged: v0.7.0 · 2026-09-28
+
+A balance law with constant-power attenuation of the far side: at pan 0 both gains are exactly 1.0, so every unpanned render stays bit-identical to v0.4.0's; panning right by p leaves the right side at 1.0 and scales the left by cos(p times pi/2), and the mirror for left. Hard left and hard right are pinned to exactly 0.0 on the far side: the first version computed cos(pi/2) in f32, which is -4.4e-8 because pi/2 is not exact, and leaked 2.2e-8 (about -153 dBFS) of a mono source into the silent side; it also relied on two different `cos` implementations (native libm and the wasm port) agreeing at that point. Gains are computed once per clip per block, not per sample. Pan is per track; mono sources feed both sides.
+
+### src/render.rs · master peaks
+- refers-to: src/render.rs :: `Player::render`, `Player::take_peaks`
+- kind: explainer
+- logged: v0.7.0 · 2026-09-28
+
+After mixing a block, the absolute peak of each side of the master sum is kept until `take_peaks` reads and resets it. The engine's render reports them; the interface's output meter is not built yet. Loudness (BS.1770) is not measured yet.
+
+### src/python.rs · render()
+- refers-to: src/python.rs :: `render`, `RENDER_BLOCK`
+- kind: explainer
+- logged: v0.7.0 · 2026-09-28
+
+`render(sources, clips, frames)` takes `(id, wav bytes)` pairs and `(source, start, source_in, length, gain, pan)` tuples, decodes with the same `decode_wav`, runs the same `Player` in 128-frame blocks like the worklet, and returns interleaved little-endian f32 bytes with the master peaks. It is the engine's offline renderer and the reference for Phase 2's exit check.
+
+### Phase 2 exit check · native render against the browser's render
+- refers-to: src/render.rs, src/python.rs, src/wasm.rs
+- kind: explainer
+- logged: v0.7.0 · 2026-09-28
+
+The same session (a stereo WAV at -6 dB panned -0.5 and a mono WAV at -3 dB panned +0.75, 480,000 frames) rendered by the interface's playback path (the AudioWorklet and the wasm32 core, run in an OfflineAudioContext) and by the engine's pyo3 core matched exactly: maximum difference 0.0 on both channels. The stated null threshold is 0.0 for sessions like this one; pan values away from 0 and the endpoints use f32 `cos`, which native and wasm computed identically here but are not guaranteed to, so the general threshold is 1e-7 (about -140 dBFS). The comparison is against the realtime renderer's code run offline, not a capture of audible output, which headless Chromium cannot provide.
