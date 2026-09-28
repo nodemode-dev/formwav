@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v0.1.0
-Last updated: 2026-09-28 · engine scaffold with the health route
+Current build version: v0.2.0
+Last updated: 2026-09-28 · media import and peaks through the audio core
 
 ---
 
@@ -12,28 +12,37 @@ Last updated: 2026-09-28 · engine scaffold with the health route
 ```
 backend/
 ├── .env.example                 env names with local defaults, copied to .env (never committed)
-├── requirements.txt             pinned set · Linux, Windows, servers
+├── requirements.txt             pinned set · Linux, Windows, servers (includes maturin)
 ├── requirements_macos.txt       same membership, unpinned · Apple Silicon
-├── oc_install / .bat            venv plus requirements
+├── oc_install / .bat            venv, requirements, then builds the Rust audio core into the venv
 ├── boot_backend / .bat          loads .env, runs uvicorn on 127.0.0.1:8060
+├── data/                        runtime data (never committed): media/ holds imported audio and its JSON
 └── app/
     ├── main.py                  FastAPI app, CORS, router mounts under /api
     ├── core/
     │   ├── config.py            env-driven settings (CORS origins)
+    │   ├── paths.py             data and media folders
     │   └── version.py           VERSION, one of the version sites
-    └── routers/
-        └── health.py            GET /api/health
+    ├── routers/
+    │   ├── health.py            GET /api/health, with the audio core's version
+    │   └── media.py             POST /api/media, GET /api/media/{id}, GET /api/media/{id}/peaks
+    └── services/
+        └── media.py             import, probe, atomic storage, peak levels through formwav_dsp
 ```
 
 ---
 
 ## Table of contents
 
+- [oc_install](#oc-install)
 - [boot_backend](#boot-backend)
 - [app/main.py](#app-main)
 - [app/core/config.py](#app-core-config)
+- [app/core/paths.py](#app-core-paths)
 - [app/core/version.py](#app-core-version)
 - [app/routers/health.py](#app-routers-health)
+- [app/routers/media.py](#app-routers-media)
+- [app/services/media.py](#app-services-media)
 
 ---
 
@@ -103,3 +112,68 @@ One of the version sites, bumped by hand in the release commit together with `fr
 - logged: v0.1.0 · 2026-09-28
 
 Liveness and identity: returns the engine's name and version. The interface reads it to show whether the engine is reachable.
+
+### app/routers/health.py · core field
+- refers-to: app/routers/health.py :: `health()`, the `core` key
+- kind: explainer
+- logged: v0.2.0 · 2026-09-28
+
+The audio core's version, or `missing` when `formwav_dsp` is not importable, so a broken install is visible from one request.
+
+---
+
+## oc_install {#oc-install}
+
+### oc_install · building the audio core
+- refers-to: oc_install :: the `cargo` check and the `maturin develop` line (and the same two lines in oc_install.bat)
+- kind: rationale
+- logged: v0.2.0 · 2026-09-28
+
+From v0.2.0 the engine's audio code is the Rust crate itself, built into the venv as the Python module `formwav_dsp`, so there is one implementation of decoding and peaks rather than a Rust one and a Python one. That makes Rust a requirement for installing from source; the script stops with the rustup address when `cargo` is missing. `maturin` is pinned in requirements.txt beside the runtime packages because it runs inside the same venv. The `.bat` lines were added with LF endings inside a CRLF file; `.gitattributes` normalises them on commit and checkout.
+
+---
+
+## app/core/paths.py {#app-core-paths}
+
+### app/core/paths.py · data_dir
+- refers-to: app/core/paths.py :: `data_dir()`, `media_dir()`
+- kind: explainer
+- logged: v0.2.0 · 2026-09-28
+
+`FORMWAV_DATA_DIR` when set, otherwise `backend/data`, which the root `.gitignore` excludes. `media_dir()` creates `media/` on first use. A platform data folder (as formcut uses) replaces the default when the desktop build arrives.
+
+---
+
+## app/routers/media.py {#app-routers-media}
+
+### app/routers/media.py · import without multipart
+- refers-to: app/routers/media.py :: `import_media`
+- kind: rationale
+- logged: v0.2.0 · 2026-09-28
+
+The file travels as the raw request body with its name in a URL-encoded `X-Filename` header, so no multipart parser is needed. Status codes: 201 imported, 400 empty body or bad id, 404 unknown id, 415 not a readable WAV (the decoder's reason in `detail`), 503 audio core not built.
+
+### app/routers/media.py · peaks response
+- refers-to: app/routers/media.py :: `get_peaks`
+- kind: explainer
+- logged: v0.2.0 · 2026-09-28
+
+`spp` asks for a resolution; the engine returns the first level with at least that many samples per peak, or the coarsest level. The body is little-endian f32 (per block, per channel, min then max) and the headers `X-Samples-Per-Peak`, `X-Channels` and `X-Blocks` describe it; `main.py` exposes them to direct CORS callers. Content never changes for an id (ids are content hashes), hence the immutable cache header.
+
+---
+
+## app/services/media.py {#app-services-media}
+
+### app/services/media.py · ids and storage
+- refers-to: app/services/media.py :: `import_wav`, `_write_atomic`
+- kind: rationale
+- logged: v0.2.0 · 2026-09-28
+
+A media id is the SHA-256 of the file's bytes, so importing the same audio twice stores it once and ids are safe to cache forever. Audio and its JSON description are written to a temporary file in the same folder, flushed, fsynced and renamed into place, so a crash never leaves a half-written file under a real name. Re-importing identical audio under a new name updates the name in the JSON only.
+
+### app/services/media.py · peak cache
+- refers-to: app/services/media.py :: `_levels`
+- kind: todo
+- logged: v0.2.0 · 2026-09-28
+
+The full pyramid for the eight most recent media ids is kept in memory. Levels are not yet written to disk, and very long files are decoded whole; a disk cache and chunked decoding come with the jobs surface.

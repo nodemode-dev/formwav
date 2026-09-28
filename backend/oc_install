@@ -10,3 +10,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 else
   pip install -r requirements.txt
 fi
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "formwav needs Rust to build its audio core: install it from https://rustup.rs, then run this again." >&2
+  exit 1
+fi
+maturin develop --release -m ../native/formwav-dsp/Cargo.toml
