@@ -25,7 +25,7 @@ backend/
     │   └── version.py           VERSION, one of the version sites
     ├── routers/
     │   ├── health.py            GET /api/health, with the audio core's version
-    │   └── media.py             POST /api/media, GET /api/media/{id}, GET /api/media/{id}/peaks
+    │   └── media.py             POST /api/media, GET /api/media/{id}, GET /api/media/{id}/peaks, GET /api/media/{id}/audio
     └── services/
         └── media.py             import, probe, atomic storage, peak levels through formwav_dsp
 ```
@@ -177,3 +177,10 @@ A media id is the SHA-256 of the file's bytes, so importing the same audio twice
 - logged: v0.2.0 · 2026-09-28
 
 The full pyramid for the eight most recent media ids is kept in memory. Levels are not yet written to disk, and very long files are decoded whole; a disk cache and chunked decoding come with the jobs surface.
+
+### app/routers/media.py · audio route
+- refers-to: app/routers/media.py :: `get_audio`
+- kind: rationale
+- logged: v0.4.0 · 2026-09-28
+
+Serves the stored WAV bytes unchanged so the interface decodes them with the same Rust decoder, compiled to WebAssembly, that the engine uses; the engine never decodes for playback. Validated like the other media routes (400 malformed id, 404 unknown). Content never changes for an id, hence the immutable cache header. Verified v0.4.0: 200, `audio/wav`, 576,044 bytes for the 3 s stereo test file.

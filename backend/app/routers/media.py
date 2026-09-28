@@ -1,7 +1,9 @@
 from urllib.parse import unquote
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 
+from ..core.paths import media_dir
 from ..services import media
 
 router = APIRouter()
@@ -48,3 +50,18 @@ def get_peaks(media_id: str, spp: int = 256) -> Response:
         "Cache-Control": "private, max-age=31536000, immutable",
     }
     return Response(content=payload, media_type="application/octet-stream", headers=headers)
+
+
+@router.get("/media/{media_id}/audio")
+def get_audio(media_id: str) -> FileResponse:
+    try:
+        media.media_info(media_id)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(400, str(err)) from err
+    return FileResponse(
+        media_dir() / f"{media_id}.wav",
+        media_type="audio/wav",
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
