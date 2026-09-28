@@ -2,18 +2,18 @@ import type { Engine, LinkState, TransportState } from "../engine";
 import { delayedIndicator, mountOnce, setText } from "../vendor/nodemode/dom-stable";
 import { ICON_SIZE, icon, type IconName } from "./icons";
 
-const TRANSPORT: { name: IconName; label: string }[] = [
-  { name: "skipBack", label: "Go to start" },
-  { name: "play", label: "Play" },
-  { name: "stop", label: "Stop" },
-  { name: "record", label: "Record" },
-  { name: "loop", label: "Loop" },
+const TRANSPORT: { name: IconName; label: string; action: string; built: boolean }[] = [
+  { name: "skipBack", label: "Go to start", action: "to-start", built: true },
+  { name: "play", label: "Play", action: "play", built: true },
+  { name: "stop", label: "Stop", action: "stop", built: true },
+  { name: "record", label: "Record", action: "record", built: false },
+  { name: "loop", label: "Loop", action: "loop", built: false },
 ];
 
 function transportButtons(): string {
   return TRANSPORT.map(
     (b) =>
-      `<button class="fw-tbtn" type="button" disabled aria-label="${b.label}" title="${b.label} · arrives in v0.2.0">${icon(b.name, ICON_SIZE.transport)}</button>`,
+      `<button class="fw-tbtn" type="button" disabled data-action="${b.action}" aria-label="${b.label}" title="${b.built ? b.label : `${b.label} · not built yet`}">${icon(b.name, ICON_SIZE.transport)}</button>`,
   ).join("");
 }
 

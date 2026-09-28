@@ -51,6 +51,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
   private playing = false;
   private end = 0;
   private quanta = 0;
+  private views: { buffer: ArrayBuffer; frames: number; left: Float32Array; right: Float32Array } | null = null;
 
   constructor() {
     super();
@@ -118,9 +119,14 @@ class PlayerProcessor extends AudioWorkletProcessor {
     if (!core || !this.playing || !out || out.length === 0) return true;
     const frames = Math.min(out[0].length, MAX_FRAMES);
     core.fw_render(this.player, this.left, this.right, frames);
-    const memory = core.memory.buffer;
-    out[0].set(new Float32Array(memory, this.left, frames));
-    if (out[1]) out[1].set(new Float32Array(memory, this.right, frames));
+    const buffer = core.memory.buffer;
+    let views = this.views;
+    if (!views || views.buffer !== buffer || views.frames !== frames) {
+      views = { buffer, frames, left: new Float32Array(buffer, this.left, frames), right: new Float32Array(buffer, this.right, frames) };
+      this.views = views;
+    }
+    out[0].set(views.left);
+    if (out[1]) out[1].set(views.right);
     this.quanta++;
     const position = core.fw_position(this.player);
     if (this.end > 0 && position >= this.end) {

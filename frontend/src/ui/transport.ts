@@ -1,13 +1,13 @@
 import type { Engine, SessionDoc, TransportState } from "../engine";
 import type { Player } from "../audio/player";
-import { setText } from "../vendor/nodemode/dom-stable";
+import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
 import { samplesPerPixel } from "./lanes";
 
 export function mountTransport(host: HTMLElement, engine: Engine, player: Player): void {
-  const button = (label: string) => host.querySelector<HTMLButtonElement>(`.fw-tbtn[aria-label="${label}"]`);
-  const toStart = button("Go to start");
-  const play = button("Play");
-  const stop = button("Stop");
+  const button = (action: string) => host.querySelector<HTMLButtonElement>(`.fw-tbtn[data-action="${action}"]`);
+  const toStart = button("to-start");
+  const play = button("play");
+  const stop = button("stop");
   const lanes = host.querySelector<HTMLElement>(".fw-lanes");
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   const playhead = document.createElement("div");
@@ -15,14 +15,33 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
   playhead.setAttribute("aria-hidden", "true");
   lanes?.append(playhead);
 
-  const fail = (err: unknown) => setText(notice, `Playback failed: ${err instanceof Error ? err.message : String(err)}`);
   const togglePlay = () => {
+    let shown = false;
+    let final: string | null = null;
+    const dismiss = delayedIndicator(
+      () => {
+        shown = true;
+        setText(notice, "Loading audio");
+      },
+      () => {
+        if (final !== null) setText(notice, final);
+      },
+    );
     player
       .toggle()
-      .then(() => {
-        if (player.skipped > 0) setText(notice, `${player.skipped} clip(s) at another sample rate are silent until resampling arrives`);
-      })
-      .catch(fail);
+      .then(
+        () => {
+          if (player.skipped > 0) final = `${player.skipped} clip(s) at another sample rate are silent until resampling arrives`;
+          else if (shown) final = "";
+        },
+        (err: unknown) => {
+          final = `Playback failed: ${err instanceof Error ? err.message : String(err)}`;
+        },
+      )
+      .finally(() => {
+        dismiss();
+        if (!shown && final !== null) setText(notice, final);
+      });
   };
 
   let lastTransform = "";

@@ -81,10 +81,12 @@ export class Player {
   private sources = new Map<string, number>();
   private counter = 0;
   private lastPlan: ClipPlan = { clips: [], end: 0, skipped: 0 };
+  private pending = new Map<string, Promise<void>>();
 
   constructor(private readonly engine: Engine) {
     engine.subscribe("document", (doc) => {
       if (this.node) this.sendPlan(this.node, doc);
+      this.prefetch(doc);
     });
   }
 
@@ -105,6 +107,27 @@ export class Player {
 
   private nextId = (): number => ++this.counter;
 
+  private load(node: AudioWorkletNode, mediaId: string): Promise<void> {
+    let loading = this.pending.get(mediaId);
+    if (!loading) {
+      loading = loadInto(node, this.sources, mediaId, this.nextId);
+      this.pending.set(mediaId, loading);
+      loading.catch(() => this.pending.delete(mediaId));
+    }
+    return loading;
+  }
+
+  private prefetch(doc: SessionDoc): void {
+    const missing = Object.keys(doc.media).filter((id) => !this.pending.has(id));
+    if (!missing.length || !doc.tracks.length) return;
+    this.ensure()
+      .then((node) => Promise.all(missing.map((id) => this.load(node, id))))
+      .then(() => {
+        if (this.node) this.sendPlan(this.node, this.engine.get("document"));
+      })
+      .catch(() => undefined);
+  }
+
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
     send(node, { type: "clips", clips: this.lastPlan.clips, end: this.lastPlan.end });
@@ -116,14 +139,26 @@ export class Player {
     else if (reply.type === "ended") this.engine.setTransport({ positionSamples: reply.position, playing: false });
   };
 
-  private async ensure(): Promise<AudioWorkletNode> {
+  private starting: Promise<AudioWorkletNode> | null = null;
+
+  private ensure(): Promise<AudioWorkletNode> {
     const rate = this.engine.get("document").sampleRate;
-    if (this.ctx && this.node && this.ctx.sampleRate === rate) return this.node;
+    if (this.ctx && this.node && this.ctx.sampleRate === rate) return Promise.resolve(this.node);
+    if (!this.starting) {
+      this.starting = this.start(rate).finally(() => {
+        this.starting = null;
+      });
+    }
+    return this.starting;
+  }
+
+  private async start(rate: number): Promise<AudioWorkletNode> {
     if (this.ctx) {
       await this.ctx.close();
       this.ctx = null;
       this.node = null;
       this.sources.clear();
+      this.pending.clear();
     }
     const ctx = new AudioContext({ sampleRate: rate, latencyHint: "interactive" });
     const node = await makeNode(ctx, await this.core());
@@ -137,7 +172,7 @@ export class Player {
     const node = await this.ensure();
     await this.ctx?.resume();
     const doc = this.engine.get("document");
-    await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, this.sources, id, this.nextId)));
+    await Promise.all(Object.keys(doc.media).map((id) => this.load(node, id)));
     this.sendPlan(node, this.engine.get("document"));
     send(node, { type: "seek", position: this.engine.get("transport").positionSamples });
     send(node, { type: "play" });

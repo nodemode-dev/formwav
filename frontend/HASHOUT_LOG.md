@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.4.0
-Last updated: 2026-09-28 · playback through the wasm core in an AudioWorklet, transport, playhead, bounce
+Current build version: v0.4.1
+Last updated: 2026-09-28 · prefetch on import, loading notice, cached worklet views, data-action on transport buttons
 
 ---
 
@@ -417,3 +417,35 @@ The first version posted a compiled `WebAssembly.Module` to the worklet; Chromiu
 - logged: v0.4.0 · 2026-09-28
 
 Renders into two wasm-side buffers sized for 4,096 frames and copies them out; posts the position every 8 render quanta and `ended` at the session end. It creates two small typed-array views per quantum, which allocates on the audio thread; caching the views (rebuilt only when memory grows) is the next refinement.
+
+---
+
+## v0.4.1 · playback polish
+
+### src/audio/player.ts · prefetch and one load per file (resolves the v0.4.0 first-play todo)
+- refers-to: src/audio/player.ts :: `prefetch`, `load`, `ensure`, `start`
+- kind: rationale
+- logged: v0.4.1 · 2026-09-28
+
+Every document change checks for media not yet loading and, when the session has tracks, starts the context (suspended until Play, which satisfies autoplay rules) and transfers those files into the worklet. `load` keeps one promise per media id, so prefetch and Play share a transfer; `ensure` shares one in-flight `start`, so two callers never open two contexts; `start` clears the pending loads when it replaces a context. Verified v0.4.1 under 4x CPU and Fast 3G: with the prefetch finished, Play reached playing in 72 ms (about 3,000 ms in v0.4.0); pressed straight after import it took 3,277 ms, and in both cases the file was requested once.
+
+### src/ui/transport.ts · loading notice
+- refers-to: src/ui/transport.ts :: `togglePlay`
+- kind: explainer
+- logged: v0.4.1 · 2026-09-28
+
+The same delayed-indicator pattern as import: "Loading audio" appears only if Play has not resolved after 300 ms, holds at least 250 ms, then gives way to the outcome (empty, the skipped-clip count, or the error). When Play is fast the notice is not touched at all: verified, no notice change after a prefetched Play.
+
+### src/ui/transport.ts and src/ui/shell.ts · data-action (resolves the aria-label todo)
+- refers-to: src/ui/shell.ts :: `TRANSPORT`, `transportButtons`; src/ui/transport.ts :: `button`
+- kind: explainer
+- logged: v0.4.1 · 2026-09-28
+
+Each transport button carries `data-action` (to-start, play, stop, record, loop) and the wiring selects by it, so labels can change or be translated freely. Record and Loop's tooltips say they are not built yet, replacing the stale "arrives in v0.2.0".
+
+### src/audio/player-worklet.ts · cached views (resolves the render-loop todo)
+- refers-to: src/audio/player-worklet.ts :: `process`, `views`
+- kind: explainer
+- logged: v0.4.1 · 2026-09-28
+
+The two output views are kept and rebuilt only when wasm memory grows (its buffer changes) or the block size changes, so the steady-state render loop allocates nothing. The offline null test runs through this loop and stayed bit-identical.
