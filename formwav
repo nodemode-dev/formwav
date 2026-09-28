@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+trap 'trap - EXIT INT TERM; kill 0 2>/dev/null' EXIT INT TERM
+if [ -d backend ]; then
+  ( cd backend && ./boot_backend ) &
+fi
+if [ -d frontend ]; then
+  ( cd frontend && ./boot_frontend ) &
+fi
+echo "formwav interface http://localhost:3060 · engine http://127.0.0.1:8060"
+wait
