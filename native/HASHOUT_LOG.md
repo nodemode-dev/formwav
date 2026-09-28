@@ -20,7 +20,9 @@ native/
         ├── graph.rs             node and port model, connection rules, processing order
         ├── wav.rs               RIFF WAVE probe and decode to planar f32
         ├── peaks.rs             min and max peak pyramid for waveform drawing
-        └── python.rs            pyo3 module: probe() and peaks() (python feature only)
+        ├── python.rs            pyo3 module: probe() and peaks() (python feature only)
+        ├── render.rs            Player: sources, clips, position, render to a stereo pair
+        └── wasm.rs              C-ABI exports for the wasm32 build (fw_alloc, fw_load_wav, fw_render, ...)
 ```
 
 ---
@@ -34,6 +36,8 @@ native/
 - [formwav-dsp/src/wav.rs](#src-wav)
 - [formwav-dsp/src/peaks.rs](#src-peaks)
 - [formwav-dsp/src/python.rs](#src-python)
+- [formwav-dsp/src/render.rs](#src-render)
+- [formwav-dsp/src/wasm.rs](#src-wasm)
 
 ---
 
@@ -153,3 +157,32 @@ Level 0 takes the min and max of every `base` samples (256 by default); each nex
 - logged: v0.2.0 · 2026-09-28
 
 `probe(bytes)` returns `(sample_rate, channels, frames, format_name)`; `peaks(bytes, base=256, factor=4, min_blocks=64)` returns one `(samples_per_peak, channels, blocks, payload)` tuple per level, where `payload` is little-endian f32 in the level layout above. Decode errors raise `ValueError` with the decoder's message. `__version__` is the crate version. The engine does not yet release the GIL around decoding; that comes with the jobs surface.
+
+---
+
+## formwav-dsp/src/render.rs {#src-render}
+
+### src/render.rs · Player
+- refers-to: src/render.rs :: `Player::render`
+- kind: explainer
+- logged: v0.4.0 · 2026-09-28
+
+Holds decoded sources by small integer id and a flat list of clips (source, start, source_in, length, linear gain). `render` zeroes a stereo pair, adds every clip overlapping the block from its source (mono sources to both sides, channels past two ignored for now), and advances the position. Positions are samples at the session rate; a source at another rate would play at the wrong speed, so the interface leaves such clips out until resampling lands. The graph in graph.rs does not drive playback yet: this flat mixer is the first renderer and becomes graph nodes when buses and effects arrive.
+
+---
+
+## formwav-dsp/src/wasm.rs {#src-wasm}
+
+### src/wasm.rs · export surface
+- refers-to: src/wasm.rs :: all `fw_*` functions
+- kind: rationale
+- logged: v0.4.0 · 2026-09-28
+
+A plain C ABI, compiled only for `wasm32`, so the module has no imports and needs no generated JavaScript (33,115 bytes in v0.4.0). JavaScript owns memory through `fw_alloc` and `fw_free`; the player is a boxed pointer from `fw_player_new`. Sample positions cross as f64 because JavaScript numbers cannot carry u64 without BigInt. The same `decode_wav` the engine uses decodes files inside the browser.
+
+### src/wasm.rs · verification v0.4.0
+- refers-to: src/wasm.rs :: module
+- kind: explainer
+- logged: v0.4.0 · 2026-09-28
+
+Built with `cargo build --release --locked --target wasm32-unknown-unknown --lib`; Node listed exactly the ten `fw_*` exports plus `memory` and no imports. In Chromium, an offline render of a 3 s stereo 16-bit WAV through the AudioWorklet and this module matched the source samples exactly (maximum difference 0.0 on both channels) and, at -6 dB track gain, within 3.7e-8.
