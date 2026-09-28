@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.5.0
-Last updated: 2026-09-28 · recording with an input meter; playing state owned by the main thread
+Current build version: v0.6.0
+Last updated: 2026-09-28 · session name, save and open with an Open popover; loadDocument
 
 ---
 
@@ -31,16 +31,18 @@ frontend/
     │       └── index.ts         asks the engine for health, sets link state
     ├── io/
     │   ├── engine-client.ts     fetchHealth with timeout
-    │   └── media-client.ts      importFile, fetchPeaks
+    │   ├── media-client.ts      importFile, fetchPeaks
+    │   └── projects-client.ts   listProjects, saveProject, openProject
     ├── ui/
-    │   ├── icons.ts             fourteen NodeMode icons plus the icon() helper
+    │   ├── icons.ts             fifteen NodeMode icons plus the icon() helper
     │   ├── shell.ts             mounts the shell once, patches status and clock in place
     │   ├── session.ts           wires lanes, import, undo and redo buttons, shortcuts
     │   ├── lanes.ts             keyed track lanes, clip boxes, canvas waveforms
     │   ├── import.ts            Import button, file picker, drop on the stage, notice line
     │   ├── shortcuts.ts         Cmd or Ctrl with Z, Shift Z and Y
     │   ├── transport.ts         transport buttons, playhead, click to seek, Space and Home
-    │   └── record.ts            Record button and R key, input meter, takes into the session
+    │   ├── record.ts            Record button and R key, input meter, takes into the session
+    │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
     ├── audio/
     │   ├── player.ts            AudioContext at the session rate, media into the worklet, bounce()
     │   ├── player-worklet.ts    AudioWorklet hosting the wasm player (public/core, built at install)
@@ -82,6 +84,8 @@ frontend/
 - [src/ui/record.ts](#src-ui-record)
 - [src/audio/recorder.ts](#src-audio-recorder)
 - [src/audio/recorder-worklet.ts](#src-audio-recorder-worklet)
+- [src/ui/projects.ts](#src-ui-projects)
+- [src/io/projects-client.ts](#src-io-projects-client)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -520,3 +524,46 @@ Since v0.4.0, `play()` set playing true and then the worklet's reply to the prec
 - logged: v0.5.0 · 2026-09-28
 
 `play(true)` sends no end position, so the clock keeps running past the last clip while recording; `stop` clears it. `context()` gives the recorder the running context.
+
+---
+
+## src/ui/projects.ts {#src-ui-projects}
+
+### src/ui/projects.ts · save and open
+- refers-to: src/ui/projects.ts :: `save`, `open`, `withNotice`
+- kind: explainer
+- logged: v0.6.0 · 2026-09-28
+
+Save (button, Enter in the name field, Cmd or Ctrl S) sends the current document under the field's name, "Untitled session" when empty. Open loads a session through `engine.loadDocument`, which replaces the document, clears undo history and resets the transport; the player then prefetches its media as for any document change. Opening over unsaved changes asks first with the browser's confirm dialog (unsaved means the document differs from the one last saved or opened and has tracks). Both show their pending text only after 300 ms, like import.
+
+### src/ui/projects.ts · the Open popover, the first overlay
+- refers-to: src/ui/projects.ts :: `show`, `close`, `popover`
+- kind: rationale
+- logged: v0.6.0 · 2026-09-28
+
+Created once at mount inside `#overlay-root`, so no ancestor can clip or trap it, on the declared `--z-menu` layer (200). The list is filled by `patchList` while the popover is still hidden, then it is placed under the Open button and shown in one step, and focus moves to the first row. Escape, a pointer down outside it, or opening a session closes it; `aria-expanded` on Open follows. Verified v0.6.0 under 4x CPU and Fast 3G: opening a session after a reload gave layout shift 0, and every mutation was the popover's own position, visibility and list, `aria-expanded`, the lanes, the enabled transport buttons, the notice and the canvases. The same run recorded one `style` write on each of the two form inputs, which no formwav code path makes; its origin was not identified.
+
+### src/ui/shell.ts · name-field class collision, defect fixed
+- refers-to: src/ui/shell.ts :: the session-name input; src/styles/shell.css :: `.fw-session-name`
+- kind: warning-context
+- logged: v0.6.0 · 2026-09-28
+
+The field was first given the class `fw-name`, which the brand label in the top bar already uses. `querySelector('.fw-name')` returned the brand span, so Save would have thrown reading `.value` of a span, and the new CSS restyled the brand label as an input. The harness failed to type into the field and a measurement of its box exposed the collision. The field is now `input.fw-session-name`, selected with its tag. Before naming a class, search the shell for it.
+
+---
+
+## src/io/projects-client.ts {#src-io-projects-client}
+
+### src/io/projects-client.ts · calls
+- refers-to: src/io/projects-client.ts :: `listProjects`, `saveProject`, `openProject`
+- kind: explainer
+- logged: v0.6.0 · 2026-09-28
+
+Names are URL-encoded into the path; the document travels as JSON; an error reply's `detail` becomes the thrown message, which the notice shows.
+
+### src/engine · loadDocument and History.clear
+- refers-to: src/engine/index.ts :: `loadDocument`; src/engine/history.ts :: `clear`
+- kind: explainer
+- logged: v0.6.0 · 2026-09-28
+
+Opening a session is not an undoable edit: history is cleared, so Ctrl Z cannot step back into the previous session. Verified: undo disabled after opening.

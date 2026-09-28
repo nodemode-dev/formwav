@@ -31,6 +31,11 @@ export class History<T> {
     return next;
   }
 
+  clear(): void {
+    this.past.length = 0;
+    this.future.length = 0;
+  }
+
   state(): HistoryState {
     return { canUndo: this.past.length > 0, canRedo: this.future.length > 0, undoDepth: this.past.length, redoDepth: this.future.length };
   }

@@ -27,6 +27,9 @@ function shellHtml(): string {
     </div>
     <div class="fw-topbar-mid">
       <div class="fw-tools" role="group" aria-label="Session">
+        <input class="fw-session-name" type="text" value="Untitled session" aria-label="Session name" maxlength="80" spellcheck="false" autocomplete="off">
+        <button class="fw-ibtn" type="button" data-action="save" title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span></button>
+        <button class="fw-ibtn" type="button" data-action="open" aria-haspopup="dialog" title="Open (Cmd or Ctrl O)">${icon("folderOpen", ICON_SIZE.control)}<span>Open</span></button>
         <button class="fw-ibtn" type="button" data-action="import">${icon("upload", ICON_SIZE.control)}<span>Import</span></button>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="undo" aria-label="Undo" title="Undo" disabled>${icon("undo", ICON_SIZE.control)}</button>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="redo" aria-label="Redo" title="Redo" disabled>${icon("redo", ICON_SIZE.control)}</button>

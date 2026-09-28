@@ -102,6 +102,13 @@ export class Engine {
     if (changed) this.update("transport", next);
   }
 
+  loadDocument(doc: SessionDoc): void {
+    this.past.clear();
+    this.update("document", doc);
+    this.update("history", this.past.state());
+    this.setTransport({ playing: false, recording: false, positionSamples: 0, sampleRate: doc.sampleRate });
+  }
+
   private commit(doc: SessionDoc): void {
     this.update("document", doc);
     this.update("history", this.past.state());
