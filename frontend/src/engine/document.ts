@@ -89,6 +89,7 @@ export type Command =
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
   | { type: "add-clip"; trackId: string; mediaId: string; start: number; sourceIn: number; length: number }
+  | { type: "paste-clip"; trackId: string; clip: Omit<Clip, "id"> }
   | { type: "remove-clip"; trackId: string; clipId: string }
   | { type: "set-clip-fades"; trackId: string; clipId: string; fadeIn: number; fadeOut: number; shape?: FadeShape }
   | { type: "crossfade"; trackId: string; leftClipId: string; rightClipId: string; shape?: FadeShape }
@@ -272,6 +273,11 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         });
         return changed ? { ...t, clips } : t;
       });
+    case "paste-clip": {
+      if (!doc.media[cmd.clip.mediaId]) return doc;
+      const clip: Clip = { ...cmd.clip, id: newId(), start: Math.max(0, Math.round(cmd.clip.start)) };
+      return mapTrack(doc, cmd.trackId, (t) => ({ ...t, clips: [...t.clips, clip].sort((a, b) => a.start - b.start) }));
+    }
     case "add-clip": {
       if (!doc.media[cmd.mediaId]) return doc;
       const clip: Clip = {

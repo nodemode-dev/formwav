@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.19.1
-Last updated: 2026-09-28 · gain label moved to the clip's start side
+Current build version: v0.20.0
+Last updated: 2026-09-28 · cut, copy and paste (Shuffle-aware); fades and gain across a selection
 
 ---
 
@@ -851,3 +851,21 @@ Shuffle mode (a button beside Grid, or H) makes edits keep a track's clips close
 - logged: v0.19.1 · 2026-09-28
 
 The dB label was anchored to the gain line's right end, so a clip running past the window's right edge had its label cut off (recorded in v0.16.0). It now sits 12 px inside the line's start, clear of the fade-in handle in the top corner. Verified: with a short and a long clip selected, both labels started at x = 213 and x = 313 in a 1,280 px window, the long clip's line running on to x = 1,283; the screenshot showed both fully.
+
+---
+
+## v0.20.0 · clipboard, selection-wide fades and gain
+
+### src/engine/document.ts and src/ui/lanes.ts · cut, copy, paste
+- refers-to: src/engine/document.ts :: `paste-clip`; src/ui/lanes.ts :: `clipboard`, `selectedClips`, `removalCommands`, `paste`, keydown
+- kind: rationale
+- logged: v0.20.0 · 2026-09-28
+
+Cmd or Ctrl C copies the selected clips, keeping their tracks and their offsets from the earliest; X copies and removes them through the same removal commands as Delete, so in Shuffle mode a cut closes the gap. V pastes at the playhead onto the same tracks with `paste-clip`, which keeps gain, fades and fade shape and lets the engine give each copy a new id; the copies become the selection by comparing ids before and after. In Shuffle mode, paste first moves every clip at or after the playhead on the target tracks right by the pasted span. Each is one `batch`, one undo step. Paste skips clips whose track has since been removed. Verified on a 10 s sine split in three: pasting the first clip at 10 s rendered the source followed by that clip, 0.0 over 576,000 frames, in one step with the copy selected; cutting the middle clip in Shuffle mode rendered 0.0 against the remaining pieces joined; pasting it back at 96,000 in Shuffle mode restored the original, 0.0 over 480,000 frames.
+
+### src/ui/lanes.ts · fades and gain across the selection
+- refers-to: src/ui/lanes.ts :: pointer-down group, `shiftGain`, `preview`, `restore`, `commit`
+- kind: rationale
+- logged: v0.20.0 · 2026-09-28
+
+Dragging a fade handle or the gain line of a selected clip applies the same change to every selected clip. For fades the limits are the tightest across the group, so no clip's fades can cross; for gain the grabbed clip's dB change is added to each clip's own gain, clamped to the line's range. Every member's handle or line is previewed, and the commit is one `batch`. Verified with the first and last of three clips selected: a 50 px fade-in drag gave both 24,000 in one step and both rendered the k / 24,000 ramp within 2.7e-8 with the middle clip untouched (0.0); a 22 px gain drag gave both -12.4 dB in one step, both within 5.2e-9 of the source times the gain, the middle clip untouched.
