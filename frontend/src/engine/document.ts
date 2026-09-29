@@ -38,11 +38,26 @@ export interface Marker {
   label: string;
 }
 
+export interface Region {
+  id: string;
+  start: number;
+  end: number;
+  label: string;
+}
+
+export interface LoopRange {
+  start: number;
+  end: number;
+  enabled: boolean;
+}
+
 export interface SessionDoc {
   sampleRate: number;
   tracks: readonly Track[];
   media: Readonly<Record<string, MediaRef>>;
   markers: readonly Marker[];
+  regions?: readonly Region[];
+  loop?: LoopRange;
 }
 
 export interface FrequencyBand {
@@ -67,6 +82,9 @@ export type Command =
   | { type: "remove-clip"; trackId: string; clipId: string }
   | { type: "set-clip-fades"; trackId: string; clipId: string; fadeIn: number; fadeOut: number; shape?: FadeShape }
   | { type: "crossfade"; trackId: string; leftClipId: string; rightClipId: string; shape?: FadeShape }
+  | { type: "set-loop"; start: number; end: number; enabled: boolean }
+  | { type: "add-region"; start: number; end: number; label: string }
+  | { type: "remove-region"; regionId: string }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "add-marker"; at: number; label: string };
 
@@ -128,6 +146,26 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "set-track-gain":
       return mapTrack(doc, cmd.trackId, (t) => (t.gainDb === cmd.gainDb ? t : { ...t, gainDb: cmd.gainDb }));
+    case "set-loop": {
+      const start = Math.max(0, Math.round(Math.min(cmd.start, cmd.end)));
+      const end = Math.max(0, Math.round(Math.max(cmd.start, cmd.end)));
+      if (end <= start) return doc;
+      const current = doc.loop;
+      if (current && current.start === start && current.end === end && current.enabled === cmd.enabled) return doc;
+      return { ...doc, loop: { start, end, enabled: cmd.enabled } };
+    }
+    case "add-region": {
+      const start = Math.max(0, Math.round(Math.min(cmd.start, cmd.end)));
+      const end = Math.max(0, Math.round(Math.max(cmd.start, cmd.end)));
+      if (end <= start) return doc;
+      const region: Region = { id: newId(), start, end, label: cmd.label.trim() || "Region" };
+      return { ...doc, regions: [...(doc.regions ?? []), region].sort((a, b) => a.start - b.start) };
+    }
+    case "remove-region": {
+      const before = doc.regions ?? [];
+      const regions = before.filter((r) => r.id !== cmd.regionId);
+      return regions.length === before.length ? doc : { ...doc, regions };
+    }
     case "add-clip": {
       if (!doc.media[cmd.mediaId]) return doc;
       const clip: Clip = {

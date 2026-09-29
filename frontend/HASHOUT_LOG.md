@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.8.0
-Last updated: 2026-09-28 · clip fades and crossfades; add-clip and remove-clip
+Current build version: v0.9.0
+Last updated: 2026-09-28 · regions and loop range; Loop button, L key and loop band
 
 ---
 
@@ -41,6 +41,7 @@ frontend/
     │   ├── import.ts            Import button, file picker, drop on the stage, notice line
     │   ├── shortcuts.ts         Cmd or Ctrl with Z, Shift Z and Y
     │   ├── transport.ts         transport buttons, playhead, click to seek, Space and Home
+    │   ├── loop.ts              Loop button, L key, loop band over the lanes
     │   ├── record.ts            Record button and R key, input meter, takes into the session
     │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
     ├── audio/
@@ -86,6 +87,7 @@ frontend/
 - [src/audio/recorder-worklet.ts](#src-audio-recorder-worklet)
 - [src/ui/projects.ts](#src-ui-projects)
 - [src/io/projects-client.ts](#src-io-projects-client)
+- [src/ui/loop.ts](#src-ui-loop)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -603,3 +605,28 @@ Each clip carries its track's pan (`?? 0`) to `fw_add_clip`; the pan law itself 
 - logged: v0.8.0 · 2026-09-28
 
 Each clip carries `fadeIn`, `fadeOut` (0 when absent) and a shape code (1 equal power, 0 linear) to `fw_add_clip`; the curves live only in `render.rs`. The twin in `backend/app/services/render.py` changed in the same commit series; `verify_fades.py` compares the two renders.
+
+---
+
+## src/ui/loop.ts {#src-ui-loop}
+
+### src/ui/loop.ts · Loop button, L key, band
+- refers-to: src/ui/loop.ts :: `mountLoop`, `toggle`, `render`
+- kind: explainer
+- logged: v0.9.0 · 2026-09-28
+
+Loop (button or L) toggles the saved loop range, or the first time loops the whole session. The button is disabled without tracks and pressed while the loop is on. The band is created once at mount inside the lanes, after the playhead, with no z-index: it paints over clips and under the sticky lane heads, lets clicks through, moves by `transform`, and writes its width only when it changes. Verified v0.9.0: after L the band was 300 px wide at 0 over a 3 s session; 4.5 s of playback kept playing, wrapped backwards and never passed the end; layout shift 0; mutations only the clock, playhead and Play's `aria-pressed` (plus the unexplained `style` writes on the two form inputs noted in v0.6.0).
+
+### src/ui/loop.ts · band hard to see
+- refers-to: src/ui/loop.ts :: band; src/styles/shell.css :: `.fw-loop-band`
+- kind: todo
+- logged: v0.9.0 · 2026-09-28
+
+When the loop covers exactly a clip, as in the first-loop default, the band's tint and edges coincide with the clip's and it is barely visible (seen in the v0.9.0 screenshot). Loop markers belong in a timeline ruler, which arrives with the editing surface; there is also no way yet to set a custom range except the `set-loop` command.
+
+### src/engine/document.ts · loop and regions
+- refers-to: src/engine/document.ts :: `LoopRange`, `Region`, `set-loop`, `add-region`, `remove-region`
+- kind: rationale
+- logged: v0.9.0 · 2026-09-28
+
+Both are optional on the document, so older sessions open without them, and both are saved in `.fmw` with the rest of the document. Commands normalise reversed bounds, refuse empty ranges, trim labels ("Region" when empty) and are no-ops when nothing changes. Loop changes are undo steps because the loop range is part of the saved session (verified: undo re-armed a disarmed loop, a second undo removed it). Regions have no interface yet. `sendPlan` sends the loop to the worklet and drops the end-stop while it is on, so a loop reaching past the last clip keeps playing.

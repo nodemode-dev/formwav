@@ -13,6 +13,7 @@ interface CoreExports {
   fw_clear_clips(player: number): void;
   fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number): void;
   fw_seek(player: number, position: number): void;
+  fw_set_loop(player: number, start: number, end: number): void;
   fw_position(player: number): number;
   fw_render(player: number, left: number, right: number, frames: number): void;
 }
@@ -35,7 +36,8 @@ export type WorkletMessage =
   | { type: "clips"; clips: WorkletClip[]; end: number }
   | { type: "play" }
   | { type: "stop" }
-  | { type: "seek"; position: number };
+  | { type: "seek"; position: number }
+  | { type: "loop"; start: number; end: number };
 
 export type WorkletReply =
   | { type: "ready" }
@@ -106,6 +108,9 @@ class PlayerProcessor extends AudioWorkletProcessor {
       case "seek":
         core.fw_seek(this.player, msg.position);
         this.report();
+        break;
+      case "loop":
+        core.fw_set_loop(this.player, msg.start, msg.end);
         break;
       case "play":
         this.playing = true;

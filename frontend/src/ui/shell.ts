@@ -7,7 +7,7 @@ const TRANSPORT: { name: IconName; label: string; action: string; built: boolean
   { name: "play", label: "Play", action: "play", built: true },
   { name: "stop", label: "Stop", action: "stop", built: true },
   { name: "record", label: "Record", action: "record", built: true },
-  { name: "loop", label: "Loop", action: "loop", built: false },
+  { name: "loop", label: "Loop", action: "loop", built: true },
 ];
 
 function transportButtons(): string {

@@ -287,3 +287,16 @@ html, body, #app { height: 100%; }
 .fw-popover-name { font-size: var(--fs-12); font-weight: 500; }
 .fw-popover-meta, .fw-popover-empty { font-size: var(--fs-11); color: var(--text-muted); }
 .fw-popover-empty { padding: var(--space-2); }
+
+.fw-loop-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--fw-head-w);
+  border-inline: 1px solid var(--accent-color-dim);
+  background: var(--accent-tint);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.fw-loop-band[hidden] { display: none; }

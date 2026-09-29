@@ -140,7 +140,9 @@ export class Player {
 
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open ? 0 : this.lastPlan.end });
+    const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end });
+    send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
   private onReply = (e: MessageEvent<WorkletReply>): void => {
