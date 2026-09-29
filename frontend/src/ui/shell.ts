@@ -47,9 +47,10 @@ function shellHtml(): string {
     </div>
   </header>
   <div class="fw-workspace">
-    <aside class="fw-pane fw-pane-media" aria-label="Media">
-      <div class="fw-pane-header"><span class="fw-pane-title">Media</span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
-      <div class="fw-pane-body fw-media-list"></div>
+    <aside class="fw-pane fw-pane-media" aria-label="Media and voice">
+      <div class="fw-pane-header"><span class="fw-pane-tabs" role="tablist"><button type="button" class="fw-pane-tab is-active" role="tab" aria-selected="true" data-tab="media">Media</button><button type="button" class="fw-pane-tab" role="tab" aria-selected="false" data-tab="voice">Voice</button></span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
+      <div class="fw-pane-body fw-media-list" data-panel="media"></div>
+      <div class="fw-pane-body fw-voice-body" data-panel="voice" hidden></div>
     </aside>
     <section class="fw-pane fw-pane-timeline" aria-label="Timeline">
       <div class="fw-tool-tray" role="toolbar" aria-label="Edit modes"></div>

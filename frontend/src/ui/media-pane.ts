@@ -30,7 +30,7 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
   end?.append(importButton);
 
   const empty = document.createElement("p");
-  empty.className = "fw-empty-note";
+  empty.className = "fw-empty-note fw-media-empty";
   empty.textContent = "Imported and recorded audio appears here. Add any file to a new track with its + button.";
   list.before(empty);
 

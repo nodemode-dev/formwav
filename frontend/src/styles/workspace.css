@@ -63,6 +63,37 @@
 .fw-empty-note { margin: 0; padding: 4px 8px 8px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 .fw-empty-note[hidden] { display: none; }
 
+/* formcut's pane tabs (.pane-tab): plain until chosen, the chosen tab on the cue. */
+.fw-pane-tabs { display: flex; gap: 2px; }
+.fw-pane-tab { padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 500; color: var(--text-secondary); background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
+.fw-pane-tab:hover { color: var(--text-primary); }
+.fw-pane-tab.is-active { color: var(--text-on-accent); background: var(--accent-color); }
+.fw-pane-body[hidden],
+.fw-field[hidden] { display: none; }
+.fw-pane-media[data-tab="voice"] .fw-media-empty { display: none; }
+.fw-pane-media[data-tab="voice"] :is(.fw-pane-meta, .fw-pane-end) { visibility: hidden; }
+
+.fw-voice-body { display: grid; align-content: start; gap: 8px; }
+.fw-voice-body .fw-insp-section + .fw-insp-section { margin-block-start: 0; }
+.fw-voice-body .fw-field { grid-template-columns: 64px minmax(0, 1fr) auto; }
+.fw-voice-body .fw-field.fw-field-stack,
+.fw-field.fw-field-stack { grid-template-columns: minmax(0, 1fr); row-gap: 4px; }
+.fw-field textarea,
+.fw-voice-transcript {
+  inline-size: 100%;
+  resize: vertical;
+  padding: 6px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+.fw-voice-body button:disabled,
+.fw-voice-body select:disabled { opacity: 0.45; cursor: default; }
+.fw-voice-go { justify-content: center; }
+
 .fw-media-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
