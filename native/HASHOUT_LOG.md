@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.17.0
-Last updated: 2026-09-28 · fw_take_peaks exports the master peaks to the worklet (no native changes between v0.11.0 and v0.16.0)
+Current build version: v0.21.0
+Last updated: 2026-09-28 · S-curve and exponential fade shapes in fade_curve
 
 ---
 
@@ -299,3 +299,10 @@ With one track on a bus at -6 dB panned 0.5 and one on master: browser and engin
 - logged: v0.17.0 · 2026-09-28
 
 Writes the master-bus peaks since the last call into a two-float buffer the caller owns, then resets them, so each worklet report carries the loudest sample of its own interval. Verified in Node: after one 128-frame block at 0 and at 72,000 the peaks equalled the source block's absolute maxima exactly (0.000336 and 0.399963, then 0.400238 and 0.399963), and a second call without rendering returned 0 and 0.
+
+### src/render.rs · four fade shapes
+- refers-to: src/render.rs :: `fade_curve`, `FADE_S_CURVE`, `FADE_EXPONENTIAL`
+- kind: explainer
+- logged: v0.21.0 · 2026-09-28
+
+`fade_curve` now matches on four codes: 0 linear, 1 equal-power (sine), 2 S-curve (raised cosine, 0.5 - 0.5 cos(pi x)), 3 exponential (x squared); unknown codes stay linear, so older sessions and callers are unchanged. The shape still travels as a `u8` through both bindings, so `wasm.rs` and `python.rs` needed no change. Verified in Node on the wasm32 build: a 24,000-sample fade-in rendered within float32 precision of the source times each formula (linear 2.7e-8, equal-power 5.2e-8, S-curve 8.3e-8, exponential 5.7e-8).

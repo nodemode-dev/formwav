@@ -25,13 +25,18 @@ pub struct Bus {
 
 pub const FADE_LINEAR: u8 = 0;
 pub const FADE_EQUAL_POWER: u8 = 1;
+pub const FADE_S_CURVE: u8 = 2;
+pub const FADE_EXPONENTIAL: u8 = 3;
 
+/// Gain of a fade at position `x` (0 at the silent end, 1 at full level).
+/// Shape codes: 0 linear, 1 equal-power (sine), 2 S-curve (raised cosine), 3 exponential (square); unknown codes are linear.
 pub fn fade_curve(x: f32, shape: u8) -> f32 {
     let x = x.clamp(0.0, 1.0);
-    if shape == FADE_EQUAL_POWER {
-        (x * std::f32::consts::FRAC_PI_2).sin()
-    } else {
-        x
+    match shape {
+        FADE_EQUAL_POWER => (x * std::f32::consts::FRAC_PI_2).sin(),
+        FADE_S_CURVE => 0.5 - 0.5 * (x * std::f32::consts::PI).cos(),
+        FADE_EXPONENTIAL => x * x,
+        _ => x,
     }
 }
 
