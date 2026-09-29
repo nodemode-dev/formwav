@@ -38,7 +38,7 @@ if (host) {
   mountGrid(host);
   mountOutputMeter(host, player);
   mountTrackMeters(host, engine, player);
-  mountMixer(host, engine);
+  mountMixer(host, engine, player);
   mountRecord(host, engine, player);
   mountProjects(host, engine, player);
 }

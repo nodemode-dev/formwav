@@ -13,6 +13,7 @@ interface CoreExports {
   fw_clear_clips(player: number): void;
   fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number, bus: number, track: number, gainEnv: number, panEnv: number): void;
   fw_clear_envelopes(player: number): void;
+  fw_set_master_db(player: number, db: number): void;
   fw_add_envelope(player: number, points: number, count: number, db: number): number;
   fw_free(ptr: number, bytes: number): void;
   fw_clear_buses(player: number): void;
@@ -54,7 +55,7 @@ export interface WorkletBus {
 export type WorkletMessage =
   | { type: "init"; bytes: ArrayBuffer }
   | { type: "load"; id: number; bytes: ArrayBuffer }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[] }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number }
   | { type: "play" }
   | { type: "stop" }
   | { type: "seek"; position: number }
@@ -160,6 +161,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
         }
         core.fw_clear_buses(this.player);
         for (const b of msg.buses) core.fw_add_bus(this.player, b.id, b.gain, b.pan);
+        core.fw_set_master_db(this.player, msg.masterDb);
         this.end = msg.end;
         break;
       }

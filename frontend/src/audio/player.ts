@@ -10,6 +10,8 @@ export interface ClipPlan {
   end: number;
   skipped: number;
   buses: WorkletBus[];
+  /** Master fader in dB (0 turns the master stage off). */
+  masterDb: number;
 }
 
 export function dbToGain(db: number): number {
@@ -64,7 +66,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       end = Math.max(end, clip.start + clip.length);
     }
   }
-  return { clips, end, skipped, buses };
+  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0 };
 }
 
 function send(node: AudioWorkletNode, message: WorkletMessage, transfer: Transferable[] = []): void {
@@ -111,7 +113,7 @@ export class Player {
   private module: Promise<ArrayBuffer> | null = null;
   private sources = new Map<string, number>();
   private counter = 0;
-  private lastPlan: ClipPlan = { clips: [], end: 0, skipped: 0, buses: [] };
+  private lastPlan: ClipPlan = { clips: [], end: 0, skipped: 0, buses: [], masterDb: 0 };
   private pending = new Map<string, Promise<void>>();
 
   constructor(private readonly engine: Engine) {
@@ -174,7 +176,7 @@ export class Player {
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
@@ -271,7 +273,7 @@ export class Player {
     const node = await makeNode(ctx, await this.core());
     await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter)));
     const plan = planClips(doc, sources);
-    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses });
+    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb });
     send(node, { type: "play" });
     await request(node, { type: "seek", position: 0 }, (r) => r.type === "position");
     const rendered = await ctx.startRendering();

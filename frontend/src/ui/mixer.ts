@@ -1,8 +1,9 @@
+import type { Player } from "../audio/player";
 import type { Engine, SessionDoc, Track } from "../engine";
 import type { Bus } from "../engine/document";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
-type Strip = { kind: "track"; item: Track } | { kind: "bus"; item: Bus };
+type Strip = { kind: "track"; item: Track } | { kind: "bus"; item: Bus } | { kind: "master"; item: { id: string; name: string; gainDb: number } };
 
 function stripNode(kind: Strip["kind"]): HTMLElement {
   const node = document.createElement("div");
@@ -13,9 +14,9 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
     `<div class="fw-strip-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div>` +
     `<input class="fw-strip-fader" type="range" min="-60" max="12" step="0.1" aria-label="Volume">` +
     `<output class="fw-strip-db"></output>` +
-    `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" aria-label="Pan">` +
-    `<div class="fw-strip-buttons"><button type="button" class="fw-strip-mute" aria-pressed="false" title="Mute">M</button><button type="button" class="fw-strip-solo" aria-pressed="false" title="Solo"${kind === "bus" ? " hidden" : ""}>S</button></div>` +
-    `<select class="fw-strip-out" aria-label="Output"${kind === "bus" ? " hidden" : ""}></select>`;
+    `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" aria-label="Pan"${kind === "master" ? " hidden" : ""}>` +
+    `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute" aria-pressed="false" title="Mute">M</button><button type="button" class="fw-strip-solo" aria-pressed="false" title="Solo"${kind !== "track" ? " hidden" : ""}>S</button></div>` +
+    `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>`;
   return node;
 }
 
@@ -27,6 +28,15 @@ function setAttr(el: Element | null, name: string, value: string): void {
 
 function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
   setText(node.querySelector(".fw-strip-name"), strip.item.name);
+  if (strip.kind === "master") {
+    const masterFader = node.querySelector<HTMLInputElement>(".fw-strip-fader");
+    if (masterFader && node.dataset.dragging !== "fader") {
+      const value = String(strip.item.gainDb);
+      if (masterFader.value !== value) masterFader.value = value;
+      setText(node.querySelector(".fw-strip-db"), dbText(strip.item.gainDb));
+    }
+    return;
+  }
   const fader = node.querySelector<HTMLInputElement>(".fw-strip-fader");
   const pan = node.querySelector<HTMLInputElement>(".fw-strip-pan");
   const automation = strip.kind === "track" ? strip.item.automation : undefined;
@@ -63,7 +73,7 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
 }
 
 /** A console-style mixer docked over the bottom of the timeline, toggled from the transport bar or with X. */
-export function mountMixer(host: HTMLElement, engine: Engine): void {
+export function mountMixer(host: HTMLElement, engine: Engine, player: Player): void {
   const transport = host.querySelector<HTMLElement>(".fw-transport");
   const toggle = document.createElement("button");
   toggle.type = "button";
@@ -84,7 +94,11 @@ export function mountMixer(host: HTMLElement, engine: Engine): void {
 
   const render = (doc: SessionDoc) => {
     if (panel.hidden) return;
-    const items: Strip[] = [...doc.tracks.map((item) => ({ kind: "track" as const, item })), ...(doc.buses ?? []).map((item) => ({ kind: "bus" as const, item }))];
+    const items: Strip[] = [
+      ...doc.tracks.map((item) => ({ kind: "track" as const, item })),
+      ...(doc.buses ?? []).map((item) => ({ kind: "bus" as const, item })),
+      { kind: "master" as const, item: { id: "master", name: "Master", gainDb: doc.masterGainDb ?? 0 } },
+    ];
     patchList(strips, items, {
       key: (s) => s.item.id,
       create: (s) => {
@@ -130,7 +144,8 @@ export function mountMixer(host: HTMLElement, engine: Engine): void {
     if (el.classList.contains("fw-strip-fader")) {
       delete s.node.dataset.dragging;
       const gainDb = Number(el.value);
-      engine.dispatch(s.bus ? { type: "set-bus-gain", busId: s.id, gainDb } : { type: "set-track-gain", trackId: s.id, gainDb });
+      if (s.node.dataset.kind === "master") engine.dispatch({ type: "set-master-gain", gainDb });
+      else engine.dispatch(s.bus ? { type: "set-bus-gain", busId: s.id, gainDb } : { type: "set-track-gain", trackId: s.id, gainDb });
     } else if (el.classList.contains("fw-strip-pan")) {
       const pan = Number(el.value);
       engine.dispatch(s.bus ? { type: "set-bus-pan", busId: s.id, pan } : { type: "set-track-pan", trackId: s.id, pan });
@@ -145,5 +160,22 @@ export function mountMixer(host: HTMLElement, engine: Engine): void {
     const on = button.getAttribute("aria-pressed") !== "true";
     if (button.classList.contains("fw-strip-mute")) engine.dispatch(s.bus ? { type: "set-bus-mute", busId: s.id, mute: on } : { type: "set-track-mute", trackId: s.id, mute: on });
     else if (button.classList.contains("fw-strip-solo") && !s.bus) engine.dispatch({ type: "set-track-solo", trackId: s.id, solo: on });
+  });
+
+  const shown = [-Infinity, -Infinity];
+  let lastTime = performance.now();
+  player.onOutputLevel((left, right) => {
+    const now = performance.now();
+    const fall = ((now - lastTime) / 1000) * 20;
+    lastTime = now;
+    const bars = panel.querySelectorAll<HTMLElement>('.fw-strip[data-kind="master"] .fw-strip-meter .fw-out-bar');
+    [left, right].forEach((peak, c) => {
+      const silent = left === 0 && right === 0;
+      shown[c] = silent ? -Infinity : Math.max(peak > 0 ? 20 * Math.log10(peak) : -Infinity, shown[c] - fall);
+      const bar = bars[c];
+      if (!bar) return;
+      const transform = `scaleX(${Math.max(0, Math.min(1, (shown[c] + 60) / 60)).toFixed(3)})`;
+      if (bar.style.transform !== transform) bar.style.transform = transform;
+    });
   });
 }

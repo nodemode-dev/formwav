@@ -88,6 +88,8 @@ export interface LoopRange {
 
 export interface SessionDoc {
   sampleRate: number;
+  /** Master fader in dB, applied after the buses; absent means 0 dB. */
+  masterGainDb?: number;
   tracks: readonly Track[];
   media: Readonly<Record<string, MediaRef>>;
   markers: readonly Marker[];
@@ -128,6 +130,7 @@ export type Command =
   | { type: "set-track-mute"; trackId: string; mute: boolean }
   | { type: "set-track-solo"; trackId: string; solo: boolean }
   | { type: "set-bus-mute"; busId: string; mute: boolean }
+  | { type: "set-master-gain"; gainDb: number }
   | { type: "add-clip"; trackId: string; mediaId: string; start: number; sourceIn: number; length: number }
   | { type: "paste-clip"; trackId: string; clip: Omit<Clip, "id"> }
   | { type: "remove-clip"; trackId: string; clipId: string }
@@ -436,6 +439,10 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       return mapTrack(doc, cmd.trackId, (t) => (t.mute === cmd.mute ? t : { ...t, mute: cmd.mute }));
     case "set-track-solo":
       return mapTrack(doc, cmd.trackId, (t) => (t.solo === cmd.solo ? t : { ...t, solo: cmd.solo }));
+    case "set-master-gain": {
+      const gainDb = Math.max(-60, Math.min(12, Math.round(cmd.gainDb * 10) / 10));
+      return (doc.masterGainDb ?? 0) === gainDb ? doc : { ...doc, masterGainDb: gainDb };
+    }
     case "set-bus-mute": {
       const buses = doc.buses ?? [];
       const bus = buses.find((b) => b.id === cmd.busId);

@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.33.0
-Last updated: 2026-09-28 · console-style mixer; mute, solo and bus mute commands
+Current build version: v0.34.0
+Last updated: 2026-09-28 · master fader and a Master strip in the mixer
 
 ---
 
@@ -1060,3 +1060,14 @@ Tracks had `mute` and `solo` fields and buses a `mute` field, all honoured by th
 - logged: v0.33.0 · 2026-09-28
 
 A Mixer button in the transport bar (or X) shows a panel docked over the bottom of the timeline, fixed, so the lanes never reflow. It holds a strip per track (name, stereo meter, vertical fader with a dB readout, pan, mute, solo, output to Master or a bus) and per bus (fader, pan, mute), patched by key and written only on change. A fader or pan drag updates the readout live and commits one command on release; controls that automation drives are disabled and say so. The track meter driver also feeds the strips' bars, so a strip and its lane show the same level. Found and fixed before release: the strips' single grid column sized itself to the range inputs' natural width, so their contents spilled into neighbouring strips (the column is now the strip's width); and in `writing-mode: vertical-lr` a range input's block size is its width, so the fader's intended height made it 128 px wide (its length is now set with `inline-size`, 16 by 128 px). Known gaps: buses are not metered yet, so bus strips hide their meter rather than show a meter that always reads silence; there is no master fader, and no sends or inserts; a focused mixer button handles Space itself (the browser's accessible default) rather than starting playback. Verified with two tracks and a bus: three strips in order, the bus without solo or output, the panel's bottom at the transport's top; a real fader drag was one undo step with the track's gain equal to the fader's value; pan landed exactly; muting, soloing the other track, and routing to a muted bus each left the mix exactly silent where only that track played, the browser's render equal to the engine's; automation disabled the fader and read "auto"; during playback a strip's meter equalled its lane's (0.758 and 0.867); no strip child overflowed its strip; no page errors; layout shift 0; the track meter regression unchanged. The harness first pressed Space with a Mute button still focused, so playback never started and every meter read 0; it now clears focus first.
+
+---
+
+## v0.34.0 · master fader
+
+### src/engine/document.ts, src/audio/player.ts, player-worklet.ts, src/ui/mixer.ts · Master strip
+- refers-to: src/engine/document.ts :: `SessionDoc.masterGainDb`, `set-master-gain`; src/audio/player.ts :: `ClipPlan.masterDb`, `planClips`, both clips sends; src/audio/player-worklet.ts :: clips message, handler; src/ui/mixer.ts :: master strip, master meter listener; src/main.ts :: `mountMixer` now takes the player
+- kind: warning-context
+- logged: v0.34.0 · 2026-09-28
+
+The session carries an optional master fader (`masterGainDb`, absent meaning 0 dB), set by `set-master-gain` (clamped, tenths of a dB, one undo step). The plan carries it, both the live and the bounce sends pass it, and the worklet hands it to the core. The mixer ends with a Master strip holding only a fader, its readout and a meter driven by the output peaks on the same scale and fall-back as the other meters. The first build failed `tsc` because `masterDb` was added to the plan's returned object but not to the `ClipPlan` type (the dev server does not type-check, so the harness ran regardless); the type and the player's initial empty plan now carry it. Bus metering, planned beside the master fader, was split into its own release. Verified: the Master strip came last with pan, mute, solo and output hidden; a -6 dB move was one undo step; the bounce equalled the engine's render exactly and equalled the unity bounce times f32(10^(-6/20)) exactly; during playback the Master strip's meter equalled the OUT meter (0.8, the 0.5 tone at -12 dBFS); undo restored 0 dB; no page errors; layout shift 0; mixer and render-parity regressions unchanged.
