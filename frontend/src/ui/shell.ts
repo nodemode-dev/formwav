@@ -51,9 +51,10 @@ function shellHtml(): string {
   </header>
   <div class="fw-workspace">
     <aside class="fw-pane fw-pane-media" aria-label="Media and voice">
-      <div class="fw-pane-header"><span class="fw-pane-tabs" role="tablist"><button type="button" class="fw-pane-tab is-active" role="tab" aria-selected="true" data-tab="media">Media</button><button type="button" class="fw-pane-tab" role="tab" aria-selected="false" data-tab="voice">Voice</button></span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
+      <div class="fw-pane-header"><span class="fw-pane-tabs" role="tablist"><button type="button" class="fw-pane-tab is-active" role="tab" aria-selected="true" data-tab="media">Media</button><button type="button" class="fw-pane-tab" role="tab" aria-selected="false" data-tab="voice">Voice</button><button type="button" class="fw-pane-tab" role="tab" aria-selected="false" data-tab="transcript">Transcript</button></span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
       <div class="fw-pane-body fw-media-list" data-panel="media"></div>
       <div class="fw-pane-body fw-voice-body" data-panel="voice" hidden></div>
+      <div class="fw-pane-body fw-transcript-body" data-panel="transcript" hidden></div>
     </aside>
     <div class="fw-pane-divider" data-side="media" role="separator" aria-orientation="vertical" aria-label="Resize the Media pane" tabindex="0"></div>
     <section class="fw-pane fw-pane-timeline" aria-label="Timeline">

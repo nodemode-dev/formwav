@@ -126,6 +126,7 @@ export type Command =
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
+  | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -181,6 +182,16 @@ function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): Se
 
 export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string): SessionDoc {
   switch (cmd.type) {
+    case "clear-ranges": {
+      const ranges = cmd.ranges
+        .map((r) => ({ start: Math.min(r.start, r.end), end: Math.max(r.start, r.end) }))
+        .filter((r) => r.end > r.start)
+        .sort((a, b) => b.start - a.start);
+      let next = doc;
+      for (const r of ranges)
+        for (const trackId of cmd.trackIds) next = applyCommand(next, { type: "clear-range", trackId, start: r.start, end: r.end, ripple: cmd.ripple }, newId);
+      return next;
+    }
     case "set-clip-media": {
       let changed = false;
       const next = mapTrack(doc, cmd.trackId, (t) => ({
