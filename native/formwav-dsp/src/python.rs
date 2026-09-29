@@ -59,11 +59,25 @@ fn peaks<'py>(py: Python<'py>, data: &[u8], base: u32, factor: u32, min_blocks: 
         .collect())
 }
 
+#[pyfunction]
+fn loudness(interleaved: &[u8], channels: usize, rate: u32) -> PyResult<Option<f64>> {
+    if channels == 0 || interleaved.len() % (4 * channels) != 0 {
+        return Err(PyValueError::new_err("the sample data does not divide into whole frames"));
+    }
+    let frames = interleaved.len() / (4 * channels);
+    let mut planar = vec![Vec::with_capacity(frames); channels];
+    for (i, s) in interleaved.chunks_exact(4).enumerate() {
+        planar[i % channels].push(f32::from_le_bytes([s[0], s[1], s[2], s[3]]));
+    }
+    Ok(crate::loudness::integrated_loudness(&planar, rate))
+}
+
 #[pymodule]
 fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(probe, m)?)?;
     m.add_function(wrap_pyfunction!(peaks, m)?)?;
     m.add_function(wrap_pyfunction!(render, m)?)?;
+    m.add_function(wrap_pyfunction!(loudness, m)?)?;
     m.add("__version__", crate::CRATE_VERSION)?;
     Ok(())
 }

@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.9.0
-Last updated: 2026-09-28 · sample-accurate loop playback in render.rs; mixing moved into mix()
+Current build version: v0.10.0
+Last updated: 2026-09-28 · BS.1770-4 integrated loudness in loudness.rs, exposed through pyo3
 
 ---
 
@@ -22,7 +22,8 @@ native/
         ├── peaks.rs             min and max peak pyramid for waveform drawing
         ├── python.rs            pyo3 module: probe() and peaks() (python feature only)
         ├── render.rs            Player: sources, clips, position, render to a stereo pair
-        └── wasm.rs              C-ABI exports for the wasm32 build (fw_alloc, fw_load_wav, fw_render, ...)
+        ├── wasm.rs              C-ABI exports for the wasm32 build (fw_alloc, fw_load_wav, fw_render, ...)
+        └── loudness.rs          BS.1770-4 integrated loudness: K-weighting for any rate, 400 ms blocks, two gates
 ```
 
 ---
@@ -38,6 +39,7 @@ native/
 - [formwav-dsp/src/python.rs](#src-python)
 - [formwav-dsp/src/render.rs](#src-render)
 - [formwav-dsp/src/wasm.rs](#src-wasm)
+- [formwav-dsp/src/loudness.rs](#src-loudness)
 
 ---
 
@@ -254,3 +256,21 @@ On a 440 Hz sine with two aligned clips overlapping by one second: a linear cros
 - logged: v0.9.0 · 2026-09-28
 
 Checked in Node against the wasm module, sample by sample against the source: a loop of 1000 to 1300 started at 900 produced 900..1299, then 1000..1299 twice, then 1000..1023 over 1,024 frames with no mismatch and ended at 1024; starting at 2000 with the same loop ran linearly to 3024; a cleared loop ran linearly; a 50-sample loop wrapped twice inside one 128-frame block and ended at 528. Unlooped render and playback regressions were unchanged (0.0).
+
+---
+
+## formwav-dsp/src/loudness.rs {#src-loudness}
+
+### src/loudness.rs · BS.1770-4 integrated loudness
+- refers-to: src/loudness.rs :: `k_weighting`, `integrated_loudness`
+- kind: rationale
+- logged: v0.10.0 · 2026-09-28
+
+Both K-weighting stages (the high shelf and the RLB high-pass) are designed for the actual sample rate from the standard's analog prototypes, the approach libebur128 takes, so 44.1 kHz is measured as correctly as 48 kHz; at 48 kHz they reduce to the coefficient table in BS.1770. Filtering runs in f64. Mean-square power per channel comes from prefix sums over 400 ms blocks every 100 ms; channel weights are 1.0 (stereo; surround weights and LFE exclusion arrive with multichannel buses). Blocks at or below -70 LUFS are dropped (absolute gate), then blocks more than 10 LU below the mean of the rest (relative gate). Returns `None` for silence or anything shorter than one block. `python.rs` exposes it as `loudness(interleaved_f32_bytes, channels, rate)`.
+
+### src/loudness.rs · verification v0.10.0
+- refers-to: src/loudness.rs :: `integrated_loudness`
+- kind: explainer
+- logged: v0.10.0 · 2026-09-28
+
+Against the standards' own references: a 997 Hz sine at 0 dBFS in the left channel read -3.010 LUFS (BS.1770 gives -3.01); EBU Tech 3341 cases read -22.993 (1 kHz at -23 dBFS, 48 kHz), -22.991 (the same at 44.1 kHz), -32.993 (-33 dBFS) and -23.014 (the -36, -23, -36 dBFS gating sequence), all inside the stated ±0.1 LU; silence and a 300 ms tone gave no reading. Against pyloudnorm (installed only for the check): formwav read 0.041 to 0.045 LU higher on every signal, white noise included. A constant offset points to a difference in filter design, not in gating or blocking, and the -3.01 reference is met exactly here and missed by 0.042 there, so the evidence favours these filters; the agreement is recorded as within 0.045 LU, not identical.
