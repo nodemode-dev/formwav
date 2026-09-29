@@ -35,6 +35,27 @@ async def import_media(request: Request) -> dict:
         raise HTTPException(415, str(err)) from err
 
 
+@router.get("/effects")
+def list_effects() -> list[dict]:
+    from ..services import effects
+
+    return effects.catalogue()
+
+
+@router.post("/media/{media_id}/effect", status_code=201)
+def apply_effect(media_id: str, name: str) -> dict:
+    from ..services import effects
+
+    try:
+        return effects.apply(media_id, name)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.CoreMissing as err:
+        raise HTTPException(503, str(err)) from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/resample", status_code=201)
 def resample(media_id: str, rate: int) -> dict:
     try:
