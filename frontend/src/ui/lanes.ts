@@ -163,7 +163,12 @@ function clipNode(): HTMLElement {
   fadeOut.title = "Drag to set the fade-out; click to change its curve";
   const gain = document.createElement("span");
   gain.className = "fw-gain-line";
-  node.append(canvas, fadeIn, fadeOut, gain);
+  const takeBadge = document.createElement("button");
+  takeBadge.type = "button";
+  takeBadge.className = "fw-take";
+  takeBadge.hidden = true;
+  takeBadge.title = "Loop-recorded takes: click to play the next one";
+  node.append(canvas, fadeIn, fadeOut, gain, takeBadge);
   return node;
 }
 
@@ -184,6 +189,14 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
     [".fw-fade-in", `translateX(${((clip.fadeIn ?? 0) / spp).toFixed(2)}px)`],
     [".fw-fade-out", `translateX(${(-(clip.fadeOut ?? 0) / spp).toFixed(2)}px)`],
   ];
+  const badge = node.querySelector<HTMLButtonElement>(".fw-take");
+  if (badge) {
+    const count = clip.takes?.length ?? 0;
+    const hide = count < 2;
+    if (badge.hidden !== hide) badge.hidden = hide;
+    const label = hide ? "" : `Take ${(clip.take ?? count - 1) + 1}/${count}`;
+    if (badge.textContent !== label) badge.textContent = label;
+  }
   const line = node.querySelector<HTMLElement>(".fw-gain-line");
   if (line) {
     const top = `${(gainFraction(clip.gainDb) * 100).toFixed(2)}%`;
@@ -289,6 +302,14 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     setArmedTrack(armedTrack() === id ? null : id);
   });
   onArm(() => render(engine.get("document")));
+  lanes.addEventListener("click", (e) => {
+    const badge = (e.target as HTMLElement).closest<HTMLElement>(".fw-take");
+    const clipId = badge?.closest<HTMLElement>(".fw-clip")?.dataset.key;
+    const trackId = badge?.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    if (!badge || !clipId || !trackId) return;
+    const clip = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === clipId);
+    if (clip?.takes) engine.dispatch({ type: "set-clip-take", trackId, clipId, take: (clip.take ?? clip.takes.length - 1) + 1 });
+  });
 
   const spot = document.createElement("div");
   spot.className = "fw-spot";
@@ -450,6 +471,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
 
   lanes.addEventListener("pointerdown", (e) => {
     const target = e.target as HTMLElement;
+    if (target.closest(".fw-take")) return;
     const node = target.closest<HTMLElement>(".fw-clip");
     const trackId = node?.closest<HTMLElement>(".fw-lane")?.dataset.key;
     if (!node || !trackId || !node.dataset.key || e.button !== 0) {

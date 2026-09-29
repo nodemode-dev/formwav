@@ -63,6 +63,7 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
 
   let active: Recording | null = null;
   let punchRange: { start: number; end: number } | null = null;
+  let loopRange: { start: number; end: number } | null = null;
   let lastPosition = 0;
 
   /** Cut the track's clips at the punch in and out points: keep what lies outside, remove what lies inside. */
@@ -97,6 +98,7 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       setRecordingTrack(armed?.id ?? null);
       const position = engine.get("transport").positionSamples;
       punchRange = punchEnabled() && armed && doc.loop && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
+      loopRange = !punchRange && doc.loop?.enabled && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
       lastPosition = position;
       active = await startRecording(player, position, showLevel);
       engine.setTransport({ recording: true });
@@ -105,11 +107,13 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
         notice,
         punchRange && armed
           ? `Punching in ${seconds(punchRange.start)} to ${seconds(punchRange.end)} s on ${armed.name}`
-          : armed
-            ? `Recording into ${armed.name}`
-            : punchEnabled()
-              ? "Recording (arm a track to punch in)"
-              : "Recording",
+          : loopRange
+            ? `Loop recording ${seconds(loopRange.start)} to ${seconds(loopRange.end)} s${armed ? ` on ${armed.name}` : ""}: each pass is a take`
+            : armed
+              ? `Recording into ${armed.name}`
+              : punchEnabled()
+                ? "Recording (arm a track to punch in)"
+                : "Recording",
       );
     } catch (err) {
       active = null;
@@ -155,9 +159,29 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       takes++;
       const file = new File([encodeWav(channels, take.sampleRate)], `Take ${takes}.wav`, { type: "audio/wav" });
       const media = await importFile(file);
-      const cuts = punch && target ? punchCommands(target, at, at + channels[0].length) : [];
-      engine.dispatch({ type: "batch", commands: [...cuts, { type: "import-media", media, at, trackId: target ?? undefined }] });
-      setText(notice, punch && target ? `Punched in ${file.name}` : `Recorded ${file.name}`);
+      const loop = loopRange;
+      loopRange = null;
+      let shape: { sourceIn: number; length: number; takes: number[]; take: number } | undefined;
+      if (!punch && loop) {
+        const length = loop.end - loop.start;
+        const first = current.startPosition <= loop.start ? loop.start - current.startPosition : loop.end - current.startPosition;
+        const offsets: number[] = [];
+        for (let o = first; o + length <= take.frames; o += length) offsets.push(o);
+        if (offsets.length) {
+          shape = { sourceIn: offsets[offsets.length - 1], length, takes: offsets, take: offsets.length - 1 };
+          at = loop.start;
+        }
+      }
+      const cuts = (punch || shape) && target ? punchCommands(target, at, at + (shape ? shape.length : channels[0].length)) : [];
+      engine.dispatch({ type: "batch", commands: [...cuts, { type: "import-media", media, at, trackId: target ?? undefined, clip: shape }] });
+      setText(
+        notice,
+        punch && target
+          ? `Punched in ${file.name}`
+          : shape
+            ? `Recorded ${shape.takes.length} take${shape.takes.length === 1 ? "" : "s"} in ${file.name}; the last one plays`
+            : `Recorded ${file.name}`,
+      );
     } catch (err) {
       setText(notice, `Could not save the take: ${reason(err)}`);
     } finally {

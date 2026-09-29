@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.27.0
-Last updated: 2026-09-28 · live loudness readout; meters reset at the natural end of playback
+Current build version: v0.28.0
+Last updated: 2026-09-28 · loop recording keeps every complete pass as a take; a badge switches takes
 
 ---
 
@@ -978,3 +978,14 @@ With Punch on (button or P), a track armed and a loop range ahead of the playhea
 - logged: v0.27.0 · 2026-09-28
 
 Every play resets the core's live meter at the context's rate; every report carries momentary, short-term and integrated loudness beside the peaks; a fixed-width readout after the OUT meter shows them, written at most five times a second and only on change, "--" until 400 ms (M) or 3 s (S) have been measured, M and S blanked when playback stops and I kept. Defect fixed before release: at the natural end of playback the worklet sent only `ended`, which the player turned into a stopped transport without any level update, so the readout kept its last throttled value (I read -8.6 against the engine's -8.24) and the peak bars froze on their last values (a latent fault since v0.17.0, whose harnesses stop with Space). The worklet now reports once more before `ended`, and on `ended` the player publishes silent peaks and the final integrated value, which the readout writes at once. The build also needed a `declare` for the worklet's `sampleRate` global, which the dev server had not type-checked. Verified: over the 3 s stereo file the readout ended at I -8.2 with M and S blanked, 0.04 from the engine's offline -8.24; every bar read 0 after the natural end; the readout kept its 224 px width and was written 13 times in 3 s; no page errors; layout shift 0; playback null, natural end, master meter and track meter regressions unchanged.
+
+---
+
+## v0.28.0 · loop recording with alternate takes
+
+### src/engine/document.ts, src/ui/record.ts, src/ui/lanes.ts · takes as source offsets
+- refers-to: src/engine/document.ts :: `Clip.takes`, `Clip.take`, `set-clip-take`, `import-media` `clip`; src/ui/record.ts :: `loopRange`, `begin`, `finish`; src/ui/lanes.ts :: `clipNode`, `updateClip`, take badge click, pointer-down; src/styles/shell.css :: `.fw-take`
+- kind: rationale
+- logged: v0.28.0 · 2026-09-28
+
+With looping on and Punch off, recording from before or inside a loop range keeps capturing as the playhead wraps. On stop the whole capture is imported once, and every complete pass through the range becomes a take: from before the range pass k starts at (loop start minus recording start) plus k loop lengths; from inside it the partial first pass is skipped. Because all takes cover the same range, a take is just a source offset into the same media, so the clip on the loop range carries `takes` (offsets) and `take` (the one that plays), and switching takes changes only its `sourceIn`: the core, the player and the engine are unchanged. On an armed track the range is replaced the same way as a punch. With no complete pass the recording is kept whole, as before. A badge on the clip ("Take 2/3") plays the next take as one undo step; presses on it never start a drag. Comping between takes needs take lanes and is the next step. Verified with the fake microphone fed the 3 s stereo ramp (a steady sine would make every one-second pass identical): looping 1 to 2 s on an armed 10 s tone and recording from 0 for about 3.8 s gave one undo step, the original 0 to 1 s, a clip at 48,000 with takes [48,000, 96,000] and the second playing, and the original from 2 s; the render inside the range equalled the take media at the active offset exactly and the tone outside was untouched; the badge read Take 2/2, switched to Take 1/2 in one undo step with the render then equal to the media at 48,000 exactly, and undo returned to take 2; no page errors; layout shift 0; punch, arming, edit and clipboard regressions unchanged.

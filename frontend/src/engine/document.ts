@@ -41,6 +41,10 @@ export interface Clip {
   fadeIn?: number;
   fadeOut?: number;
   fadeShape?: FadeShape;
+  /** Alternate takes from loop recording: source offsets into the same media, all `length` long. */
+  takes?: number[];
+  /** Index into `takes` of the take that plays. */
+  take?: number;
 }
 
 export interface Track {
@@ -105,7 +109,8 @@ export interface Selection {
 }
 
 export type Command =
-  | { type: "import-media"; media: MediaRef; at: number; trackId?: string }
+  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number } }
+  | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -157,14 +162,28 @@ function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): Se
 
 export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string): SessionDoc {
   switch (cmd.type) {
+    case "set-clip-take":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        let changed = false;
+        const clips = t.clips.map((c) => {
+          if (c.id !== cmd.clipId || !c.takes || !c.takes.length) return c;
+          const take = ((Math.round(cmd.take) % c.takes.length) + c.takes.length) % c.takes.length;
+          if (take === (c.take ?? c.takes.length - 1) && c.sourceIn === c.takes[take]) return c;
+          changed = true;
+          return { ...c, take, sourceIn: c.takes[take] };
+        });
+        return changed ? { ...t, clips } : t;
+      });
     case "import-media": {
       const sampleRate = doc.tracks.length === 0 ? cmd.media.sampleRate : doc.sampleRate;
+      const shaped = cmd.clip;
       const clip: Clip = {
         id: newId(),
         mediaId: cmd.media.id,
         start: Math.max(0, Math.round(cmd.at)),
-        length: sessionLength(cmd.media, sampleRate),
-        sourceIn: 0,
+        length: shaped ? Math.max(1, Math.round(shaped.length)) : sessionLength(cmd.media, sampleRate),
+        sourceIn: shaped ? Math.max(0, Math.round(shaped.sourceIn)) : 0,
+        ...(shaped?.takes && shaped.takes.length > 1 ? { takes: shaped.takes.map((s) => Math.max(0, Math.round(s))), take: shaped.take ?? shaped.takes.length - 1 } : {}),
         gainDb: 0,
       };
       const media = { ...doc.media, [cmd.media.id]: cmd.media };
