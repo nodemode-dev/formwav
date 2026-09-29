@@ -630,12 +630,8 @@ html, body, #app { height: 100%; }
 .fw-glyph-off { display: inline-flex; }
 
 .fw-mixer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: var(--fw-mixer-bottom, 0px);
-  z-index: var(--z-menu);
-  max-block-size: 45vh;
+  flex: none;
+  max-block-size: 45%;
   overflow: auto;
   padding: var(--space-3);
   background: var(--bg-secondary);

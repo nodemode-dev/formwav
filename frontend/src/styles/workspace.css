@@ -82,6 +82,20 @@
 .fw-pane-body { flex: 1; min-block-size: 0; overflow: auto; padding: 0 8px 8px; }
 
 .fw-pane-timeline .fw-stage { flex: 1; min-block-size: 0; }
+.fw-pane-timeline .fw-transport { flex-wrap: wrap; row-gap: 6px; padding-block: 8px; block-size: auto; min-block-size: calc(var(--ctl-xl) + var(--space-4)); }
+@media (max-width: 1180px) {
+  .fw-topbar { grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 8px; }
+  .fw-topbar-mid { min-inline-size: 0; }
+  .fw-topbar-mid .fw-notice { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fw-tools .fw-ibtn > span {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 .fw-tool-tray { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); }
 .fw-pane-timeline .fw-transport { flex: none; block-size: calc(var(--ctl-xl) + var(--space-4)); }
 
@@ -152,5 +166,8 @@
   border-radius: 6px;
 }
 .fw-field input[type="range"] { inline-size: 100%; accent-color: var(--accent-color); }
+.fw-field input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+.fw-field input[type="number"]::-webkit-inner-spin-button,
+.fw-field input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -webkit-appearance: none; }
 .fw-field input:disabled { opacity: 0.4; }
 .fw-field output { font-family: var(--font-mono); color: var(--text-secondary); text-align: end; }

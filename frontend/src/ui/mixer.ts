@@ -91,7 +91,8 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   const strips = document.createElement("div");
   strips.className = "fw-mixer-strips";
   panel.append(strips);
-  host.append(panel);
+  if (transport) transport.before(panel);
+  else host.append(panel);
 
   const render = (doc: SessionDoc) => {
     if (panel.hidden) return;
@@ -113,7 +114,6 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   engine.subscribe("document", render);
 
   const setOpen = (open: boolean) => {
-    if (open && transport) panel.style.setProperty("--fw-mixer-bottom", `${Math.round(window.innerHeight - transport.getBoundingClientRect().top)}px`);
     panel.hidden = !open;
     toggle.setAttribute("aria-pressed", String(open));
     render(engine.get("document"));
