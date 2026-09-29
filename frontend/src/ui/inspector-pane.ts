@@ -215,18 +215,24 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const label = action === "enhance" ? "Enhance speech" : pick?.selectedOptions[0]?.textContent ?? name;
     setText(notice, `Applying ${label}...`);
     try {
-      const inRange = range && range.trackId === hit.track.id && range.end > hit.clip.start && range.start < hit.clip.start + hit.clip.length ? range : null;
+      // While a Smart Tool range exists it is the target (as Audacity processes its selection): the clip it overlaps on
+      // its track, whichever piece is selected; otherwise the selected clip, whole.
+      const r = range;
+      const rangeTrack = r ? engine.get("document").tracks.find((t) => t.id === r.trackId) : undefined;
+      const rangeClip = r && rangeTrack ? rangeTrack.clips.find((c) => c.start < r.end && r.start < c.start + c.length) : undefined;
+      const target = rangeTrack && rangeClip ? { track: rangeTrack, clip: rangeClip } : hit;
+      const inRange = rangeClip && r ? r : null;
       if (inRange && retiming.has(name)) throw new Error(`${label} changes timing, so it applies to whole clips: clear the range first`);
       const params = action === "apply" ? currentParams() : {};
-      const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}`, { method: "POST" });
+      const res = await fetch(`/api/media/${target.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       if (inRange) {
-        engine.dispatch({ type: "set-range-media", trackId: hit.track.id, clipId: hit.clip.id, start: inRange.start, end: inRange.end, media: out as unknown as MediaRef });
+        engine.dispatch({ type: "set-range-media", trackId: target.track.id, clipId: target.clip.id, start: inRange.start, end: inRange.end, media: out as unknown as MediaRef });
         const rate = engine.get("document").sampleRate;
-        setText(notice, `Applied ${label} to ${((Math.min(inRange.end, hit.clip.start + hit.clip.length) - Math.max(inRange.start, hit.clip.start)) / rate).toFixed(2)} s of the clip`);
+        setText(notice, `Applied ${label} to ${((Math.min(inRange.end, target.clip.start + target.clip.length) - Math.max(inRange.start, target.clip.start)) / rate).toFixed(2)} s of the clip`);
       } else {
-        engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
+        engine.dispatch({ type: "set-clip-media", trackId: target.track.id, clipId: target.clip.id, media: out as unknown as MediaRef });
         setText(notice, `Applied ${label} to the clip`);
       }
     } catch (err) {
