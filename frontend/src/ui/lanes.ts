@@ -1,7 +1,7 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import { documentLength, sessionLength } from "../engine/document";
 import { fetchPeaks, type PeakData } from "../io/media-client";
-import { gridEnabled, snapSamples } from "./grid";
+import { gridEnabled, shuffleEnabled, snapSamples } from "./grid";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
 const PEAK_SPP = 256;
@@ -339,7 +339,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
 
   type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out" | "gain";
   type Member = { trackId: string; clip: Clip; node: HTMLElement };
-  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number; group: Member[] };
+  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number; group: Member[]; ripple: boolean; followers: Member[] };
   let drag: Gesture | null = null;
   const EDGE_PX = 6;
 
@@ -423,7 +423,17 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         }
       }
     }
-    drag = { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low, high, group };
+    const ripple = shuffleEnabled() && (kind === "trim-left" || kind === "trim-right");
+    const followers: Member[] = [];
+    if (ripple) {
+      const end = clip.start + clip.length;
+      for (const other of doc.tracks.find((t) => t.id === trackId)?.clips ?? []) {
+        if (other.id === clip.id || other.start < end) continue;
+        const otherNode = lanes.querySelector<HTMLElement>(`.fw-clip[data-key="${other.id}"]`);
+        if (otherNode) followers.push({ trackId, clip: other, node: otherNode });
+      }
+    }
+    drag = { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low, high, group, ripple, followers };
     node.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
@@ -441,9 +451,13 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const shift = `translateX(${d.dx.toFixed(1)}px)`;
     if (d.kind === "move") for (const member of d.group) member.node.style.transform = shift;
     else if (d.kind === "trim-left") {
-      d.node.style.transform = shift;
+      if (!d.ripple) d.node.style.transform = shift;
       d.node.style.width = `${Math.max(1, d.clip.length / spp - d.dx).toFixed(2)}px`;
-    } else if (d.kind === "trim-right") d.node.style.width = `${Math.max(1, d.clip.length / spp + d.dx).toFixed(2)}px`;
+      for (const f of d.followers) f.node.style.transform = `translateX(${(-d.dx).toFixed(1)}px)`;
+    } else if (d.kind === "trim-right") {
+      d.node.style.width = `${Math.max(1, d.clip.length / spp + d.dx).toFixed(2)}px`;
+      for (const f of d.followers) f.node.style.transform = shift;
+    }
     else {
       const handle = d.node.querySelector<HTMLElement>(d.kind === "fade-in" ? ".fw-fade-in" : ".fw-fade-out");
       const base = d.kind === "fade-in" ? (d.clip.fadeIn ?? 0) / spp : -(d.clip.fadeOut ?? 0) / spp;
@@ -453,6 +467,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
 
   const restore = (d: Gesture) => {
     for (const member of d.group) member.node.style.transform = "";
+    for (const f of d.followers) f.node.style.transform = "";
     if (d.node.dataset.width) d.node.style.width = d.node.dataset.width;
     for (const handle of d.node.querySelectorAll<HTMLElement>(".fw-fade-handle")) handle.style.transform = handle.dataset.tx ?? "";
     const line = d.node.querySelector<HTMLElement>(".fw-gain-line");
@@ -475,8 +490,19 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         type: "batch",
         commands: d.group.map((m) => ({ type: "move-clip" as const, trackId: m.trackId, clipId: m.clip.id, start: m.clip.start + delta })),
       });
-    else if (d.kind === "trim-left") engine.dispatch({ type: "set-clip-bounds", ...ids, start: c.start + delta, sourceIn: c.sourceIn + delta, length: c.length - delta });
-    else if (d.kind === "trim-right") engine.dispatch({ type: "set-clip-bounds", ...ids, start: c.start, sourceIn: c.sourceIn, length: c.length + delta });
+    else if (d.kind === "trim-left" || d.kind === "trim-right") {
+      const left = d.kind === "trim-left";
+      const bounds = {
+        type: "set-clip-bounds" as const,
+        ...ids,
+        start: left && !d.ripple ? c.start + delta : c.start,
+        sourceIn: left ? c.sourceIn + delta : c.sourceIn,
+        length: left ? c.length - delta : c.length + delta,
+      };
+      const shiftBy = left ? -delta : delta;
+      const moves = d.ripple ? d.followers.map((f) => ({ type: "move-clip" as const, trackId: f.trackId, clipId: f.clip.id, start: f.clip.start + shiftBy })) : [];
+      engine.dispatch({ type: "batch", commands: [bounds, ...moves] });
+    }
     else if (d.kind === "fade-in") engine.dispatch({ type: "set-clip-fades", ...ids, fadeIn: (c.fadeIn ?? 0) + delta, fadeOut: c.fadeOut ?? 0 });
     else engine.dispatch({ type: "set-clip-fades", ...ids, fadeIn: c.fadeIn ?? 0, fadeOut: (c.fadeOut ?? 0) - delta });
   };
@@ -549,7 +575,19 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         .map(({ trackId, clip }) => ({ type: "split-clip" as const, trackId, clipId: clip.id, at }));
       if (commands.length) engine.dispatch({ type: "batch", commands });
     } else if ((e.key === "Delete" || e.key === "Backspace") && selectedClipIds.size) {
-      const commands = selection().map(({ trackId, clip }) => ({ type: "remove-clip" as const, trackId, clipId: clip.id }));
+      const removed = selection();
+      const commands: Parameters<Engine["dispatch"]>[0][] = removed.map(({ trackId, clip }) => ({ type: "remove-clip" as const, trackId, clipId: clip.id }));
+      if (shuffleEnabled()) {
+        for (const track of engine.get("document").tracks) {
+          const gone = removed.filter((r) => r.trackId === track.id).map((r) => r.clip);
+          if (!gone.length) continue;
+          for (const clip of track.clips) {
+            if (gone.some((g) => g.id === clip.id)) continue;
+            const shift = gone.filter((g) => g.start < clip.start).reduce((sum, g) => sum + g.length, 0);
+            if (shift) commands.push({ type: "move-clip", trackId: track.id, clipId: clip.id, start: clip.start - shift });
+          }
+        }
+      }
       selectedClipIds.clear();
       if (commands.length) engine.dispatch({ type: "batch", commands });
     } else if (e.key === "Escape" && selectedClipIds.size) {

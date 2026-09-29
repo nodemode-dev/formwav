@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.18.0
-Last updated: 2026-09-28 · marquee selection, zoom anchored on the playhead, IN and OUT meter labels
+Current build version: v0.19.0
+Last updated: 2026-09-28 · Shuffle mode: gap-closing delete and rippling trims
 
 ---
 
@@ -829,3 +829,14 @@ A press on empty lane space starts a marquee; once the pointer has moved 4 px, o
 - logged: v0.18.0 · 2026-09-28
 
 The output meter has an OUT label as its first grid column and the input meter an IN label before it, both in the muted mono token. Verified: both inside the transport bar (OUT at 406 px, IN at 563 px). The two-file harnesses report a layout shift of 0.0072 whose single source is the harness's scripted `move-clip` of a clip (no user input), not the app; single-file harnesses report 0.
+
+---
+
+## v0.19.0 · Shuffle mode
+
+### src/ui/grid.ts and lanes.ts · gap-closing delete, rippling trims
+- refers-to: src/ui/grid.ts :: `shuffleEnabled`, `mountGrid`; src/ui/lanes.ts :: `Gesture.ripple`, `Gesture.followers`, pointer-down, `preview`, `restore`, `commit`, keydown Delete
+- kind: rationale
+- logged: v0.19.0 · 2026-09-28
+
+Shuffle mode (a button beside Grid, or H) makes edits keep a track's clips closed up. Delete removes the selection and moves each remaining clip left by the lengths of the removed clips before it on the same track, all in one `batch`. A trim ripples: trimming a clip's end moves every later clip on the track by the same amount; trimming its start keeps the clip where it is, advances the source and moves the later clips by the opposite amount. The followers are gathered at pointer-down and previewed by `transform`, so the drag shows exactly where the commit will put them; the bounds and every move go in one `batch`, one undo step. Moving a clip in Shuffle mode is still a slip move; reordering clips by dragging is not built yet, and neither is rippling across tracks. Verified on a 10 s sine split into three contiguous clips, each render compared with the source's surviving pieces joined end to end: deleting the middle clip gave 0.0 over 336,000 frames with the last clip at 96,000; trimming the first clip's end by 50 px previewed the later two at -50 px during the drag and rendered 0.0 over 456,000 frames; trimming the middle clip's start by 50 px kept it in place, previewed the last at -50 px and rendered 0.0; each was one undo step and undo restored the layout; with Shuffle off, Delete kept the gap; layout shift 0.
