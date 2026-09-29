@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.21.0
-Last updated: 2026-09-28 · S-curve and exponential fade shapes in fade_curve
+Current build version: v0.22.0
+Last updated: 2026-09-28 · per-track peak metering in a separate pass that leaves the audio unchanged
 
 ---
 
@@ -306,3 +306,10 @@ Writes the master-bus peaks since the last call into a two-float buffer the call
 - logged: v0.21.0 · 2026-09-28
 
 `fade_curve` now matches on four codes: 0 linear, 1 equal-power (sine), 2 S-curve (raised cosine, 0.5 - 0.5 cos(pi x)), 3 exponential (x squared); unknown codes stay linear, so older sessions and callers are unchanged. The shape still travels as a `u8` through both bindings, so `wasm.rs` and `python.rs` needed no change. Verified in Node on the wasm32 build: a 24,000-sample fade-in rendered within float32 precision of the source times each formula (linear 2.7e-8, equal-power 5.2e-8, S-curve 8.3e-8, exponential 5.7e-8).
+
+### src/render.rs, src/wasm.rs, src/python.rs · per-track peak metering
+- refers-to: src/render.rs :: `PlayClip.track`, `Player::mix`, `Player::meter_tracks`, `Player::take_track_peaks`; src/wasm.rs :: `fw_add_clip`, `fw_take_track_peaks`; src/python.rs :: `render`
+- kind: rationale
+- logged: v0.22.0 · 2026-09-28
+
+A track's level is the peak of the sum of its clips, which can exceed any single clip's peak where clips overlap, so each track's clips are summed into a meter scratch and measured there (after track gain and pan, before any bus). The pass runs after each rendered segment and never writes to the output; `mix` now takes a clip filter instead of a bus id, doing the same arithmetic in the same order, so the audio is unchanged. The cost is mixing each metered clip twice; tracks become real summing nodes in the Phase 8 graph work, which will remove it. Clips carry a 1-based track number (0 is not metered; engine renders pass 0). Verified in Node on the wasm32 build over 1,125 blocks: output rendered with and without track numbers was bit-identical (0); each track's peaks equalled the peaks of that track rendered alone (0), including an equal-power crossfade overlap on one track; peaks reset after each read.

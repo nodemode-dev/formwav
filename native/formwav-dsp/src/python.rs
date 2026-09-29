@@ -18,7 +18,7 @@ fn render<'py>(py: Python<'py>, sources: Vec<(u32, Bound<'py, PyBytes>)>, clips:
         player.load_source(*id, buf);
     }
     for (source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus) in clips {
-        player.add_clip(PlayClip { source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus });
+        player.add_clip(PlayClip { source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, track: 0 });
     }
     for (id, gain, pan) in buses {
         player.add_bus(crate::render::Bus { id, gain, pan });

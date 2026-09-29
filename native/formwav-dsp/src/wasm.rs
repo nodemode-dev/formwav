@@ -53,6 +53,7 @@ pub unsafe extern "C" fn fw_add_clip(
     fade_out: f64,
     fade_shape: u32,
     bus: u32,
+    track: u32,
 ) {
     (*player).add_clip(PlayClip {
         source,
@@ -65,6 +66,7 @@ pub unsafe extern "C" fn fw_add_clip(
         fade_out: fade_out.max(0.0) as u64,
         fade_shape: fade_shape.min(u8::MAX as u32) as u8,
         bus,
+        track,
     });
 }
 
@@ -103,4 +105,10 @@ pub unsafe extern "C" fn fw_take_peaks(player: *mut Player, out: *mut f32) {
     let (left, right) = (*player).take_peaks();
     *out = left;
     *out.add(1) = right;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_take_track_peaks(player: *mut Player, out: *mut f32, max_tracks: u32) -> u32 {
+    let buf = std::slice::from_raw_parts_mut(out, max_tracks as usize * 2);
+    (*player).take_track_peaks(buf) as u32
 }

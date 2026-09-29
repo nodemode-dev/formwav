@@ -14,6 +14,8 @@ pub struct PlayClip {
     pub fade_out: u64,
     pub fade_shape: u8,
     pub bus: u32,
+    /// 1-based track number for per-track metering; 0 means the clip is not metered.
+    pub track: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -59,6 +61,9 @@ pub struct Player {
     buses: Vec<Bus>,
     scratch_left: Vec<f32>,
     scratch_right: Vec<f32>,
+    track_peaks: Vec<(f32, f32)>,
+    meter_left: Vec<f32>,
+    meter_right: Vec<f32>,
 }
 
 impl Player {
@@ -100,8 +105,9 @@ impl Player {
                 }
             }
             let len = span as usize;
-            self.mix(&mut left[done..done + len], &mut right[done..done + len], from, 0);
+            self.mix(&mut left[done..done + len], &mut right[done..done + len], from, |c| c.bus == 0);
             self.mix_buses(&mut left[done..done + len], &mut right[done..done + len], from);
+            self.meter_tracks(from, len);
             done += len;
             self.position = from + span;
             if let Some((start, end)) = self.loop_range {
@@ -142,7 +148,8 @@ impl Player {
         for bus in &self.buses {
             scratch_left[..n].fill(0.0);
             scratch_right[..n].fill(0.0);
-            self.mix(&mut scratch_left[..n], &mut scratch_right[..n], from, bus.id);
+            let id = bus.id;
+            self.mix(&mut scratch_left[..n], &mut scratch_right[..n], from, |c| c.bus == id);
             let (pan_left, pan_right) = pan_gains(bus.pan);
             let gain_left = bus.gain * pan_left;
             let gain_right = bus.gain * pan_right;
@@ -155,11 +162,11 @@ impl Player {
         self.scratch_right = scratch_right;
     }
 
-    fn mix(&self, left: &mut [f32], right: &mut [f32], from: u64, bus: u32) {
+    fn mix(&self, left: &mut [f32], right: &mut [f32], from: u64, select: impl Fn(&PlayClip) -> bool) {
         let n = left.len().min(right.len());
         let to = from + n as u64;
         for clip in &self.clips {
-            if clip.bus != bus {
+            if !select(clip) {
                 continue;
             }
             let Some(src) = self.sources.get(&clip.source) else { continue };
@@ -197,5 +204,49 @@ impl Player {
         self.peak_left = 0.0;
         self.peak_right = 0.0;
         peaks
+    }
+
+    /// Per-track peak metering. Each track's clips are summed into a meter scratch, so overlapping clips
+    /// are measured together as the track plays them (post track gain and pan, before any bus). The pass
+    /// never writes to the output, so the rendered audio is unchanged by metering.
+    fn meter_tracks(&mut self, from: u64, n: usize) {
+        let count = self.clips.iter().map(|c| c.track).max().unwrap_or(0) as usize;
+        if count == 0 || n == 0 {
+            return;
+        }
+        if self.track_peaks.len() <= count {
+            self.track_peaks.resize(count + 1, (0.0, 0.0));
+        }
+        let mut meter_left = std::mem::take(&mut self.meter_left);
+        let mut meter_right = std::mem::take(&mut self.meter_right);
+        if meter_left.len() < n {
+            meter_left.resize(n, 0.0);
+            meter_right.resize(n, 0.0);
+        }
+        for track in 1..=count as u32 {
+            meter_left[..n].fill(0.0);
+            meter_right[..n].fill(0.0);
+            self.mix(&mut meter_left[..n], &mut meter_right[..n], from, |c| c.track == track);
+            let peak = &mut self.track_peaks[track as usize];
+            for i in 0..n {
+                peak.0 = peak.0.max(meter_left[i].abs());
+                peak.1 = peak.1.max(meter_right[i].abs());
+            }
+        }
+        self.meter_left = meter_left;
+        self.meter_right = meter_right;
+    }
+
+    /// Writes (left, right) peaks for tracks 1..=count into `out` as pairs, resets them, and returns
+    /// how many tracks were written (at most `out.len() / 2`).
+    pub fn take_track_peaks(&mut self, out: &mut [f32]) -> usize {
+        let count = self.track_peaks.len().saturating_sub(1).min(out.len() / 2);
+        for t in 0..count {
+            let peak = &mut self.track_peaks[t + 1];
+            out[2 * t] = peak.0;
+            out[2 * t + 1] = peak.1;
+            *peak = (0.0, 0.0);
+        }
+        count
     }
 }
