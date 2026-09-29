@@ -82,7 +82,7 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   toggle.innerHTML = `${fcIcon("mixer")}<span>Mixer</span>`;
   toggle.title = "Show the mixer (X)";
   toggle.setAttribute("aria-pressed", "false");
-  transport?.append(toggle);
+  (host.querySelector<HTMLElement>(".fw-tool-tray") ?? transport)?.append(toggle);
 
   const panel = document.createElement("section");
   panel.className = "fw-mixer";

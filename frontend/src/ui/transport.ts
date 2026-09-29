@@ -60,7 +60,8 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
         if (!headWidth) headWidth = followStage.querySelector<HTMLElement>(".fw-lane-head")?.offsetWidth ?? 0;
         const view = followStage.clientWidth - headWidth;
         const left = followStage.scrollLeft;
-        if (view > 0 && (px > left + view * 0.92 || px < left)) followStage.scrollLeft = Math.max(0, px - view * 0.08);
+        const ahead = engine.get("transport").playing ? left + view * 0.92 : left + view;
+        if (view > 0 && (px > ahead || px < left)) followStage.scrollLeft = Math.max(0, px - view * 0.08);
       }
     }
   };

@@ -4,6 +4,7 @@ import "@fontsource/inter/600.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "./vendor/nodemode/tokens.css";
 import "./styles/shell.css";
+import "./styles/workspace.css";
 import "./styles/family.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
@@ -18,6 +19,8 @@ import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
 import { mountOutputMeter, mountTrackMeters } from "./ui/meter";
 import { mountMixer } from "./ui/mixer";
+import { mountMediaPane } from "./ui/media-pane";
+import { mountInspector } from "./ui/inspector-pane";
 import { mountRecord } from "./ui/record";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
@@ -40,6 +43,8 @@ if (host) {
   mountOutputMeter(host, player);
   mountTrackMeters(host, engine, player);
   mountMixer(host, engine, player);
+  mountMediaPane(host, engine);
+  mountInspector(host, engine);
   mountRecord(host, engine, player);
   mountProjects(host, engine, player);
 }

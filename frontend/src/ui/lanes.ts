@@ -774,6 +774,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       const on = String(node.dataset.key !== undefined && selectedClipIds.has(node.dataset.key));
       if (node.getAttribute("aria-selected") !== on) node.setAttribute("aria-selected", on);
     }
+    lanes.dispatchEvent(new CustomEvent("fw-selection", { bubbles: true, detail: [...selectedClipIds] }));
   };
 
   type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out" | "gain" | "range";

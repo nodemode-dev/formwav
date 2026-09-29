@@ -35,7 +35,7 @@ export function snapSamples(position: number, sampleRate: number, pxPerSecond: n
 }
 
 export function mountGrid(host: HTMLElement): void {
-  const transport = host.querySelector<HTMLElement>(".fw-transport");
+  const transport = host.querySelector<HTMLElement>(".fw-tool-tray") ?? host.querySelector<HTMLElement>(".fw-transport");
   const makeButton = (label: string, title: string, glyph: string) => {
     const button = document.createElement("button");
     button.type = "button";

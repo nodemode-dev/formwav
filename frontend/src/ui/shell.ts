@@ -21,20 +21,21 @@ function shellHtml(): string {
   return `
 <div class="fw-shell">
   <header class="fw-topbar">
-    <div class="fw-identity">
-      <img class="fw-logo" src="/favicon-32.png" width="20" height="20" alt="">
-      <span class="fw-name">formwav</span>
-    </div>
-    <div class="fw-topbar-mid">
+    <div class="fw-titlebar-left">
+      <div class="fw-identity">
+        <img class="fw-logo" src="/favicon-32.png" width="20" height="20" alt="">
+        <span class="fw-name">formwav</span>
+      </div>
       <div class="fw-tools" role="group" aria-label="Session">
-        <input class="fw-session-name" type="text" value="Untitled session" aria-label="Session name" maxlength="80" spellcheck="false" autocomplete="off">
         <button class="fw-ibtn" type="button" data-action="save" title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span></button>
         <button class="fw-ibtn" type="button" data-action="open" aria-haspopup="dialog" title="Open (Cmd or Ctrl O)">${icon("folderOpen", ICON_SIZE.control)}<span>Open</span></button>
-        <button class="fw-ibtn" type="button" data-action="import">${icon("upload", ICON_SIZE.control)}<span>Import</span></button>
-        <button class="fw-ibtn" type="button" data-action="export" title="Export the mix as a WAV file (Cmd or Ctrl Shift E)" disabled>${icon("download", ICON_SIZE.control)}<span>Export</span></button>
+        <button class="fw-ibtn" type="button" data-action="import" title="Import any audio or video file">${icon("upload", ICON_SIZE.control)}<span>Import</span></button>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="undo" aria-label="Undo" title="Undo" disabled>${icon("undo", ICON_SIZE.control)}</button>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="redo" aria-label="Redo" title="Redo" disabled>${icon("redo", ICON_SIZE.control)}</button>
       </div>
+    </div>
+    <div class="fw-topbar-mid">
+      <input class="fw-session-name" type="text" value="Untitled session" aria-label="Session name" maxlength="80" spellcheck="false" autocomplete="off">
       <span class="fw-notice" role="status" aria-live="polite"></span>
     </div>
     <div class="fw-topbar-actions">
@@ -42,21 +43,35 @@ function shellHtml(): string {
         <span class="fw-engine-dot"></span>
         <span class="fw-engine-text"></span>
       </span>
+      <button class="fw-ibtn fw-btn-export" type="button" data-action="export" title="Export the mix as a WAV file (Cmd or Ctrl Shift E)" disabled>${icon("download", ICON_SIZE.control)}<span>Export</span></button>
     </div>
   </header>
-  <main class="fw-stage" data-view="empty">
-    <section class="fw-empty">
-      <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>
-      <h1 class="fw-empty-title">No session open</h1>
-      <p class="fw-empty-body">Import a WAV file, drop one here, or press Record to start a session.</p>
+  <div class="fw-workspace">
+    <aside class="fw-pane fw-pane-media" aria-label="Media">
+      <div class="fw-pane-header"><span class="fw-pane-title">Media</span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
+      <div class="fw-pane-body fw-media-list"></div>
+    </aside>
+    <section class="fw-pane fw-pane-timeline" aria-label="Timeline">
+      <div class="fw-tool-tray" role="toolbar" aria-label="Edit modes"></div>
+      <main class="fw-stage" data-view="empty">
+        <section class="fw-empty">
+          <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>
+          <h1 class="fw-empty-title">No session open</h1>
+          <p class="fw-empty-body">Import any audio or video file, drop one here, or press Record to start a session.</p>
+        </section>
+        <div class="fw-lanes"></div>
+        <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi" multiple hidden>
+      </main>
+      <footer class="fw-transport">
+        <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>
+        <output class="fw-clock">00:00:00.000</output>
+      </footer>
     </section>
-    <div class="fw-lanes"></div>
-    <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi" multiple hidden>
-  </main>
-  <footer class="fw-transport">
-    <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>
-    <output class="fw-clock">00:00:00.000</output>
-  </footer>
+    <aside class="fw-pane fw-pane-inspector" aria-label="Inspector">
+      <div class="fw-pane-header"><span class="fw-pane-title">Inspector</span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
+      <div class="fw-pane-body fw-inspector-body"></div>
+    </aside>
+  </div>
 </div>`;
 }
 

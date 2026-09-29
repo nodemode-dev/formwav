@@ -19,12 +19,12 @@ export function mountNormalize(host: HTMLElement, engine: Engine): void {
   const exportButton = host.querySelector<HTMLButtonElement>('[data-action="export"]');
   const button = document.createElement("button");
   button.type = "button";
-  button.className = exportButton?.className ?? "fw-mode";
+  button.className = "fw-ibtn";
   button.innerHTML = `${icon("waveform", ICON_SIZE.control)}<span>Loudness</span>`;
   button.title = "Normalize the selected clips, or every clip, to a loudness target";
   button.setAttribute("aria-haspopup", "dialog");
   button.setAttribute("aria-expanded", "false");
-  exportButton?.after(button);
+  exportButton?.before(button);
 
   const pop = document.createElement("div");
   pop.className = "fw-norm";
