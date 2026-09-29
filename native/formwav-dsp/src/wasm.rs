@@ -41,7 +41,18 @@ pub unsafe extern "C" fn fw_clear_clips(player: *mut Player) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn fw_add_clip(player: *mut Player, source: u32, start: f64, source_in: f64, length: f64, gain: f32, pan: f32) {
+pub unsafe extern "C" fn fw_add_clip(
+    player: *mut Player,
+    source: u32,
+    start: f64,
+    source_in: f64,
+    length: f64,
+    gain: f32,
+    pan: f32,
+    fade_in: f64,
+    fade_out: f64,
+    fade_shape: u32,
+) {
     (*player).add_clip(PlayClip {
         source,
         start: start.max(0.0) as u64,
@@ -49,6 +60,9 @@ pub unsafe extern "C" fn fw_add_clip(player: *mut Player, source: u32, start: f6
         length: length.max(0.0) as u64,
         gain,
         pan,
+        fade_in: fade_in.max(0.0) as u64,
+        fade_out: fade_out.max(0.0) as u64,
+        fade_shape: fade_shape.min(u8::MAX as u32) as u8,
     });
 }
 

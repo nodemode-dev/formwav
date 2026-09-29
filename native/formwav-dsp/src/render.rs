@@ -10,6 +10,21 @@ pub struct PlayClip {
     pub length: u64,
     pub gain: f32,
     pub pan: f32,
+    pub fade_in: u64,
+    pub fade_out: u64,
+    pub fade_shape: u8,
+}
+
+pub const FADE_LINEAR: u8 = 0;
+pub const FADE_EQUAL_POWER: u8 = 1;
+
+pub fn fade_curve(x: f32, shape: u8) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    if shape == FADE_EQUAL_POWER {
+        (x * std::f32::consts::FRAC_PI_2).sin()
+    } else {
+        x
+    }
 }
 
 pub fn pan_gains(pan: f32) -> (f32, f32) {
@@ -69,14 +84,24 @@ impl Player {
             let (pan_left, pan_right) = pan_gains(clip.pan);
             let gain_left = clip.gain * pan_left;
             let gain_right = clip.gain * pan_right;
+            let fade_in = clip.fade_in.min(clip.length);
+            let fade_out = clip.fade_out.min(clip.length - fade_in);
             for t in a..b {
-                let s = (clip.source_in + (t - clip.start)) as usize;
+                let k = t - clip.start;
+                let s = (clip.source_in + k) as usize;
                 if s >= l.len() {
                     break;
                 }
+                let mut fade = 1.0f32;
+                if k < fade_in {
+                    fade *= fade_curve(k as f32 / fade_in as f32, clip.fade_shape);
+                }
+                if k >= clip.length - fade_out {
+                    fade *= fade_curve((clip.length - k) as f32 / fade_out as f32, clip.fade_shape);
+                }
                 let i = (t - from) as usize;
-                left[i] += l[s] * gain_left;
-                right[i] += r[s] * gain_right;
+                left[i] += l[s] * gain_left * fade;
+                right[i] += r[s] * gain_right * fade;
             }
         }
         for i in 0..n {

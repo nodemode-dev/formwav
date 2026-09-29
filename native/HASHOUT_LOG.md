@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.7.0
-Last updated: 2026-09-28 · pan and master peaks in render.rs, native render() for the engine (header was left at v0.2.0 through v0.6.1 and is corrected here)
+Current build version: v0.8.0
+Last updated: 2026-09-28 · clip fades (linear and equal-power) and crossfades in render.rs
 
 ---
 
@@ -218,3 +218,21 @@ After mixing a block, the absolute peak of each side of the master sum is kept u
 - logged: v0.7.0 · 2026-09-28
 
 The same session (a stereo WAV at -6 dB panned -0.5 and a mono WAV at -3 dB panned +0.75, 480,000 frames) rendered by the interface's playback path (the AudioWorklet and the wasm32 core, run in an OfflineAudioContext) and by the engine's pyo3 core matched exactly: maximum difference 0.0 on both channels. The stated null threshold is 0.0 for sessions like this one; pan values away from 0 and the endpoints use f32 `cos`, which native and wasm computed identically here but are not guaranteed to, so the general threshold is 1e-7 (about -140 dBFS). The comparison is against the realtime renderer's code run offline, not a capture of audible output, which headless Chromium cannot provide.
+
+---
+
+## v0.8.0 · fades and crossfades
+
+### src/render.rs · fade gains
+- refers-to: src/render.rs :: `fade_curve`, `PlayClip::fade_in`, `fade_out`, `fade_shape`, `Player::render`
+- kind: rationale
+- logged: v0.8.0 · 2026-09-28
+
+Fade lengths are in session samples from the clip's start and end; the fade-out is limited to what the fade-in leaves. At clip sample k the fade-in gain is curve(k / F), so the first sample is 0, and the fade-out gain is curve((length - k) / F), so the last sample is 1 / F. Shapes: 0 linear (x), 1 equal power (sin(x times pi/2)). Outside the fade zones the gain is exactly 1.0 and the multiplication order is unchanged, so unfaded renders stay bit-identical to v0.7.0 (verified). A crossfade is a fade-out on the left clip and a fade-in on the right clip over their overlap: linear sums to 1 at every sample (right for correlated material), equal power keeps the sum of squares at 1 (right for uncorrelated material, and 3 dB loud mid-overlap on identical material).
+
+### src/render.rs · verification v0.8.0
+- refers-to: src/render.rs :: fades
+- kind: explainer
+- logged: v0.8.0 · 2026-09-28
+
+On a 440 Hz sine with two aligned clips overlapping by one second: a linear crossfade reproduced the source within 3.0e-8 and the browser and engine renders were identical (0.0); an equal-power crossfade peaked at 1.414 times the source mid-overlap (sqrt 2 is 1.4142) and was exact outside the overlap; a linear 0.5 s fade-in started at 0 and followed k / F within 2.7e-8. Equal-power fades differ between the native and wasm builds by up to 6.0e-8 (about -144 dBFS), because `sin` in native libm and in the wasm libm port round one ulp apart; that is inside the general threshold of 1e-7 stated in v0.7.0. Linear fades use no transcendental function and stay identical.
