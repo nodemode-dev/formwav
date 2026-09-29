@@ -1,4 +1,5 @@
 import type { Engine, SessionDoc } from "../engine";
+import { FADE_SHAPES } from "../engine/document";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
 
@@ -52,7 +53,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         pan: track.pan ?? 0,
         fadeIn: clip.fadeIn ?? 0,
         fadeOut: clip.fadeOut ?? 0,
-        fadeShape: clip.fadeShape === "equal-power" ? 1 : 0,
+        fadeShape: FADE_SHAPES[clip.fadeShape ?? "linear"] ?? 0,
         bus,
       });
       end = Math.max(end, clip.start + clip.length);

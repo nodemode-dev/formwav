@@ -1,5 +1,5 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
-import { documentLength, sessionLength } from "../engine/document";
+import { documentLength, fadeCurve, nextFadeShape, sessionLength } from "../engine/document";
 import { fetchPeaks, type PeakData } from "../io/media-client";
 import { gridEnabled, shuffleEnabled, snapSamples } from "./grid";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
@@ -100,7 +100,7 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
   const fadeIn = Math.min(clip.fadeIn ?? 0, clip.length);
   const fadeOut = Math.min(clip.fadeOut ?? 0, clip.length - fadeIn);
   if (fadeIn <= 0 && fadeOut <= 0) return;
-  const curve = (v: number) => (clip.fadeShape === "equal-power" ? Math.sin((v * Math.PI) / 2) : v);
+  const curve = (v: number) => fadeCurve(v, clip.fadeShape);
   const style = getComputedStyle(canvas);
   const pxPerSample = w / clip.length;
   const envelope = (from: number, span: number, rising: boolean) => {
@@ -156,8 +156,10 @@ function clipNode(): HTMLElement {
   canvas.className = "fw-wave";
   const fadeIn = document.createElement("span");
   fadeIn.className = "fw-fade-handle fw-fade-in";
+  fadeIn.title = "Drag to set the fade-in; click to change its curve";
   const fadeOut = document.createElement("span");
   fadeOut.className = "fw-fade-handle fw-fade-out";
+  fadeOut.title = "Drag to set the fade-out; click to change its curve";
   const gain = document.createElement("span");
   gain.className = "fw-gain-line";
   node.append(canvas, fadeIn, fadeOut, gain);
@@ -561,7 +563,24 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   const endDrag = (apply: boolean) => {
     const d = drag;
     drag = null;
-    if (!d || !d.moved) return;
+    if (!d) return;
+    if (!d.moved) {
+      if (apply && (d.kind === "fade-in" || d.kind === "fade-out")) {
+        const shape = nextFadeShape(d.clip.fadeShape);
+        engine.dispatch({
+          type: "batch",
+          commands: d.group.map((m) => ({
+            type: "set-clip-fades" as const,
+            trackId: m.trackId,
+            clipId: m.clip.id,
+            fadeIn: m.clip.fadeIn ?? 0,
+            fadeOut: m.clip.fadeOut ?? 0,
+            shape,
+          })),
+        });
+      }
+      return;
+    }
     restore(d);
     if (apply) commit(d, samplesPerPixel(engine.get("document")));
   };

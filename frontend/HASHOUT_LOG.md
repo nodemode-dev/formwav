@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.20.0
-Last updated: 2026-09-28 · cut, copy and paste (Shuffle-aware); fades and gain across a selection
+Current build version: v0.21.0
+Last updated: 2026-09-28 · four fade curves chosen by clicking a fade handle; gain label no longer blocks fade handles
 
 ---
 
@@ -869,3 +869,21 @@ Cmd or Ctrl C copies the selected clips, keeping their tracks and their offsets 
 - logged: v0.20.0 · 2026-09-28
 
 Dragging a fade handle or the gain line of a selected clip applies the same change to every selected clip. For fades the limits are the tightest across the group, so no clip's fades can cross; for gain the grabbed clip's dB change is added to each clip's own gain, clamped to the line's range. Every member's handle or line is previewed, and the commit is one `batch`. Verified with the first and last of three clips selected: a 50 px fade-in drag gave both 24,000 in one step and both rendered the k / 24,000 ramp within 2.7e-8 with the middle clip untouched (0.0); a 22 px gain drag gave both -12.4 dB in one step, both within 5.2e-9 of the source times the gain, the middle clip untouched.
+
+---
+
+## v0.21.0 · fade curves
+
+### src/engine/document.ts, src/audio/player.ts, src/ui/lanes.ts · four curves, click to cycle
+- refers-to: src/engine/document.ts :: `FADE_SHAPES`, `FadeShape`, `nextFadeShape`, `fadeCurve`; src/audio/player.ts :: clip plan; src/ui/lanes.ts :: `endDrag`, `paint`, `clipNode`
+- kind: rationale
+- logged: v0.21.0 · 2026-09-28
+
+`FADE_SHAPES` is the one table of fade names and the core's codes; the `FadeShape` type is derived from it and the player maps through it, so a new shape cannot be half-wired. Clicking a fade handle without dragging cycles linear, equal-power, S-curve, exponential, as one `set-clip-fades` batch across the selected group; the handles' tooltips say so. `paint` draws the envelope with `fadeCurve`, the same formulas the core applies. Verified: each click was one undo step, four clicks returned to linear and undo stepped back to exponential; for each shape the browser's render matched the engine's (0.0 for linear and exponential, within 3e-8 for the sine and cosine curves) and the formula within 8.3e-8; the screenshot showed the four curves distinct.
+
+### src/styles/shell.css · the gain label no longer covers fade handles, defect fixed
+- refers-to: src/styles/shell.css :: `.fw-gain-line::after`
+- kind: warning-context
+- logged: v0.21.0 · 2026-09-28
+
+Moving the gain label to the clip's start in v0.19.1 put it over a fade handle placed roughly 20 to 70 px in; because a pseudo-element's box belongs to its element for hit-testing and the gain line comes later in the clip, a press there started a gain gesture instead. The first harness run showed clicks on the handle doing nothing; a probe found `.fw-gain-line` under the click point. The label now has `pointer-events: none`; the line keeps its own 8 px band.

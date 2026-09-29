@@ -7,7 +7,29 @@ export interface MediaRef {
   format: string;
 }
 
-export type FadeShape = "linear" | "equal-power";
+/** Fade shape names and the core's codes for them (native/formwav-dsp/src/render.rs `fade_curve`). */
+export const FADE_SHAPES = { linear: 0, "equal-power": 1, "s-curve": 2, exponential: 3 } as const;
+export type FadeShape = keyof typeof FADE_SHAPES;
+
+export function nextFadeShape(shape: FadeShape | undefined): FadeShape {
+  const order = Object.keys(FADE_SHAPES) as FadeShape[];
+  return order[(order.indexOf(shape ?? "linear") + 1) % order.length];
+}
+
+/** The same curve the core applies, for drawing: 0 at the silent end, 1 at full level. */
+export function fadeCurve(x: number, shape: FadeShape | undefined): number {
+  const v = Math.min(1, Math.max(0, x));
+  switch (shape) {
+    case "equal-power":
+      return Math.sin((v * Math.PI) / 2);
+    case "s-curve":
+      return 0.5 - 0.5 * Math.cos(v * Math.PI);
+    case "exponential":
+      return v * v;
+    default:
+      return v;
+  }
+}
 
 export interface Clip {
   id: string;
