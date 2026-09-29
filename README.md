@@ -98,7 +98,7 @@ Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoni
 
 ## Status
 
-v0.11.0 is Phase 2 in progress: import, waveform lanes, 100-step undo, playback w/ sample-accurate looping, recording, `.fmw` save & open, track pan, buses (tracks routed to buses w/ their own gain, pan & mute), clip fades & crossfades, regions & a loop range, & Export (Cmd or Ctrl Shift E): the engine's mix as a float32 WAV w/ its peak & BS.1770 loudness in LUFS. The engine's render matches the browser's playback render (exactly, or within 1e-7 where equal-power fades use `sin`); both Phase 2 exit checks pass. Phase 2's last item is revision checks on save; fade handles, pan controls, bus strips, an output meter, a timeline ruler & the mixer arrive w/ the editing surface (Phase 3).
+v0.12.0 closes Phase 2: import, waveform lanes, 100-step undo, playback w/ sample-accurate looping, recording, `.fmw` save & open w/ revision checks (a second window cannot silently overwrite newer work), track pan, buses, clip fades & crossfades, regions & a loop range, & Export (Cmd or Ctrl Shift E) w/ peak & BS.1770 loudness. The engine's render matches the browser's playback render (exactly, or within 1e-7 where equal-power fades use `sin`). Carried to later phases: fade handles, pan controls, bus strips, meters, a timeline ruler & the mixer (Phase 3, next), effects on buses (Phase 4), playback beyond stereo (Phase 9) & the desktop build (Phase 10).
 
 ## Contributors
 
