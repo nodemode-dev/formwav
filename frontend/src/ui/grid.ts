@@ -4,6 +4,7 @@ const STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 360
 let enabled = false;
 let shuffle = false;
 let spot = false;
+let punch = false;
 
 export function shuffleEnabled(): boolean {
   return shuffle;
@@ -11,6 +12,10 @@ export function shuffleEnabled(): boolean {
 
 export function spotEnabled(): boolean {
   return spot;
+}
+
+export function punchEnabled(): boolean {
+  return punch;
 }
 
 export function labelStep(pxPerSecond: number): number {
@@ -42,6 +47,7 @@ export function mountGrid(host: HTMLElement): void {
   const gridButton = makeButton("Grid", "Snap moves and trims to the ruler's ticks (G)");
   const shuffleButton = makeButton("Shuffle", "Deleting and trimming clips moves the later clips on the track to close the gap (H)");
   const spotButton = makeButton("Spot", "Click a clip to type its exact start time (T)");
+  const punchButton = makeButton("Punch", "Recording on the armed track replaces only the loop range, then stops (P)");
 
   const toggleGrid = () => {
     enabled = !enabled;
@@ -55,9 +61,14 @@ export function mountGrid(host: HTMLElement): void {
     spot = !spot;
     spotButton.setAttribute("aria-pressed", String(spot));
   };
+  const togglePunch = () => {
+    punch = !punch;
+    punchButton.setAttribute("aria-pressed", String(punch));
+  };
   gridButton.addEventListener("click", toggleGrid);
   shuffleButton.addEventListener("click", toggleShuffle);
   spotButton.addEventListener("click", toggleSpot);
+  punchButton.addEventListener("click", togglePunch);
   window.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement | null;
     if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
@@ -66,6 +77,7 @@ export function mountGrid(host: HTMLElement): void {
     if (key === "g") toggleGrid();
     else if (key === "h") toggleShuffle();
     else if (key === "t") toggleSpot();
+    else if (key === "p") togglePunch();
     else return;
     e.preventDefault();
   });

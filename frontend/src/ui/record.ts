@@ -4,6 +4,7 @@ import { encodeWav, startRecording, type Recording } from "../audio/recorder";
 import { importFile } from "../io/media-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { armedTrack, recordingTrack, setRecordingTrack } from "./arm";
+import { punchEnabled } from "./grid";
 
 function reason(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -61,6 +62,29 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
   }
 
   let active: Recording | null = null;
+  let punchRange: { start: number; end: number } | null = null;
+  let lastPosition = 0;
+
+  /** Cut the track's clips at the punch in and out points: keep what lies outside, remove what lies inside. */
+  const punchCommands = (trackId: string, from: number, to: number): Parameters<Engine["dispatch"]>[0][] => {
+    const commands: Parameters<Engine["dispatch"]>[0][] = [];
+    for (const c of engine.get("document").tracks.find((t) => t.id === trackId)?.clips ?? []) {
+      const end = c.start + c.length;
+      if (end <= from || c.start >= to) continue;
+      if (c.start < from) {
+        commands.push({ type: "set-clip-bounds", trackId, clipId: c.id, start: c.start, sourceIn: c.sourceIn, length: from - c.start });
+        commands.push({ type: "set-clip-fades", trackId, clipId: c.id, fadeIn: Math.min(c.fadeIn ?? 0, from - c.start), fadeOut: 0 });
+      } else commands.push({ type: "remove-clip", trackId, clipId: c.id });
+      if (end > to) {
+        commands.push({
+          type: "paste-clip",
+          trackId,
+          clip: { mediaId: c.mediaId, start: to, length: end - to, sourceIn: c.sourceIn + (to - c.start), gainDb: c.gainDb, fadeIn: 0, fadeOut: Math.min(c.fadeOut ?? 0, end - to), fadeShape: c.fadeShape },
+        });
+      }
+    }
+    return commands;
+  };
   let busy = false;
   let takes = 0;
 
@@ -68,13 +92,28 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
     busy = true;
     try {
       setText(notice, "Waiting for the microphone");
-      const armed = engine.get("document").tracks.find((t) => t.id === armedTrack());
+      const doc = engine.get("document");
+      const armed = doc.tracks.find((t) => t.id === armedTrack());
       setRecordingTrack(armed?.id ?? null);
-      active = await startRecording(player, engine.get("transport").positionSamples, showLevel);
+      const position = engine.get("transport").positionSamples;
+      punchRange = punchEnabled() && armed && doc.loop && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
+      lastPosition = position;
+      active = await startRecording(player, position, showLevel);
       engine.setTransport({ recording: true });
-      setText(notice, armed ? `Recording into ${armed.name}` : "Recording");
+      const seconds = (s: number) => (s / doc.sampleRate).toFixed(3);
+      setText(
+        notice,
+        punchRange && armed
+          ? `Punching in ${seconds(punchRange.start)} to ${seconds(punchRange.end)} s on ${armed.name}`
+          : armed
+            ? `Recording into ${armed.name}`
+            : punchEnabled()
+              ? "Recording (arm a track to punch in)"
+              : "Recording",
+      );
     } catch (err) {
       active = null;
+      punchRange = null;
       setRecordingTrack(null);
       const refused = err instanceof DOMException && err.name === "NotAllowedError";
       setText(notice, refused ? "Microphone access was refused" : `Could not start recording: ${reason(err)}`);
@@ -98,11 +137,27 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
         setText(notice, "Nothing was recorded");
         return;
       }
+      const punch = punchRange;
+      punchRange = null;
+      const target = recordingTrack();
+      let channels = take.channels;
+      let at = current.startPosition;
+      if (punch && target) {
+        const from = Math.max(0, punch.start - current.startPosition);
+        const to = Math.min(take.frames, punch.end - current.startPosition);
+        if (to <= from) {
+          setText(notice, "Stopped before the punch range; nothing was recorded");
+          return;
+        }
+        channels = take.channels.map((c) => c.slice(from, to));
+        at = current.startPosition + from;
+      }
       takes++;
-      const file = new File([encodeWav(take.channels, take.sampleRate)], `Take ${takes}.wav`, { type: "audio/wav" });
+      const file = new File([encodeWav(channels, take.sampleRate)], `Take ${takes}.wav`, { type: "audio/wav" });
       const media = await importFile(file);
-      engine.dispatch({ type: "import-media", media, at: current.startPosition, trackId: recordingTrack() ?? undefined });
-      setText(notice, `Recorded ${file.name}`);
+      const cuts = punch && target ? punchCommands(target, at, at + channels[0].length) : [];
+      engine.dispatch({ type: "batch", commands: [...cuts, { type: "import-media", media, at, trackId: target ?? undefined }] });
+      setText(notice, punch && target ? `Punched in ${file.name}` : `Recorded ${file.name}`);
     } catch (err) {
       setText(notice, `Could not save the take: ${reason(err)}`);
     } finally {
@@ -135,5 +190,12 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
     if (stop && stop.disabled === stopEnabled) stop.disabled = !stopEnabled;
   };
   engine.subscribe("transport", renderRecording);
+  engine.subscribe("transport", (t) => {
+    const range = punchRange;
+    if (!active || busy || !range) return;
+    const wrapped = t.positionSamples < lastPosition;
+    lastPosition = t.positionSamples;
+    if (t.positionSamples >= range.end || wrapped) void finish();
+  });
   renderRecording(engine.get("transport"));
 }

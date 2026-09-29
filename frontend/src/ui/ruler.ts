@@ -69,11 +69,12 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
       ctx.fillText(region.label, x0 + 4, height - 16);
     }
 
-    if (doc.loop) {
+    const range = pending ?? doc.loop;
+    if (range) {
       ctx.fillStyle = style.borderTopColor;
-      ctx.globalAlpha = doc.loop.enabled ? 1 : 0.35;
-      const x0 = doc.loop.start / spp;
-      const x1 = doc.loop.end / spp;
+      ctx.globalAlpha = pending || doc.loop?.enabled ? 1 : 0.35;
+      const x0 = range.start / spp;
+      const x1 = range.end / spp;
       ctx.fillRect(x0, 0, Math.max(1, x1 - x0), 3);
       ctx.fillRect(x0, 0, 1, height);
       ctx.fillRect(Math.max(x0, x1 - 1), 0, 1, height);
@@ -81,11 +82,43 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     }
   };
 
-  canvas.addEventListener("pointerdown", (e) => {
+  let pending: { start: number; end: number } | null = null;
+  let pressX: number | null = null;
+  const toSamples = (x: number) => {
     const doc = engine.get("document");
-    if (doc.tracks.length) {
-      const spp = samplesPerPixel(doc);
-      player.seek(snapSamples(e.offsetX * spp, doc.sampleRate, doc.sampleRate / spp));
+    const spp = samplesPerPixel(doc);
+    return snapSamples(Math.max(0, x) * spp, doc.sampleRate, doc.sampleRate / spp);
+  };
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || !engine.get("document").tracks.length) return;
+    pressX = e.offsetX;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (pressX === null || (!pending && Math.abs(e.offsetX - pressX) < 4)) return;
+    const a = toSamples(pressX);
+    const b = toSamples(e.offsetX);
+    pending = { start: Math.min(a, b), end: Math.max(a, b) };
+    draw();
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    if (pressX === null) return;
+    const range = pending;
+    pressX = null;
+    pending = null;
+    if (range && range.end > range.start) {
+      engine.dispatch({ type: "set-loop", start: range.start, end: range.end, enabled: engine.get("document").loop?.enabled ?? false });
+      draw();
+    } else {
+      player.seek(toSamples(e.offsetX));
+      if (range) draw();
+    }
+  });
+  canvas.addEventListener("pointercancel", () => {
+    pressX = null;
+    if (pending) {
+      pending = null;
+      draw();
     }
   });
   engine.subscribe("document", draw);

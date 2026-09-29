@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.25.0
-Last updated: 2026-09-28 · track arming: record into the armed track, input shown in its header meter
+Current build version: v0.26.0
+Last updated: 2026-09-28 · punch-in over the loop range; the ruler sets the range by dragging
 
 ---
 
@@ -949,3 +949,21 @@ Outside Shuffle mode, dragging either edge of a selected clip trims every select
 - logged: v0.25.0 · 2026-09-28
 
 Each lane head has a record-arm button; one track can be armed at a time, and arming is interface state like the selection, so it never enters undo history or the saved session. Recording starts into the armed track if it still exists (the notice names it); while it runs, the input level that drives the transport IN meter also drives that track's header meter, and the playback meter leaves that track alone so the two never write the same bars. On stop the take is imported with `import-media` naming the track, which adds the take as a clip on it at the recording's start instead of creating a track; with nothing armed recording makes a new track as before. The recording track is cleared on every path, saved, empty or failed. Verified with Chromium's fake microphone fed a continuous 440 Hz file: arming one track then another left exactly one armed and clicking again disarmed, with no undo steps; recording from 5 s showed scaleX(0.9) on the armed track's header, equal to the IN meter (the 0.5-peak tone), and 0 on the other track, whose clip had ended; the take landed on the armed track at exactly 240,000 in one undo step and undo removed it; the header meter reset after stop; unarmed recording made a new track; layout shift 0. The first run used the default fake microphone, which beeps once a second, and read 0 between beeps on both the IN meter and the header; the harness now uses the same capture file as the v0.5.0 recording harness. The unarmed button is faint against the header; cosmetic.
+
+---
+
+## v0.26.0 · punch-in
+
+### src/ui/ruler.ts · drag to set the loop range
+- refers-to: src/ui/ruler.ts :: `pending`, pointer handlers, `draw`
+- kind: explainer
+- logged: v0.26.0 · 2026-09-28
+
+Dragging across the ruler by more than 4 px sets the loop range (snapped to the grid in Grid mode); the band follows the drag on the canvas and the range is committed on release as one `set-loop`, keeping whether looping is on. A plain click still seeks, now on release. Before this the range could only be the whole session. Verified: a drag from 100 to 200 px at 100 px per second set 48,000 to 96,000 in one undo step; a click seeked to 24,000 and left the range alone; `pending` is declared before the ruler's first draw, and the page logged no errors.
+
+### src/ui/record.ts and grid.ts · punch-in on the armed track
+- refers-to: src/ui/record.ts :: `punchRange`, `punchCommands`, `begin`, `finish`, the punch auto-stop subscription; src/ui/grid.ts :: `punchEnabled`, `mountGrid`
+- kind: rationale
+- logged: v0.26.0 · 2026-09-28
+
+With Punch on (button or P), a track armed and a loop range ahead of the playhead, recording is a punch: the take is captured from the playhead as usual, but only the part inside the range is kept; the armed track's clips are cut at the in and out points (the part before keeps its fade-in and loses its fade-out, the part after is re-created at the right source offset, anything inside is removed) and the take goes in between, all in one `batch`. Recording stops by itself at the out point, or if looping wraps the playhead back. Without an armed track, Punch records normally and the notice says a track must be armed. Recording latency is not compensated yet (the latency spike is still pending), so a punched take can sit a device latency late on real hardware; the harness's fake microphone has none. Verified with the fake microphone fed a continuous 440 Hz file, punching 1 to 2 s into the 3 s stereo file: the notice announced the punch, recording stopped by itself, the track became the original 0 to 1 s, the take at 48,000 for 48,000 samples and the original from 96,000 at source offset 96,000; the render equalled the original exactly before and after the range with the 0.5-peak take inside; one undo step, undo restored the single clip; Punch without an armed track recorded a new track with the explanation; layout shift 0.
