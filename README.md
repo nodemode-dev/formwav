@@ -98,7 +98,7 @@ Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoni
 
 ## Status
 
-v0.14.0 continues Phase 3, the editing surface: a timeline ruler (time, loop range, regions; click to move the playhead), zoom (`=`, `-`, `0`), & clips you can select, drag, split at the playhead (S), trim from either edge & fade in or out by dragging the handles in their top corners, w/ the fades drawn on the waveform; every edit is one undo step. On top of Phase 2: import, recording, sample-accurate looping, `.fmw` save & open w/ revision checks, pan, buses, crossfades, & Export w/ peak & BS.1770 loudness; the engine's render matches the browser's (exactly, or within 1e-7 where equal-power fades use `sin`). Still to come in Phase 3: grid & shuffle modes, automation lanes, take comping & the mixer.
+v0.15.0 continues Phase 3, the editing surface: a timeline ruler (time, loop range, regions; click to move the playhead), zoom (`=`, `-`, `0`), Grid mode (G) that snaps moves & trims to the ruler's ticks, & clips you can select, drag, split at the playhead (S), trim from either edge, fade in or out w/ the handles in their top corners & turn up or down w/ a gain line, w/ fades & gain drawn on the waveform; every edit is one undo step. On top of Phase 2: import, recording, sample-accurate looping, `.fmw` save & open w/ revision checks, pan, buses, crossfades, & Export w/ peak & BS.1770 loudness; the engine's render matches the browser's (exactly, or within 1e-7 where equal-power fades use `sin`). Still to come in Phase 3: shuffle mode, multi-clip selection, automation lanes, take comping & the mixer.
 
 ## Contributors
 
