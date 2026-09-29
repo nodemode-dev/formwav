@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.22.0
-Last updated: 2026-09-28 · per-track meters in the lane heads
+Current build version: v0.23.0
+Last updated: 2026-09-28 · Shuffle reordering and Spot mode
 
 ---
 
@@ -898,3 +898,21 @@ Moving the gain label to the clip's start in v0.19.1 put it over a fade handle p
 - logged: v0.22.0 · 2026-09-28
 
 The player numbers each clip's track by the document's track order; each worklet report takes the per-track peaks after the master pair from one buffer (up to 256 tracks) and the player passes them to level listeners beside the master peaks. Each lane head is created with a two-bar meter; `mountTrackMeters` drives it on the master meter's scale and 20 dB/s fall-back, writing a bar only when its value changes, and empties every lane on stop. Defect fixed before release: the lane meter reused `.fw-out-track`, whose `grid-column: 2` (from the transport meter's label column) made an empty implicit first column in the lane meter's grid, so each bar was 48 px wide starting at x = 60; the screenshot showed it, a measurement confirmed it, and the lane meter is now a flex column. Verified with two tracks: the 0.5 sine's lane held scaleX(0.9) (-6.02 dBFS) on both bars, the stereo file's right bar held 0.867 while its left climbed with its ramp, every lane emptied on stop, bars start at x = 12 beside the track name at 86 and 83 px wide, only meter bars, clock, playhead and Play's pressed state changed during playback, layout shift 0; master meter, playback null (0.0) and browser-versus-engine (0.0) regressions unchanged.
+
+---
+
+## v0.23.0 · Shuffle reordering and Spot mode
+
+### src/ui/lanes.ts · Shuffle reorder
+- refers-to: src/ui/lanes.ts :: `shuffleLayout`, `Gesture.reorder`, pointer-down, `preview`, `commit`
+- kind: rationale
+- logged: v0.23.0 · 2026-09-28
+
+In Shuffle mode, dragging one clip reorders it by the same rule as Shuffle cut and paste: the clip is lifted out (clips after it close its gap), then inserted at the clip boundary nearest to where it is dropped (clips at or after that boundary move right by its length). Gaps between the other clips are kept. `shuffleLayout` computes every clip's new start; the preview places every clip on the track there by `transform`, so the drag shows the result, and the commit sends only the changed starts as one `batch`. Dropping near the original place changes nothing and records nothing. Moving several selected clips in Shuffle mode is still a slip move. Verified on a 10 s sine split in three: dragging the first clip to the end previewed it at +800 px and the others at -200 px mid-drag, committed in one step, and rendered 0.0 against the pieces in the new order; moving the last clip to the front rendered 0.0; a 10 px nudge recorded nothing.
+
+### src/ui/grid.ts and lanes.ts · Spot mode
+- refers-to: src/ui/grid.ts :: `spotEnabled`, `mountGrid`; src/ui/lanes.ts :: `spot`, `openSpot`, `closeSpot`, `parseTime`, `formatTime`, pointer-down
+- kind: warning-context
+- logged: v0.23.0 · 2026-09-28
+
+Spot mode (a button beside Grid and Shuffle, or T) turns a press on a clip body into a small field over the clip, prefilled with its start as m:ss.mmm and selected. Enter moves the clip to the typed time (seconds or m:ss.mmm, converted to the nearest sample) as one undo step; invalid text is flagged and changes nothing; Escape or leaving the field closes it. Keys typed into the field never reach the global shortcuts. Defect fixed before release: closing the field hid it but left it focused, so every global shortcut, which ignores keys aimed at an input, went dead until the next click; closing now releases focus. Verified: 7.5 moved a clip to exactly 360,000 in one step; 1:00.5 gave 2,904,000; "2t" was flagged, changed nothing, and its "t" did not toggle Spot mode; after Escape the field held no focus and Space started playback; the screenshot showed the field on the clip with its time selected.

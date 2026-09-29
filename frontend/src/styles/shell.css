@@ -483,3 +483,36 @@ html, body, #app { height: 100%; }
 }
 
 .fw-marquee[hidden] { display: none; }
+
+.fw-spot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius);
+}
+
+.fw-spot[hidden] { display: none; }
+
+.fw-spot-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+
+.fw-spot-input {
+  inline-size: 11ch;
+  padding: 2px var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.fw-spot-input[aria-invalid="true"] { border-color: var(--danger); }

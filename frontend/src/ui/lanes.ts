@@ -1,7 +1,7 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import { documentLength, fadeCurve, nextFadeShape, sessionLength } from "../engine/document";
 import { fetchPeaks, type PeakData } from "../io/media-client";
-import { gridEnabled, shuffleEnabled, snapSamples } from "./grid";
+import { gridEnabled, shuffleEnabled, snapSamples, spotEnabled } from "./grid";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
 const PEAK_SPP = 256;
@@ -278,6 +278,75 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   });
   render(engine.get("document"));
 
+  const spot = document.createElement("div");
+  spot.className = "fw-spot";
+  spot.hidden = true;
+  spot.innerHTML = `<label class="fw-spot-label">Start<input class="fw-spot-input" type="text" inputmode="decimal" spellcheck="false" aria-label="Clip start, in seconds or m:ss.mmm"></label>`;
+  lanes.append(spot);
+  const spotInput = spot.querySelector<HTMLInputElement>(".fw-spot-input") as HTMLInputElement;
+  let spotTarget: { trackId: string; clipId: string } | null = null;
+
+  const formatTime = (samples: number, rate: number) => {
+    const seconds = samples / rate;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}:${(seconds - minutes * 60).toFixed(3).padStart(6, "0")}`;
+  };
+  const parseTime = (text: string, rate: number): number | null => {
+    const parts = text.trim().split(":");
+    if (!text.trim() || parts.length > 2 || parts.some((p) => p.trim() === "")) return null;
+    const seconds = parts.length === 2 ? Number(parts[0]) * 60 + Number(parts[1]) : Number(parts[0]);
+    return Number.isFinite(seconds) && seconds >= 0 ? Math.round(seconds * rate) : null;
+  };
+  const closeSpot = () => {
+    spotTarget = null;
+    if (!spot.hidden) spot.hidden = true;
+    if (document.activeElement === spotInput) spotInput.blur();
+  };
+  const openSpot = (trackId: string, clip: Clip, node: HTMLElement) => {
+    const r = lanes.getBoundingClientRect();
+    const c = node.getBoundingClientRect();
+    spot.style.transform = `translate(${(c.left - r.left).toFixed(1)}px, ${(c.top - r.top + 4).toFixed(1)}px)`;
+    spotTarget = { trackId, clipId: clip.id };
+    spotInput.value = formatTime(clip.start, engine.get("document").sampleRate);
+    spotInput.removeAttribute("aria-invalid");
+    spot.hidden = false;
+    spotInput.focus();
+    spotInput.select();
+  };
+  spotInput.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeSpot();
+      return;
+    }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const start = parseTime(spotInput.value, engine.get("document").sampleRate);
+    if (start === null) {
+      spotInput.setAttribute("aria-invalid", "true");
+      return;
+    }
+    if (spotTarget) engine.dispatch({ type: "move-clip", ...spotTarget, start });
+    closeSpot();
+  });
+  spotInput.addEventListener("input", () => spotInput.removeAttribute("aria-invalid"));
+  spotInput.addEventListener("blur", closeSpot);
+
+  /**
+   * Shuffle reorder: lift the clip out (later clips close its gap), then insert it at the clip boundary
+   * nearest to where it was dropped (clips at or after that boundary move right by its length).
+   * Gaps between the other clips are kept. Returns every clip's new start.
+   */
+  const shuffleLayout = (clip: Clip, others: Member[], delta: number): Map<string, number> => {
+    const rest = others.map((m) => ({ id: m.clip.id, length: m.clip.length, start: m.clip.start > clip.start ? m.clip.start - clip.length : m.clip.start }));
+    const target = Math.max(0, clip.start + delta);
+    const bounds = rest.length ? rest.flatMap((r) => [r.start, r.start + r.length]) : [target];
+    const slot = bounds.reduce((best, b) => (Math.abs(b - target) < Math.abs(best - target) ? b : best), bounds[0]);
+    const starts = new Map<string, number>([[clip.id, slot]]);
+    for (const r of rest) starts.set(r.id, r.start >= slot ? r.start + clip.length : r.start);
+    return starts;
+  };
+
   const marquee = document.createElement("div");
   marquee.className = "fw-marquee";
   marquee.hidden = true;
@@ -341,7 +410,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
 
   type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out" | "gain";
   type Member = { trackId: string; clip: Clip; node: HTMLElement };
-  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number; group: Member[]; ripple: boolean; followers: Member[] };
+  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number; group: Member[]; ripple: boolean; followers: Member[]; reorder: boolean };
   let drag: Gesture | null = null;
   const EDGE_PX = 6;
 
@@ -398,6 +467,14 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
             : x > rect.width - EDGE_PX
               ? "trim-right"
               : "move";
+    if (spotEnabled() && kind === "move" && !e.shiftKey) {
+      e.preventDefault();
+      selectedClipIds.clear();
+      selectedClipIds.add(clip.id);
+      markSelected();
+      openSpot(trackId, clip, node);
+      return;
+    }
     if (e.shiftKey && kind === "move") {
       if (selectedClipIds.has(clip.id)) selectedClipIds.delete(clip.id);
       else selectedClipIds.add(clip.id);
@@ -428,16 +505,17 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       }
     }
     const ripple = shuffleEnabled() && (kind === "trim-left" || kind === "trim-right");
+    const reorder = shuffleEnabled() && kind === "move" && group.length === 1;
     const followers: Member[] = [];
-    if (ripple) {
+    if (ripple || reorder) {
       const end = clip.start + clip.length;
       for (const other of doc.tracks.find((t) => t.id === trackId)?.clips ?? []) {
-        if (other.id === clip.id || other.start < end) continue;
+        if (other.id === clip.id || (ripple && other.start < end)) continue;
         const otherNode = lanes.querySelector<HTMLElement>(`.fw-clip[data-key="${other.id}"]`);
         if (otherNode) followers.push({ trackId, clip: other, node: otherNode });
       }
     }
-    drag = { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low, high, group, ripple, followers };
+    drag = { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low, high, group, ripple, followers, reorder };
     node.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
@@ -457,7 +535,12 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       return;
     }
     const shift = `translateX(${d.dx.toFixed(1)}px)`;
-    if (d.kind === "move") for (const member of d.group) member.node.style.transform = shift;
+    if (d.kind === "move" && d.reorder) {
+      const starts = shuffleLayout(d.clip, d.followers, Math.round(d.dx * spp));
+      for (const m of [{ trackId: d.trackId, clip: d.clip, node: d.node }, ...d.followers]) {
+        m.node.style.transform = `translateX(${(((starts.get(m.clip.id) ?? m.clip.start) - m.clip.start) / spp).toFixed(1)}px)`;
+      }
+    } else if (d.kind === "move") for (const member of d.group) member.node.style.transform = shift;
     else if (d.kind === "trim-left") {
       if (!d.ripple) d.node.style.transform = shift;
       d.node.style.width = `${Math.max(1, d.clip.length / spp - d.dx).toFixed(2)}px`;
@@ -501,7 +584,13 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const delta = Math.round(d.dx * spp);
     const c = d.clip;
     const ids = { trackId: d.trackId, clipId: c.id };
-    if (d.kind === "move")
+    if (d.kind === "move" && d.reorder) {
+      const starts = shuffleLayout(d.clip, d.followers, delta);
+      const commands = [{ trackId: d.trackId, clip: d.clip }, ...d.followers]
+        .filter((m) => starts.get(m.clip.id) !== m.clip.start)
+        .map((m) => ({ type: "move-clip" as const, trackId: m.trackId, clipId: m.clip.id, start: starts.get(m.clip.id) ?? m.clip.start }));
+      if (commands.length) engine.dispatch({ type: "batch", commands });
+    } else if (d.kind === "move")
       engine.dispatch({
         type: "batch",
         commands: d.group.map((m) => ({ type: "move-clip" as const, trackId: m.trackId, clipId: m.clip.id, start: m.clip.start + delta })),
