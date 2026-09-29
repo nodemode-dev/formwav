@@ -531,6 +531,24 @@ html, body, #app { height: 100%; }
 .fw-auto-rows { grid-column: 2; border-top: 1px dashed var(--border-color); }
 .fw-auto-rows[hidden] { display: none; }
 .fw-auto-row { position: relative; block-size: calc(var(--space-8) * 1.5); }
+.fw-auto-row + .fw-auto-row { border-top: 1px solid var(--border-color); }
+.fw-auto-heads {
+  grid-column: 1;
+  grid-row: 2;
+  position: sticky;
+  left: 0;
+  z-index: var(--z-raised);
+  display: grid;
+  grid-auto-rows: calc(var(--space-8) * 1.5);
+  align-items: center;
+  padding-inline: var(--space-3);
+  border-top: 1px dashed var(--border-color);
+  background: var(--bg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+}
+.fw-auto-heads[hidden] { display: none; }
 .fw-auto-svg { display: block; inline-size: 100%; block-size: 100%; overflow: hidden; cursor: crosshair; }
 .fw-auto-line { fill: none; stroke: var(--accent-color); stroke-width: 1.5; }
 .fw-auto-line[data-static="true"] { stroke: var(--text-muted); stroke-dasharray: 4 4; }

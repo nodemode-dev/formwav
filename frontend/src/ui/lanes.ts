@@ -226,7 +226,7 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle" hidden aria-expanded="false" title="Show every take as a lane; drag across a take to comp that range">Takes</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><button type="button" class="fw-auto-toggle" aria-expanded="false" title="Show volume automation: click the line to add a point, drag to move it, Alt-click to delete it">Auto</button></div><div class="fw-lane-body"></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-rows" hidden></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle" hidden aria-expanded="false" title="Show every take as a lane; drag across a take to comp that range">Takes</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><button type="button" class="fw-auto-toggle" aria-expanded="false" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">Auto</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-rows" hidden></div>`;
   return lane;
 }
 
@@ -253,9 +253,11 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
   const autoToggle = node.querySelector<HTMLElement>(".fw-auto-toggle");
   if (autoToggle && autoToggle.getAttribute("aria-expanded") !== String(autoOpen)) autoToggle.setAttribute("aria-expanded", String(autoOpen));
   const autoRows = node.querySelector<HTMLElement>(".fw-auto-rows");
+  const autoHeads = node.querySelector<HTMLElement>(".fw-auto-heads");
+  if (autoHeads && autoHeads.hidden === autoOpen) autoHeads.hidden = !autoOpen;
   if (autoRows) {
     if (autoRows.hidden === autoOpen) autoRows.hidden = !autoOpen;
-    if (autoOpen) drawVolumeLane(autoRows, track, spp);
+    if (autoOpen) for (const row of autoRows.querySelectorAll<HTMLElement>(".fw-auto-row")) drawAutoLane(row, track, row.dataset.param === "pan" ? "pan" : "volume", spp);
   }
   const takeClips = track.clips.filter((c) => (c.takes?.length ?? 0) > 1);
   const count = takeClips.reduce((most, c) => Math.max(most, c.takes?.length ?? 0), 0);
@@ -309,19 +311,31 @@ const expandedTracks = new Set<string>();
 const autoTracks = new Set<string>();
 const AUTO_ROW_H = 48;
 
-/** Draws a track's volume automation: the line through its points (held before the first and after the last), a circle per point. */
-function drawVolumeLane(rows: HTMLElement, track: Track, spp: number): void {
-  const svg = rows.querySelector<SVGSVGElement>(".fw-auto-svg");
+type AutoParam = "volume" | "pan";
+
+/** Where a value sits down an automation row, 0 at the top: volume +12 to -36 dB; pan left (-1) to right (+1). */
+function autoFraction(param: AutoParam, value: number): number {
+  return param === "volume" ? gainFraction(value) : Math.min(1, Math.max(0, (value + 1) / 2));
+}
+
+/** The value at a fraction down an automation row (the inverse of autoFraction), rounded as the document stores it. */
+function autoValue(param: AutoParam, frac: number): number {
+  return param === "volume" ? Math.round((GAIN_TOP_DB - frac * GAIN_SPAN_DB) * 10) / 10 : Math.round((frac * 2 - 1) * 100) / 100;
+}
+
+/** Draws one automation row: the line through the points (held before the first and after the last), a circle per point; with no automation a dashed line shows the static fader or pan. */
+function drawAutoLane(row: HTMLElement, track: Track, param: AutoParam, spp: number, points: AutoPoint[] = track.automation?.[param] ?? []): void {
+  const svg = row.querySelector<SVGSVGElement>(".fw-auto-svg");
   const line = svg?.querySelector<SVGPolylineElement>(".fw-auto-line");
   const group = svg?.querySelector<SVGGElement>(".fw-auto-points");
   if (!svg || !line || !group) return;
-  const points = track.automation?.volume ?? [];
-  const y = (db: number) => (gainFraction(db) * AUTO_ROW_H).toFixed(1);
+  const y = (value: number) => (autoFraction(param, value) * AUTO_ROW_H).toFixed(1);
   const x = (time: number) => (time / spp).toFixed(1);
+  const fallback = param === "volume" ? track.gainDb : track.pan ?? 0;
   const last = points[points.length - 1];
   const coords = points.length
     ? [`0,${y(points[0].value)}`, ...points.map((p) => `${x(p.time)},${y(p.value)}`), `${(last.time / spp + 100000).toFixed(1)},${y(last.value)}`]
-    : [`0,${y(track.gainDb)}`, `100000,${y(track.gainDb)}`];
+    : [`0,${y(fallback)}`, `100000,${y(fallback)}`];
   const attr = coords.join(" ");
   if (line.getAttribute("points") !== attr) line.setAttribute("points", attr);
   const fader = String(points.length === 0);
@@ -469,47 +483,47 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     render(engine.get("document"));
   });
 
-  let autoDrag: { trackId: string; rows: HTMLElement; index: number; points: AutoPoint[]; moved: boolean } | null = null;
-  const autoPointAt = (rows: HTMLElement, e: PointerEvent): AutoPoint => {
+  let autoDrag: { trackId: string; row: HTMLElement; param: AutoParam; index: number; points: AutoPoint[] } | null = null;
+  const autoPointAt = (row: HTMLElement, param: AutoParam, e: PointerEvent): AutoPoint => {
     const doc = engine.get("document");
     const spp = samplesPerPixel(doc);
-    const r = (rows.querySelector<HTMLElement>(".fw-auto-row") ?? rows).getBoundingClientRect();
+    const r = row.getBoundingClientRect();
     const time = Math.round(snapSamples(Math.max(0, e.clientX - r.left) * spp, doc.sampleRate, doc.sampleRate / spp));
-    const frac = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-    return { time, value: Math.round((GAIN_TOP_DB - frac * GAIN_SPAN_DB) * 10) / 10 };
+    return { time, value: autoValue(param, Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))) };
   };
   const previewAuto = (d: NonNullable<typeof autoDrag>) => {
     const track = engine.get("document").tracks.find((t) => t.id === d.trackId);
-    if (track) drawVolumeLane(d.rows, { ...track, automation: { ...track.automation, volume: d.points } }, samplesPerPixel(engine.get("document")));
+    if (track) drawAutoLane(d.row, track, d.param, samplesPerPixel(engine.get("document")), d.points);
   };
-  const startAuto = (e: PointerEvent, rows: HTMLElement) => {
-    const trackId = rows.closest<HTMLElement>(".fw-lane")?.dataset.key;
+  const startAuto = (e: PointerEvent, _rows: HTMLElement) => {
+    const row = (e.target as Element).closest<HTMLElement>(".fw-auto-row");
+    const trackId = row?.closest<HTMLElement>(".fw-lane")?.dataset.key;
     const track = engine.get("document").tracks.find((t) => t.id === trackId);
-    if (!trackId || !track) return;
+    if (!row || !trackId || !track) return;
     e.preventDefault();
-    const points = [...(track.automation?.volume ?? [])];
+    const param: AutoParam = row.dataset.param === "pan" ? "pan" : "volume";
+    const points = [...(track.automation?.[param] ?? [])];
     const circle = (e.target as Element).closest("circle");
     let index = circle?.parentElement ? Array.from(circle.parentElement.children).indexOf(circle) : -1;
     if (index >= 0 && e.altKey) {
       points.splice(index, 1);
-      engine.dispatch({ type: "set-automation", trackId, param: "volume", points });
+      engine.dispatch({ type: "set-automation", trackId, param, points });
       return;
     }
     if (index < 0) {
-      const added = autoPointAt(rows, e);
+      const added = autoPointAt(row, param, e);
       points.push(added);
       points.sort((a, b) => a.time - b.time);
       index = points.indexOf(added);
     }
-    autoDrag = { trackId, rows, index, points, moved: false };
-    rows.setPointerCapture(e.pointerId);
+    autoDrag = { trackId, row, param, index, points };
+    row.setPointerCapture(e.pointerId);
     previewAuto(autoDrag);
   };
   lanes.addEventListener("pointermove", (e) => {
     const d = autoDrag;
     if (!d) return;
-    d.moved = true;
-    const next = autoPointAt(d.rows, e);
+    const next = autoPointAt(d.row, d.param, e);
     const lo = d.index > 0 ? d.points[d.index - 1].time + 1 : 0;
     const hi = d.index < d.points.length - 1 ? d.points[d.index + 1].time - 1 : Number.MAX_SAFE_INTEGER;
     d.points[d.index] = { time: Math.min(hi, Math.max(lo, next.time)), value: next.value };
@@ -519,7 +533,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const d = autoDrag;
     autoDrag = null;
     if (!d) return;
-    if (apply) engine.dispatch({ type: "set-automation", trackId: d.trackId, param: "volume", points: d.points });
+    if (apply) engine.dispatch({ type: "set-automation", trackId: d.trackId, param: d.param, points: d.points });
     else render(engine.get("document"));
   };
   lanes.addEventListener("pointerup", () => endAuto(true));

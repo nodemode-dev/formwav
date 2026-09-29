@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.31.0
-Last updated: 2026-09-28 · volume and pan automation (document, player); a volume automation lane to draw it
+Current build version: v0.32.0
+Last updated: 2026-09-28 · a pan automation lane beside volume; automation labels in the header column
 
 ---
 
@@ -1029,3 +1029,14 @@ A track may carry volume automation (dB) and pan automation (-1 to 1) as time-so
 - logged: v0.31.0 · 2026-09-28
 
 The Auto toggle in each lane head shows a volume automation lane under the track, in the same growable lane row as take lanes: an SVG line through the points (held before the first and after the last) with a circle per point, written only on change; with no automation a dashed line shows the static fader level. A click on the lane adds a point and a drag moves it (kept between its neighbours, snapped to the grid), Alt-click deletes one; each gesture is one `set-automation`. Pan automation plays but has no lane yet. Defect fixed before release: the pointer was mapped against the lane container, whose 1 px top border the drawing does not include, so a point landed about 0.7 dB from the cursor (-0.7 instead of 0); it is now mapped against the drawn row. Verified with the 10 s tone at 100 px per second: clicks added (48,000, 0 dB) and (144,000, -12 dB), one step each; a drag moved the second to (168,000, -24 dB) in one step; the browser's render equalled the engine's exactly and the gain equalled f32 interpolation exactly at 355 probes; Alt-click deleted a point; undo walked back to no automation; the lane added 49 px and collapsing restored 96; no page errors; layout shift 0; take lane and browser-versus-engine regressions unchanged.
+
+---
+
+## v0.32.0 · pan automation lane
+
+### src/ui/lanes.ts, shell.css · Volume and Pan rows
+- refers-to: src/ui/lanes.ts :: `AutoParam`, `autoFraction`, `autoValue`, `drawAutoLane`, `updateLane`, `autoPointAt`, `startAuto`, `previewAuto`, `endAuto`, lane markup; src/styles/shell.css :: `.fw-auto-row`, `.fw-auto-heads`
+- kind: warning-context
+- logged: v0.32.0 · 2026-09-28
+
+The Auto panel now holds a Volume row and a Pan row. Drawing and gestures are one implementation keyed by parameter: `autoFraction` and `autoValue` are the only mappings (volume +12 to -36 dB down the row; pan left at the top, centre in the middle, right at the bottom), so drawing and pointer input cannot disagree; each row's press finds its own row and parameter and commits one `set-automation`. With no pan automation a dashed line shows the track's static pan. The labels live in the lane grid's header column beside the rows, sticky on the left like the track head: the first version put them at each row's right end, which is the timeline's right end and off-screen on any session wider than the window (seen in the screenshot). While moving them, an edit dropped the take-rows container from the lane markup; it was restored before any build, and the take-lane harness passed afterwards. A point at an extreme value (hard pan, +12 or -36 dB) is drawn half-clipped by its row's edge; insetting it changes the coordinates the exact-value harnesses use, so it is left for a pass of its own. Verified with the 10 s tone at 100 px per second: clicks at the pan row's top and bottom edges added (48,000, -1) and (144,000, +1), one step each; a drag to mid-height gave (168,000, 0) in one step; the browser's render equalled the engine's (0.0 left, 3e-8 right), the right channel was exactly silent while hard left and the channels exactly equal while centred; Alt-click deleted and undo walked back; the volume row stayed untouched; the labels sat at x = 12 in the header column, each centred on its row; no page errors; layout shift 0; volume lane and take lane regressions unchanged.
