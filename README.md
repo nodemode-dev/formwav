@@ -98,7 +98,7 @@ Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoni
 
 ## Status
 
-v0.12.0 closes Phase 2: import, waveform lanes, 100-step undo, playback w/ sample-accurate looping, recording, `.fmw` save & open w/ revision checks (a second window cannot silently overwrite newer work), track pan, buses, clip fades & crossfades, regions & a loop range, & Export (Cmd or Ctrl Shift E) w/ peak & BS.1770 loudness. The engine's render matches the browser's playback render (exactly, or within 1e-7 where equal-power fades use `sin`). Carried to later phases: fade handles, pan controls, bus strips, meters, a timeline ruler & the mixer (Phase 3, next), effects on buses (Phase 4), playback beyond stereo (Phase 9) & the desktop build (Phase 10).
+v0.13.0 opens Phase 3, the editing surface: a timeline ruler (time, loop range, regions; click to move the playhead), zoom (`=`, `-`, `0`), & clips you can select, drag along the timeline (one undo step per drag) & delete. On top of Phase 2: import, recording, sample-accurate looping, 100-step undo, `.fmw` save & open w/ revision checks, pan, buses, fades & crossfades, & Export w/ peak & BS.1770 loudness; the engine's render matches the browser's (exactly, or within 1e-7 where equal-power fades use `sin`). Still to come in Phase 3: grid & shuffle modes, split & trim, fade handles, automation lanes, take comping & the mixer.
 
 ## Contributors
 
