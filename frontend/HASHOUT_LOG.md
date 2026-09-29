@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.12.0
-Last updated: 2026-09-28 · save with revision checks: known revision, conflict prompt, one retry
+Current build version: v0.13.0
+Last updated: 2026-09-28 · Phase 3 opens: zoom, timeline ruler, clip selection, slip drag, delete
 
 ---
 
@@ -44,6 +44,7 @@ frontend/
     │   ├── transport.ts         transport buttons, playhead, click to seek, Space and Home
     │   ├── loop.ts              Loop button, L key, loop band over the lanes
     │   ├── export.ts            Export button and Cmd or Ctrl Shift E: the engine's mix as a WAV download
+    │   ├── ruler.ts             timeline ruler on one canvas: time labels, loop range, regions; click to seek
     │   ├── record.ts            Record button and R key, input meter, takes into the session
     │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
     ├── audio/
@@ -91,6 +92,7 @@ frontend/
 - [src/io/projects-client.ts](#src-io-projects-client)
 - [src/ui/loop.ts](#src-ui-loop)
 - [src/ui/export.ts and src/io/render-client.ts](#src-ui-export)
+- [src/ui/ruler.ts and the v0.13.0 timeline](#src-ui-ruler)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -673,3 +675,35 @@ Buses are optional on the document and a track without `busId` feeds master, so 
 - logged: v0.12.0 · 2026-09-28
 
 Each window remembers the name and revision of the session it last saved or opened. Saving under that name sends its revision as `base`; saving under any other name sends 0, meaning "new". A 409 becomes `RevisionConflict` carrying the server's revision, and the window asks with the browser's confirm dialog: "already exists" for a new name, "saved from another window" otherwise. Declining leaves the saved file untouched and says so; accepting retries once against the server's revision. Verified v0.12.0 with three windows: A saved, B opened and saved over it, A was asked, declined (B's version kept), then accepted on the next save (revision 3, A's content); a fresh window saving under the same name was told it exists and declined. The v0.6.0 round-trip harness also crossed an "already exists" prompt and still null-tested at 0.
+
+---
+
+## src/ui/ruler.ts and the v0.13.0 timeline {#src-ui-ruler}
+
+### src/ui/ruler.ts · one canvas
+- refers-to: src/ui/ruler.ts :: `mountRuler`, `draw`, `label`
+- kind: rationale
+- logged: v0.13.0 · 2026-09-28
+
+Created once at mount and inserted before the lanes, so it scrolls with them, sticky at the top on `--z-selected` with a sticky corner over the lane heads on `--z-raised`. Everything is drawn on one canvas, so zooming or editing never adds or removes DOM: labels at the first step in the list that leaves 80 px between labels, minor ticks at a fifth of that when they are at least 6 px apart, the loop range as a bar across the top (faded when off), regions as bars with labels along the bottom. Colours come from computed CSS on the canvas (`color`, `border-top-color`, `outline-color`), not tokens read in script. Redraws on document changes, zoom, theme changes and resize. A pointer down seeks. The region label touches the minor ticks (seen in the v0.13.0 screenshot); cosmetic, left for the ruler's next pass.
+
+### src/styles/shell.css · ruler canvas overflow, defect fixed
+- refers-to: src/styles/shell.css :: `.fw-ruler` `grid-template-rows`
+- kind: warning-context
+- logged: v0.13.0 · 2026-09-28
+
+A canvas has an intrinsic height of 150 px. In the ruler's grid the row sized to that content, so the canvas overflowed its 32 px ruler and lay over the first lane, where it swallowed every pointer event: drags never reached the clip. The first timeline harness run surfaced it as a confusing failure (its Ctrl+Z then undid an import instead of a move); a step-by-step replay showed the drag had not committed, and `elementFromPoint` at the clip's centre returned the ruler canvas. `grid-template-rows: minmax(0, 1fr)` pins the row to the ruler's own height (31 px measured after); `overflow: hidden` was avoided because it would stop the sticky corner staying put in horizontal scroll.
+
+### src/ui/lanes.ts · zoom
+- refers-to: src/ui/lanes.ts :: `zoom`, `setZoom`, `onZoom`, `samplesPerPixel`
+- kind: explainer
+- logged: v0.13.0 · 2026-09-28
+
+Zoom is view state, not document state, so it is not saved or undone. It multiplies the base 100 px per second, from 0.25 to 16, and is still capped by the 16,000-pixel timeline limit. `=` doubles, `-` halves, `0` resets; lanes, playhead, loop band and ruler all re-render through `onZoom`. Verified: at 2x clip widths doubled (300 to 600 px, 1000 to 2000 px) and the playhead moved from 100 to 200 px; halving twice gave 150 px; reset gave 300 px. There is no zoom control on screen yet, and zoom does not keep the playhead in view.
+
+### src/ui/lanes.ts · select, slip, delete
+- refers-to: src/ui/lanes.ts :: pointer handlers, `markSelected`, keydown handler; src/ui/transport.ts :: lanes click guard
+- kind: rationale
+- logged: v0.13.0 · 2026-09-28
+
+A pointer down on a clip selects it and captures the pointer; moving more than 3 px starts a slip drag that moves the clip by `transform` only, clamped so it cannot pass time zero; release clears the transform and dispatches one `move-clip`, so a drag is one undo step and the committed position lands in the same frame. Delete or Backspace removes the selected clip (one undo step); Escape or a pointer down on empty lane space deselects. Clicks on clips no longer seek; empty lane space and the ruler do. Verified: a 100 px drag committed exactly 48,000 samples with only transform writes during the drag; undo, delete, undo delete, Escape and empty-lane deselect behaved; layout shift 0. Grid and shuffle modes, the smart tool, split and trim are the next Phase 3 steps.

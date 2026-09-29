@@ -1,0 +1,94 @@
+import type { Engine } from "../engine";
+import type { Player } from "../audio/player";
+import { documentLength } from "../engine/document";
+import { onZoom, samplesPerPixel } from "./lanes";
+
+const LABEL_SPACING_PX = 80;
+const MIN_MINOR_PX = 6;
+const STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
+
+function label(seconds: number, step: number): string {
+  const minutes = Math.floor(seconds / 60 + 1e-9);
+  const rest = Math.max(0, seconds - minutes * 60);
+  const text = step < 1 ? rest.toFixed(step < 0.5 ? 2 : 1) : String(Math.round(rest));
+  return `${minutes}:${rest < 10 ? "0" : ""}${text}`;
+}
+
+export function mountRuler(host: HTMLElement, engine: Engine, player: Player): void {
+  const stage = host.querySelector<HTMLElement>(".fw-stage");
+  const lanes = host.querySelector<HTMLElement>(".fw-lanes");
+  if (!stage || !lanes) return;
+  const ruler = document.createElement("div");
+  ruler.className = "fw-ruler";
+  ruler.innerHTML = `<div class="fw-ruler-corner"></div><canvas class="fw-ruler-canvas" aria-label="Timeline: click to move the playhead"></canvas>`;
+  stage.insertBefore(ruler, lanes);
+  const corner = ruler.firstElementChild as HTMLElement;
+  const canvas = ruler.lastElementChild as HTMLCanvasElement;
+  let lastWidth = "";
+
+  const draw = () => {
+    const doc = engine.get("document");
+    if (!doc.tracks.length) return;
+    const spp = samplesPerPixel(doc);
+    const width = Math.max(Math.ceil(documentLength(doc) / spp), stage.clientWidth - corner.offsetWidth);
+    const cssWidth = `${width}px`;
+    if (cssWidth !== lastWidth) {
+      lastWidth = cssWidth;
+      canvas.style.width = cssWidth;
+    }
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(width * dpr));
+    const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const style = getComputedStyle(canvas);
+    const height = h / dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.font = `${style.fontSize} ${style.fontFamily}`;
+    ctx.textBaseline = "top";
+
+    const pxPerSecond = doc.sampleRate / spp;
+    const step = STEPS.find((s) => s * pxPerSecond >= LABEL_SPACING_PX) ?? STEPS[STEPS.length - 1];
+    const minor = step / 5;
+    const drawMinor = minor * pxPerSecond >= MIN_MINOR_PX;
+    ctx.fillStyle = style.color;
+    for (let i = 0; i * minor * pxPerSecond <= width; i++) {
+      const major = i % 5 === 0;
+      if (!major && !drawMinor) continue;
+      const x = Math.round(i * minor * pxPerSecond);
+      ctx.fillRect(x, major ? height * 0.5 : height * 0.75, 1, height);
+      if (major) ctx.fillText(label(i * minor, step), x + 4, 3);
+    }
+
+    ctx.fillStyle = style.outlineColor;
+    for (const region of doc.regions ?? []) {
+      const x0 = region.start / spp;
+      ctx.fillRect(x0, height - 4, Math.max(1, (region.end - region.start) / spp), 4);
+      ctx.fillText(region.label, x0 + 4, height - 16);
+    }
+
+    if (doc.loop) {
+      ctx.fillStyle = style.borderTopColor;
+      ctx.globalAlpha = doc.loop.enabled ? 1 : 0.35;
+      const x0 = doc.loop.start / spp;
+      const x1 = doc.loop.end / spp;
+      ctx.fillRect(x0, 0, Math.max(1, x1 - x0), 3);
+      ctx.fillRect(x0, 0, 1, height);
+      ctx.fillRect(Math.max(x0, x1 - 1), 0, 1, height);
+      ctx.globalAlpha = 1;
+    }
+  };
+
+  canvas.addEventListener("pointerdown", (e) => {
+    const doc = engine.get("document");
+    if (doc.tracks.length) player.seek(e.offsetX * samplesPerPixel(doc));
+  });
+  engine.subscribe("document", draw);
+  onZoom(draw);
+  document.addEventListener("nm:ui-settings-changed", draw);
+  window.addEventListener("resize", draw);
+  draw();
+}

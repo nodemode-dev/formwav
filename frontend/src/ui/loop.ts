@@ -1,6 +1,6 @@
 import type { Engine, SessionDoc } from "../engine";
 import { documentLength } from "../engine/document";
-import { samplesPerPixel } from "./lanes";
+import { onZoom, samplesPerPixel } from "./lanes";
 
 export function mountLoop(host: HTMLElement, engine: Engine): void {
   const button = host.querySelector<HTMLButtonElement>('.fw-tbtn[data-action="loop"]');
@@ -51,5 +51,6 @@ export function mountLoop(host: HTMLElement, engine: Engine): void {
     toggle();
   });
   engine.subscribe("document", render);
+  onZoom(() => render(engine.get("document")));
   render(engine.get("document"));
 }

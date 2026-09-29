@@ -27,8 +27,29 @@ function peaksFor(id: string): Promise<PeakData> {
   return pending;
 }
 
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 16;
+let zoom = 1;
+let selectedClipId: string | null = null;
+const zoomListeners = new Set<() => void>();
+
+export function getZoom(): number {
+  return zoom;
+}
+
+export function setZoom(next: number): void {
+  const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+  if (clamped === zoom) return;
+  zoom = clamped;
+  for (const listener of zoomListeners) listener();
+}
+
+export function onZoom(listener: () => void): void {
+  zoomListeners.add(listener);
+}
+
 export function samplesPerPixel(doc: SessionDoc): number {
-  return Math.max(doc.sampleRate / BASE_PX_PER_SECOND, Math.ceil(documentLength(doc) / MAX_TIMELINE_PX));
+  return Math.max(doc.sampleRate / (BASE_PX_PER_SECOND * zoom), Math.ceil(documentLength(doc) / MAX_TIMELINE_PX));
 }
 
 function channelLabel(n: number): string {
@@ -101,6 +122,8 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
     node.dataset.width = width;
     node.style.width = width;
   }
+  const selected = String(clip.id === selectedClipId);
+  if (node.getAttribute("aria-selected") !== selected) node.setAttribute("aria-selected", selected);
   const canvas = node.firstElementChild as HTMLCanvasElement | null;
   const media = doc.media[clip.mediaId];
   if (!canvas || !media) return;
@@ -168,5 +191,75 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   });
 
   engine.subscribe("document", render);
+  onZoom(() => render(engine.get("document")));
   render(engine.get("document"));
+
+  const markSelected = () => {
+    for (const node of lanes.querySelectorAll<HTMLElement>(".fw-clip")) {
+      const on = String(node.dataset.key === selectedClipId);
+      if (node.getAttribute("aria-selected") !== on) node.setAttribute("aria-selected", on);
+    }
+  };
+
+  let drag: { node: HTMLElement; trackId: string; clipId: string; startX: number; origin: number; dx: number; moved: boolean } | null = null;
+
+  lanes.addEventListener("pointerdown", (e) => {
+    const node = (e.target as HTMLElement).closest<HTMLElement>(".fw-clip");
+    const trackId = node?.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    if (!node || !trackId || !node.dataset.key || e.button !== 0) {
+      if (selectedClipId !== null && !(e.target as HTMLElement).closest(".fw-lane-head")) {
+        selectedClipId = null;
+        markSelected();
+      }
+      return;
+    }
+    const clip = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === node.dataset.key);
+    if (!clip) return;
+    selectedClipId = clip.id;
+    markSelected();
+    drag = { node, trackId, clipId: clip.id, startX: e.clientX, origin: clip.start, dx: 0, moved: false };
+    node.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  lanes.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.startX;
+    if (!drag.moved && Math.abs(dx) < 3) return;
+    drag.moved = true;
+    drag.dx = Math.max(-drag.origin / samplesPerPixel(engine.get("document")), dx);
+    drag.node.style.transform = `translateX(${drag.dx.toFixed(1)}px)`;
+  });
+
+  const endDrag = (commit: boolean) => {
+    const d = drag;
+    drag = null;
+    if (!d) return;
+    if (d.moved) d.node.style.transform = "";
+    if (commit && d.moved) {
+      const start = d.origin + d.dx * samplesPerPixel(engine.get("document"));
+      engine.dispatch({ type: "move-clip", trackId: d.trackId, clipId: d.clipId, start });
+    }
+  };
+  lanes.addEventListener("pointerup", () => endDrag(true));
+  lanes.addEventListener("pointercancel", () => endDrag(false));
+
+  window.addEventListener("keydown", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "=" || e.key === "+") setZoom(zoom * 2);
+    else if (e.key === "-") setZoom(zoom / 2);
+    else if (e.key === "0") setZoom(1);
+    else if ((e.key === "Delete" || e.key === "Backspace") && selectedClipId) {
+      const clipId = selectedClipId;
+      const track = engine.get("document").tracks.find((t) => t.clips.some((c) => c.id === clipId));
+      selectedClipId = null;
+      if (track) engine.dispatch({ type: "remove-clip", trackId: track.id, clipId });
+    } else if (e.key === "Escape" && selectedClipId) {
+      selectedClipId = null;
+      markSelected();
+    } else return;
+    e.preventDefault();
+  });
 }

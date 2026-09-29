@@ -1,7 +1,7 @@
 import type { Engine, SessionDoc, TransportState } from "../engine";
 import type { Player } from "../audio/player";
 import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
-import { samplesPerPixel } from "./lanes";
+import { onZoom, samplesPerPixel } from "./lanes";
 
 export function mountTransport(host: HTMLElement, engine: Engine, player: Player): void {
   const button = (action: string) => host.querySelector<HTMLButtonElement>(`.fw-tbtn[data-action="${action}"]`);
@@ -80,6 +80,7 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
     player.seek(0);
   });
   lanes?.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest(".fw-clip")) return;
     const body = (e.target as HTMLElement).closest<HTMLElement>(".fw-lane-body");
     if (!body) return;
     const px = e.clientX - body.getBoundingClientRect().left;
@@ -100,6 +101,7 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
 
   engine.subscribe("document", renderDocument);
   engine.subscribe("transport", renderTransport);
+  onZoom(placePlayhead);
   renderDocument(engine.get("document"));
   renderTransport(engine.get("transport"));
 }
