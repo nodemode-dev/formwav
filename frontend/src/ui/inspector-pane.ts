@@ -19,6 +19,12 @@ const BODY = `
   <label class="fw-field fw-field-stack"><span>Effect</span><select data-fx="pick"></select></label>
   <button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button>
 </div>
+<div class="fw-insp-section fw-insp-analyze" hidden>
+  <div class="fw-insp-head">Analyze</div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="stats">Statistics</button><button type="button" class="fw-ibtn" data-an="spectrogram">Spectrogram</button></div>
+  <dl class="fw-stats"></dl>
+  <img class="fw-spectrogram" alt="Spectrogram of the selected clip" hidden>
+</div>
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Volume</span><input type="range" min="-60" max="12" step="0.1" data-f="volume"><output data-o="volume"></output></label>
@@ -60,6 +66,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     show(body.querySelector(".fw-insp-clip"), !!hit);
     show(body.querySelector(".fw-insp-track"), !!hit);
     show(body.querySelector(".fw-insp-effects"), !!hit);
+    show(body.querySelector(".fw-insp-analyze"), !!hit);
     if (!hit) {
       const seconds = doc.tracks.reduce((end, t) => Math.max(end, ...t.clips.map((c) => (c.start + c.length) / doc.sampleRate)), 0);
       setText(body.querySelector(".fw-insp-empty"), selected.length > 1 ? `${selected.length} clips selected. Select one clip to edit its properties.` : doc.tracks.length ? `Session: ${doc.tracks.length} track${doc.tracks.length === 1 ? "" : "s"}, ${(doc.sampleRate / 1000).toFixed(1)} kHz, ${seconds.toFixed(1)} s. Select a clip to edit its properties.` : "Import audio to begin. Selecting a clip shows its properties here.");
@@ -167,6 +174,51 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, `Could not apply ${label}: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       for (const b of buttons) b.disabled = false;
+    }
+  });
+
+  const statsList = body.querySelector<HTMLElement>(".fw-stats");
+  const spectrogram = body.querySelector<HTMLImageElement>(".fw-spectrogram");
+  const STAT_LABELS: [string, string, (v: number) => string][] = [
+    ["peakDb", "Peak", (v) => `${v.toFixed(2)} dBFS`],
+    ["rmsDb", "RMS", (v) => `${v.toFixed(2)} dBFS`],
+    ["dcOffset", "DC offset", (v) => v.toFixed(5)],
+    ["crestFactor", "Crest factor", (v) => v.toFixed(2)],
+    ["dynamicRangeDb", "Dynamic range", (v) => `${v.toFixed(1)} dB`],
+    ["flatFactor", "Clipped runs", (v) => v.toFixed(1)],
+  ];
+  const clearAnalysis = () => {
+    statsList?.replaceChildren();
+    if (spectrogram && !spectrogram.hidden) spectrogram.hidden = true;
+  };
+  host.addEventListener("fw-selection", clearAnalysis);
+  body.addEventListener("click", async (e) => {
+    const action = (e.target as HTMLElement).closest<HTMLElement>("[data-an]")?.dataset.an;
+    const hit = find(engine.get("document"));
+    if (!action || !hit) return;
+    try {
+      if (action === "stats") {
+        const res = await fetch(`/api/media/${hit.clip.mediaId}/stats`);
+        if (!res.ok) throw new Error(`the engine answered ${res.status}`);
+        const s = (await res.json()) as Record<string, number | boolean>;
+        statsList?.replaceChildren(
+          ...STAT_LABELS.filter(([key]) => typeof s[key] === "number").flatMap(([key, label, fmt]) => {
+            const dt = document.createElement("dt");
+            dt.textContent = label;
+            const dd = document.createElement("dd");
+            dd.textContent = fmt(s[key] as number);
+            return [dt, dd];
+          }),
+        );
+      } else if (action === "spectrogram" && spectrogram) {
+        const res = await fetch(`/api/media/${hit.clip.mediaId}/spectrogram.png`);
+        if (!res.ok) throw new Error(`the engine answered ${res.status}`);
+        if (spectrogram.src.startsWith("blob:")) URL.revokeObjectURL(spectrogram.src);
+        spectrogram.src = URL.createObjectURL(await res.blob());
+        spectrogram.hidden = false;
+      }
+    } catch (err) {
+      setText(notice, `Could not analyze the clip: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 

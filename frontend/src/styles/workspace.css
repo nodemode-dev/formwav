@@ -133,6 +133,19 @@
 .fw-voice-body select:disabled { opacity: 0.45; cursor: default; }
 .fw-voice-go { justify-content: center; }
 
+.fw-generate { flex: none; margin: 0 8px 8px; }
+.fw-generate[hidden] { display: none; }
+.fw-generate .fw-field { grid-template-columns: 64px minmax(0, 1fr) auto; }
+.fw-generate .fw-field.fw-field-stack { grid-template-columns: minmax(0, 1fr); }
+.fw-field input[type="text"] { inline-size: 100%; padding: 3px 6px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
+.fw-analyze-buttons { display: flex; gap: 6px; }
+.fw-stats { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: 12px; }
+.fw-stats:empty { display: none; }
+.fw-stats dt { color: var(--text-secondary); }
+.fw-stats dd { margin: 0; font-family: var(--font-mono); text-align: end; }
+.fw-spectrogram { display: block; inline-size: 100%; block-size: auto; border-radius: 6px; }
+.fw-spectrogram[hidden] { display: none; }
+
 .fw-media-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

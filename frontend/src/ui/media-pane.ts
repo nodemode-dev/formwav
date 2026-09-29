@@ -34,6 +34,53 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
   empty.textContent = "Imported and recorded audio appears here. Add any file to a new track with its + button.";
   list.before(empty);
 
+  const gen = document.createElement("section");
+  gen.className = "fw-insp-section fw-generate";
+  gen.dataset.panel = "media";
+  gen.innerHTML = `<div class="fw-insp-head">Generate</div>
+<label class="fw-field fw-field-stack"><span>Signal</span><select data-g="kind"><option value="tone">Tone</option><option value="noise-white">White noise</option><option value="noise-pink">Pink noise</option><option value="noise-brown">Brown noise</option><option value="silence">Silence</option><option value="chirp">Chirp, 100 Hz to 8 kHz</option><option value="dtmf">DTMF tones</option><option value="bleep">Bleep, 1 kHz</option></select></label>
+<label class="fw-field" data-gfor="tone noise-white noise-pink noise-brown silence chirp bleep"><span>Seconds</span><input type="number" data-g="seconds" value="5" min="0.1" max="3600" step="0.1"><span></span></label>
+<label class="fw-field" data-gfor="tone"><span>Hz</span><input type="number" data-g="freq" value="440" min="20" max="20000" step="1"><span></span></label>
+<label class="fw-field" data-gfor="dtmf"><span>Digits</span><input type="text" data-g="digits" value="0123456789" maxlength="64"><span></span></label>
+<button type="button" class="fw-ibtn" data-g="go">Add on a new track</button>`;
+  list.after(gen);
+  const g = <T extends HTMLElement>(name: string) => gen.querySelector<T>(`[data-g="${name}"]`) as T;
+  const showFields = () => {
+    const kind = g<HTMLSelectElement>("kind").value;
+    for (const row of gen.querySelectorAll<HTMLElement>("[data-gfor]")) {
+      const on = (row.dataset.gfor ?? "").split(" ").includes(kind);
+      if (row.hidden === on) row.hidden = !on;
+    }
+  };
+  gen.addEventListener("change", showFields);
+  gen.addEventListener("click", async (e) => {
+    if ((e.target as HTMLElement).closest<HTMLElement>("[data-g]")?.dataset.g !== "go") return;
+    const button = g<HTMLButtonElement>("go");
+    const doc = engine.get("document");
+    const params = new URLSearchParams({
+      kind: g<HTMLSelectElement>("kind").value,
+      seconds: g<HTMLInputElement>("seconds").value,
+      rate: String(doc.tracks.length ? doc.sampleRate : 48000),
+      freq: g<HTMLInputElement>("freq").value,
+      digits: g<HTMLInputElement>("digits").value,
+    });
+    const notice = host.querySelector<HTMLElement>(".fw-notice");
+    button.disabled = true;
+    try {
+      const res = await fetch(`/api/generate?${params}`, { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `the engine answered ${res.status}`);
+      const media = body as unknown as MediaRef;
+      engine.dispatch({ type: "import-media", media, at: engine.get("transport").positionSamples });
+      setText(notice, `Generated ${media.name} on a new track at the playhead`);
+    } catch (err) {
+      setText(notice, `Could not generate: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  showFields();
+
   const render = (doc: SessionDoc) => {
     const items = Object.values(doc.media);
     if (empty.hidden !== items.length > 0) empty.hidden = items.length > 0;
