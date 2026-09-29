@@ -29,7 +29,17 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         skipped++;
         continue;
       }
-      clips.push({ source, start: clip.start, sourceIn: clip.sourceIn, length: clip.length, gain: dbToGain(track.gainDb + clip.gainDb), pan: track.pan ?? 0 });
+      clips.push({
+        source,
+        start: clip.start,
+        sourceIn: clip.sourceIn,
+        length: clip.length,
+        gain: dbToGain(track.gainDb + clip.gainDb),
+        pan: track.pan ?? 0,
+        fadeIn: clip.fadeIn ?? 0,
+        fadeOut: clip.fadeOut ?? 0,
+        fadeShape: clip.fadeShape === "equal-power" ? 1 : 0,
+      });
       end = Math.max(end, clip.start + clip.length);
     }
   }

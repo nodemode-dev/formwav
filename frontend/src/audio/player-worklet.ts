@@ -11,7 +11,7 @@ interface CoreExports {
   fw_player_new(): number;
   fw_load_wav(player: number, id: number, ptr: number, len: number): number;
   fw_clear_clips(player: number): void;
-  fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number): void;
+  fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number): void;
   fw_seek(player: number, position: number): void;
   fw_position(player: number): number;
   fw_render(player: number, left: number, right: number, frames: number): void;
@@ -24,6 +24,9 @@ export interface WorkletClip {
   length: number;
   gain: number;
   pan: number;
+  fadeIn: number;
+  fadeOut: number;
+  fadeShape: number;
 }
 
 export type WorkletMessage =
@@ -97,7 +100,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       }
       case "clips":
         core.fw_clear_clips(this.player);
-        for (const c of msg.clips) core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan);
+        for (const c of msg.clips) core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape);
         this.end = msg.end;
         break;
       case "seek":

@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.7.0
-Last updated: 2026-09-28 · track pan in the document and the worklet
+Current build version: v0.8.0
+Last updated: 2026-09-28 · clip fades and crossfades; add-clip and remove-clip
 
 ---
 
@@ -585,3 +585,21 @@ Pan runs from -1 (left) to 1 (right) and is optional on `Track`, so sessions sav
 - logged: v0.7.0 · 2026-09-28
 
 Each clip carries its track's pan (`?? 0`) to `fw_add_clip`; the pan law itself lives only in `render.rs`. `planClips` has a twin in `backend/app/services/render.py`: change both together, and rerun `verify_render.py`, whose null test between the browser's render and the engine's caught nothing in v0.7.0 (0.0 on both channels).
+
+---
+
+## v0.8.0 · fades, crossfades, clips
+
+### src/engine/document.ts · clip commands
+- refers-to: src/engine/document.ts :: `add-clip`, `remove-clip`, `set-clip-fades`, `crossfade`, `FadeShape`
+- kind: rationale
+- logged: v0.8.0 · 2026-09-28
+
+`add-clip` places media already in the session onto a track (kept sorted by start) and `remove-clip` takes a clip off; together they let two clips overlap on one track, which import alone never produced. `set-clip-fades` clamps the fade-in to the clip and the fade-out to what remains, and is a no-op when nothing changes (verified: no undo step). `crossfade` finds the overlap of a left and a right clip on the same track and sets the left clip's fade-out and the right clip's fade-in to it, equal power unless told otherwise; a clip has one shape for both its fades, so a crossfade sets the shape of both clips. Fade fields are optional, so older sessions open without them. All four are undoable (verified for crossfade). No fade handles in the interface yet: fades are drawn and dragged with the editing surface in Phase 3, and the lanes do not show them.
+
+### src/audio/player.ts and player-worklet.ts · fades to the core
+- refers-to: src/audio/player.ts :: `planClips`; src/audio/player-worklet.ts :: `WorkletClip`, `fw_add_clip`
+- kind: warning-context
+- logged: v0.8.0 · 2026-09-28
+
+Each clip carries `fadeIn`, `fadeOut` (0 when absent) and a shape code (1 equal power, 0 linear) to `fw_add_clip`; the curves live only in `render.rs`. The twin in `backend/app/services/render.py` changed in the same commit series; `verify_fades.py` compares the two renders.

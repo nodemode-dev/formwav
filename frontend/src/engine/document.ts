@@ -7,6 +7,8 @@ export interface MediaRef {
   format: string;
 }
 
+export type FadeShape = "linear" | "equal-power";
+
 export interface Clip {
   id: string;
   mediaId: string;
@@ -14,6 +16,9 @@ export interface Clip {
   length: number;
   sourceIn: number;
   gainDb: number;
+  fadeIn?: number;
+  fadeOut?: number;
+  fadeShape?: FadeShape;
 }
 
 export interface Track {
@@ -58,6 +63,10 @@ export type Command =
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
+  | { type: "add-clip"; trackId: string; mediaId: string; start: number; sourceIn: number; length: number }
+  | { type: "remove-clip"; trackId: string; clipId: string }
+  | { type: "set-clip-fades"; trackId: string; clipId: string; fadeIn: number; fadeOut: number; shape?: FadeShape }
+  | { type: "crossfade"; trackId: string; leftClipId: string; rightClipId: string; shape?: FadeShape }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "add-marker"; at: number; label: string };
 
@@ -119,6 +128,50 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "set-track-gain":
       return mapTrack(doc, cmd.trackId, (t) => (t.gainDb === cmd.gainDb ? t : { ...t, gainDb: cmd.gainDb }));
+    case "add-clip": {
+      if (!doc.media[cmd.mediaId]) return doc;
+      const clip: Clip = {
+        id: newId(),
+        mediaId: cmd.mediaId,
+        start: Math.max(0, Math.round(cmd.start)),
+        length: Math.max(1, Math.round(cmd.length)),
+        sourceIn: Math.max(0, Math.round(cmd.sourceIn)),
+        gainDb: 0,
+      };
+      return mapTrack(doc, cmd.trackId, (t) => ({ ...t, clips: [...t.clips, clip].sort((a, b) => a.start - b.start) }));
+    }
+    case "remove-clip":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const clips = t.clips.filter((c) => c.id !== cmd.clipId);
+        return clips.length === t.clips.length ? t : { ...t, clips };
+      });
+    case "set-clip-fades":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        let changed = false;
+        const clips = t.clips.map((c) => {
+          if (c.id !== cmd.clipId) return c;
+          const fadeIn = Math.max(0, Math.min(c.length, Math.round(cmd.fadeIn)));
+          const fadeOut = Math.max(0, Math.min(c.length - fadeIn, Math.round(cmd.fadeOut)));
+          const fadeShape = cmd.shape ?? c.fadeShape ?? "linear";
+          if ((c.fadeIn ?? 0) === fadeIn && (c.fadeOut ?? 0) === fadeOut && (c.fadeShape ?? "linear") === fadeShape) return c;
+          changed = true;
+          return { ...c, fadeIn, fadeOut, fadeShape };
+        });
+        return changed ? { ...t, clips } : t;
+      });
+    case "crossfade":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const left = t.clips.find((c) => c.id === cmd.leftClipId);
+        const right = t.clips.find((c) => c.id === cmd.rightClipId);
+        if (!left || !right || right.start < left.start) return t;
+        const span = Math.min(left.start + left.length - right.start, left.length, right.length);
+        if (span <= 0) return t;
+        const shape = cmd.shape ?? "equal-power";
+        const clips = t.clips.map((c) =>
+          c.id === left.id ? { ...c, fadeOut: span, fadeShape: shape } : c.id === right.id ? { ...c, fadeIn: span, fadeShape: shape } : c,
+        );
+        return { ...t, clips };
+      });
     case "set-track-pan": {
       const pan = Math.max(-1, Math.min(1, cmd.pan));
       return mapTrack(doc, cmd.trackId, (t) => ((t.pan ?? 0) === pan ? t : { ...t, pan }));
