@@ -4,6 +4,7 @@ import "@fontsource/inter/600.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "./vendor/nodemode/tokens.css";
 import "./styles/shell.css";
+import "./styles/family.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
 import "./extensions/engine-link";

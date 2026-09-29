@@ -17,6 +17,7 @@ export interface ThemeProfile { label: string; vars: Record<string, string>; lig
 
 export const THEMES: Record<string, ThemeProfile> = {
   'nodemode-dark': { label: 'NodeMode Dark', vars: { '--bg-primary': '#0a0a0a', '--bg-secondary': '#121218', '--bg-tertiary': '#1a1a24', '--border-color': '#2a2a35', '--border-light': '#3a3a48', '--text-primary': '#e8e8ee', '--text-secondary': '#a8a8b8', '--text-muted': '#6a6a7a', '--canvas-bg': '#0a0a0a', '--grid-color': 'rgba(255,255,255,0.04)', '--node-shadow': '0 6px 18px rgba(0,0,0,0.45)' } },
+  'formcut': { label: 'formcut', vars: { '--bg-primary': '#121617', '--bg-secondary': '#1d2425', '--bg-tertiary': '#2d3739', '--border-color': 'rgba(255,255,255,0.1)', '--border-light': 'rgba(255,255,255,0.2)', '--text-primary': '#f4f5f6', '--text-secondary': '#a1adaf', '--text-muted': '#6a797c', '--canvas-bg': '#121617', '--grid-color': 'rgba(255,255,255,0.05)', '--node-shadow': '0 6px 18px rgba(0,0,0,0.45)' } },
   'light': { label: 'Light', light: true, vars: { '--bg-primary': '#ecebe6', '--bg-secondary': '#f7f6f1', '--bg-tertiary': '#e2e0d8', '--bg-node': '#f4f3ed', '--border-color': '#d1cdc1', '--border-light': '#beb9aa', '--text-primary': '#26241d', '--text-secondary': '#4c4a40', '--text-muted': '#8b887a', '--canvas-bg': '#e7e5dd', '--grid-color': 'rgba(70,60,30,0.10)', '--node-shadow': '0 5px 14px rgba(96,90,70,0.15)' } },
   'github-dark': { label: 'GitHub Dark', vars: { '--bg-primary': '#0d1117', '--bg-secondary': '#161b22', '--bg-tertiary': '#21262d', '--border-color': '#30363d', '--border-light': '#3d444d', '--text-primary': '#e6edf3', '--text-secondary': '#9198a1', '--text-muted': '#656c76', '--canvas-bg': '#0d1117', '--grid-color': 'rgba(230,237,243,0.05)', '--node-shadow': '0 6px 18px rgba(0,0,0,0.5)' } },
   'midnight': { label: 'Midnight Blue', vars: { '--bg-primary': '#0b1020', '--bg-secondary': '#101830', '--bg-tertiary': '#182242', '--border-color': '#25325c', '--border-light': '#324274', '--text-primary': '#e4e9f7', '--text-secondary': '#9fabd0', '--text-muted': '#63709a', '--canvas-bg': '#0b1020', '--grid-color': 'rgba(160,180,255,0.06)', '--node-shadow': '0 8px 22px rgba(0,0,20,0.55)' } },
@@ -31,8 +32,8 @@ export const THEMES: Record<string, ThemeProfile> = {
   'terminal': { label: 'Terminal Green', vars: { '--bg-primary': '#050d05', '--bg-secondary': '#0a140a', '--bg-tertiary': '#102010', '--border-color': '#1f3d1f', '--border-light': '#2b522b', '--text-primary': '#d8f5d8', '--text-secondary': '#8fce8f', '--text-muted': '#568a56', '--canvas-bg': '#050d05', '--grid-color': 'rgba(120,255,120,0.06)', '--node-shadow': '0 6px 18px rgba(0,10,0,0.6)' } },
   'contrast': { label: 'High Contrast', vars: { '--bg-primary': '#000000', '--bg-secondary': '#0a0a0a', '--bg-tertiary': '#161616', '--border-color': '#555555', '--border-light': '#777777', '--text-primary': '#ffffff', '--text-secondary': '#d8d8d8', '--text-muted': '#9a9a9a', '--canvas-bg': '#000000', '--grid-color': 'rgba(255,255,255,0.10)', '--node-shadow': '0 0 0 1px #666' } },};
 
-export const DEFAULT_THEME = 'nodemode-dark';
-export const DEFAULT_ACCENT = '#f97316';
+export const DEFAULT_THEME = 'formcut';
+export const DEFAULT_ACCENT = '#ffae2b';
 // the app persists UI settings under this key as JSON {theme, accentColor, ...}
 export const STORAGE_KEY = 'nodemode_ui_settings';
 

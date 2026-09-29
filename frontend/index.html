@@ -25,11 +25,12 @@ body.app-ready #app { visibility: visible; }
    MutationObserver the instant body appears, still before paint. */
 (function () {
   var KEY = 'nodemode_ui_settings';
-  var DEFAULT_THEME = 'nodemode-dark';
-  var DEFAULT_ACCENT = '#f97316';
+  var DEFAULT_THEME = 'formcut';
+  var DEFAULT_ACCENT = '#ffae2b';
   var LIGHT = { 'light': 1, 'sand': 1 };
   var PROFILES = {
     'nodemode-dark': ['#0a0a0a', '#121218', '#1a1a24', '#2a2a35', '#3a3a48', '#e8e8ee', '#a8a8b8', '#6a6a7a', '#0a0a0a', 'rgba(255,255,255,0.04)'],
+    'formcut':       ['#121617', '#1d2425', '#2d3739', 'rgba(255,255,255,0.1)', 'rgba(255,255,255,0.2)', '#f4f5f6', '#a1adaf', '#6a797c', '#121617', 'rgba(255,255,255,0.05)'],
     'light':         ['#ecebe6', '#f7f6f1', '#e2e0d8', '#d1cdc1', '#beb9aa', '#26241d', '#4c4a40', '#8b887a', '#e7e5dd', 'rgba(70,60,30,0.10)', '#f4f3ed'],
     'github-dark':   ['#0d1117', '#161b22', '#21262d', '#30363d', '#3d444d', '#e6edf3', '#9198a1', '#656c76', '#0d1117', 'rgba(230,237,243,0.05)'],
     'midnight':      ['#0b1020', '#101830', '#182242', '#25325c', '#324274', '#e4e9f7', '#9fabd0', '#63709a', '#0b1020', 'rgba(160,180,255,0.06)'],

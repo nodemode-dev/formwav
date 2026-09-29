@@ -589,6 +589,31 @@ html, body, #app { height: 100%; }
 
 .fw-auto-toggle[aria-expanded="true"] { color: var(--accent-color); border-color: var(--accent-color); }
 
+.fw-lane-ms {
+  position: absolute;
+  right: calc(var(--space-2) + 44px);
+  bottom: var(--space-2);
+  display: flex;
+  gap: 4px;
+}
+
+.fw-lane-ms button {
+  min-inline-size: 22px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.fw-lane-ms button:hover { border-color: var(--border-light); color: var(--text-primary); }
+.fw-lane-mute[aria-pressed="true"] { color: #fff; background: var(--danger); border-color: var(--danger); }
+.fw-lane-solo[aria-pressed="true"] { color: var(--text-on-accent); background: var(--accent-color); border-color: var(--accent-color); }
+
 .fw-mixer {
   position: fixed;
   left: 0;

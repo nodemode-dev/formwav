@@ -226,7 +226,7 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle" hidden aria-expanded="false" title="Show every take as a lane; drag across a take to comp that range">Takes</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><button type="button" class="fw-auto-toggle" aria-expanded="false" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">Auto</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-heads" hidden aria-hidden="true"></div><div class="fw-take-rows" hidden></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle" hidden aria-expanded="false" title="Show every take as a lane; drag across a take to comp that range">Takes</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><div class="fw-lane-ms"><button type="button" class="fw-lane-mute" aria-pressed="false" title="Mute this track">M</button><button type="button" class="fw-lane-solo" aria-pressed="false" title="Solo this track">S</button></div><button type="button" class="fw-auto-toggle" aria-expanded="false" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">Auto</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-heads" hidden aria-hidden="true"></div><div class="fw-take-rows" hidden></div>`;
   return lane;
 }
 
@@ -250,6 +250,10 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
     update: (n, c) => updateClip(n, c, doc, spp),
   });
   const autoOpen = autoTracks.has(track.id);
+  const muteButton = node.querySelector(".fw-lane-mute");
+  if (muteButton && muteButton.getAttribute("aria-pressed") !== String(track.mute)) muteButton.setAttribute("aria-pressed", String(track.mute));
+  const soloButton = node.querySelector(".fw-lane-solo");
+  if (soloButton && soloButton.getAttribute("aria-pressed") !== String(track.solo)) soloButton.setAttribute("aria-pressed", String(track.solo));
   const autoToggle = node.querySelector<HTMLElement>(".fw-auto-toggle");
   if (autoToggle && autoToggle.getAttribute("aria-expanded") !== String(autoOpen)) autoToggle.setAttribute("aria-expanded", String(autoOpen));
   const autoRows = node.querySelector<HTMLElement>(".fw-auto-rows");
@@ -423,6 +427,13 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     setArmedTrack(armedTrack() === id ? null : id);
   });
   onArm(() => render(engine.get("document")));
+  lanes.addEventListener("click", (e) => {
+    const button = (e.target as HTMLElement).closest<HTMLElement>(".fw-lane-mute, .fw-lane-solo");
+    const trackId = button?.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    if (!button || !trackId) return;
+    const on = button.getAttribute("aria-pressed") !== "true";
+    engine.dispatch(button.classList.contains("fw-lane-mute") ? { type: "set-track-mute", trackId, mute: on } : { type: "set-track-solo", trackId, solo: on });
+  });
   lanes.addEventListener("click", (e) => {
     const toggle = (e.target as HTMLElement).closest<HTMLElement>(".fw-takes-toggle");
     const id = toggle?.closest<HTMLElement>(".fw-lane")?.dataset.key;

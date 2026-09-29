@@ -46,12 +46,22 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
   };
 
   let lastTransform = "";
+  const followStage = host.querySelector<HTMLElement>(".fw-stage");
+  let headWidth = 0;
   const placePlayhead = () => {
     const doc = engine.get("document");
-    const x = `translateX(${(engine.get("transport").positionSamples / samplesPerPixel(doc)).toFixed(1)}px)`;
+    const px = engine.get("transport").positionSamples / samplesPerPixel(doc);
+    const x = `translateX(${px.toFixed(1)}px)`;
     if (x !== lastTransform) {
       lastTransform = x;
       playhead.style.transform = x;
+      // Follow the playhead: page the view when it passes 92% of the visible timeline or leaves it on the left.
+      if (followStage) {
+        if (!headWidth) headWidth = followStage.querySelector<HTMLElement>(".fw-lane-head")?.offsetWidth ?? 0;
+        const view = followStage.clientWidth - headWidth;
+        const left = followStage.scrollLeft;
+        if (view > 0 && (px > left + view * 0.92 || px < left)) followStage.scrollLeft = Math.max(0, px - view * 0.08);
+      }
     }
   };
 
@@ -91,12 +101,19 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
   });
   window.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement | null;
-    if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName))) return;
-    if (e.metaKey || e.ctrlKey || e.altKey || !engine.get("document").tracks.length) return;
+    const typing =
+      !!target &&
+      (target.isContentEditable ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        (target.tagName === "INPUT" && !/^(range|checkbox|radio|button|submit|reset|file|color)$/.test((target as HTMLInputElement).type)));
+    if (typing || e.metaKey || e.ctrlKey || e.altKey || !engine.get("document").tracks.length) return;
     if (e.code === "Space") {
+      // Space is the transport everywhere but text entry: a focused button must not swallow it or be clicked by it.
       e.preventDefault();
-      togglePlay();
-    } else if (e.key === "Home") {
+      if (target && target !== document.body && target.tagName !== "INPUT") target.blur();
+      if (!e.repeat) togglePlay();
+    } else if (e.key === "Home" && target?.tagName !== "INPUT") {
       e.preventDefault();
       player.seek(0);
     }
