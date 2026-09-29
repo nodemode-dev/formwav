@@ -42,6 +42,7 @@ pub struct Player {
     position: u64,
     peak_left: f32,
     peak_right: f32,
+    loop_range: Option<(u64, u64)>,
 }
 
 impl Player {
@@ -73,7 +74,37 @@ impl Player {
         let n = left.len().min(right.len());
         left[..n].fill(0.0);
         right[..n].fill(0.0);
-        let from = self.position;
+        let mut done = 0;
+        while done < n {
+            let from = self.position;
+            let mut span = (n - done) as u64;
+            if let Some((_, end)) = self.loop_range {
+                if from < end {
+                    span = span.min(end - from);
+                }
+            }
+            let len = span as usize;
+            self.mix(&mut left[done..done + len], &mut right[done..done + len], from);
+            done += len;
+            self.position = from + span;
+            if let Some((start, end)) = self.loop_range {
+                if self.position == end {
+                    self.position = start;
+                }
+            }
+        }
+        for i in 0..n {
+            self.peak_left = self.peak_left.max(left[i].abs());
+            self.peak_right = self.peak_right.max(right[i].abs());
+        }
+    }
+
+    pub fn set_loop(&mut self, start: u64, end: u64) {
+        self.loop_range = if end > start { Some((start, end)) } else { None };
+    }
+
+    fn mix(&self, left: &mut [f32], right: &mut [f32], from: u64) {
+        let n = left.len().min(right.len());
         let to = from + n as u64;
         for clip in &self.clips {
             let Some(src) = self.sources.get(&clip.source) else { continue };
@@ -104,11 +135,6 @@ impl Player {
                 right[i] += r[s] * gain_right * fade;
             }
         }
-        for i in 0..n {
-            self.peak_left = self.peak_left.max(left[i].abs());
-            self.peak_right = self.peak_right.max(right[i].abs());
-        }
-        self.position = to;
     }
 
     pub fn take_peaks(&mut self) -> (f32, f32) {

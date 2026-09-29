@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.8.0
-Last updated: 2026-09-28 · clip fades (linear and equal-power) and crossfades in render.rs
+Current build version: v0.9.0
+Last updated: 2026-09-28 · sample-accurate loop playback in render.rs; mixing moved into mix()
 
 ---
 
@@ -236,3 +236,21 @@ Fade lengths are in session samples from the clip's start and end; the fade-out 
 - logged: v0.8.0 · 2026-09-28
 
 On a 440 Hz sine with two aligned clips overlapping by one second: a linear crossfade reproduced the source within 3.0e-8 and the browser and engine renders were identical (0.0); an equal-power crossfade peaked at 1.414 times the source mid-overlap (sqrt 2 is 1.4142) and was exact outside the overlap; a linear 0.5 s fade-in started at 0 and followed k / F within 2.7e-8. Equal-power fades differ between the native and wasm builds by up to 6.0e-8 (about -144 dBFS), because `sin` in native libm and in the wasm libm port round one ulp apart; that is inside the general threshold of 1e-7 stated in v0.7.0. Linear fades use no transcendental function and stay identical.
+
+---
+
+## v0.9.0 · looping
+
+### src/render.rs · sample-accurate loop
+- refers-to: src/render.rs :: `Player::render`, `Player::set_loop`, `Player::mix`
+- kind: rationale
+- logged: v0.9.0 · 2026-09-28
+
+`render` walks the block in spans: while a loop is set and the position is before its end, a span stops exactly at the end, the position wraps to the loop start, and the next span continues in the same block, so a loop point never waits for a block boundary and a loop shorter than a block wraps as often as it needs. Playback that starts past the loop end is not pulled back. `set_loop(start, end)` with end at or before start clears the loop. The clip mixing moved unchanged into `mix`, which adds a span's clips into a slice; peaks are taken over the whole block afterwards. Offline renders (`python.rs`) do not loop: a mixdown is linear.
+
+### src/wasm.rs · fw_set_loop and verification v0.9.0
+- refers-to: src/wasm.rs :: `fw_set_loop`; src/render.rs :: `render`
+- kind: explainer
+- logged: v0.9.0 · 2026-09-28
+
+Checked in Node against the wasm module, sample by sample against the source: a loop of 1000 to 1300 started at 900 produced 900..1299, then 1000..1299 twice, then 1000..1023 over 1,024 frames with no mismatch and ended at 1024; starting at 2000 with the same loop ran linearly to 3024; a cleared loop ran linearly; a 50-sample loop wrapped twice inside one 128-frame block and ended at 528. Unlooped render and playback regressions were unchanged (0.0).

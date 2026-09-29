@@ -80,3 +80,8 @@ pub unsafe extern "C" fn fw_position(player: *mut Player) -> f64 {
 pub unsafe extern "C" fn fw_render(player: *mut Player, left: *mut f32, right: *mut f32, frames: usize) {
     (*player).render(slice::from_raw_parts_mut(left, frames), slice::from_raw_parts_mut(right, frames));
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_loop(player: *mut Player, start: f64, end: f64) {
+    (*player).set_loop(start.max(0.0) as u64, end.max(0.0) as u64);
+}
