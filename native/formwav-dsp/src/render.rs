@@ -64,6 +64,7 @@ pub struct Player {
     track_peaks: Vec<(f32, f32)>,
     meter_left: Vec<f32>,
     meter_right: Vec<f32>,
+    loudness: Option<crate::loudness::LiveLoudness>,
 }
 
 impl Player {
@@ -119,6 +120,9 @@ impl Player {
         for i in 0..n {
             self.peak_left = self.peak_left.max(left[i].abs());
             self.peak_right = self.peak_right.max(right[i].abs());
+        }
+        if let Some(meter) = self.loudness.as_mut() {
+            meter.process(&left[..n], &right[..n]);
         }
     }
 
@@ -248,5 +252,18 @@ impl Player {
             *peak = (0.0, 0.0);
         }
         count
+    }
+
+    /// Starts a fresh live loudness measurement of the master output at `rate`.
+    pub fn reset_loudness(&mut self, rate: u32) {
+        self.loudness = Some(crate::loudness::LiveLoudness::new(rate));
+    }
+
+    /// Momentary, short-term and integrated loudness of the master output since the last reset.
+    pub fn loudness(&self) -> (Option<f64>, Option<f64>, Option<f64>) {
+        match &self.loudness {
+            Some(m) => (m.momentary(), m.short_term(), m.integrated()),
+            None => (None, None, None),
+        }
     }
 }

@@ -112,3 +112,17 @@ pub unsafe extern "C" fn fw_take_track_peaks(player: *mut Player, out: *mut f32,
     let buf = std::slice::from_raw_parts_mut(out, max_tracks as usize * 2);
     (*player).take_track_peaks(buf) as u32
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_loudness_reset(player: *mut Player, rate: u32) {
+    (*player).reset_loudness(rate);
+}
+
+/// Writes momentary, short-term and integrated loudness (LUFS) to `out[0..3]`; -inf where not yet measured.
+#[no_mangle]
+pub unsafe extern "C" fn fw_loudness(player: *mut Player, out: *mut f32) {
+    let (m, s, i) = (*player).loudness();
+    for (k, v) in [m, s, i].into_iter().enumerate() {
+        *out.add(k) = v.map_or(f32::NEG_INFINITY, |x| x as f32);
+    }
+}

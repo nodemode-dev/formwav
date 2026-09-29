@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.22.0
-Last updated: 2026-09-28 · per-track peak metering in a separate pass that leaves the audio unchanged
+Current build version: v0.27.0
+Last updated: 2026-09-28 · live BS.1770 loudness (momentary, short-term, integrated) sharing the export meter's filters, blocks and gating
 
 ---
 
@@ -313,3 +313,10 @@ Writes the master-bus peaks since the last call into a two-float buffer the call
 - logged: v0.22.0 · 2026-09-28
 
 A track's level is the peak of the sum of its clips, which can exceed any single clip's peak where clips overlap, so each track's clips are summed into a meter scratch and measured there (after track gain and pan, before any bus). The pass runs after each rendered segment and never writes to the output; `mix` now takes a clip filter instead of a bus id, doing the same arithmetic in the same order, so the audio is unchanged. The cost is mixing each metered clip twice; tracks become real summing nodes in the Phase 8 graph work, which will remove it. Clips carry a 1-based track number (0 is not metered; engine renders pass 0). Verified in Node on the wasm32 build over 1,125 blocks: output rendered with and without track numbers was bit-identical (0); each track's peaks equalled the peaks of that track rendered alone (0), including an equal-power crossfade overlap on one track; peaks reset after each read.
+
+### src/loudness.rs, src/render.rs, src/wasm.rs · live loudness
+- refers-to: src/loudness.rs :: `gated_loudness`, `LiveLoudness`; src/render.rs :: `Player::reset_loudness`, `Player::loudness`, `render`; src/wasm.rs :: `fw_loudness_reset`, `fw_loudness`
+- kind: rationale
+- logged: v0.27.0 · 2026-09-28
+
+`LiveLoudness` streams the master output through the same K-weighting as `integrated_loudness`, sums energy per 100 ms step, and forms 400 ms blocks on the same boundaries; momentary is the last 4 steps, short-term the last 30 (each only once that much has been measured), and integrated gates all blocks since the last reset. The gating tail of `integrated_loudness` moved into `gated_loudness`, with the same arithmetic in the same order, so the offline and live meters share it. The player feeds its finished output to the meter after the peak scan and never writes to it. Verified in Node on the wasm32 build: stereo 1 kHz sines at -23 and -33 dBFS read -22.993 and -32.993 for M, S and I (EBU Tech 3341's tolerance is 0.1 LU); 10 s of tone then 10 s of silence held I at -23.059 while M and S fell to -inf; metered output bit-identical to unmetered; over the whole 3 s stereo test file the live integrated value was -8.2363 against the engine's offline -8.24.
