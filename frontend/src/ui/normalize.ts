@@ -1,6 +1,7 @@
 import type { Engine, SessionDoc } from "../engine";
 import { renderMix } from "../io/render-client";
 import { setText } from "../vendor/nodemode/dom-stable";
+import { ICON_SIZE, icon } from "./icons";
 
 const TARGETS: [number, string][] = [
   [-14, "-14 LUFS (streaming)"],
@@ -19,7 +20,7 @@ export function mountNormalize(host: HTMLElement, engine: Engine): void {
   const button = document.createElement("button");
   button.type = "button";
   button.className = exportButton?.className ?? "fw-mode";
-  button.textContent = "Loudness";
+  button.innerHTML = `${icon("waveform", ICON_SIZE.control)}<span>Loudness</span>`;
   button.title = "Normalize the selected clips, or every clip, to a loudness target";
   button.setAttribute("aria-haspopup", "dialog");
   button.setAttribute("aria-expanded", "false");

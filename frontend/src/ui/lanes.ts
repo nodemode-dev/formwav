@@ -226,7 +226,7 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle" hidden aria-expanded="false" title="Show every take as a lane; drag across a take to comp that range">Takes</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><button type="button" class="fw-auto-toggle" aria-expanded="false" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">Auto</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-rows" hidden></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle" hidden aria-expanded="false" title="Show every take as a lane; drag across a take to comp that range">Takes</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><button type="button" class="fw-auto-toggle" aria-expanded="false" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">Auto</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-heads" hidden aria-hidden="true"></div><div class="fw-take-rows" hidden></div>`;
   return lane;
 }
 
@@ -266,6 +266,20 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
   if (toggle) {
     if (toggle.hidden !== (count === 0)) toggle.hidden = count === 0;
     if (toggle.getAttribute("aria-expanded") !== String(open)) toggle.setAttribute("aria-expanded", String(open));
+  }
+  const takeHeads = node.querySelector<HTMLElement>(".fw-take-heads");
+  if (takeHeads) {
+    if (takeHeads.hidden === open) takeHeads.hidden = !open;
+    if (open)
+      patchList(takeHeads, Array.from({ length: count }, (_, k) => k), {
+        key: (k) => String(k),
+        create: (k) => {
+          const label = document.createElement("span");
+          label.textContent = `Take ${k + 1}`;
+          return label;
+        },
+        update: () => {},
+      });
   }
   const rows = node.querySelector<HTMLElement>(".fw-take-rows");
   if (!rows) return;
@@ -310,6 +324,8 @@ const expandedTracks = new Set<string>();
 /** Tracks whose volume automation lane is shown (interface state). */
 const autoTracks = new Set<string>();
 const AUTO_ROW_H = 48;
+/** Space above the top value and below the bottom one, so a point (radius 4 plus stroke) at an extreme is not clipped. */
+const AUTO_INSET = 5;
 
 type AutoParam = "volume" | "pan";
 
@@ -329,7 +345,7 @@ function drawAutoLane(row: HTMLElement, track: Track, param: AutoParam, spp: num
   const line = svg?.querySelector<SVGPolylineElement>(".fw-auto-line");
   const group = svg?.querySelector<SVGGElement>(".fw-auto-points");
   if (!svg || !line || !group) return;
-  const y = (value: number) => (autoFraction(param, value) * AUTO_ROW_H).toFixed(1);
+  const y = (value: number) => (AUTO_INSET + autoFraction(param, value) * (AUTO_ROW_H - 2 * AUTO_INSET)).toFixed(1);
   const x = (time: number) => (time / spp).toFixed(1);
   const fallback = param === "volume" ? track.gainDb : track.pan ?? 0;
   const last = points[points.length - 1];
@@ -489,7 +505,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const spp = samplesPerPixel(doc);
     const r = row.getBoundingClientRect();
     const time = Math.round(snapSamples(Math.max(0, e.clientX - r.left) * spp, doc.sampleRate, doc.sampleRate / spp));
-    return { time, value: autoValue(param, Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))) };
+    return { time, value: autoValue(param, Math.min(1, Math.max(0, (e.clientY - r.top - AUTO_INSET) / (r.height - 2 * AUTO_INSET)))) };
   };
   const previewAuto = (d: NonNullable<typeof autoDrag>) => {
     const track = engine.get("document").tracks.find((t) => t.id === d.trackId);

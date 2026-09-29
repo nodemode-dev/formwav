@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.35.0
-Last updated: 2026-09-28 · bus strips meter their buses
+Current build version: v0.36.0
+Last updated: 2026-09-28 · cosmetic polish: inset automation points, take-lane labels, Loudness icon, visible arm button
 
 ---
 
@@ -1082,3 +1082,14 @@ The session carries an optional master fader (`masterGainDb`, absent meaning 0 d
 - logged: v0.35.0 · 2026-09-28
 
 Position replies now carry per-bus peak pairs, taken into the same buffer after the loudness values (up to 64 buses). Level listeners receive them as an optional last argument that defaults to empty, so every stop, end and not-playing path publishes silent bus levels unchanged. The mixer drives the Master and bus strips from one function with the other meters' scale and fall-back, and bus strips show their meter again (v0.33.0 hid it while it could not work). Ordering hazard, checked before wiring: the core reports buses in plan order, and the plan leaves muted buses out, so matching peaks to strips by document index would show a later bus's level on the wrong strip whenever an earlier bus is muted; the mixer walks the document's buses, advancing only past unmuted ones, and a muted bus reads silent. Verified with two tracks each routed to its own bus: bus meters visible; during playback each bus strip equalled its track's lane meter (0.9 and 0.9; 0.753 and 0.867); with the first bus muted it read silent and the second still showed its own track's level (0.756 and 0.867); no page errors; layout shift 0; mixer, master, buses (browser equal to engine), track meter and output meter regressions unchanged.
+
+---
+
+## v0.36.0 · cosmetic polish
+
+### src/ui/lanes.ts, normalize.ts, shell.css · the four recorded cosmetic debts
+- refers-to: src/ui/lanes.ts :: `AUTO_INSET`, `drawAutoLane`, `autoPointAt`, lane markup, `updateLane` (take labels); src/ui/normalize.ts :: Loudness button; src/styles/shell.css :: `.fw-arm`, `.fw-take-heads`, `.fw-auto-heads`
+- kind: explainer
+- logged: v0.36.0 · 2026-09-28
+
+Automation rows now keep a 5 px inset (the point radius plus stroke) above the top value and below the bottom one, applied identically in the drawing and in the pointer mapping, so points at extreme values sit fully inside their row and still land exactly under the cursor; presses beyond the inset clamp to the extreme. The volume harness's click positions were moved onto the inset scale, its expected values unchanged. Take lanes have Take 1 to N labels in the header column, sharing the automation labels' styling, in the row below the automation rows when both are open. The Loudness button carries the waveform icon and a label span, like Export. The unarmed arm button's border uses the secondary text colour on the primary background, so it is visible without looking armed, and previews red on hover. Verified: pan points at hard left and right drew at y 5 and 43, each fully inside the 48 px row with its stroke, still exactly -1 and +1, the right channel exactly silent while hard left; volume points still exactly 0, -12 and -24 dB with the render exact against the engine and f32 interpolation; Take 1 to 3 labels centred on their rows with and without the automation rows open, and the automation labels centred beside take lanes; the Loudness button showed its icon and label (screenshot); the arm button's border matched --text-secondary and turned to the danger colour on hover; no page errors; layout shift 0; loudness normalization, arming and take lane regressions unchanged.

@@ -475,11 +475,13 @@ html, body, #app { height: 100%; }
   inline-size: 14px;
   block-size: 14px;
   padding: 0;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--text-secondary);
   border-radius: 50%;
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   cursor: pointer;
 }
+
+.fw-arm:hover { border-color: var(--danger); }
 
 .fw-arm[aria-pressed="true"] { background: var(--danger); border-color: var(--danger); }
 
@@ -532,7 +534,8 @@ html, body, #app { height: 100%; }
 .fw-auto-rows[hidden] { display: none; }
 .fw-auto-row { position: relative; block-size: calc(var(--space-8) * 1.5); }
 .fw-auto-row + .fw-auto-row { border-top: 1px solid var(--border-color); }
-.fw-auto-heads {
+.fw-auto-heads,
+.fw-take-heads {
   grid-column: 1;
   grid-row: 2;
   position: sticky;
@@ -549,6 +552,8 @@ html, body, #app { height: 100%; }
   color: var(--text-muted);
 }
 .fw-auto-heads[hidden] { display: none; }
+.fw-take-heads[hidden] { display: none; }
+.fw-auto-rows:not([hidden]) ~ .fw-take-heads { grid-row: 3; }
 .fw-auto-svg { display: block; inline-size: 100%; block-size: 100%; overflow: hidden; cursor: crosshair; }
 .fw-auto-line { fill: none; stroke: var(--accent-color); stroke-width: 1.5; }
 .fw-auto-line[data-static="true"] { stroke: var(--text-muted); stroke-dasharray: 4 4; }
