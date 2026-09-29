@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.23.0
-Last updated: 2026-09-28 · Shuffle reordering and Spot mode
+Current build version: v0.24.0
+Last updated: 2026-09-28 · loudness normalization; group trims
 
 ---
 
@@ -47,6 +47,7 @@ frontend/
     │   ├── ruler.ts             timeline ruler on one canvas: time labels, loop range, regions; click to seek
     │   ├── grid.ts              the ruler's step, Grid mode (button and G) and snapping to its ticks
     │   ├── meter.ts             stereo output meter in the transport bar, 20 dB/s fall-back, latching clip indicator
+    │   ├── normalize.ts         Loudness button and popover: BS.1770 normalization of the selected or all clips to a target
     │   ├── record.ts            Record button and R key, input meter, takes into the session
     │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
     ├── audio/
@@ -97,6 +98,7 @@ frontend/
 - [src/ui/ruler.ts and the v0.13.0 timeline](#src-ui-ruler)
 - [src/ui/grid.ts, the clip gain line and the transport row (v0.15.0)](#src-ui-grid)
 - [src/ui/meter.ts and the output level path (v0.17.0)](#src-ui-meter)
+- [src/ui/normalize.ts and group trims (v0.24.0)](#src-ui-normalize)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -916,3 +918,21 @@ In Shuffle mode, dragging one clip reorders it by the same rule as Shuffle cut a
 - logged: v0.23.0 · 2026-09-28
 
 Spot mode (a button beside Grid and Shuffle, or T) turns a press on a clip body into a small field over the clip, prefilled with its start as m:ss.mmm and selected. Enter moves the clip to the typed time (seconds or m:ss.mmm, converted to the nearest sample) as one undo step; invalid text is flagged and changes nothing; Escape or leaving the field closes it. Keys typed into the field never reach the global shortcuts. Defect fixed before release: closing the field hid it but left it focused, so every global shortcut, which ignores keys aimed at an input, went dead until the next click; closing now releases focus. Verified: 7.5 moved a clip to exactly 360,000 in one step; 1:00.5 gave 2,904,000; "2t" was flagged, changed nothing, and its "t" did not toggle Spot mode; after Escape the field held no focus and Space started playback; the screenshot showed the field on the clip with its time selected.
+
+---
+
+## src/ui/normalize.ts and group trims (v0.24.0) {#src-ui-normalize}
+
+### src/ui/normalize.ts · loudness normalization
+- refers-to: src/ui/normalize.ts :: `mountNormalize`; src/io/render-client.ts :: `renderMix`; src/main.ts :: mount
+- kind: warning-context
+- logged: v0.24.0 · 2026-09-28
+
+A Loudness button after Export opens a popover (created once, fixed, placed by `transform`, on the registered menu layer) with a target of -14, -16 or -23 LUFS. Apply measures the integrated loudness (BS.1770, the engine's meter) of the selected clips, or of every clip when none are selected, as they play in the session, by rendering a copy of the session holding only those clips; it then changes each chosen clip's gain by the difference in one `batch`. Integrated loudness moves one-for-one with gain, so the result lands on the target within the 0.1 dB step that clip gain is stored in; clips that would pass +12 dB stop there and the status says so; silence and an unreachable engine are reported, not guessed. Two defects were fixed before release: the stylesheet named `--z-popover`, which is not in the registry, and would have computed to `auto` (now `--z-menu`, as the Open menu uses); and Escape did not close the popover once Apply's disabled state had dropped focus to the page (Escape is now handled at the document while the popover is open). The button is text-only while its neighbours carry icons; cosmetic. Verified: one selected clip from -6.7 to -23 LUFS measured -23.0 afterwards with the other clip untouched, one undo step, undo restored; every clip from -5.85 to -16 LUFS measured -15.95 (the stored -10.15 dB rounded to -10.1); Escape and an outside click close the popover; layout shift 0.
+
+### src/ui/lanes.ts · group trims
+- refers-to: src/ui/lanes.ts :: pointer-down group, `preview`, `restore`, `commit`
+- kind: explainer
+- logged: v0.24.0 · 2026-09-28
+
+Outside Shuffle mode, dragging either edge of a selected clip trims every selected clip by the same amount, with the tightest limits across the group, every member previewed, and one `batch` of bounds; in Shuffle mode a trim still ripples its own track only. The commit function's unused locals were removed. Verified on a 10 s sine split in three: trimming the starts of the first two by 50 px moved both starts and sources by 24,000 in one step and rendered 0.0 against the expected silence-and-source layout; trimming the ends of the first and last by 50 px did the same, the middle clip untouched. The first run of the second case trimmed all three clips because the selection from the first case was still active; that was correct behaviour and the harness now clears the selection first.

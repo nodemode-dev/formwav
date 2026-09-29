@@ -516,3 +516,35 @@ html, body, #app { height: 100%; }
 }
 
 .fw-spot-input[aria-invalid="true"] { border-color: var(--danger); }
+
+.fw-norm {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-menu);
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: calc(var(--space-8) * 7);
+  padding: var(--space-3);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+}
+
+.fw-norm[hidden] { display: none; }
+
+.fw-norm-target {
+  padding: 2px var(--space-1);
+  font-size: var(--fs-12);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.fw-norm-status {
+  min-block-size: 1.4em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-secondary);
+}

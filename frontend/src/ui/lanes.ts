@@ -491,7 +491,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const spp = samplesPerPixel(doc);
     let [low, high] = limits(kind, clip, spp);
     const group: Member[] = [{ trackId, clip, node }];
-    if (kind === "move" || kind === "fade-in" || kind === "fade-out" || kind === "gain") {
+    if (kind === "move" || kind === "fade-in" || kind === "fade-out" || kind === "gain" || ((kind === "trim-left" || kind === "trim-right") && !shuffleEnabled())) {
       for (const track of doc.tracks) {
         for (const other of track.clips) {
           if (other.id === clip.id || !selectedClipIds.has(other.id)) continue;
@@ -542,11 +542,13 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       }
     } else if (d.kind === "move") for (const member of d.group) member.node.style.transform = shift;
     else if (d.kind === "trim-left") {
-      if (!d.ripple) d.node.style.transform = shift;
-      d.node.style.width = `${Math.max(1, d.clip.length / spp - d.dx).toFixed(2)}px`;
+      for (const m of d.group) {
+        if (!d.ripple) m.node.style.transform = shift;
+        m.node.style.width = `${Math.max(1, m.clip.length / spp - d.dx).toFixed(2)}px`;
+      }
       for (const f of d.followers) f.node.style.transform = `translateX(${(-d.dx).toFixed(1)}px)`;
     } else if (d.kind === "trim-right") {
-      d.node.style.width = `${Math.max(1, d.clip.length / spp + d.dx).toFixed(2)}px`;
+      for (const m of d.group) m.node.style.width = `${Math.max(1, m.clip.length / spp + d.dx).toFixed(2)}px`;
       for (const f of d.followers) f.node.style.transform = shift;
     }
     else {
@@ -561,7 +563,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   const restore = (d: Gesture) => {
     for (const member of d.group) member.node.style.transform = "";
     for (const f of d.followers) f.node.style.transform = "";
-    if (d.node.dataset.width) d.node.style.width = d.node.dataset.width;
+    for (const m of d.group) if (m.node.dataset.width) m.node.style.width = m.node.dataset.width;
     for (const m of d.group) {
       for (const handle of m.node.querySelectorAll<HTMLElement>(".fw-fade-handle")) handle.style.transform = handle.dataset.tx ?? "";
       const line = m.node.querySelector<HTMLElement>(".fw-gain-line");
@@ -582,8 +584,6 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       return;
     }
     const delta = Math.round(d.dx * spp);
-    const c = d.clip;
-    const ids = { trackId: d.trackId, clipId: c.id };
     if (d.kind === "move" && d.reorder) {
       const starts = shuffleLayout(d.clip, d.followers, delta);
       const commands = [{ trackId: d.trackId, clip: d.clip }, ...d.followers]
@@ -597,16 +597,17 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       });
     else if (d.kind === "trim-left" || d.kind === "trim-right") {
       const left = d.kind === "trim-left";
-      const bounds = {
+      const bounds = d.group.map((m) => ({
         type: "set-clip-bounds" as const,
-        ...ids,
-        start: left && !d.ripple ? c.start + delta : c.start,
-        sourceIn: left ? c.sourceIn + delta : c.sourceIn,
-        length: left ? c.length - delta : c.length + delta,
-      };
+        trackId: m.trackId,
+        clipId: m.clip.id,
+        start: left && !d.ripple ? m.clip.start + delta : m.clip.start,
+        sourceIn: left ? m.clip.sourceIn + delta : m.clip.sourceIn,
+        length: left ? m.clip.length - delta : m.clip.length + delta,
+      }));
       const shiftBy = left ? -delta : delta;
       const moves = d.ripple ? d.followers.map((f) => ({ type: "move-clip" as const, trackId: f.trackId, clipId: f.clip.id, start: f.clip.start + shiftBy })) : [];
-      engine.dispatch({ type: "batch", commands: [bounds, ...moves] });
+      engine.dispatch({ type: "batch", commands: [...bounds, ...moves] });
     }
     else
       engine.dispatch({

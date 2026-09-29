@@ -12,6 +12,7 @@ import { mountSession } from "./ui/session";
 import { mountTransport } from "./ui/transport";
 import { mountLoop } from "./ui/loop";
 import { mountExport } from "./ui/export";
+import { mountNormalize } from "./ui/normalize";
 import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
 import { mountOutputMeter, mountTrackMeters } from "./ui/meter";
@@ -31,6 +32,7 @@ if (host) {
   mountTransport(host, engine, player);
   mountLoop(host, engine);
   mountExport(host, engine);
+  mountNormalize(host, engine);
   mountRuler(host, engine, player);
   mountGrid(host);
   mountOutputMeter(host, player);
