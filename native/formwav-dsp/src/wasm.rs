@@ -54,6 +54,8 @@ pub unsafe extern "C" fn fw_add_clip(
     fade_shape: u32,
     bus: u32,
     track: u32,
+    gain_env: u32,
+    pan_env: u32,
 ) {
     (*player).add_clip(PlayClip {
         source,
@@ -67,6 +69,8 @@ pub unsafe extern "C" fn fw_add_clip(
         fade_shape: fade_shape.min(u8::MAX as u32) as u8,
         bus,
         track,
+        gain_env,
+        pan_env,
     });
 }
 
@@ -125,4 +129,17 @@ pub unsafe extern "C" fn fw_loudness(player: *mut Player, out: *mut f32) {
     for (k, v) in [m, s, i].into_iter().enumerate() {
         *out.add(k) = v.map_or(f32::NEG_INFINITY, |x| x as f32);
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_clear_envelopes(player: *mut Player) {
+    (*player).clear_envelopes();
+}
+
+/// Adds an envelope from `count` (time, value) f64 pairs at `points`; `db` != 0 means dB values. Returns its 1-based index.
+#[no_mangle]
+pub unsafe extern "C" fn fw_add_envelope(player: *mut Player, points: *const f64, count: u32, db: u32) -> u32 {
+    let raw = std::slice::from_raw_parts(points, count as usize * 2);
+    let pairs: Vec<(u64, f64)> = raw.chunks_exact(2).map(|p| (p[0].max(0.0) as u64, p[1])).collect();
+    (*player).add_envelope(&pairs, db != 0)
 }

@@ -16,6 +16,10 @@ pub struct PlayClip {
     pub bus: u32,
     /// 1-based track number for per-track metering; 0 means the clip is not metered.
     pub track: u32,
+    /// 1-based index of a volume envelope (linear gain applied on top of `gain`); 0 for none.
+    pub gain_env: u32,
+    /// 1-based index of a pan envelope (replacing `pan`); 0 for none.
+    pub pan_env: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -42,6 +46,34 @@ pub fn fade_curve(x: f32, shape: u8) -> f32 {
     }
 }
 
+/// Automation: points (time in samples, value) in time order, linearly interpolated, the first and last
+/// values held before and after them. Volume envelopes hold linear gain (converted from dB once, on load).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Envelope {
+    points: Vec<(u64, f32)>,
+}
+
+impl Envelope {
+    pub fn value_at(&self, t: u64) -> f32 {
+        let p = &self.points;
+        let Some(&(_, last)) = p.last() else { return 1.0 };
+        let i = p.partition_point(|&(time, _)| time <= t);
+        if i == 0 {
+            return p[0].1;
+        }
+        if i == p.len() {
+            return last;
+        }
+        let (t0, v0) = p[i - 1];
+        let (t1, v1) = p[i];
+        if t1 == t0 {
+            return v1;
+        }
+        let x = (t - t0) as f64 / (t1 - t0) as f64;
+        (f64::from(v0) + (f64::from(v1) - f64::from(v0)) * x) as f32
+    }
+}
+
 pub fn pan_gains(pan: f32) -> (f32, f32) {
     let p = pan.clamp(-1.0, 1.0);
     let far = |amount: f32| if amount >= 1.0 { 0.0 } else { (amount * std::f32::consts::FRAC_PI_2).cos() };
@@ -65,6 +97,7 @@ pub struct Player {
     meter_left: Vec<f32>,
     meter_right: Vec<f32>,
     loudness: Option<crate::loudness::LiveLoudness>,
+    envelopes: Vec<Envelope>,
 }
 
 impl Player {
@@ -82,6 +115,30 @@ impl Player {
 
     pub fn add_clip(&mut self, clip: PlayClip) {
         self.clips.push(clip);
+    }
+
+    pub fn clear_envelopes(&mut self) {
+        self.envelopes.clear();
+    }
+
+    /// Adds an envelope from (time, value) points and returns its 1-based index. With `db`, values are dB
+    /// and are converted to linear gain here, once, so every caller gets the same gains.
+    pub fn add_envelope(&mut self, points: &[(u64, f64)], db: bool) -> u32 {
+        let mut points: Vec<(u64, f32)> = points
+            .iter()
+            .map(|&(t, v)| (t, if db { 10f64.powf(v / 20.0) as f32 } else { v as f32 }))
+            .collect();
+        points.sort_by_key(|&(t, _)| t);
+        self.envelopes.push(Envelope { points });
+        self.envelopes.len() as u32
+    }
+
+    fn envelope(&self, id: u32) -> Option<&Envelope> {
+        if id == 0 {
+            None
+        } else {
+            self.envelopes.get(id as usize - 1)
+        }
     }
 
     pub fn seek(&mut self, position: u64) {
@@ -197,8 +254,15 @@ impl Player {
                     fade *= fade_curve((clip.length - k) as f32 / fade_out as f32, clip.fade_shape);
                 }
                 let i = (t - from) as usize;
-                left[i] += l[s] * gain_left * fade;
-                right[i] += r[s] * gain_right * fade;
+                if clip.gain_env == 0 && clip.pan_env == 0 {
+                    left[i] += l[s] * gain_left * fade;
+                    right[i] += r[s] * gain_right * fade;
+                } else {
+                    let gain = clip.gain * self.envelope(clip.gain_env).map_or(1.0, |e| e.value_at(t));
+                    let (pl, pr) = self.envelope(clip.pan_env).map_or((pan_left, pan_right), |e| pan_gains(e.value_at(t)));
+                    left[i] += l[s] * (gain * pl) * fade;
+                    right[i] += r[s] * (gain * pr) * fade;
+                }
             }
         }
     }

@@ -8,17 +8,27 @@ use crate::wav::{decode_wav, probe_wav};
 
 const RENDER_BLOCK: usize = 128;
 
-type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32);
+type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-fn render<'py>(py: Python<'py>, sources: Vec<(u32, Bound<'py, PyBytes>)>, clips: Vec<RenderClip>, frames: usize, buses: Vec<(u32, f32, f32)>) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
+fn render<'py>(
+    py: Python<'py>,
+    sources: Vec<(u32, Bound<'py, PyBytes>)>,
+    clips: Vec<RenderClip>,
+    frames: usize,
+    buses: Vec<(u32, f32, f32)>,
+    envelopes: Vec<(Vec<(u64, f64)>, bool)>,
+) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let mut player = Player::new();
     for (id, bytes) in &sources {
         let buf = decode_wav(bytes.as_bytes()).map_err(|e| PyValueError::new_err(e.to_string()))?;
         player.load_source(*id, buf);
     }
-    for (source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus) in clips {
-        player.add_clip(PlayClip { source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, track: 0 });
+    for (points, db) in &envelopes {
+        player.add_envelope(points, *db);
+    }
+    for (source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, gain_env, pan_env) in clips {
+        player.add_clip(PlayClip { source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, track: 0, gain_env, pan_env });
     }
     for (id, gain, pan) in buses {
         player.add_bus(crate::render::Bus { id, gain, pan });

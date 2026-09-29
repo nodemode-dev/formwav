@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.27.0
-Last updated: 2026-09-28 · live BS.1770 loudness (momentary, short-term, integrated) sharing the export meter's filters, blocks and gating
+Current build version: v0.31.0
+Last updated: 2026-09-28 · volume and pan automation envelopes in the player
 
 ---
 
@@ -320,3 +320,10 @@ A track's level is the peak of the sum of its clips, which can exceed any single
 - logged: v0.27.0 · 2026-09-28
 
 `LiveLoudness` streams the master output through the same K-weighting as `integrated_loudness`, sums energy per 100 ms step, and forms 400 ms blocks on the same boundaries; momentary is the last 4 steps, short-term the last 30 (each only once that much has been measured), and integrated gates all blocks since the last reset. The gating tail of `integrated_loudness` moved into `gated_loudness`, with the same arithmetic in the same order, so the offline and live meters share it. The player feeds its finished output to the meter after the peak scan and never writes to it. Verified in Node on the wasm32 build: stereo 1 kHz sines at -23 and -33 dBFS read -22.993 and -32.993 for M, S and I (EBU Tech 3341's tolerance is 0.1 LU); 10 s of tone then 10 s of silence held I at -23.059 while M and S fell to -inf; metered output bit-identical to unmetered; over the whole 3 s stereo test file the live integrated value was -8.2363 against the engine's offline -8.24.
+
+### src/render.rs, src/wasm.rs, src/python.rs · automation envelopes
+- refers-to: src/render.rs :: `Envelope`, `Envelope::value_at`, `PlayClip::gain_env`, `PlayClip::pan_env`, `Player::add_envelope`, `Player::clear_envelopes`, `mix`; src/wasm.rs :: `fw_add_clip`, `fw_add_envelope`, `fw_clear_envelopes`; src/python.rs :: `render`, `RenderClip`
+- kind: rationale
+- logged: v0.31.0 · 2026-09-28
+
+The player holds an envelope table; a clip may reference a volume envelope (linear gain on top of its own gain) and a pan envelope (replacing its pan), each evaluated per sample by linear interpolation between points, the first and last values held. Volume points arrive in dB as f64 on both paths (wasm and pyo3) and are converted to linear gain once, in Rust, on load, so the browser and the engine compute identical gains. Clips without envelopes keep the exact previous arithmetic. Verified in Node on the wasm32 build: a 0 to -20 dB ramp over 48,000 samples equalled f32 linear interpolation of the gains exactly (0), and the hold after the last point exactly; browser and engine renders with volume automation were identical (0.0 over 480,000 frames), and with pan automation too within 3e-8 (sine and cosine in the two math libraries).
