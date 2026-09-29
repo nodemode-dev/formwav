@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.11.0
-Last updated: 2026-09-28 · buses in render.rs: master path unchanged, per-bus scratch, bus gain and pan
+Current build version: v0.17.0
+Last updated: 2026-09-28 · fw_take_peaks exports the master peaks to the worklet (no native changes between v0.11.0 and v0.16.0)
 
 ---
 
@@ -292,3 +292,10 @@ A clip carries the bus it feeds, 0 meaning master. Each span mixes master clips 
 - logged: v0.11.0 · 2026-09-28
 
 With one track on a bus at -6 dB panned 0.5 and one on master: browser and engine renders identical (0.0); the bus track soloed matched source times bus gain times cos(pi/4) within 4.3e-8; two tracks on one bus matched the sum of their solo renders within 3.7e-8 (the bus sums before its gain, a different rounding order); a muted bus equalled a muted track exactly; removing the bus returned its track to master bit-identical to a session that never had one.
+
+### src/wasm.rs · fw_take_peaks
+- refers-to: src/wasm.rs :: `fw_take_peaks`; src/render.rs :: `Player::take_peaks`
+- kind: explainer
+- logged: v0.17.0 · 2026-09-28
+
+Writes the master-bus peaks since the last call into a two-float buffer the caller owns, then resets them, so each worklet report carries the loudest sample of its own interval. Verified in Node: after one 128-frame block at 0 and at 72,000 the peaks equalled the source block's absolute maxima exactly (0.000336 and 0.399963, then 0.400238 and 0.399963), and a second call without rendering returned 0 and 0.

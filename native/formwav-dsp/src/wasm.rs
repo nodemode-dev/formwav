@@ -97,3 +97,10 @@ pub unsafe extern "C" fn fw_clear_buses(player: *mut Player) {
 pub unsafe extern "C" fn fw_add_bus(player: *mut Player, id: u32, gain: f32, pan: f32) {
     (*player).add_bus(crate::render::Bus { id, gain, pan });
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_take_peaks(player: *mut Player, out: *mut f32) {
+    let (left, right) = (*player).take_peaks();
+    *out = left;
+    *out.add(1) = right;
+}
