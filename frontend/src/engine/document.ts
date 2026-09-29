@@ -125,6 +125,7 @@ export type Command =
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
+  | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -180,6 +181,18 @@ function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): Se
 
 export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string): SessionDoc {
   switch (cmd.type) {
+    case "set-clip-media": {
+      let changed = false;
+      const next = mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.map((c) => {
+          if (c.id !== cmd.clipId || c.mediaId === cmd.media.id) return c;
+          changed = true;
+          return { ...c, mediaId: cmd.media.id };
+        }),
+      }));
+      return changed ? { ...next, media: { ...doc.media, [cmd.media.id]: cmd.media } } : doc;
+    }
     case "resample-session": {
       const r = cmd.sampleRate / doc.sampleRate;
       const swaps = new Map(cmd.swaps.map((s) => [s.from, s.to]));

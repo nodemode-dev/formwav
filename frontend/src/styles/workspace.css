@@ -50,6 +50,7 @@
 }
 
 .fw-pane-title { font-weight: 500; }
+.fw-pane-inspector .fw-pane-header { grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 8px; }
 .fw-pane-meta { overflow: hidden; color: var(--text-muted); font-size: 12px; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .fw-pane-end { display: flex; justify-content: flex-end; gap: 4px; }
 .fw-pane-action { inline-size: 26px; block-size: 26px; color: var(--text-secondary); background: transparent; border: 0; border-radius: 6px; cursor: pointer; }

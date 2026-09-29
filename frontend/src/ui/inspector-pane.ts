@@ -1,4 +1,4 @@
-import type { Clip, Engine, SessionDoc, Track } from "../engine";
+import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import type { FadeShape } from "../engine/document";
 import { setText } from "../vendor/nodemode/dom-stable";
 
@@ -12,6 +12,12 @@ const BODY = `
   <label class="fw-field"><span>Fade in</span><input type="number" step="0.01" min="0" data-f="fadeIn"><output>s</output></label>
   <label class="fw-field"><span>Fade out</span><input type="number" step="0.01" min="0" data-f="fadeOut"><output>s</output></label>
   <label class="fw-field"><span>Fade curve</span><select data-f="shape"><option value="linear">Linear</option><option value="equal-power">Equal power</option><option value="s-curve">S-curve</option><option value="exponential">Exponential</option></select><span></span></label>
+</div>
+<div class="fw-insp-section fw-insp-effects" hidden>
+  <div class="fw-insp-head">Effects</div>
+  <button type="button" class="fw-ibtn fw-btn-export fw-voice-go" data-fx="enhance" title="formcut's voice-clean: rumble cut, denoise, gentle compression and a limiter">Enhance speech</button>
+  <label class="fw-field fw-field-stack"><span>Effect</span><select data-fx="pick"></select></label>
+  <button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button>
 </div>
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
@@ -53,6 +59,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     show(body.querySelector(".fw-insp-empty"), !hit);
     show(body.querySelector(".fw-insp-clip"), !!hit);
     show(body.querySelector(".fw-insp-track"), !!hit);
+    show(body.querySelector(".fw-insp-effects"), !!hit);
     if (!hit) {
       const seconds = doc.tracks.reduce((end, t) => Math.max(end, ...t.clips.map((c) => (c.start + c.length) / doc.sampleRate)), 0);
       setText(body.querySelector(".fw-insp-empty"), selected.length > 1 ? `${selected.length} clips selected. Select one clip to edit its properties.` : doc.tracks.length ? `Session: ${doc.tracks.length} track${doc.tracks.length === 1 ? "" : "s"}, ${(doc.sampleRate / 1000).toFixed(1)} kHz, ${seconds.toFixed(1)} s. Select a clip to edit its properties.` : "Import audio to begin. Selecting a clip shows its properties here.");
@@ -122,6 +129,45 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         break;
     }
     render();
+  });
+
+  const pick = body.querySelector<HTMLSelectElement>('[data-fx="pick"]');
+  void fetch("/api/effects")
+    .then((res) => (res.ok ? res.json() : []))
+    .then((groups: { group: string; effects: { id: string; label: string }[] }[]) => {
+      if (!pick) return;
+      pick.replaceChildren(
+        ...groups.map((g) => {
+          const group = document.createElement("optgroup");
+          group.label = g.group;
+          group.append(...g.effects.map((fx) => new Option(fx.label, fx.id)));
+          return group;
+        }),
+      );
+    })
+    .catch(() => undefined);
+  const notice = host.querySelector<HTMLElement>(".fw-notice");
+  body.addEventListener("click", async (e) => {
+    const action = (e.target as HTMLElement).closest<HTMLElement>("[data-fx]")?.dataset.fx;
+    if (action !== "enhance" && action !== "apply") return;
+    const hit = find(engine.get("document"));
+    const name = action === "enhance" ? "voice-clean" : pick?.value;
+    if (!hit || !name) return;
+    const buttons = [...body.querySelectorAll<HTMLButtonElement>("button[data-fx]")];
+    for (const b of buttons) b.disabled = true;
+    const label = action === "enhance" ? "Enhance speech" : pick?.selectedOptions[0]?.textContent ?? name;
+    setText(notice, `Applying ${label}...`);
+    try {
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=${encodeURIComponent(name)}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
+      setText(notice, `Applied ${label} to the clip`);
+    } catch (err) {
+      setText(notice, `Could not apply ${label}: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      for (const b of buttons) b.disabled = false;
+    }
   });
 
   host.addEventListener("fw-selection", (e) => {
