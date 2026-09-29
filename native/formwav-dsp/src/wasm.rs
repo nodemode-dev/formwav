@@ -52,6 +52,7 @@ pub unsafe extern "C" fn fw_add_clip(
     fade_in: f64,
     fade_out: f64,
     fade_shape: u32,
+    bus: u32,
 ) {
     (*player).add_clip(PlayClip {
         source,
@@ -63,6 +64,7 @@ pub unsafe extern "C" fn fw_add_clip(
         fade_in: fade_in.max(0.0) as u64,
         fade_out: fade_out.max(0.0) as u64,
         fade_shape: fade_shape.min(u8::MAX as u32) as u8,
+        bus,
     });
 }
 
@@ -84,4 +86,14 @@ pub unsafe extern "C" fn fw_render(player: *mut Player, left: *mut f32, right: *
 #[no_mangle]
 pub unsafe extern "C" fn fw_set_loop(player: *mut Player, start: f64, end: f64) {
     (*player).set_loop(start.max(0.0) as u64, end.max(0.0) as u64);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_clear_buses(player: *mut Player) {
+    (*player).clear_buses();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn fw_add_bus(player: *mut Player, id: u32, gain: f32, pan: f32) {
+    (*player).add_bus(crate::render::Bus { id, gain, pan });
 }

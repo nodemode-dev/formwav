@@ -13,6 +13,14 @@ pub struct PlayClip {
     pub fade_in: u64,
     pub fade_out: u64,
     pub fade_shape: u8,
+    pub bus: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Bus {
+    pub id: u32,
+    pub gain: f32,
+    pub pan: f32,
 }
 
 pub const FADE_LINEAR: u8 = 0;
@@ -43,6 +51,9 @@ pub struct Player {
     peak_left: f32,
     peak_right: f32,
     loop_range: Option<(u64, u64)>,
+    buses: Vec<Bus>,
+    scratch_left: Vec<f32>,
+    scratch_right: Vec<f32>,
 }
 
 impl Player {
@@ -84,7 +95,8 @@ impl Player {
                 }
             }
             let len = span as usize;
-            self.mix(&mut left[done..done + len], &mut right[done..done + len], from);
+            self.mix(&mut left[done..done + len], &mut right[done..done + len], from, 0);
+            self.mix_buses(&mut left[done..done + len], &mut right[done..done + len], from);
             done += len;
             self.position = from + span;
             if let Some((start, end)) = self.loop_range {
@@ -103,10 +115,48 @@ impl Player {
         self.loop_range = if end > start { Some((start, end)) } else { None };
     }
 
-    fn mix(&self, left: &mut [f32], right: &mut [f32], from: u64) {
+    pub fn clear_buses(&mut self) {
+        self.buses.clear();
+    }
+
+    pub fn add_bus(&mut self, bus: Bus) {
+        self.buses.push(bus);
+    }
+
+    fn mix_buses(&mut self, left: &mut [f32], right: &mut [f32], from: u64) {
+        if self.buses.is_empty() {
+            return;
+        }
+        let n = left.len().min(right.len());
+        let mut scratch_left = std::mem::take(&mut self.scratch_left);
+        let mut scratch_right = std::mem::take(&mut self.scratch_right);
+        if scratch_left.len() < n {
+            scratch_left.resize(n, 0.0);
+            scratch_right.resize(n, 0.0);
+        }
+        for bus in &self.buses {
+            scratch_left[..n].fill(0.0);
+            scratch_right[..n].fill(0.0);
+            self.mix(&mut scratch_left[..n], &mut scratch_right[..n], from, bus.id);
+            let (pan_left, pan_right) = pan_gains(bus.pan);
+            let gain_left = bus.gain * pan_left;
+            let gain_right = bus.gain * pan_right;
+            for i in 0..n {
+                left[i] += scratch_left[i] * gain_left;
+                right[i] += scratch_right[i] * gain_right;
+            }
+        }
+        self.scratch_left = scratch_left;
+        self.scratch_right = scratch_right;
+    }
+
+    fn mix(&self, left: &mut [f32], right: &mut [f32], from: u64, bus: u32) {
         let n = left.len().min(right.len());
         let to = from + n as u64;
         for clip in &self.clips {
+            if clip.bus != bus {
+                continue;
+            }
             let Some(src) = self.sources.get(&clip.source) else { continue };
             let Some(l) = src.channels.first() else { continue };
             let r = src.channels.get(1).unwrap_or(l);

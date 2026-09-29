@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.10.0
-Last updated: 2026-09-28 · BS.1770-4 integrated loudness in loudness.rs, exposed through pyo3
+Current build version: v0.11.0
+Last updated: 2026-09-28 · buses in render.rs: master path unchanged, per-bus scratch, bus gain and pan
 
 ---
 
@@ -274,3 +274,21 @@ Both K-weighting stages (the high shelf and the RLB high-pass) are designed for 
 - logged: v0.10.0 · 2026-09-28
 
 Against the standards' own references: a 997 Hz sine at 0 dBFS in the left channel read -3.010 LUFS (BS.1770 gives -3.01); EBU Tech 3341 cases read -22.993 (1 kHz at -23 dBFS, 48 kHz), -22.991 (the same at 44.1 kHz), -32.993 (-33 dBFS) and -23.014 (the -36, -23, -36 dBFS gating sequence), all inside the stated ±0.1 LU; silence and a 300 ms tone gave no reading. Against pyloudnorm (installed only for the check): formwav read 0.041 to 0.045 LU higher on every signal, white noise included. A constant offset points to a difference in filter design, not in gating or blocking, and the -3.01 reference is met exactly here and missed by 0.042 there, so the evidence favours these filters; the agreement is recorded as within 0.045 LU, not identical.
+
+---
+
+## v0.11.0 · buses
+
+### src/render.rs · bus stage
+- refers-to: src/render.rs :: `Bus`, `PlayClip::bus`, `Player::mix_buses`, `Player::mix`
+- kind: rationale
+- logged: v0.11.0 · 2026-09-28
+
+A clip carries the bus it feeds, 0 meaning master. Each span mixes master clips straight into the output exactly as before, then `mix_buses` sums each bus's clips into a scratch pair and adds it to the output scaled by the bus gain and the bus pan law (the same balance law as tracks). With no buses `mix_buses` returns at once, so master-only sessions are bit-identical to v0.10.0 (verified). The scratch pair lives on the player and only grows, so the audio thread does not allocate per block once warm. A clip naming a bus the player does not have is silent; both planners only emit known buses. Buses are the node that effects attach to in Phase 4; today they only gain and pan. `fw_clear_buses` and `fw_add_bus` in wasm.rs and a `buses` argument to `render` in python.rs carry them.
+
+### src/render.rs · verification v0.11.0
+- refers-to: src/render.rs :: buses
+- kind: explainer
+- logged: v0.11.0 · 2026-09-28
+
+With one track on a bus at -6 dB panned 0.5 and one on master: browser and engine renders identical (0.0); the bus track soloed matched source times bus gain times cos(pi/4) within 4.3e-8; two tracks on one bus matched the sum of their solo renders within 3.7e-8 (the bus sums before its gain, a different rounding order); a muted bus equalled a muted track exactly; removing the bus returned its track to master bit-identical to a session that never had one.
