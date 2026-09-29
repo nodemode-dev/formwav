@@ -3,6 +3,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 import time
 import zipfile
 from pathlib import Path
@@ -18,6 +19,26 @@ NAME = re.compile(r"^[\w][\w .,'()-]{0,79}$")
 
 class ProjectError(ValueError):
     pass
+
+
+class RevisionConflict(Exception):
+    def __init__(self, current: int) -> None:
+        super().__init__(f"the saved session is at revision {current}")
+        self.current = current
+
+
+_SAVE_LOCK = threading.Lock()
+
+
+def _current_revision(path: Path) -> int:
+    if not path.exists():
+        return 0
+    try:
+        manifest, _doc, z = _read(path)
+        z.close()
+    except (ProjectError, zipfile.BadZipFile):
+        return 1
+    return int(manifest.get("revision", 1))
 
 
 def projects_dir() -> Path:
@@ -56,10 +77,11 @@ def _summary(path: Path, manifest: dict, doc: dict) -> dict:
         "tracks": len(doc.get("tracks", [])),
         "bytes": path.stat().st_size,
         "appVersion": manifest.get("appVersion"),
+        "revision": int(manifest.get("revision", 1)),
     }
 
 
-def save(name: str, doc: object) -> dict:
+def save(name: str, doc: object, base: int | None = None) -> dict:
     path = _path(name)
     ids = _media_ids(doc)
     for mid in ids:
@@ -67,29 +89,34 @@ def save(name: str, doc: object) -> dict:
             media.media_info(mid)
         except KeyError as err:
             raise ProjectError("the session uses media the engine no longer has") from err
-    manifest = {
-        "format": FORMAT,
-        "formatVersion": FORMAT_VERSION,
-        "app": "formwav",
-        "appVersion": VERSION,
-        "name": path.stem,
-        "savedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }
-    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".fmw")
-    try:
-        with os.fdopen(fd, "wb") as fh:
-            with zipfile.ZipFile(fh, "w", compression=zipfile.ZIP_DEFLATED) as z:
-                z.writestr("manifest.json", json.dumps(manifest, indent=2))
-                z.writestr("session.json", json.dumps(doc))
-                for mid in sorted(ids):
-                    z.write(media_dir() / f"{mid}.wav", f"media/{mid}.wav", compress_type=zipfile.ZIP_STORED)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
-    return _summary(path, manifest, doc)
+    with _SAVE_LOCK:
+        current = _current_revision(path)
+        if base is not None and base != current:
+            raise RevisionConflict(current)
+        manifest = {
+            "format": FORMAT,
+            "formatVersion": FORMAT_VERSION,
+            "app": "formwav",
+            "appVersion": VERSION,
+            "name": path.stem,
+            "revision": current + 1,
+            "savedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".fmw")
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                with zipfile.ZipFile(fh, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                    z.writestr("manifest.json", json.dumps(manifest, indent=2))
+                    z.writestr("session.json", json.dumps(doc))
+                    for mid in sorted(ids):
+                        z.write(media_dir() / f"{mid}.wav", f"media/{mid}.wav", compress_type=zipfile.ZIP_STORED)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+        return _summary(path, manifest, doc)
 
 
 def _read(path: Path) -> tuple[dict, dict, zipfile.ZipFile]:
@@ -127,7 +154,7 @@ def open_project(name: str) -> dict:
             if hashlib.sha256(data).hexdigest() != mid:
                 raise ProjectError("a media file inside the session is damaged")
             media.import_wav(doc["media"][mid].get("name", f"{mid}.wav"), data)
-    return {"name": path.stem, "savedAt": manifest.get("savedAt"), "document": doc}
+    return {"name": path.stem, "savedAt": manifest.get("savedAt"), "revision": int(manifest.get("revision", 1)), "document": doc}
 
 
 def list_projects() -> list[dict]:

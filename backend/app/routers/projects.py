@@ -12,9 +12,16 @@ def list_projects() -> list[dict]:
 
 
 @router.put("/projects/{name}")
-def save_project(name: str, document: dict = Body(...)) -> dict:
+def save_project(name: str, document: dict = Body(...), base: int | None = None) -> dict:
     try:
-        return projects.save(name, document)
+        return projects.save(name, document, base)
+    except projects.RevisionConflict as err:
+        message = (
+            "a saved session with that name already exists"
+            if base == 0
+            else "the session was saved elsewhere since this copy was opened or saved"
+        )
+        raise HTTPException(409, {"message": message, "revision": err.current}) from err
     except projects.ProjectError as err:
         raise HTTPException(400, str(err)) from err
 
