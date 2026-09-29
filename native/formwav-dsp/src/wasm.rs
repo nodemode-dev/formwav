@@ -118,6 +118,12 @@ pub unsafe extern "C" fn fw_take_track_peaks(player: *mut Player, out: *mut f32,
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn fw_take_bus_peaks(player: *mut Player, out: *mut f32, max_buses: u32) -> u32 {
+    let buf = std::slice::from_raw_parts_mut(out, max_buses as usize * 2);
+    (*player).take_bus_peaks(buf) as u32
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn fw_loudness_reset(player: *mut Player, rate: u32) {
     (*player).reset_loudness(rate);
 }

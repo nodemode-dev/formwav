@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.34.0
-Last updated: 2026-09-28 · master fader applied to the finished mix; off at 0 dB
+Current build version: v0.35.0
+Last updated: 2026-09-28 · per-bus peak metering after each bus's gain and pan
 
 ---
 
@@ -334,3 +334,10 @@ The player holds an envelope table; a clip may reference a volume envelope (line
 - logged: v0.34.0 · 2026-09-28
 
 The master fader scales the finished mix after the buses and before the peak scan and live loudness, so those meters report what is heard. The dB value is converted once, in Rust, on both the wasm and pyo3 paths; 0 dB clears the stage entirely rather than multiplying by one, so every session at 0 dB renders exactly as before. Verified in Node on the wasm32 build over 288,000 samples: at 0 dB the output was bit-identical to a player never given a master level, and at -6 dB every sample equalled the unity output times f32(10^(-6/20)) exactly.
+
+### src/render.rs, src/wasm.rs · bus metering
+- refers-to: src/render.rs :: `Player::bus_peaks`, `mix_buses`, `Player::take_bus_peaks`; src/wasm.rs :: `fw_take_bus_peaks`
+- kind: rationale
+- logged: v0.35.0 · 2026-09-28
+
+Each bus is measured as it is added to the mix, after its gain and pan: the contribution is bound to a local, added, and its magnitude kept as that bus's peak, the same multiply and add as before, so the audio cannot change. Peaks are kept in the order buses were added (the player's plan order, which leaves muted buses out) and reset when taken. Verified in Node on the wasm32 build: a two-bus session rendered bit-identically on this core and on the v0.34.0 core, and over 750 blocks bus 1's reported peak equalled the output peak of a player holding only bus 1's clip exactly.

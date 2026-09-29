@@ -99,6 +99,7 @@ pub struct Player {
     loudness: Option<crate::loudness::LiveLoudness>,
     envelopes: Vec<Envelope>,
     master_gain: Option<f32>,
+    bus_peaks: Vec<(f32, f32)>,
 }
 
 impl Player {
@@ -219,7 +220,11 @@ impl Player {
             scratch_left.resize(n, 0.0);
             scratch_right.resize(n, 0.0);
         }
-        for bus in &self.buses {
+        let mut bus_peaks = std::mem::take(&mut self.bus_peaks);
+        if bus_peaks.len() != self.buses.len() {
+            bus_peaks.resize(self.buses.len(), (0.0, 0.0));
+        }
+        for (k, bus) in self.buses.iter().enumerate() {
             scratch_left[..n].fill(0.0);
             scratch_right[..n].fill(0.0);
             let id = bus.id;
@@ -227,11 +232,17 @@ impl Player {
             let (pan_left, pan_right) = pan_gains(bus.pan);
             let gain_left = bus.gain * pan_left;
             let gain_right = bus.gain * pan_right;
+            let peak = &mut bus_peaks[k];
             for i in 0..n {
-                left[i] += scratch_left[i] * gain_left;
-                right[i] += scratch_right[i] * gain_right;
+                let l = scratch_left[i] * gain_left;
+                let r = scratch_right[i] * gain_right;
+                left[i] += l;
+                right[i] += r;
+                peak.0 = peak.0.max(l.abs());
+                peak.1 = peak.1.max(r.abs());
             }
         }
+        self.bus_peaks = bus_peaks;
         self.scratch_left = scratch_left;
         self.scratch_right = scratch_right;
     }
@@ -327,6 +338,18 @@ impl Player {
             out[2 * t] = peak.0;
             out[2 * t + 1] = peak.1;
             *peak = (0.0, 0.0);
+        }
+        count
+    }
+
+    /// Writes (left, right) peaks for each bus, in the order the buses were added, into `out` as pairs,
+    /// resets them, and returns how many buses were written (at most `out.len() / 2`).
+    pub fn take_bus_peaks(&mut self, out: &mut [f32]) -> usize {
+        let count = self.bus_peaks.len().min(out.len() / 2);
+        for b in 0..count {
+            out[2 * b] = self.bus_peaks[b].0;
+            out[2 * b + 1] = self.bus_peaks[b].1;
+            self.bus_peaks[b] = (0.0, 0.0);
         }
         count
     }
