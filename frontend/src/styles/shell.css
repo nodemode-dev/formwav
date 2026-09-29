@@ -391,7 +391,7 @@ html, body, #app { height: 100%; }
 .fw-gain-line::after {
   content: attr(data-db);
   position: absolute;
-  right: 0;
+  left: var(--space-3);
   bottom: 6px;
   font-family: var(--font-mono);
   font-size: var(--fs-11);

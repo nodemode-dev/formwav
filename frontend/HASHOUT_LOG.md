@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.19.0
-Last updated: 2026-09-28 · Shuffle mode: gap-closing delete and rippling trims
+Current build version: v0.19.1
+Last updated: 2026-09-28 · gain label moved to the clip's start side
 
 ---
 
@@ -840,3 +840,14 @@ The output meter has an OUT label as its first grid column and the input meter a
 - logged: v0.19.0 · 2026-09-28
 
 Shuffle mode (a button beside Grid, or H) makes edits keep a track's clips closed up. Delete removes the selection and moves each remaining clip left by the lengths of the removed clips before it on the same track, all in one `batch`. A trim ripples: trimming a clip's end moves every later clip on the track by the same amount; trimming its start keeps the clip where it is, advances the source and moves the later clips by the opposite amount. The followers are gathered at pointer-down and previewed by `transform`, so the drag shows exactly where the commit will put them; the bounds and every move go in one `batch`, one undo step. Moving a clip in Shuffle mode is still a slip move; reordering clips by dragging is not built yet, and neither is rippling across tracks. Verified on a 10 s sine split into three contiguous clips, each render compared with the source's surviving pieces joined end to end: deleting the middle clip gave 0.0 over 336,000 frames with the last clip at 96,000; trimming the first clip's end by 50 px previewed the later two at -50 px during the drag and rendered 0.0 over 456,000 frames; trimming the middle clip's start by 50 px kept it in place, previewed the last at -50 px and rendered 0.0; each was one undo step and undo restored the layout; with Shuffle off, Delete kept the gap; layout shift 0.
+
+---
+
+## v0.19.1 · gain label placement
+
+### src/styles/shell.css · the gain label at the clip's start
+- refers-to: src/styles/shell.css :: `.fw-gain-line::after`
+- kind: explainer
+- logged: v0.19.1 · 2026-09-28
+
+The dB label was anchored to the gain line's right end, so a clip running past the window's right edge had its label cut off (recorded in v0.16.0). It now sits 12 px inside the line's start, clear of the fade-in handle in the top corner. Verified: with a short and a long clip selected, both labels started at x = 213 and x = 313 in a 1,280 px window, the long clip's line running on to x = 1,283; the screenshot showed both fully.
