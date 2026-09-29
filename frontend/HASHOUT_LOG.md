@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.17.0
-Last updated: 2026-09-28 · stereo output meter with clip indicator
+Current build version: v0.18.0
+Last updated: 2026-09-28 · marquee selection, zoom anchored on the playhead, IN and OUT meter labels
 
 ---
 
@@ -804,3 +804,28 @@ Every position report (about every 21 ms while playing) takes the master peaks f
 - logged: v0.17.0 · 2026-09-28
 
 Created once at mount in the transport bar: two bars (left, right) on the input meter's -60 to 0 dBFS scale, moved by `scaleX` only and written only when the value changes; each bar shows the new peak or falls back at 20 dB per second, whichever is higher, and a report of two zeros empties both. A peak at or above 1.0 latches the clip indicator (the danger token) until it is clicked. Verified on the stereo test file: the right bar held exactly scaleX(0.867), which is -7.96 dBFS for its 0.4 sine, while the left bar climbed with its ramp; at +12 dB the clip indicator latched and a click reset it; during playback only the meter, clock, playhead and Play's pressed state changed; layout shift 0. The output and input meters sit side by side without labels (seen in the screenshot); "IN" and "OUT" labels are the next small fix. Loudness is not metered live yet.
+
+---
+
+## v0.18.0 · marquee selection, zoom anchor, meter labels
+
+### src/ui/lanes.ts · marquee selection
+- refers-to: src/ui/lanes.ts :: `marquee`, `box`, `updateMarquee`, `endMarquee`, `swallowClick`, pointer handlers
+- kind: warning-context
+- logged: v0.18.0 · 2026-09-28
+
+A press on empty lane space starts a marquee; once the pointer has moved 4 px, one overlay created at mount is shown and moved by `transform` and its own size, and every clip whose box it touches is selected, live. Shift keeps the existing selection as the base. A marquee press prevents the browser's text selection; the click that follows a marquee release is swallowed so it cannot also move the playhead, and a plain click still seeks and clears. Four defects were caught before release, each by the harness or the screenshot. First, a local `box` in the pointer-down handler shadowed the marquee state; `tsc` failed, while the dev server, which does not type-check, threw at runtime, so the local is now `rect`. Second, capturing the pointer on every empty-space press retargeted the following `click` to the lanes element, where the seek handler found no lane body and did not seek; the pointer is now captured only once a marquee moves. Third, the swallow flag could outlive a release that produced no click and eat the next real one; it now clears once the event sequence finishes. Fourth, the screenshot showed lane-head text highlighted by the drag; the press now prevents default. Verified: a marquee across two lanes selected both clips during and after the drag without moving the playhead; an empty marquee cleared the selection; a Shift-marquee added a clip; no text was selected; a plain empty-space click still sought to 240,000 and cleared; only the overlay and `aria-selected` changed.
+
+### src/ui/lanes.ts · zoom keeps the playhead in place
+- refers-to: src/ui/lanes.ts :: `lastSpp`, the `onZoom` listener, `render`
+- kind: explainer
+- logged: v0.18.0 · 2026-09-28
+
+`render` records the samples per pixel it drew with; on a zoom the playhead's on-screen offset is taken with the old value, and after the new render the stage's scroll is set so the playhead sits at the same offset (scrolling is not a layout shift). Verified: with the playhead at 500 px, zooming in 2x scrolled the stage to 500 and the playhead stayed at x = 692.
+
+### src/ui/meter.ts and record.ts · IN and OUT labels
+- refers-to: src/ui/meter.ts :: `mountOutputMeter`; src/ui/record.ts :: meter mount; src/styles/shell.css :: `.fw-meter-label`, `.fw-out-meter`
+- kind: explainer
+- logged: v0.18.0 · 2026-09-28
+
+The output meter has an OUT label as its first grid column and the input meter an IN label before it, both in the muted mono token. Verified: both inside the transport bar (OUT at 406 px, IN at 563 px). The two-file harnesses report a layout shift of 0.0072 whose single source is the harness's scripted `move-clip` of a clip (no user input), not the app; single-file harnesses report 0.

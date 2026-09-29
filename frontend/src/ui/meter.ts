@@ -14,6 +14,7 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
   meter.setAttribute("role", "group");
   meter.setAttribute("aria-label", "Output level");
   meter.innerHTML =
+    `<span class="fw-meter-label">OUT</span>` +
     `<div class="fw-out-track"><div class="fw-out-bar"></div></div>` +
     `<div class="fw-out-track"><div class="fw-out-bar"></div></div>` +
     `<button class="fw-out-clip" type="button" data-clip="false" aria-label="Output clip indicator, click to reset" title="Output reached 0 dBFS (click to reset)"></button>`;

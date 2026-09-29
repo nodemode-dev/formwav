@@ -241,6 +241,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const view = doc.tracks.length ? "session" : "empty";
     if (stage.dataset.view !== view) stage.dataset.view = view;
     const spp = samplesPerPixel(doc);
+    lastSpp = spp;
     const timeline = `${Math.ceil(documentLength(doc) / spp)}px`;
     if (lanes.dataset.timeline !== timeline) {
       lanes.dataset.timeline = timeline;
@@ -265,8 +266,69 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   });
 
   engine.subscribe("document", render);
-  onZoom(() => render(engine.get("document")));
+  let lastSpp = 1;
+  onZoom(() => {
+    const doc = engine.get("document");
+    const position = engine.get("transport").positionSamples;
+    const offset = position / lastSpp - stage.scrollLeft;
+    render(doc);
+    stage.scrollLeft = Math.max(0, position / samplesPerPixel(doc) - offset);
+  });
   render(engine.get("document"));
+
+  const marquee = document.createElement("div");
+  marquee.className = "fw-marquee";
+  marquee.hidden = true;
+  lanes.append(marquee);
+  let box: { x0: number; y0: number; base: Set<string>; moved: boolean } | null = null;
+  let swallowClick = false;
+  lanes.addEventListener(
+    "click",
+    (e) => {
+      if (!swallowClick) return;
+      swallowClick = false;
+      e.stopPropagation();
+    },
+    true,
+  );
+
+  const updateMarquee = (e: PointerEvent) => {
+    if (!box) return;
+    const r = lanes.getBoundingClientRect();
+    const x1 = e.clientX - r.left;
+    const y1 = e.clientY - r.top;
+    if (!box.moved && Math.hypot(x1 - box.x0, y1 - box.y0) < 4) return;
+    if (!box.moved) lanes.setPointerCapture(e.pointerId);
+    box.moved = true;
+    const left = Math.min(box.x0, x1);
+    const top = Math.min(box.y0, y1);
+    const width = Math.abs(x1 - box.x0);
+    const height = Math.abs(y1 - box.y0);
+    if (marquee.hidden) marquee.hidden = false;
+    marquee.style.transform = `translate(${left.toFixed(1)}px, ${top.toFixed(1)}px)`;
+    marquee.style.width = `${width.toFixed(1)}px`;
+    marquee.style.height = `${height.toFixed(1)}px`;
+    selectedClipIds.clear();
+    for (const id of box.base) selectedClipIds.add(id);
+    for (const clipNode of lanes.querySelectorAll<HTMLElement>(".fw-clip")) {
+      const c = clipNode.getBoundingClientRect();
+      const hit = c.right > r.left + left && c.left < r.left + left + width && c.bottom > r.top + top && c.top < r.top + top + height;
+      if (hit && clipNode.dataset.key) selectedClipIds.add(clipNode.dataset.key);
+    }
+    markSelected();
+  };
+
+  const endMarquee = () => {
+    if (!box) return;
+    if (box.moved) {
+      swallowClick = true;
+      setTimeout(() => {
+        swallowClick = false;
+      }, 0);
+    }
+    box = null;
+    if (!marquee.hidden) marquee.hidden = true;
+  };
 
   const markSelected = () => {
     for (const node of lanes.querySelectorAll<HTMLElement>(".fw-clip")) {
@@ -308,6 +370,11 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const node = target.closest<HTMLElement>(".fw-clip");
     const trackId = node?.closest<HTMLElement>(".fw-lane")?.dataset.key;
     if (!node || !trackId || !node.dataset.key || e.button !== 0) {
+      if (e.button === 0 && target.closest(".fw-lane-body")) {
+        const r = lanes.getBoundingClientRect();
+        box = { x0: e.clientX - r.left, y0: e.clientY - r.top, base: new Set(e.shiftKey ? selectedClipIds : []), moved: false };
+        e.preventDefault();
+      }
       if (selectedClipIds.size && !e.shiftKey && !target.closest(".fw-lane-head")) {
         selectedClipIds.clear();
         markSelected();
@@ -316,8 +383,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
     const clip = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === node.dataset.key);
     if (!clip) return;
-    const box = node.getBoundingClientRect();
-    const x = e.clientX - box.left;
+    const rect = node.getBoundingClientRect();
+    const x = e.clientX - rect.left;
     const kind: GestureKind = target.classList.contains("fw-gain-line")
       ? "gain"
       : target.classList.contains("fw-fade-in")
@@ -326,7 +393,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
           ? "fade-out"
           : x < EDGE_PX
             ? "trim-left"
-            : x > box.width - EDGE_PX
+            : x > rect.width - EDGE_PX
               ? "trim-right"
               : "move";
     if (e.shiftKey && kind === "move") {
@@ -415,6 +482,10 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   };
 
   lanes.addEventListener("pointermove", (e) => {
+    if (box) {
+      updateMarquee(e);
+      return;
+    }
     if (!drag) return;
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
@@ -445,8 +516,14 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     restore(d);
     if (apply) commit(d, samplesPerPixel(engine.get("document")));
   };
-  lanes.addEventListener("pointerup", () => endDrag(true));
-  lanes.addEventListener("pointercancel", () => endDrag(false));
+  lanes.addEventListener("pointerup", () => {
+    endMarquee();
+    endDrag(true);
+  });
+  lanes.addEventListener("pointercancel", () => {
+    endMarquee();
+    endDrag(false);
+  });
 
   window.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement | null;

@@ -24,7 +24,10 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
   const bar = document.createElement("div");
   bar.className = "fw-meter-bar";
   meter.append(bar);
-  transport?.append(meter);
+  const label = document.createElement("span");
+  label.className = "fw-meter-label";
+  label.textContent = "IN";
+  transport?.append(label, meter);
 
   let lastScale = "";
   let lastNow = "0";
