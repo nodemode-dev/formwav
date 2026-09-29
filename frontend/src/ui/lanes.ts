@@ -1,5 +1,5 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
-import { documentLength } from "../engine/document";
+import { documentLength, sessionLength } from "../engine/document";
 import { fetchPeaks, type PeakData } from "../io/media-client";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
@@ -94,6 +94,35 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
       ctx.fillRect(x, top, 1, Math.max(1, bottom - top));
     }
   }
+  const clip = info.clip;
+  const fadeIn = Math.min(clip.fadeIn ?? 0, clip.length);
+  const fadeOut = Math.min(clip.fadeOut ?? 0, clip.length - fadeIn);
+  if (fadeIn <= 0 && fadeOut <= 0) return;
+  const curve = (v: number) => (clip.fadeShape === "equal-power" ? Math.sin((v * Math.PI) / 2) : v);
+  const style = getComputedStyle(canvas);
+  const pxPerSample = w / clip.length;
+  const envelope = (from: number, span: number, rising: boolean) => {
+    ctx.beginPath();
+    ctx.moveTo(from, 0);
+    const steps = Math.max(2, Math.ceil(span));
+    for (let i = 0; i <= steps; i++) {
+      const v = i / steps;
+      ctx.lineTo(from + v * span, h * (1 - curve(rising ? v : 1 - v)));
+    }
+    ctx.lineTo(from + span, 0);
+    ctx.closePath();
+  };
+  ctx.fillStyle = style.outlineColor;
+  ctx.globalAlpha = 0.6;
+  if (fadeIn > 0) {
+    envelope(0, fadeIn * pxPerSample, true);
+    ctx.fill();
+  }
+  if (fadeOut > 0) {
+    envelope(w - fadeOut * pxPerSample, fadeOut * pxPerSample, false);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 }
 
 function schedulePaint(canvas: HTMLCanvasElement, mediaId: string): void {
@@ -107,7 +136,11 @@ function clipNode(): HTMLElement {
   node.className = "fw-clip";
   const canvas = document.createElement("canvas");
   canvas.className = "fw-wave";
-  node.append(canvas);
+  const fadeIn = document.createElement("span");
+  fadeIn.className = "fw-fade-handle fw-fade-in";
+  const fadeOut = document.createElement("span");
+  fadeOut.className = "fw-fade-handle fw-fade-out";
+  node.append(canvas, fadeIn, fadeOut);
   return node;
 }
 
@@ -124,6 +157,17 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
   }
   const selected = String(clip.id === selectedClipId);
   if (node.getAttribute("aria-selected") !== selected) node.setAttribute("aria-selected", selected);
+  const handles: [string, string][] = [
+    [".fw-fade-in", `translateX(${((clip.fadeIn ?? 0) / spp).toFixed(2)}px)`],
+    [".fw-fade-out", `translateX(${(-(clip.fadeOut ?? 0) / spp).toFixed(2)}px)`],
+  ];
+  for (const [selector, transform] of handles) {
+    const handle = node.querySelector<HTMLElement>(selector);
+    if (handle && handle.dataset.tx !== transform) {
+      handle.dataset.tx = transform;
+      handle.style.transform = transform;
+    }
+  }
   const canvas = node.firstElementChild as HTMLCanvasElement | null;
   const media = doc.media[clip.mediaId];
   if (!canvas || !media) return;
@@ -201,13 +245,37 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
   };
 
-  let drag: { node: HTMLElement; trackId: string; clipId: string; startX: number; origin: number; dx: number; moved: boolean } | null = null;
+  type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out";
+  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; dx: number; moved: boolean; low: number; high: number };
+  let drag: Gesture | null = null;
+  const EDGE_PX = 6;
+
+  const limits = (kind: GestureKind, clip: Clip, spp: number): [number, number] => {
+    const doc = engine.get("document");
+    const media = doc.media[clip.mediaId];
+    const after = media ? Math.max(0, sessionLength(media, doc.sampleRate) - clip.sourceIn - clip.length) : 0;
+    const fadeIn = clip.fadeIn ?? 0;
+    const fadeOut = clip.fadeOut ?? 0;
+    switch (kind) {
+      case "move":
+        return [-clip.start / spp, Infinity];
+      case "trim-left":
+        return [-Math.min(clip.start, clip.sourceIn) / spp, (clip.length - 1) / spp];
+      case "trim-right":
+        return [-(clip.length - 1) / spp, after / spp];
+      case "fade-in":
+        return [-fadeIn / spp, (clip.length - fadeOut - fadeIn) / spp];
+      case "fade-out":
+        return [-(clip.length - fadeIn - fadeOut) / spp, fadeOut / spp];
+    }
+  };
 
   lanes.addEventListener("pointerdown", (e) => {
-    const node = (e.target as HTMLElement).closest<HTMLElement>(".fw-clip");
+    const target = e.target as HTMLElement;
+    const node = target.closest<HTMLElement>(".fw-clip");
     const trackId = node?.closest<HTMLElement>(".fw-lane")?.dataset.key;
     if (!node || !trackId || !node.dataset.key || e.button !== 0) {
-      if (selectedClipId !== null && !(e.target as HTMLElement).closest(".fw-lane-head")) {
+      if (selectedClipId !== null && !target.closest(".fw-lane-head")) {
         selectedClipId = null;
         markSelected();
       }
@@ -215,31 +283,71 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
     const clip = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === node.dataset.key);
     if (!clip) return;
+    const box = node.getBoundingClientRect();
+    const x = e.clientX - box.left;
+    const kind: GestureKind = target.classList.contains("fw-fade-in")
+      ? "fade-in"
+      : target.classList.contains("fw-fade-out")
+        ? "fade-out"
+        : x < EDGE_PX
+          ? "trim-left"
+          : x > box.width - EDGE_PX
+            ? "trim-right"
+            : "move";
+    const [low, high] = limits(kind, clip, samplesPerPixel(engine.get("document")));
     selectedClipId = clip.id;
     markSelected();
-    drag = { node, trackId, clipId: clip.id, startX: e.clientX, origin: clip.start, dx: 0, moved: false };
+    drag = { kind, node, trackId, clip, startX: e.clientX, dx: 0, moved: false, low, high };
     node.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
+
+  const preview = (d: Gesture, spp: number) => {
+    const shift = `translateX(${d.dx.toFixed(1)}px)`;
+    if (d.kind === "move") d.node.style.transform = shift;
+    else if (d.kind === "trim-left") {
+      d.node.style.transform = shift;
+      d.node.style.width = `${Math.max(1, d.clip.length / spp - d.dx).toFixed(2)}px`;
+    } else if (d.kind === "trim-right") d.node.style.width = `${Math.max(1, d.clip.length / spp + d.dx).toFixed(2)}px`;
+    else {
+      const handle = d.node.querySelector<HTMLElement>(d.kind === "fade-in" ? ".fw-fade-in" : ".fw-fade-out");
+      const base = d.kind === "fade-in" ? (d.clip.fadeIn ?? 0) / spp : -(d.clip.fadeOut ?? 0) / spp;
+      if (handle) handle.style.transform = `translateX(${(base + d.dx).toFixed(2)}px)`;
+    }
+  };
+
+  const restore = (d: Gesture) => {
+    d.node.style.transform = "";
+    if (d.node.dataset.width) d.node.style.width = d.node.dataset.width;
+    for (const handle of d.node.querySelectorAll<HTMLElement>(".fw-fade-handle")) handle.style.transform = handle.dataset.tx ?? "";
+  };
+
+  const commit = (d: Gesture, spp: number) => {
+    const delta = Math.round(d.dx * spp);
+    const c = d.clip;
+    const ids = { trackId: d.trackId, clipId: c.id };
+    if (d.kind === "move") engine.dispatch({ type: "move-clip", ...ids, start: c.start + delta });
+    else if (d.kind === "trim-left") engine.dispatch({ type: "set-clip-bounds", ...ids, start: c.start + delta, sourceIn: c.sourceIn + delta, length: c.length - delta });
+    else if (d.kind === "trim-right") engine.dispatch({ type: "set-clip-bounds", ...ids, start: c.start, sourceIn: c.sourceIn, length: c.length + delta });
+    else if (d.kind === "fade-in") engine.dispatch({ type: "set-clip-fades", ...ids, fadeIn: (c.fadeIn ?? 0) + delta, fadeOut: c.fadeOut ?? 0 });
+    else engine.dispatch({ type: "set-clip-fades", ...ids, fadeIn: c.fadeIn ?? 0, fadeOut: (c.fadeOut ?? 0) - delta });
+  };
 
   lanes.addEventListener("pointermove", (e) => {
     if (!drag) return;
     const dx = e.clientX - drag.startX;
     if (!drag.moved && Math.abs(dx) < 3) return;
     drag.moved = true;
-    drag.dx = Math.max(-drag.origin / samplesPerPixel(engine.get("document")), dx);
-    drag.node.style.transform = `translateX(${drag.dx.toFixed(1)}px)`;
+    drag.dx = Math.min(drag.high, Math.max(drag.low, dx));
+    preview(drag, samplesPerPixel(engine.get("document")));
   });
 
-  const endDrag = (commit: boolean) => {
+  const endDrag = (apply: boolean) => {
     const d = drag;
     drag = null;
-    if (!d) return;
-    if (d.moved) d.node.style.transform = "";
-    if (commit && d.moved) {
-      const start = d.origin + d.dx * samplesPerPixel(engine.get("document"));
-      engine.dispatch({ type: "move-clip", trackId: d.trackId, clipId: d.clipId, start });
-    }
+    if (!d || !d.moved) return;
+    restore(d);
+    if (apply) commit(d, samplesPerPixel(engine.get("document")));
   };
   lanes.addEventListener("pointerup", () => endDrag(true));
   lanes.addEventListener("pointercancel", () => endDrag(false));
@@ -251,6 +359,11 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (e.key === "=" || e.key === "+") setZoom(zoom * 2);
     else if (e.key === "-") setZoom(zoom / 2);
     else if (e.key === "0") setZoom(1);
+    else if (e.key.toLowerCase() === "s" && selectedClipId) {
+      const clipId = selectedClipId;
+      const track = engine.get("document").tracks.find((t) => t.clips.some((c) => c.id === clipId));
+      if (track) engine.dispatch({ type: "split-clip", trackId: track.id, clipId, at: engine.get("transport").positionSamples });
+    }
     else if ((e.key === "Delete" || e.key === "Backspace") && selectedClipId) {
       const clipId = selectedClipId;
       const track = engine.get("document").tracks.find((t) => t.clips.some((c) => c.id === clipId));

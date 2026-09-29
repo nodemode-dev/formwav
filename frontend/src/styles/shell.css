@@ -340,3 +340,32 @@ html, body, #app { height: 100%; }
 
 .fw-clip { cursor: grab; touch-action: none; }
 .fw-clip[aria-selected="true"] { border-color: var(--accent-color); box-shadow: inset 0 0 0 1px var(--accent-color); }
+
+.fw-clip::before,
+.fw-clip::after {
+  content: "";
+  position: absolute;
+  top: var(--space-3);
+  bottom: 0;
+  inline-size: 6px;
+  cursor: ew-resize;
+}
+
+.fw-clip::before { left: 0; }
+.fw-clip::after { right: 0; }
+
+.fw-fade-handle {
+  position: absolute;
+  top: 0;
+  inline-size: 10px;
+  block-size: 10px;
+  background: var(--accent-color);
+  cursor: ew-resize;
+  opacity: 0;
+}
+
+.fw-fade-in { left: 0; }
+.fw-fade-out { right: 0; }
+.fw-clip:hover .fw-fade-handle,
+.fw-clip[aria-selected="true"] .fw-fade-handle { opacity: 1; }
+.fw-wave { outline: 0 none var(--bg-primary); }

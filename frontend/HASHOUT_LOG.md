@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.13.0
-Last updated: 2026-09-28 · Phase 3 opens: zoom, timeline ruler, clip selection, slip drag, delete
+Current build version: v0.14.0
+Last updated: 2026-09-28 · split, trim, fade handles and drawn fades
 
 ---
 
@@ -707,3 +707,28 @@ Zoom is view state, not document state, so it is not saved or undone. It multipl
 - logged: v0.13.0 · 2026-09-28
 
 A pointer down on a clip selects it and captures the pointer; moving more than 3 px starts a slip drag that moves the clip by `transform` only, clamped so it cannot pass time zero; release clears the transform and dispatches one `move-clip`, so a drag is one undo step and the committed position lands in the same frame. Delete or Backspace removes the selected clip (one undo step); Escape or a pointer down on empty lane space deselects. Clicks on clips no longer seek; empty lane space and the ruler do. Verified: a 100 px drag committed exactly 48,000 samples with only transform writes during the drag; undo, delete, undo delete, Escape and empty-lane deselect behaved; layout shift 0. Grid and shuffle modes, the smart tool, split and trim are the next Phase 3 steps.
+
+---
+
+## v0.14.0 · split, trim, fades on the timeline
+
+### src/engine/document.ts · split-clip and set-clip-bounds
+- refers-to: src/engine/document.ts :: `split-clip`, `set-clip-bounds`
+- kind: rationale
+- logged: v0.14.0 · 2026-09-28
+
+`split-clip` cuts a clip at a session position strictly inside it: the left part keeps the clip's id and fade-in, the right part gets a new id, its source offset advanced by the cut (converted to source frames), and the fade-out; either part's fades are clamped to its new length. `set-clip-bounds` sets start, source offset and length together, refusing a negative start or offset, an empty clip, or one running past the end of its media, and clamps the fades. Both are no-ops when nothing changes. Verified: a split at 2.5 s rendered bit-identical to the unsplit clip (difference 0 over 480,000 frames); undo and redo.
+
+### src/ui/lanes.ts · one gesture model
+- refers-to: src/ui/lanes.ts :: `GestureKind`, `limits`, `preview`, `restore`, `commit`, pointer handlers
+- kind: rationale
+- logged: v0.14.0 · 2026-09-28
+
+The pointer-down target decides the gesture: a fade handle is a fade, within 6 px of a side edge is a trim, anything else is a move. Each gesture's limits are worked out first, in pixels, so the preview can never show what the document would refuse (before time zero, before the source's start or past its end, fades crossing). The preview uses `transform`, and for trims the clip's own width; release restores the committed look and dispatches one command, so a gesture is one undo step. Trimming the left edge moves the start and the source offset together, so the audio stays where it was in time. Source offsets are taken as session samples, which holds while clips play at the session rate (other-rate clips are silent until resampling). Verified: a left-edge trim of 50 px gave 144,000 / 336,000 / source 144,000, silence in the gap and the source unchanged elsewhere; a right-edge trim gave 96,000; a trim past the source's start was clamped and recorded nothing; only clip `style` and selection changed during a drag.
+
+### src/ui/lanes.ts and shell.css · handles, trim zones, drawn fades
+- refers-to: src/ui/lanes.ts :: `clipNode`, `updateClip`, `paint`; src/styles/shell.css :: `.fw-clip::before`, `.fw-clip::after`, `.fw-fade-handle`, `.fw-wave`
+- kind: explainer
+- logged: v0.14.0 · 2026-09-28
+
+Each clip is created with two fade handles in its top corners, placed by `transform` at the fade's length and shown on hover or selection. The trim zones are pseudo-elements down the clip's sides below a top band, so their `ew-resize` cursor shows without script and the corners stay with the handles. `paint` shades the cut-away area above each fade curve with the canvas's computed `outline-color` and follows the fade's shape. S splits the selected clip at the playhead. Verified: the fade-in handle dragged 50 px set 24,000 samples and the render ramped k / 24,000 within 2.7e-8; the fade-out handle dragged 100 px set 48,000; the screenshot showed both fades drawn and the handles in place. Grid snapping and shuffle mode are still to come.

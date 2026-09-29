@@ -100,6 +100,8 @@ export type Command =
   | { type: "route-track"; trackId: string; busId: string | null }
   | { type: "set-bus-gain"; busId: string; gainDb: number }
   | { type: "set-bus-pan"; busId: string; pan: number }
+  | { type: "split-clip"; trackId: string; clipId: string; at: number }
+  | { type: "set-clip-bounds"; trackId: string; clipId: string; start: number; sourceIn: number; length: number }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "add-marker"; at: number; label: string };
 
@@ -214,6 +216,46 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const regions = before.filter((r) => r.id !== cmd.regionId);
       return regions.length === before.length ? doc : { ...doc, regions };
     }
+    case "split-clip":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const index = t.clips.findIndex((c) => c.id === cmd.clipId);
+        if (index < 0) return t;
+        const c = t.clips[index];
+        const offset = Math.round(cmd.at) - c.start;
+        if (offset <= 0 || offset >= c.length) return t;
+        const media = doc.media[c.mediaId];
+        const ratio = media ? media.sampleRate / doc.sampleRate : 1;
+        const left: Clip = { ...c, length: offset, fadeIn: Math.min(c.fadeIn ?? 0, offset), fadeOut: 0 };
+        const right: Clip = {
+          ...c,
+          id: newId(),
+          start: c.start + offset,
+          sourceIn: c.sourceIn + Math.round(offset * ratio),
+          length: c.length - offset,
+          fadeIn: 0,
+          fadeOut: Math.min(c.fadeOut ?? 0, c.length - offset),
+        };
+        return { ...t, clips: [...t.clips.slice(0, index), left, right, ...t.clips.slice(index + 1)] };
+      });
+    case "set-clip-bounds":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        let changed = false;
+        const clips = t.clips.map((c) => {
+          if (c.id !== cmd.clipId) return c;
+          const media = doc.media[c.mediaId];
+          if (!media) return c;
+          const start = Math.round(cmd.start);
+          const sourceIn = Math.round(cmd.sourceIn);
+          const length = Math.round(cmd.length);
+          const available = sessionLength(media, doc.sampleRate) - Math.round((sourceIn * doc.sampleRate) / media.sampleRate);
+          if (start < 0 || sourceIn < 0 || length < 1 || length > available) return c;
+          if (start === c.start && sourceIn === c.sourceIn && length === c.length) return c;
+          changed = true;
+          const fadeIn = Math.min(c.fadeIn ?? 0, length);
+          return { ...c, start, sourceIn, length, fadeIn, fadeOut: Math.min(c.fadeOut ?? 0, length - fadeIn) };
+        });
+        return changed ? { ...t, clips } : t;
+      });
     case "add-clip": {
       if (!doc.media[cmd.mediaId]) return doc;
       const clip: Clip = {
