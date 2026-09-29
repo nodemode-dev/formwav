@@ -17,6 +17,7 @@ const BODY = `
   <div class="fw-insp-head">Effects</div>
   <button type="button" class="fw-ibtn fw-btn-export fw-voice-go" data-fx="enhance" title="formcut's voice-clean: rumble cut, denoise, gentle compression and a limiter">Enhance speech</button>
   <label class="fw-field fw-field-stack"><span>Effect</span><select data-fx="pick"></select></label>
+  <div class="fw-fx-params"></div>
   <button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button>
 </div>
 <div class="fw-insp-section fw-insp-analyze" hidden>
@@ -139,10 +140,41 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   });
 
   const pick = body.querySelector<HTMLSelectElement>('[data-fx="pick"]');
+  const paramsBox = body.querySelector<HTMLElement>(".fw-fx-params");
+  type Control = { id: string; label: string; min: number; max: number; default: number; unit: string };
+  const controls = new Map<string, Control[]>();
+  const showControls = () => {
+    const list = controls.get(pick?.value ?? "") ?? [];
+    paramsBox?.replaceChildren(
+      ...list.map((c) => {
+        const row = document.createElement("label");
+        row.className = "fw-field";
+        const name = document.createElement("span");
+        name.textContent = c.label;
+        const input = document.createElement("input");
+        input.type = "range";
+        input.min = String(c.min);
+        input.max = String(c.max);
+        input.step = c.max - c.min > 20 ? "1" : "0.1";
+        input.value = String(c.default);
+        input.dataset.param = c.id;
+        const out = document.createElement("output");
+        out.textContent = `${c.default} ${c.unit}`;
+        input.addEventListener("input", () => {
+          out.textContent = `${input.value} ${c.unit}`;
+        });
+        row.append(name, input, out);
+        return row;
+      }),
+    );
+  };
+  const currentParams = () => Object.fromEntries([...(paramsBox?.querySelectorAll<HTMLInputElement>("input[data-param]") ?? [])].map((i) => [i.dataset.param, Number(i.value)]));
+  pick?.addEventListener("change", showControls);
   void fetch("/api/effects")
     .then((res) => (res.ok ? res.json() : []))
-    .then((groups: { group: string; effects: { id: string; label: string }[] }[]) => {
+    .then((groups: { group: string; effects: { id: string; label: string; params?: Control[] }[] }[]) => {
       if (!pick) return;
+      for (const g of groups) for (const fx of g.effects) if (fx.params?.length) controls.set(fx.id, fx.params);
       pick.replaceChildren(
         ...groups.map((g) => {
           const group = document.createElement("optgroup");
@@ -151,6 +183,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
           return group;
         }),
       );
+      showControls();
     })
     .catch(() => undefined);
   const notice = host.querySelector<HTMLElement>(".fw-notice");
@@ -165,7 +198,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const label = action === "enhance" ? "Enhance speech" : pick?.selectedOptions[0]?.textContent ?? name;
     setText(notice, `Applying ${label}...`);
     try {
-      const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=${encodeURIComponent(name)}`, { method: "POST" });
+      const params = action === "apply" ? currentParams() : {};
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
