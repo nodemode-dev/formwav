@@ -2,7 +2,7 @@
 <h1 align="center">formwav</h1>
 <p align="center"><b>Local-first audio editing, the audio member of the form family.</b></p>
 <p align="center">
-<img src="https://img.shields.io/badge/version-0.36.0-f97316" alt="version 0.36.0">
+<img src="https://img.shields.io/badge/version-0.37.0-f97316" alt="version 0.37.0">
 <img src="https://img.shields.io/badge/node-20.19%2B-339933" alt="node 20.19+">
 <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="python 3.12">
 <img src="https://img.shields.io/badge/rust-stable-B7410E" alt="rust stable">
