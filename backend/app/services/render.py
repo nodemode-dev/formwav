@@ -83,7 +83,7 @@ def render(doc: object) -> dict:
         if not path.exists():
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0))
     loudness = native.loudness(interleaved, 2, rate)
     return {
         "wav": wav_float32_stereo(interleaved, rate),

@@ -2,7 +2,7 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v0.31.0
+Current build version: v0.34.0
 Last updated: 2026-09-28 · .fmw revision checks: revision in the manifest, base on save, 409 on conflict, save lock
 
 ---
@@ -299,3 +299,10 @@ The engine maps a clip's `fadeShape` through a table of the four names the core 
 - logged: v0.31.0 · 2026-09-28
 
 A track's `automation.volume` (dB points) and `automation.pan` points become core envelopes; when present, each replaces the track's static fader or pan for that track's clips, while clip gain still applies. `plan` now also returns the envelopes and `render` passes them to the core; it is the only caller of `plan`. Verified: with volume automation the engine's render equalled the browser's exactly over 480,000 frames, and with pan automation too within 3e-8.
+
+### app/services/render.py · master fader in the engine render
+- refers-to: app/services/render.py :: `render`
+- kind: explainer
+- logged: v0.34.0 · 2026-09-28
+
+The engine passes the session's `masterGainDb` (0 when absent) to the core, which applies it to the finished mix. Verified: with the master at -6 dB the engine's render equalled the browser's exactly.
