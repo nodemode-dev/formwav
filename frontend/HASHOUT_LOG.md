@@ -1185,3 +1185,10 @@ A Transcript tab beside Media and Voice. Transcribe session transcribes each fil
 - logged: v0.45.0 (in progress) · 2026-09-29
 
 Speaker labels: each word carries its track's name, and when the transcript spans more than one, a label heads each change of speaker, as Descript labels a multitrack sequence; telling speakers apart inside one recording (diarization) is not attempted yet. Remove retakes: a run of four words said again within the next forty means the first attempt was abandoned; it goes from its first word up to where the retake starts, keeping the last take, in one ripple edit. Four words, because a single take can repeat three (the JFK line has "can do for you" and "can do for your"). Verified in Chromium (verify_retakes.py) on real speech: a single JFK take reported no earlier takes; with the recording again as "guest" from 11 s, the transcript showed 44 words labelled jfk then guest; Remove retakes removed 11.00 s in one undo step, leaving the last take's exact 22 words from 0 s without labels; undo restored 44 words and 22 s; no page errors; the transcript regression unchanged.
+
+### src/ui/inspector-pane.ts · sliders for an effect's controls
+- refers-to: src/ui/inspector-pane.ts :: `.fw-fx-params`, `showControls`, `currentParams`, the Apply request's `params`
+- kind: explainer
+- logged: v0.46.0 (in progress) · 2026-09-29 (entry written the session after its commit, `d4ac11d`)
+
+The engine's catalogue now lists each adjustable effect's controls (see the backend log). Choosing such an effect in the Inspector shows a slider per control with its live value and unit, starting at the default; Apply sends the values, Enhance speech keeps its default. Verified in Chromium (verify_params.py): Amplify showed "Gain 6 dB", the slider moved to -3 read "-3 dB", and Apply produced "mic (Amplify -3dB).wav" at 0.7079 of the original peak (-3 dB); Invert showed no controls; no page errors.
