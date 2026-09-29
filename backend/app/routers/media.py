@@ -71,6 +71,20 @@ def media_spectrogram(media_id: str) -> Response:
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/transcript")
+def media_transcript(media_id: str, model: str = "") -> dict:
+    from ..services import transcript
+
+    try:
+        return transcript.transcript(media_id, model)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except transcript.TranscriptUnavailable as err:
+        raise HTTPException(503, str(err)) from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/effects")
 def list_effects() -> list[dict]:
     from ..services import effects

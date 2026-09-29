@@ -17,6 +17,8 @@ frontend/public/core/
 data/
 models/*
 !models/.gitkeep
+# Downloaded model weights (Whisper for transcripts, formwave's Qwen checkpoints): never committed.
+backend/models/
 *.log
 .DS_Store
 Icon?

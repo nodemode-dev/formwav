@@ -1,0 +1,6 @@
+# Optional: word-level transcripts for transcript editing (the Transcript tab).
+# faster-whisper runs Whisper on the CPU (or CUDA); models download on first use into backend/models/whisper.
+# requests is listed because faster-whisper 1.1.1 imports it without declaring it.
+faster-whisper==1.1.1
+requests>=2.31
+numpy>=1.26
