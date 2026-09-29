@@ -71,6 +71,86 @@ def import_wav(name: str, data: bytes) -> dict:
     return info
 
 
+#: Rates a new session may keep from its first file; anything else starts the session at 48 kHz.
+STANDARD_RATES = (44100, 48000, 88200, 96000)
+
+
+def _tool(name: str) -> str:
+    import os
+    import shutil
+
+    exe = shutil.which(os.environ.get(f"FORMWAV_{name.upper()}", name))
+    if not exe:
+        raise MediaError(f"{name} is needed to read this file; install it (macOS: brew install ffmpeg) or import a WAV at the session's sample rate")
+    return exe
+
+
+def _probe_stream(path: Path) -> tuple[int, int]:
+    """Sample rate and channel count of the first audio stream in any file ffmpeg reads."""
+    import subprocess
+
+    done = subprocess.run(
+        [_tool("ffprobe"), "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=sample_rate,channels", "-of", "json", str(path)],
+        capture_output=True, text=True, timeout=120,
+    )
+    try:
+        stream = json.loads(done.stdout or "{}").get("streams", [])[0]
+        return int(stream["sample_rate"]), int(stream["channels"])
+    except (IndexError, KeyError, ValueError) as err:
+        raise MediaError("no audio stream found in this file") from err
+
+
+def _transcode(src: Path, out: Path, rate: int, channels: int) -> bytes:
+    """Decodes `src` to 32-bit float WAV at `rate`: resampled with soxr (ffmpeg's own resampler if soxr is missing),
+    mono kept mono, more than two channels downmixed to stereo. Output goes to a file, as a WAV header needs a seekable target."""
+    import subprocess
+
+    detail = ""
+    for resampler in ("soxr:precision=28", "swr"):
+        cmd = [_tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(src), "-map", "0:a:0", "-vn",
+               "-af", f"aresample={rate}:resampler={resampler}", "-ac", str(min(channels, 2)), "-c:a", "pcm_f32le", str(out)]
+        done = subprocess.run(cmd, capture_output=True, timeout=900)
+        if done.returncode == 0 and out.exists() and out.stat().st_size > 44:
+            return out.read_bytes()
+        detail = done.stderr.decode(errors="replace").strip()[-300:]
+    raise MediaError(f"could not decode this file: {detail}")
+
+
+def import_audio(name: str, data: bytes, rate: int | None = None) -> dict:
+    """Imports any audio (or the audio of a video) at `rate`, the session's rate. With no session yet, a file at a
+    standard rate keeps it and anything else becomes 48 kHz. A WAV already at the target rate is stored byte for byte."""
+    import tempfile
+
+    native = _require_core()
+    if len(data) > MAX_IMPORT_BYTES:
+        raise MediaError("the file is larger than FORMWAV_MAX_IMPORT_MB allows")
+    try:
+        wav_rate = native.probe(data)[0]
+        if (rate is None and wav_rate in STANDARD_RATES) or wav_rate == rate:
+            return import_wav(name, data)
+    except ValueError:
+        pass
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / ("source" + Path(name).suffix[:12])
+        src.write_bytes(data)
+        native_rate, channels = _probe_stream(src)
+        target = rate or (native_rate if native_rate in STANDARD_RATES else 48000)
+        wav = _transcode(src, Path(tmp) / "decoded.wav", target, channels)
+    return import_wav(name, wav)
+
+
+def resample_media(media_id: str, rate: int) -> dict:
+    """A stored media file converted to `rate` (a new media id); the original is kept."""
+    import tempfile
+
+    info = media_info(media_id)
+    if info["sampleRate"] == rate:
+        return info
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = _transcode(media_dir() / f"{media_id}.wav", Path(tmp) / "resampled.wav", rate, int(info["channels"]))
+    return import_wav(info["name"], wav)
+
+
 def media_info(media_id: str) -> dict:
     _check_id(media_id)
     path = media_dir() / f"{media_id}.json"
