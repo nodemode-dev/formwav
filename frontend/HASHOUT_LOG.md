@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.21.0
-Last updated: 2026-09-28 · four fade curves chosen by clicking a fade handle; gain label no longer blocks fade handles
+Current build version: v0.22.0
+Last updated: 2026-09-28 · per-track meters in the lane heads
 
 ---
 
@@ -887,3 +887,14 @@ Dragging a fade handle or the gain line of a selected clip applies the same chan
 - logged: v0.21.0 · 2026-09-28
 
 Moving the gain label to the clip's start in v0.19.1 put it over a fade handle placed roughly 20 to 70 px in; because a pseudo-element's box belongs to its element for hit-testing and the gain line comes later in the clip, a press there started a gain gesture instead. The first harness run showed clicks on the handle doing nothing; a probe found `.fw-gain-line` under the click point. The label now has `pointer-events: none`; the line keeps its own 8 px band.
+
+---
+
+## v0.22.0 · per-track meters
+
+### src/audio/player-worklet.ts, player.ts, src/ui/meter.ts, lanes.ts · track peaks to the lane heads
+- refers-to: src/audio/player-worklet.ts :: `report`, `MAX_METERED_TRACKS`; src/audio/player.ts :: clip plan `track`, `onOutputLevel`; src/ui/meter.ts :: `mountTrackMeters`; src/ui/lanes.ts :: lane markup; src/styles/shell.css :: `.fw-lane-meter`
+- kind: warning-context
+- logged: v0.22.0 · 2026-09-28
+
+The player numbers each clip's track by the document's track order; each worklet report takes the per-track peaks after the master pair from one buffer (up to 256 tracks) and the player passes them to level listeners beside the master peaks. Each lane head is created with a two-bar meter; `mountTrackMeters` drives it on the master meter's scale and 20 dB/s fall-back, writing a bar only when its value changes, and empties every lane on stop. Defect fixed before release: the lane meter reused `.fw-out-track`, whose `grid-column: 2` (from the transport meter's label column) made an empty implicit first column in the lane meter's grid, so each bar was 48 px wide starting at x = 60; the screenshot showed it, a measurement confirmed it, and the lane meter is now a flex column. Verified with two tracks: the 0.5 sine's lane held scaleX(0.9) (-6.02 dBFS) on both bars, the stereo file's right bar held 0.867 while its left climbed with its ramp, every lane emptied on stop, bars start at x = 12 beside the track name at 86 and 83 px wide, only meter bars, clock, playhead and Play's pressed state changed during playback, layout shift 0; master meter, playback null (0.0) and browser-versus-engine (0.0) regressions unchanged.

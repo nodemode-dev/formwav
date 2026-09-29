@@ -456,6 +456,16 @@ html, body, #app { height: 100%; }
 
 .fw-out-clip[data-clip="true"] { background: var(--danger); border-color: var(--danger); }
 
+.fw-lane-meter {
+  display: flex;
+  flex-direction: column;
+  row-gap: 2px;
+  inline-size: calc(var(--space-8) * 3);
+  margin-top: var(--space-2);
+}
+
+.fw-lane-meter .fw-out-bar { transform: scaleX(0); }
+
 .fw-meter-label {
   font-family: var(--font-mono);
   font-size: var(--fs-11);

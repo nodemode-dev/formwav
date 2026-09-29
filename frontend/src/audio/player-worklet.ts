@@ -11,10 +11,11 @@ interface CoreExports {
   fw_player_new(): number;
   fw_load_wav(player: number, id: number, ptr: number, len: number): number;
   fw_clear_clips(player: number): void;
-  fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number, bus: number): void;
+  fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number, bus: number, track: number): void;
   fw_clear_buses(player: number): void;
   fw_add_bus(player: number, id: number, gain: number, pan: number): void;
   fw_take_peaks(player: number, out: number): void;
+  fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
   fw_seek(player: number, position: number): void;
   fw_set_loop(player: number, start: number, end: number): void;
   fw_position(player: number): number;
@@ -32,6 +33,7 @@ export interface WorkletClip {
   fadeOut: number;
   fadeShape: number;
   bus: number;
+  track: number;
 }
 
 export interface WorkletBus {
@@ -53,10 +55,11 @@ export type WorkletReply =
   | { type: "ready" }
   | { type: "error"; message: string }
   | { type: "loaded"; id: number; frames: number }
-  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number }
+  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; trackPeaks: number[] }
   | { type: "ended"; position: number };
 
 const MAX_FRAMES = 4096;
+const MAX_METERED_TRACKS = 256;
 const REPORT_EVERY = 8;
 
 class PlayerProcessor extends AudioWorkletProcessor {
@@ -89,8 +92,16 @@ class PlayerProcessor extends AudioWorkletProcessor {
     const core = this.core;
     if (!core) return;
     core.fw_take_peaks(this.player, this.peaks);
-    const peaks = new Float32Array(core.memory.buffer, this.peaks, 2);
-    this.reply({ type: "position", position: core.fw_position(this.player), playing: this.playing, peakLeft: peaks[0], peakRight: peaks[1] });
+    const tracks = core.fw_take_track_peaks(this.player, this.peaks + 8, MAX_METERED_TRACKS);
+    const peaks = new Float32Array(core.memory.buffer, this.peaks, 2 + tracks * 2);
+    this.reply({
+      type: "position",
+      position: core.fw_position(this.player),
+      playing: this.playing,
+      peakLeft: peaks[0],
+      peakRight: peaks[1],
+      trackPeaks: Array.from(peaks.subarray(2)),
+    });
   }
 
   private handle(msg: WorkletMessage): void {
@@ -100,7 +111,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       this.player = core.fw_player_new();
       this.left = core.fw_alloc(MAX_FRAMES * 4);
       this.right = core.fw_alloc(MAX_FRAMES * 4);
-      this.peaks = core.fw_alloc(8);
+      this.peaks = core.fw_alloc(8 + MAX_METERED_TRACKS * 8);
       this.reply({ type: "ready" });
       return;
     }
@@ -118,7 +129,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       }
       case "clips":
         core.fw_clear_clips(this.player);
-        for (const c of msg.clips) core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape, c.bus);
+        for (const c of msg.clips) core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape, c.bus, c.track);
         core.fw_clear_buses(this.player);
         for (const b of msg.buses) core.fw_add_bus(this.player, b.id, b.gain, b.pan);
         this.end = msg.end;

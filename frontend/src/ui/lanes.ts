@@ -212,7 +212,7 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><span class="fw-lane-meta"></span></div><div class="fw-lane-body"></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div></div><div class="fw-lane-body"></div>`;
   return lane;
 }
 

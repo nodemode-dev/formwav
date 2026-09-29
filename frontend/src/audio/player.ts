@@ -55,6 +55,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         fadeOut: clip.fadeOut ?? 0,
         fadeShape: FADE_SHAPES[clip.fadeShape ?? "linear"] ?? 0,
         bus,
+        track: doc.tracks.indexOf(track) + 1,
       });
       end = Math.max(end, clip.start + clip.length);
     }
@@ -116,14 +117,15 @@ export class Player {
     });
   }
 
-  private levelListeners = new Set<(left: number, right: number) => void>();
+  private levelListeners = new Set<(left: number, right: number, tracks: number[]) => void>();
 
-  onOutputLevel(listener: (left: number, right: number) => void): void {
+  /** Master peaks, then per-track peaks as [left, right] pairs in the document's track order. */
+  onOutputLevel(listener: (left: number, right: number, tracks: number[]) => void): void {
     this.levelListeners.add(listener);
   }
 
-  private emitLevel(left: number, right: number): void {
-    for (const listener of this.levelListeners) listener(left, right);
+  private emitLevel(left: number, right: number, tracks: number[]): void {
+    for (const listener of this.levelListeners) listener(left, right, tracks);
   }
 
   get skipped(): number {
@@ -175,7 +177,7 @@ export class Player {
     const reply = e.data;
     if (reply.type === "position") {
       this.engine.setTransport({ positionSamples: reply.position });
-      if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight);
+      if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks);
     }
     else if (reply.type === "ended") this.engine.setTransport({ positionSamples: reply.position, playing: false });
   };
@@ -226,7 +228,7 @@ export class Player {
   stop(): void {
     this.open = false;
     if (this.node) send(this.node, { type: "stop" });
-    this.emitLevel(0, 0);
+    this.emitLevel(0, 0, []);
     this.engine.setTransport({ playing: false });
   }
 
