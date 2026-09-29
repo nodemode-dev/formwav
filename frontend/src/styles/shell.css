@@ -614,6 +614,21 @@ html, body, #app { height: 100%; }
 .fw-lane-mute[aria-pressed="true"] { color: #fff; background: var(--danger); border-color: var(--danger); }
 .fw-lane-solo[aria-pressed="true"] { color: var(--text-on-accent); background: var(--accent-color); border-color: var(--accent-color); }
 
+.fw-mode { display: inline-flex; align-items: center; gap: 6px; }
+.fw-mode > svg { flex: none; }
+.fw-icon-btn { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
+.fw-icon-btn svg { inline-size: 14px; block-size: 14px; }
+.fw-lane-ms .fw-icon-btn,
+.fw-strip-buttons .fw-icon-btn,
+.fw-auto-toggle.fw-icon-btn,
+.fw-takes-toggle.fw-icon-btn { block-size: 20px; min-inline-size: 22px; padding: 0 3px; }
+.fw-glyph-on { display: none; }
+[aria-pressed="true"] > .fw-glyph-on { display: inline-flex; }
+[aria-pressed="true"] > .fw-glyph-off { display: none; }
+.fw-glyph-off,
+.fw-glyph-on { align-items: center; }
+.fw-glyph-off { display: inline-flex; }
+
 .fw-mixer {
   position: fixed;
   left: 0;

@@ -1,3 +1,5 @@
+import { icon as fcIcon } from "../vendor/formcut/icons";
+
 const LABEL_SPACING_PX = 80;
 const STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
 
@@ -34,20 +36,20 @@ export function snapSamples(position: number, sampleRate: number, pxPerSecond: n
 
 export function mountGrid(host: HTMLElement): void {
   const transport = host.querySelector<HTMLElement>(".fw-transport");
-  const makeButton = (label: string, title: string) => {
+  const makeButton = (label: string, title: string, glyph: string) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "fw-mode";
-    button.textContent = label;
+    button.innerHTML = `${fcIcon(glyph)}<span>${label}</span>`;
     button.title = title;
     button.setAttribute("aria-pressed", "false");
     transport?.append(button);
     return button;
   };
-  const gridButton = makeButton("Grid", "Snap moves and trims to the ruler's ticks (G)");
-  const shuffleButton = makeButton("Shuffle", "Deleting and trimming clips moves the later clips on the track to close the gap (H)");
-  const spotButton = makeButton("Spot", "Click a clip to type its exact start time (T)");
-  const punchButton = makeButton("Punch", "Recording on the armed track replaces only the loop range, then stops (P)");
+  const gridButton = makeButton("Grid", "Snap moves and trims to the ruler's ticks (G)", "grid3");
+  const shuffleButton = makeButton("Shuffle", "Deleting and trimming clips moves the later clips on the track to close the gap (H)", "shuffle");
+  const spotButton = makeButton("Spot", "Click a clip to type its exact start time (T)", "crosshair");
+  const punchButton = makeButton("Punch", "Recording on the armed track replaces only the loop range, then stops (P)", "punch");
 
   const toggleGrid = () => {
     enabled = !enabled;

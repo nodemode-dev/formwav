@@ -19,6 +19,7 @@
   --fc-audio-shade: #153729;
   --fc-track-bed: #191f1f;
   --fc-track-bed-alt: #1b2122;
+  --pane: var(--bg-secondary);
 
   --bg-primary: var(--fc-ground);
   --bg-secondary: var(--fc-pane);

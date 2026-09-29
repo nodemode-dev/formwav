@@ -2,6 +2,7 @@ import type { Player } from "../audio/player";
 import type { Engine, SessionDoc, Track } from "../engine";
 import type { Bus } from "../engine/document";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
+import { icon as fcIcon } from "../vendor/formcut/icons";
 
 type Strip = { kind: "track"; item: Track } | { kind: "bus"; item: Bus } | { kind: "master"; item: { id: string; name: string; gainDb: number } };
 
@@ -15,7 +16,7 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
     `<input class="fw-strip-fader" type="range" min="-60" max="12" step="0.1" aria-label="Volume">` +
     `<output class="fw-strip-db"></output>` +
     `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" aria-label="Pan"${kind === "master" ? " hidden" : ""}>` +
-    `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute" aria-pressed="false" title="Mute">M</button><button type="button" class="fw-strip-solo" aria-pressed="false" title="Solo"${kind !== "track" ? " hidden" : ""}>S</button></div>` +
+    `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute"><span class="fw-glyph-off">${fcIcon("speaker")}</span><span class="fw-glyph-on">${fcIcon("mute")}</span></button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo"${kind !== "track" ? " hidden" : ""}>${fcIcon("headphones")}</button></div>` +
     `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>`;
   return node;
 }
@@ -78,7 +79,7 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "fw-mode";
-  toggle.textContent = "Mixer";
+  toggle.innerHTML = `${fcIcon("mixer")}<span>Mixer</span>`;
   toggle.title = "Show the mixer (X)";
   toggle.setAttribute("aria-pressed", "false");
   transport?.append(toggle);
