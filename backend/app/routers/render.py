@@ -20,6 +20,7 @@ def render_session(document: dict = Body(...)) -> Response:
         "X-Peak-Left-dBFS": result["peakLeft"],
         "X-Peak-Right-dBFS": result["peakRight"],
         "X-Skipped-Clips": str(result["skipped"]),
+        "X-Loudness-LUFS": result["loudness"],
         "Content-Disposition": 'attachment; filename="mix.wav"',
     }
     return Response(content=result["wav"], media_type="audio/wav", headers=headers)

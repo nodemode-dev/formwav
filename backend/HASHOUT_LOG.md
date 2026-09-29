@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v0.8.0
-Last updated: 2026-09-28 · the render plan passes clip fades
+Current build version: v0.10.0
+Last updated: 2026-09-28 · the render reports integrated loudness
 
 ---
 
@@ -264,3 +264,10 @@ The WAV is IEEE float 32 (format tag 3), two channels, at the session rate, so n
 - logged: v0.8.0 · 2026-09-28
 
 Each clip tuple now ends with `fadeIn`, `fadeOut` (0 when absent) and the shape code (1 for "equal-power", otherwise 0), matching `planClips` in the interface field for field. Verified v0.8.0: identical to the browser's render for linear crossfades (0.0) and within 6.0e-8 for equal-power ones (the `sin` difference described in the native log).
+
+### app/services/render.py and routers/render.py · loudness
+- refers-to: app/services/render.py :: `render`; app/routers/render.py :: `X-Loudness-LUFS`
+- kind: explainer
+- logged: v0.10.0 · 2026-09-28
+
+After rendering, the mix's integrated loudness is measured by `formwav_dsp.loudness` on the interleaved f32 bytes and reported in `X-Loudness-LUFS` to two decimals (`-inf` when every block is gated away). The interface's Export shows it; verified v0.10.0: an exported file was byte-identical to this route's output and the notice matched the headers. (This log's header stayed at v0.8.0 through v0.9.0 because the backend did not change in v0.9.0.)

@@ -63,10 +63,12 @@ def render(doc: object) -> dict:
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
     interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end))
+    loudness = native.loudness(interleaved, 2, rate)
     return {
         "wav": wav_float32_stereo(interleaved, rate),
         "frames": max(1, end),
         "peakLeft": dbfs(peak_left),
         "peakRight": dbfs(peak_right),
+        "loudness": f"{loudness:.2f}" if loudness is not None else "-inf",
         "skipped": skipped,
     }
