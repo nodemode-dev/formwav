@@ -1,0 +1,8 @@
+# Qwen TTS + ASR packages, installed with --no-deps because they over-pin
+# transformers to two different (but compatible) 4.57.x patch versions, which
+# pip cannot co-resolve. oc_install installs these AFTER the main requirements
+# file (which provides their real shared dependencies, incl. transformers
+# 4.57.6). If a future release lifts the conflicting pins, these can move back
+# into the main requirements files.
+qwen-tts
+qwen-asr

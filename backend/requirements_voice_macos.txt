@@ -1,0 +1,41 @@
+# formwave backend — macOS (Apple Silicon) requirements. UNPINNED on purpose.
+# Pinned versions frequently fail to resolve/build on Apple Silicon; letting
+# pip choose compatible wheels avoids source-build errors. Keep this file's
+# package MEMBERSHIP in sync with requirements.txt.
+#
+# The default torch/torchaudio wheels on macOS are MPS-capable — exactly what
+# formwave targets on an M-series machine. Do NOT add a CUDA index URL here.
+#
+# NOTE ON qwen-tts / qwen-asr: they over-pin transformers to two DIFFERENT
+# 4.57.x patch versions (4.57.3 vs 4.57.6), which pip cannot co-resolve even
+# though the versions are compatible. They are therefore installed separately
+# with --no-deps (see requirements_qwen.txt + oc_install), and their shared
+# dependencies are listed explicitly below with transformers pinned to 4.57.6
+# (the newer of the two; qwen-tts runs fine on it).
+
+# ── web server ──
+fastapi
+uvicorn[standard]
+python-multipart
+
+# ── core audio / ML ──
+numpy
+soundfile
+librosa
+einops
+torch
+torchaudio
+
+# ── transformers stack (shared by qwen-tts, qwen-asr, and Whisper ASR) ──
+# Pinned to qwen-asr's version; qwen-tts (which asks for 4.57.3) is compatible.
+transformers==4.57.6
+accelerate==1.12.0
+onnxruntime
+
+# ── qwen-asr-only runtime deps (its tokenizers / helpers) ──
+qwen-omni-utils
+nagisa
+soynlp
+
+# The qwen-tts and qwen-asr packages themselves are installed with --no-deps
+# from requirements_qwen.txt by oc_install (after this file).

@@ -1,0 +1,37 @@
+# formwave backend — pinned requirements (Linux / EC2 / Windows).
+# macOS dev uses requirements_macos.txt (unpinned) instead; keep the package
+# MEMBERSHIP of these two files in sync.
+#
+# NOTE: torch/torchaudio are NOT pinned to a CUDA build here. On Linux/EC2 with
+# a GPU, install the appropriate CUDA torch wheel separately (see README)
+# before installing this file.
+#
+# NOTE ON qwen-tts / qwen-asr: they over-pin transformers to two DIFFERENT
+# 4.57.x patch versions (4.57.3 vs 4.57.6), which pip cannot co-resolve. They
+# are installed separately with --no-deps (requirements_qwen.txt + oc_install);
+# their shared deps are listed here with transformers pinned to 4.57.6.
+
+# ── web server ──
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# ── core audio / ML ──
+numpy==2.2.1
+soundfile==0.13.0
+librosa==0.10.2.post1
+einops==0.8.0
+torch==2.6.0
+torchaudio==2.6.0
+
+# ── transformers stack (shared by qwen-tts, qwen-asr, and Whisper ASR) ──
+transformers==4.57.6
+accelerate==1.12.0
+onnxruntime==1.20.1
+
+# ── qwen-asr-only runtime deps ──
+qwen-omni-utils
+nagisa==0.2.11
+soynlp==0.0.493
+
+# qwen-tts + qwen-asr are installed with --no-deps from requirements_qwen.txt.
