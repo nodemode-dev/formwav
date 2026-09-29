@@ -767,6 +767,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
           fadeIn: clip.fadeIn,
           fadeOut: clip.fadeOut,
           fadeShape: clip.fadeShape,
+          ...(clip.takes ? { takes: [...clip.takes], take: clip.take } : {}),
         },
       });
     }

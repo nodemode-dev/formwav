@@ -301,6 +301,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           length: c.length - offset,
           fadeIn: 0,
           fadeOut: Math.min(c.fadeOut ?? 0, c.length - offset),
+          ...(c.takes ? { takes: c.takes.map((t) => t + Math.round(offset * ratio)) } : {}),
         };
         return { ...t, clips: [...t.clips.slice(0, index), left, right, ...t.clips.slice(index + 1)] };
       });
@@ -317,9 +318,12 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           const available = sessionLength(media, doc.sampleRate) - Math.round((sourceIn * doc.sampleRate) / media.sampleRate);
           if (start < 0 || sourceIn < 0 || length < 1 || length > available) return c;
           if (start === c.start && sourceIn === c.sourceIn && length === c.length) return c;
+          const takes = c.takes?.map((t) => t + (sourceIn - c.sourceIn));
+          const mediaLength = sessionLength(media, doc.sampleRate);
+          if (takes && takes.some((t) => t < 0 || t + length > mediaLength)) return c;
           changed = true;
           const fadeIn = Math.min(c.fadeIn ?? 0, length);
-          return { ...c, start, sourceIn, length, fadeIn, fadeOut: Math.min(c.fadeOut ?? 0, length - fadeIn) };
+          return { ...c, start, sourceIn, length, fadeIn, fadeOut: Math.min(c.fadeOut ?? 0, length - fadeIn), ...(takes ? { takes } : {}) };
         });
         return changed ? { ...t, clips } : t;
       });

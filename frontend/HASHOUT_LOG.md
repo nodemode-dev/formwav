@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.28.0
-Last updated: 2026-09-28 · loop recording keeps every complete pass as a take; a badge switches takes
+Current build version: v0.29.0
+Last updated: 2026-09-28 · takes survive splits, trims and paste; comping by split and per-piece take choice
 
 ---
 
@@ -989,3 +989,14 @@ Every play resets the core's live meter at the context's rate; every report carr
 - logged: v0.28.0 · 2026-09-28
 
 With looping on and Punch off, recording from before or inside a loop range keeps capturing as the playhead wraps. On stop the whole capture is imported once, and every complete pass through the range becomes a take: from before the range pass k starts at (loop start minus recording start) plus k loop lengths; from inside it the partial first pass is skipped. Because all takes cover the same range, a take is just a source offset into the same media, so the clip on the loop range carries `takes` (offsets) and `take` (the one that plays), and switching takes changes only its `sourceIn`: the core, the player and the engine are unchanged. On an armed track the range is replaced the same way as a punch. With no complete pass the recording is kept whole, as before. A badge on the clip ("Take 2/3") plays the next take as one undo step; presses on it never start a drag. Comping between takes needs take lanes and is the next step. Verified with the fake microphone fed the 3 s stereo ramp (a steady sine would make every one-second pass identical): looping 1 to 2 s on an armed 10 s tone and recording from 0 for about 3.8 s gave one undo step, the original 0 to 1 s, a clip at 48,000 with takes [48,000, 96,000] and the second playing, and the original from 2 s; the render inside the range equalled the take media at the active offset exactly and the tone outside was untouched; the badge read Take 2/2, switched to Take 1/2 in one undo step with the render then equal to the media at 48,000 exactly, and undo returned to take 2; no page errors; layout shift 0; punch, arming, edit and clipboard regressions unchanged.
+
+---
+
+## v0.29.0 · takes through edits, comping
+
+### src/engine/document.ts, src/ui/lanes.ts · take offsets follow the source offset
+- refers-to: src/engine/document.ts :: `split-clip`, `set-clip-bounds`; src/ui/lanes.ts :: `paste`; src/styles/shell.css :: `.fw-take`, `.fw-gain-line::after`
+- kind: warning-context
+- logged: v0.29.0 · 2026-09-28
+
+A take clip keeps `sourceIn === takes[take]`, every offset pointing at the same moment of its pass. v0.28.0 broke that under two edits, found by reading the reducers before building comping: `split-clip` gave the right piece a shifted `sourceIn` but copied `takes` unchanged, and `set-clip-bounds` shifted `sourceIn` on a start trim without the takes, so switching takes on such a piece jumped to the wrong place in the capture; and clipboard paste dropped a clip's takes. Now split and trim shift every take offset by the same amount as `sourceIn`, a trim that would put any take outside its media is refused (no change, no undo step), and paste keeps the takes and the active take. That makes comping work with existing tools: split the take clip where the take should change, then choose each piece's take with its badge. A view of all takes as lanes is not built yet. Badges and gain labels no longer wrap onto two lines on narrow pieces (seen in the screenshot). Verified with two loop-recorded takes over 1 to 2 s: a split at 1.5 s gave the right piece takes [72,000, 120,000]; switching the left piece to take 1 rendered media[48,000:72,000] then media[120,000:144,000] exactly, the tone outside untouched, in one undo step; a 10 px start trim of the right piece shifted its takes to [76,800, 124,800] and switching then played the media at 76,800 exactly; extending the right piece past take 2's media was refused with no undo step; a paste kept its takes; every badge measured 16 px (one line); no page errors; layout shift 0; loop take, edit, clipboard, group trim and punch regressions unchanged.
