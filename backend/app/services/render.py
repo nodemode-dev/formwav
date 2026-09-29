@@ -17,13 +17,23 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         raise RenderError("the session has no valid sample rate")
     tracks = [t for t in doc["tracks"] if isinstance(t, dict)]
     soloed = any(t.get("solo") for t in tracks)
+    buses: dict[str, tuple[int, float, float]] = {}
+    muted_buses: set[str] = set()
+    for bus in doc.get("buses") or []:
+        if not isinstance(bus, dict) or not isinstance(bus.get("id"), str):
+            continue
+        if bus.get("mute"):
+            muted_buses.add(bus["id"])
+            continue
+        buses[bus["id"]] = (len(buses) + 1, math.pow(10, float(bus.get("gainDb", 0)) / 20), float(bus.get("pan") or 0))
     sources: dict[str, int] = {}
     clips: list[tuple] = []
     end = 0
     skipped = 0
     for track in tracks:
-        if track.get("mute") or (soloed and not track.get("solo")):
+        if track.get("mute") or (soloed and not track.get("solo")) or track.get("busId") in muted_buses:
             continue
+        bus_index = buses[track["busId"]][0] if track.get("busId") in buses else 0
         for clip in track.get("clips", []):
             info = doc["media"].get(clip.get("mediaId"))
             if not isinstance(info, dict):
@@ -35,9 +45,9 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             gain = math.pow(10, (float(track.get("gainDb", 0)) + float(clip.get("gainDb", 0))) / 20)
             start, length = int(clip["start"]), int(clip["length"])
             fade_shape = 1 if clip.get("fadeShape") == "equal-power" else 0
-            clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, float(track.get("pan") or 0), int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape))
+            clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, float(track.get("pan") or 0), int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index))
             end = max(end, start + length)
-    return rate, sources, clips, end, skipped
+    return rate, sources, clips, end, skipped, list(buses.values())
 
 
 def wav_float32_stereo(interleaved: bytes, rate: int) -> bytes:
@@ -54,7 +64,7 @@ def dbfs(peak: float) -> str:
 
 def render(doc: object) -> dict:
     native = media._require_core()
-    rate, sources, clips, end, skipped = plan(doc)
+    rate, sources, clips, end, skipped, buses = plan(doc)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -62,7 +72,7 @@ def render(doc: object) -> dict:
         if not path.exists():
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end))
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses)
     loudness = native.loudness(interleaved, 2, rate)
     return {
         "wav": wav_float32_stereo(interleaved, rate),

@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v0.10.0
-Last updated: 2026-09-28 · the render reports integrated loudness
+Current build version: v0.11.0
+Last updated: 2026-09-28 · the render plan resolves buses
 
 ---
 
@@ -271,3 +271,10 @@ Each clip tuple now ends with `fadeIn`, `fadeOut` (0 when absent) and the shape 
 - logged: v0.10.0 · 2026-09-28
 
 After rendering, the mix's integrated loudness is measured by `formwav_dsp.loudness` on the interleaved f32 bytes and reported in `X-Loudness-LUFS` to two decimals (`-inf` when every block is gated away). The interface's Export shows it; verified v0.10.0: an exported file was byte-identical to this route's output and the notice matched the headers. (This log's header stayed at v0.8.0 through v0.9.0 because the backend did not change in v0.9.0.)
+
+### app/services/render.py · buses in the plan
+- refers-to: app/services/render.py :: `plan`, `render`
+- kind: warning-context
+- logged: v0.11.0 · 2026-09-28
+
+Unmuted buses are numbered from 1 in document order and passed as `(id, linear gain, pan)`; a track on a muted bus is left out like a muted track; a `busId` that names no bus, or none, routes to master (0). Each clip tuple ends with its bus index, and `plan` now returns the bus list as a sixth value. This is `planClips` in the interface rule for rule; verified v0.11.0 by identical browser and engine renders of a bused session (0.0).
