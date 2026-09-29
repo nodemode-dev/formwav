@@ -44,7 +44,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             source = sources.setdefault(clip["mediaId"], len(sources) + 1)
             gain = math.pow(10, (float(track.get("gainDb", 0)) + float(clip.get("gainDb", 0))) / 20)
             start, length = int(clip["start"]), int(clip["length"])
-            fade_shape = 1 if clip.get("fadeShape") == "equal-power" else 0
+            fade_shape = {"linear": 0, "equal-power": 1, "s-curve": 2, "exponential": 3}.get(clip.get("fadeShape") or "linear", 0)
             clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, float(track.get("pan") or 0), int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index))
             end = max(end, start + length)
     return rate, sources, clips, end, skipped, list(buses.values())
