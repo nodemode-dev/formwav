@@ -21,6 +21,31 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
     `<div class="fw-out-track"><div class="fw-out-bar"></div></div>` +
     `<button class="fw-out-clip" type="button" data-clip="false" aria-label="Output clip indicator, click to reset" title="Output reached 0 dBFS (click to reset)"></button>`;
   transport?.append(meter);
+
+  const lufs = document.createElement("output");
+  lufs.className = "fw-lufs";
+  lufs.title = "Output loudness since play started (BS.1770): momentary 400 ms, short-term 3 s, integrated";
+  transport?.append(lufs);
+  const show = (v: number | undefined) => (v !== undefined && Number.isFinite(v) ? v.toFixed(1) : "--").padStart(5, " ");
+  let integrated: number | undefined;
+  let lastWrite = 0;
+  const writeLufs = (m?: number, s?: number) => {
+    const text = `M ${show(m)}  S ${show(s)}  I ${show(integrated)} LUFS`;
+    if (lufs.textContent !== text) lufs.textContent = text;
+  };
+  writeLufs();
+  player.onOutputLevel((_left, _right, _tracks, loudness) => {
+    if (!loudness) {
+      writeLufs();
+      return;
+    }
+    integrated = loudness[2];
+    const stopped = !Number.isFinite(loudness[0]) && !Number.isFinite(loudness[1]);
+    const now = performance.now();
+    if (!stopped && now - lastWrite < 200) return;
+    lastWrite = now;
+    writeLufs(loudness[0], loudness[1]);
+  });
   const bars = [...meter.querySelectorAll<HTMLElement>(".fw-out-bar")];
   const clip = meter.querySelector<HTMLButtonElement>(".fw-out-clip");
   const shown = [-Infinity, -Infinity];

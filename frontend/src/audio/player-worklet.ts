@@ -16,6 +16,8 @@ interface CoreExports {
   fw_add_bus(player: number, id: number, gain: number, pan: number): void;
   fw_take_peaks(player: number, out: number): void;
   fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
+  fw_loudness_reset(player: number, rate: number): void;
+  fw_loudness(player: number, out: number): void;
   fw_seek(player: number, position: number): void;
   fw_set_loop(player: number, start: number, end: number): void;
   fw_position(player: number): number;
@@ -55,9 +57,11 @@ export type WorkletReply =
   | { type: "ready" }
   | { type: "error"; message: string }
   | { type: "loaded"; id: number; frames: number }
-  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; trackPeaks: number[] }
+  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; trackPeaks: number[]; loudness: number[] }
   | { type: "ended"; position: number };
 
+/** The AudioWorkletGlobalScope's context sample rate. */
+declare const sampleRate: number;
 const MAX_FRAMES = 4096;
 const MAX_METERED_TRACKS = 256;
 const REPORT_EVERY = 8;
@@ -93,6 +97,8 @@ class PlayerProcessor extends AudioWorkletProcessor {
     if (!core) return;
     core.fw_take_peaks(this.player, this.peaks);
     const tracks = core.fw_take_track_peaks(this.player, this.peaks + 8, MAX_METERED_TRACKS);
+    const loudnessAt = this.peaks + 8 + MAX_METERED_TRACKS * 8;
+    core.fw_loudness(this.player, loudnessAt);
     const peaks = new Float32Array(core.memory.buffer, this.peaks, 2 + tracks * 2);
     this.reply({
       type: "position",
@@ -101,6 +107,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       peakLeft: peaks[0],
       peakRight: peaks[1],
       trackPeaks: Array.from(peaks.subarray(2)),
+      loudness: Array.from(new Float32Array(core.memory.buffer, loudnessAt, 3)),
     });
   }
 
@@ -111,7 +118,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       this.player = core.fw_player_new();
       this.left = core.fw_alloc(MAX_FRAMES * 4);
       this.right = core.fw_alloc(MAX_FRAMES * 4);
-      this.peaks = core.fw_alloc(8 + MAX_METERED_TRACKS * 8);
+      this.peaks = core.fw_alloc(8 + MAX_METERED_TRACKS * 8 + 12);
       this.reply({ type: "ready" });
       return;
     }
@@ -143,6 +150,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
         break;
       case "play":
         this.playing = true;
+        if (this.core) this.core.fw_loudness_reset(this.player, sampleRate);
         break;
       case "stop":
         this.playing = false;
@@ -168,6 +176,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
     this.quanta++;
     const position = core.fw_position(this.player);
     if (this.end > 0 && position >= this.end) {
+      this.report();
       this.playing = false;
       this.reply({ type: "ended", position });
     } else if (this.quanta % REPORT_EVERY === 0) {

@@ -481,6 +481,15 @@ html, body, #app { height: 100%; }
 
 .fw-arm[aria-pressed="true"] { background: var(--danger); border-color: var(--danger); }
 
+.fw-lufs {
+  flex: none;
+  inline-size: 32ch;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-secondary);
+  white-space: pre;
+}
+
 .fw-meter-label {
   font-family: var(--font-mono);
   font-size: var(--fs-11);

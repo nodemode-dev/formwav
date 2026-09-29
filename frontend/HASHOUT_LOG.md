@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.26.0
-Last updated: 2026-09-28 · punch-in over the loop range; the ruler sets the range by dragging
+Current build version: v0.27.0
+Last updated: 2026-09-28 · live loudness readout; meters reset at the natural end of playback
 
 ---
 
@@ -967,3 +967,14 @@ Dragging across the ruler by more than 4 px sets the loop range (snapped to the 
 - logged: v0.26.0 · 2026-09-28
 
 With Punch on (button or P), a track armed and a loop range ahead of the playhead, recording is a punch: the take is captured from the playhead as usual, but only the part inside the range is kept; the armed track's clips are cut at the in and out points (the part before keeps its fade-in and loses its fade-out, the part after is re-created at the right source offset, anything inside is removed) and the take goes in between, all in one `batch`. Recording stops by itself at the out point, or if looping wraps the playhead back. Without an armed track, Punch records normally and the notice says a track must be armed. Recording latency is not compensated yet (the latency spike is still pending), so a punched take can sit a device latency late on real hardware; the harness's fake microphone has none. Verified with the fake microphone fed a continuous 440 Hz file, punching 1 to 2 s into the 3 s stereo file: the notice announced the punch, recording stopped by itself, the track became the original 0 to 1 s, the take at 48,000 for 48,000 samples and the original from 96,000 at source offset 96,000; the render equalled the original exactly before and after the range with the 0.5-peak take inside; one undo step, undo restored the single clip; Punch without an armed track recorded a new track with the explanation; layout shift 0.
+
+---
+
+## v0.27.0 · live loudness
+
+### src/audio/player-worklet.ts, player.ts, src/ui/meter.ts · M, S and I in the transport bar
+- refers-to: src/audio/player-worklet.ts :: `report`, `play`, the end-of-material branch, `sampleRate`; src/audio/player.ts :: `onOutputLevel`, `emitLevel`, `onReply`, `lastIntegrated`; src/ui/meter.ts :: `mountOutputMeter`; src/styles/shell.css :: `.fw-lufs`
+- kind: warning-context
+- logged: v0.27.0 · 2026-09-28
+
+Every play resets the core's live meter at the context's rate; every report carries momentary, short-term and integrated loudness beside the peaks; a fixed-width readout after the OUT meter shows them, written at most five times a second and only on change, "--" until 400 ms (M) or 3 s (S) have been measured, M and S blanked when playback stops and I kept. Defect fixed before release: at the natural end of playback the worklet sent only `ended`, which the player turned into a stopped transport without any level update, so the readout kept its last throttled value (I read -8.6 against the engine's -8.24) and the peak bars froze on their last values (a latent fault since v0.17.0, whose harnesses stop with Space). The worklet now reports once more before `ended`, and on `ended` the player publishes silent peaks and the final integrated value, which the readout writes at once. The build also needed a `declare` for the worklet's `sampleRate` global, which the dev server had not type-checked. Verified: over the 3 s stereo file the readout ended at I -8.2 with M and S blanked, 0.04 from the engine's offline -8.24; every bar read 0 after the natural end; the readout kept its 224 px width and was written 13 times in 3 s; no page errors; layout shift 0; playback null, natural end, master meter and track meter regressions unchanged.

@@ -117,15 +117,16 @@ export class Player {
     });
   }
 
-  private levelListeners = new Set<(left: number, right: number, tracks: number[]) => void>();
+  private lastIntegrated = Number.NEGATIVE_INFINITY;
+  private levelListeners = new Set<(left: number, right: number, tracks: number[], loudness: number[] | null) => void>();
 
-  /** Master peaks, then per-track peaks as [left, right] pairs in the document's track order. */
-  onOutputLevel(listener: (left: number, right: number, tracks: number[]) => void): void {
+  /** Master peaks, per-track peaks as [left, right] pairs in the document's track order, and [M, S, I] loudness in LUFS (null on stop). */
+  onOutputLevel(listener: (left: number, right: number, tracks: number[], loudness: number[] | null) => void): void {
     this.levelListeners.add(listener);
   }
 
-  private emitLevel(left: number, right: number, tracks: number[]): void {
-    for (const listener of this.levelListeners) listener(left, right, tracks);
+  private emitLevel(left: number, right: number, tracks: number[], loudness: number[] | null): void {
+    for (const listener of this.levelListeners) listener(left, right, tracks, loudness);
   }
 
   get skipped(): number {
@@ -177,9 +178,14 @@ export class Player {
     const reply = e.data;
     if (reply.type === "position") {
       this.engine.setTransport({ positionSamples: reply.position });
-      if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks);
+      this.lastIntegrated = reply.loudness[2];
+      if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks, reply.loudness);
+      else this.emitLevel(0, 0, [], [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, reply.loudness[2]]);
     }
-    else if (reply.type === "ended") this.engine.setTransport({ positionSamples: reply.position, playing: false });
+    else if (reply.type === "ended") {
+      this.engine.setTransport({ positionSamples: reply.position, playing: false });
+      this.emitLevel(0, 0, [], [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, this.lastIntegrated]);
+    }
   };
 
   private starting: Promise<AudioWorkletNode> | null = null;
@@ -228,7 +234,7 @@ export class Player {
   stop(): void {
     this.open = false;
     if (this.node) send(this.node, { type: "stop" });
-    this.emitLevel(0, 0, []);
+    this.emitLevel(0, 0, [], null);
     this.engine.setTransport({ playing: false });
   }
 
