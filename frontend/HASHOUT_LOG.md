@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.11.0
-Last updated: 2026-09-28 · buses in the document, planner and worklet; render-client.ts added to the map
+Current build version: v0.12.0
+Last updated: 2026-09-28 · save with revision checks: known revision, conflict prompt, one retry
 
 ---
 
@@ -662,3 +662,14 @@ Buses are optional on the document and a track without `busId` feeds master, so 
 - logged: v0.11.0 · 2026-09-28
 
 `planClips` numbers unmuted buses from 1 in document order, drops tracks on muted buses, and gives each clip its bus index (0 for master or an unknown bus), exactly as `plan` in `backend/app/services/render.py`; the clips message carries the bus list and the worklet rebuilds the core's buses on every plan. Change both twins together and rerun `verify_buses.py`. The map gap noted for `render-client.ts` in v0.10.0 is closed above.
+
+---
+
+## v0.12.0 · save conflicts
+
+### src/ui/projects.ts · known revision and the conflict prompt
+- refers-to: src/ui/projects.ts :: `known`, `save`, `open`; src/io/projects-client.ts :: `saveProject`, `RevisionConflict`
+- kind: rationale
+- logged: v0.12.0 · 2026-09-28
+
+Each window remembers the name and revision of the session it last saved or opened. Saving under that name sends its revision as `base`; saving under any other name sends 0, meaning "new". A 409 becomes `RevisionConflict` carrying the server's revision, and the window asks with the browser's confirm dialog: "already exists" for a new name, "saved from another window" otherwise. Declining leaves the saved file untouched and says so; accepting retries once against the server's revision. Verified v0.12.0 with three windows: A saved, B opened and saved over it, A was asked, declined (B's version kept), then accepted on the next save (revision 3, A's content); a fresh window saving under the same name was told it exists and declined. The v0.6.0 round-trip harness also crossed an "already exists" prompt and still null-tested at 0.

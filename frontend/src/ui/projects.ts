@@ -1,6 +1,6 @@
 import type { Engine, SessionDoc } from "../engine";
 import type { Player } from "../audio/player";
-import { listProjects, openProject, saveProject, type ProjectSummary } from "../io/projects-client";
+import { listProjects, openProject, RevisionConflict, saveProject, type ProjectSummary } from "../io/projects-client";
 import { delayedIndicator, patchList, setText } from "../vendor/nodemode/dom-stable";
 
 function reason(err: unknown): string {
@@ -30,6 +30,7 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
   const empty = popover.querySelector(".fw-popover-empty") as HTMLElement;
 
   let lastSaved: SessionDoc = engine.get("document");
+  let known: { name: string; revision: number } | null = null;
   let busy = false;
   const sessionName = () => nameField?.value.trim() || "Untitled session";
   const unsaved = () => {
@@ -64,13 +65,24 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
     withNotice(`Saving ${sessionName()}`, async () => {
       const name = sessionName();
       const doc = engine.get("document");
-      try {
-        await saveProject(name, doc);
-      } catch (err) {
-        return `Could not save: ${reason(err)}`;
+      let base = known && known.name === name ? known.revision : 0;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const saved = await saveProject(name, doc, base);
+          known = { name, revision: saved.revision };
+          lastSaved = doc;
+          return `Saved ${name}`;
+        } catch (err) {
+          if (!(err instanceof RevisionConflict) || attempt > 0) return `Could not save: ${reason(err)}`;
+          const question =
+            base === 0
+              ? `A saved session named "${name}" already exists. Replace it with this one?`
+              : `"${name}" was saved from another window after this one opened it. Replace that version with this one?`;
+          if (!window.confirm(question)) return `Not saved: "${name}" was kept as it is`;
+          base = err.revision;
+        }
       }
-      lastSaved = doc;
-      return `Saved ${name}`;
+      return `Could not save ${name}`;
     });
 
   const close = () => {
@@ -129,6 +141,7 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       player.stop();
       engine.loadDocument(opened.document);
       lastSaved = engine.get("document");
+      known = { name: opened.name, revision: opened.revision };
       if (nameField && nameField.value !== opened.name) nameField.value = opened.name;
       return `Opened ${opened.name}`;
     });

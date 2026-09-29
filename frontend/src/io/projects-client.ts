@@ -6,12 +6,23 @@ export interface ProjectSummary {
   tracks: number;
   bytes: number;
   appVersion: string | null;
+  revision: number;
 }
 
 export interface OpenedProject {
   name: string;
   savedAt: string | null;
+  revision: number;
   document: SessionDoc;
+}
+
+export class RevisionConflict extends Error {
+  constructor(
+    message: string,
+    readonly revision: number,
+  ) {
+    super(message);
+  }
 }
 
 async function failure(res: Response): Promise<Error> {
@@ -25,12 +36,17 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   return (await res.json()) as ProjectSummary[];
 }
 
-export async function saveProject(name: string, doc: SessionDoc): Promise<ProjectSummary> {
-  const res = await fetch(`/api/projects/${encodeURIComponent(name)}`, {
+export async function saveProject(name: string, doc: SessionDoc, base: number | null): Promise<ProjectSummary> {
+  const query = base === null ? "" : `?base=${base}`;
+  const res = await fetch(`/api/projects/${encodeURIComponent(name)}${query}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(doc),
   });
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: { message?: string; revision?: number } };
+    throw new RevisionConflict(body.detail?.message ?? "the session changed elsewhere", Number(body.detail?.revision ?? 0));
+  }
   if (!res.ok) throw await failure(res);
   return (await res.json()) as ProjectSummary;
 }
