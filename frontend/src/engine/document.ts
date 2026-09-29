@@ -111,6 +111,7 @@ export interface Selection {
 export type Command =
   | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number } }
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
+  | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -162,6 +163,31 @@ function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): Se
 
 export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string): SessionDoc {
   switch (cmd.type) {
+    case "comp-range":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const index = t.clips.findIndex((c) => c.id === cmd.clipId);
+        const c = t.clips[index];
+        if (!c || !c.takes || c.takes.length < 2) return t;
+        const takes = c.takes;
+        const end = c.start + c.length;
+        const from = Math.max(c.start, Math.round(Math.min(cmd.from, cmd.to)));
+        const to = Math.min(end, Math.round(Math.max(cmd.from, cmd.to)));
+        if (to <= from) return t;
+        const take = ((Math.round(cmd.take) % takes.length) + takes.length) % takes.length;
+        const current = c.take ?? takes.length - 1;
+        if (take === current) return t;
+        const piece = (start: number, length: number, k: number, id: string, fadeIn: number, fadeOut: number): Clip => {
+          const shifted = takes.map((o) => o + (start - c.start));
+          return { ...c, id, start, length, takes: shifted, take: k, sourceIn: shifted[k], fadeIn, fadeOut };
+        };
+        const pieces: Clip[] = [];
+        if (from > c.start) pieces.push(piece(c.start, from - c.start, current, c.id, Math.min(c.fadeIn ?? 0, from - c.start), 0));
+        pieces.push(
+          piece(from, to - from, take, pieces.length ? newId() : c.id, from === c.start ? Math.min(c.fadeIn ?? 0, to - from) : 0, to === end ? Math.min(c.fadeOut ?? 0, to - from) : 0),
+        );
+        if (to < end) pieces.push(piece(to, end - to, current, newId(), 0, Math.min(c.fadeOut ?? 0, end - to)));
+        return { ...t, clips: [...t.clips.slice(0, index), ...pieces, ...t.clips.slice(index + 1)] };
+      });
     case "set-clip-take":
       return mapTrack(doc, cmd.trackId, (t) => {
         let changed = false;

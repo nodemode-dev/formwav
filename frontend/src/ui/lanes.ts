@@ -226,7 +226,7 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div></div><div class="fw-lane-body"></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle" hidden aria-expanded="false" title="Show every take as a lane; drag across a take to comp that range">Takes</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div></div><div class="fw-lane-body"></div><div class="fw-take-rows" hidden></div>`;
   return lane;
 }
 
@@ -249,7 +249,53 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
     },
     update: (n, c) => updateClip(n, c, doc, spp),
   });
+  const takeClips = track.clips.filter((c) => (c.takes?.length ?? 0) > 1);
+  const count = takeClips.reduce((most, c) => Math.max(most, c.takes?.length ?? 0), 0);
+  const open = count > 0 && expandedTracks.has(track.id);
+  const toggle = node.querySelector<HTMLButtonElement>(".fw-takes-toggle");
+  if (toggle) {
+    if (toggle.hidden !== (count === 0)) toggle.hidden = count === 0;
+    if (toggle.getAttribute("aria-expanded") !== String(open)) toggle.setAttribute("aria-expanded", String(open));
+  }
+  const rows = node.querySelector<HTMLElement>(".fw-take-rows");
+  if (!rows) return;
+  if (rows.hidden === open) rows.hidden = !open;
+  if (!open) return;
+  const fillRow = (row: HTMLElement, k: number) =>
+    patchList(row, takeClips.filter((c) => k < (c.takes?.length ?? 0)), {
+      key: (c) => c.id,
+      create: (c) => {
+        const seg = clipNode();
+        seg.classList.add("fw-take-seg");
+        updateTakeSegment(seg, c, k, doc, spp);
+        return seg;
+      },
+      update: (seg, c) => updateTakeSegment(seg, c, k, doc, spp),
+    });
+  patchList(rows, Array.from({ length: count }, (_, k) => k), {
+    key: (k) => String(k),
+    create: (k) => {
+      const row = document.createElement("div");
+      row.className = "fw-take-row";
+      row.dataset.take = String(k);
+      row.setAttribute("aria-label", `Take ${k + 1}`);
+      fillRow(row, k);
+      return row;
+    },
+    update: (row, k) => fillRow(row, k),
+  });
 }
+
+/** A take segment is the clip drawn from take k's offset, without fades or gain, marked when k plays. */
+function updateTakeSegment(seg: HTMLElement, c: Clip, k: number, doc: SessionDoc, spp: number): void {
+  const takes = c.takes ?? [];
+  updateClip(seg, { ...c, id: `${c.id}:take${k}`, sourceIn: takes[k], fadeIn: 0, fadeOut: 0, gainDb: 0, takes: undefined, take: undefined }, doc, spp);
+  const current = String((c.take ?? takes.length - 1) === k);
+  if (seg.getAttribute("aria-current") !== current) seg.setAttribute("aria-current", current);
+}
+
+/** Tracks whose take lanes are shown (interface state, like the selection). */
+const expandedTracks = new Set<string>();
 
 export function mountLanes(host: HTMLElement, engine: Engine): void {
   const stage = host.querySelector<HTMLElement>(".fw-stage");
@@ -302,6 +348,65 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     setArmedTrack(armedTrack() === id ? null : id);
   });
   onArm(() => render(engine.get("document")));
+  lanes.addEventListener("click", (e) => {
+    const toggle = (e.target as HTMLElement).closest<HTMLElement>(".fw-takes-toggle");
+    const id = toggle?.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    if (!toggle || !id) return;
+    if (expandedTracks.has(id)) expandedTracks.delete(id);
+    else expandedTracks.add(id);
+    render(engine.get("document"));
+  });
+
+  let takeDrag: { trackId: string; clip: Clip; take: number; seg: HTMLElement; x0: number; moved: boolean } | null = null;
+  const takeRange = (d: NonNullable<typeof takeDrag>, clientX: number): [number, number] => {
+    const doc = engine.get("document");
+    const spp = samplesPerPixel(doc);
+    const r = d.seg.getBoundingClientRect();
+    const at = (x: number) => {
+      const raw = d.clip.start + Math.max(0, Math.min(r.width, x - r.left)) * spp;
+      return Math.max(d.clip.start, Math.min(d.clip.start + d.clip.length, Math.round(snapSamples(raw, doc.sampleRate, doc.sampleRate / spp))));
+    };
+    const a = at(d.x0);
+    const b = at(clientX);
+    return [Math.min(a, b), Math.max(a, b)];
+  };
+  const startTakeDrag = (e: PointerEvent, seg: HTMLElement) => {
+    const trackId = seg.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    const take = Number(seg.closest<HTMLElement>(".fw-take-row")?.dataset.take);
+    const clip = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === seg.dataset.key);
+    if (!trackId || !clip || !Number.isFinite(take)) return;
+    takeDrag = { trackId, clip, take, seg, x0: e.clientX, moved: false };
+    seg.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+  lanes.addEventListener("pointermove", (e) => {
+    const d = takeDrag;
+    if (!d || (!d.moved && Math.abs(e.clientX - d.x0) < 4)) return;
+    d.moved = true;
+    const [a, b] = takeRange(d, e.clientX);
+    const spp = samplesPerPixel(engine.get("document"));
+    const lr = lanes.getBoundingClientRect();
+    const sr = d.seg.getBoundingClientRect();
+    marquee.style.transform = `translate(${(sr.left - lr.left + (a - d.clip.start) / spp).toFixed(1)}px, ${(sr.top - lr.top).toFixed(1)}px)`;
+    marquee.style.width = `${((b - a) / spp).toFixed(1)}px`;
+    marquee.style.height = `${sr.height.toFixed(1)}px`;
+    if (marquee.hidden) marquee.hidden = false;
+  });
+  const endTakeDrag = (apply: boolean, clientX: number) => {
+    const d = takeDrag;
+    takeDrag = null;
+    if (!d) return;
+    if (!marquee.hidden) marquee.hidden = true;
+    if (!apply) return;
+    if (!d.moved) {
+      engine.dispatch({ type: "set-clip-take", trackId: d.trackId, clipId: d.clip.id, take: d.take });
+      return;
+    }
+    const [a, b] = takeRange(d, clientX);
+    if (b > a) engine.dispatch({ type: "comp-range", trackId: d.trackId, clipId: d.clip.id, from: a, to: b, take: d.take });
+  };
+  lanes.addEventListener("pointerup", (e) => endTakeDrag(true, e.clientX));
+  lanes.addEventListener("pointercancel", (e) => endTakeDrag(false, e.clientX));
   lanes.addEventListener("click", (e) => {
     const badge = (e.target as HTMLElement).closest<HTMLElement>(".fw-take");
     const clipId = badge?.closest<HTMLElement>(".fw-clip")?.dataset.key;
@@ -472,6 +577,11 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   lanes.addEventListener("pointerdown", (e) => {
     const target = e.target as HTMLElement;
     if (target.closest(".fw-take")) return;
+    if (target.closest(".fw-take-rows")) {
+      const seg = target.closest<HTMLElement>(".fw-take-seg");
+      if (seg && e.button === 0) startTakeDrag(e, seg);
+      return;
+    }
     const node = target.closest<HTMLElement>(".fw-clip");
     const trackId = node?.closest<HTMLElement>(".fw-lane")?.dataset.key;
     if (!node || !trackId || !node.dataset.key || e.button !== 0) {

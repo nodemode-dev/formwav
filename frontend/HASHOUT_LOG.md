@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.29.0
-Last updated: 2026-09-28 · takes survive splits, trims and paste; comping by split and per-piece take choice
+Current build version: v0.30.0
+Last updated: 2026-09-28 · take lanes: every take shown under its track; drag across a take to comp that range
 
 ---
 
@@ -1000,3 +1000,14 @@ With looping on and Punch off, recording from before or inside a loop range keep
 - logged: v0.29.0 · 2026-09-28
 
 A take clip keeps `sourceIn === takes[take]`, every offset pointing at the same moment of its pass. v0.28.0 broke that under two edits, found by reading the reducers before building comping: `split-clip` gave the right piece a shifted `sourceIn` but copied `takes` unchanged, and `set-clip-bounds` shifted `sourceIn` on a start trim without the takes, so switching takes on such a piece jumped to the wrong place in the capture; and clipboard paste dropped a clip's takes. Now split and trim shift every take offset by the same amount as `sourceIn`, a trim that would put any take outside its media is refused (no change, no undo step), and paste keeps the takes and the active take. That makes comping work with existing tools: split the take clip where the take should change, then choose each piece's take with its badge. A view of all takes as lanes is not built yet. Badges and gain labels no longer wrap onto two lines on narrow pieces (seen in the screenshot). Verified with two loop-recorded takes over 1 to 2 s: a split at 1.5 s gave the right piece takes [72,000, 120,000]; switching the left piece to take 1 rendered media[48,000:72,000] then media[120,000:144,000] exactly, the tone outside untouched, in one undo step; a 10 px start trim of the right piece shifted its takes to [76,800, 124,800] and switching then played the media at 76,800 exactly; extending the right piece past take 2's media was refused with no undo step; a paste kept its takes; every badge measured 16 px (one line); no page errors; layout shift 0; loop take, edit, clipboard, group trim and punch regressions unchanged.
+
+---
+
+## v0.30.0 · take lanes
+
+### src/engine/document.ts, src/ui/lanes.ts, shell.css · every take as a lane, comp by drag
+- refers-to: src/engine/document.ts :: `comp-range`; src/ui/lanes.ts :: lane markup, `updateLane`, `updateTakeSegment`, `expandedTracks`, Takes toggle, `takeDrag`, `takeRange`, `startTakeDrag`, `endTakeDrag`, pointer-down; src/styles/shell.css :: `.fw-lanes`, `.fw-lane`, `.fw-take-rows`, `.fw-take-row`, `.fw-takes-toggle`
+- kind: warning-context
+- logged: v0.30.0 · 2026-09-28
+
+A track with loop-recorded takes shows a Takes toggle; expanded (interface state, like the selection) it adds one row per take under its main row, in the lane grid's body column. Each take segment is the clip drawn by the existing `clipNode` and `updateClip` from that take's offset, without fades or gain and with a synthetic id so it never shows as selected, marked `aria-current` where that take plays; rows and segments are patched by key, written only on change. Dragging across a take segment previews the range with the marquee overlay and commits `comp-range`, which splits the piece at the range edges (each piece's take offsets shifted to its start) and gives the middle the dragged take, one undo step; a click without dragging chooses that take for the whole piece; Grid snaps the range. Presses in the take rows never start clip gestures or the marquee. Two layout defects were found by the harness before release: lanes were fixed at 96 px by the container's `grid-auto-rows`, so expanded rows overflowed (a second track's lane would have been drawn over); lanes may now grow, with the first row pinned so the head, main clips and meters are unchanged; and pinning the row at 96 px made every lane 97 px because the lane's bottom border now added to it, so the row is 96 px less 1 px. The head column beside the take rows has no row labels yet, and a very narrow piece's badge is clipped; cosmetic. Verified with two loop-recorded takes over 1 to 2 s: the toggle showed two rows with the playing take marked, segments aligned with the main clip at x = 292; the lane grew from 96 to 193 px, its rows ending above a second track's lane, and collapsing restored 96; dragging 1.25 to 1.75 s across take 1 gave, in one step, take 2 then take 1 from 60,000 to 84,000 then take 2, each part of the render equal to its take's media exactly and the tone outside exact, the rows' marks following; clicking the middle piece in the take 2 row switched it exactly; undo walked back; no page errors; layout shift 0; timeline, marquee, track meter and selection regressions unchanged.
