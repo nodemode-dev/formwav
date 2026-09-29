@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v0.7.0
-Last updated: 2026-09-28 · POST /api/render: the session mixed natively to a float32 WAV
+Current build version: v0.8.0
+Last updated: 2026-09-28 · the render plan passes clip fades
 
 ---
 
@@ -257,3 +257,10 @@ The clip plan repeats `planClips` in `frontend/src/audio/player.ts` rule for rul
 - logged: v0.7.0 · 2026-09-28
 
 The WAV is IEEE float 32 (format tag 3), two channels, at the session rate, so nothing is lost to quantisation; peaks are reported in dBFS to two decimals (`-inf` for silence). The whole mix is built in memory; long sessions will need a streamed render with the jobs surface.
+
+### app/services/render.py · fades in the plan
+- refers-to: app/services/render.py :: `plan`
+- kind: warning-context
+- logged: v0.8.0 · 2026-09-28
+
+Each clip tuple now ends with `fadeIn`, `fadeOut` (0 when absent) and the shape code (1 for "equal-power", otherwise 0), matching `planClips` in the interface field for field. Verified v0.8.0: identical to the browser's render for linear crossfades (0.0) and within 6.0e-8 for equal-power ones (the `sin` difference described in the native log).
