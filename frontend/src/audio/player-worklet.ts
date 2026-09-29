@@ -11,7 +11,10 @@ interface CoreExports {
   fw_player_new(): number;
   fw_load_wav(player: number, id: number, ptr: number, len: number): number;
   fw_clear_clips(player: number): void;
-  fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number, bus: number, track: number): void;
+  fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number, bus: number, track: number, gainEnv: number, panEnv: number): void;
+  fw_clear_envelopes(player: number): void;
+  fw_add_envelope(player: number, points: number, count: number, db: number): number;
+  fw_free(ptr: number, bytes: number): void;
   fw_clear_buses(player: number): void;
   fw_add_bus(player: number, id: number, gain: number, pan: number): void;
   fw_take_peaks(player: number, out: number): void;
@@ -36,6 +39,10 @@ export interface WorkletClip {
   fadeShape: number;
   bus: number;
   track: number;
+  /** Track volume automation as flat [time, dB, time, dB, ...]; replaces the track fader. */
+  gainPoints?: number[];
+  /** Track pan automation as flat [time, pan, ...]; replaces the track pan. */
+  panPoints?: number[];
 }
 
 export interface WorkletBus {
@@ -134,13 +141,28 @@ class PlayerProcessor extends AudioWorkletProcessor {
         this.reply({ type: "loaded", id: msg.id, frames });
         break;
       }
-      case "clips":
+      case "clips": {
         core.fw_clear_clips(this.player);
-        for (const c of msg.clips) core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape, c.bus, c.track);
+        core.fw_clear_envelopes(this.player);
+        const envelope = (flat: number[] | undefined, db: boolean): number => {
+          if (!flat || flat.length < 2) return 0;
+          const bytes = flat.length * 8;
+          const ptr = core.fw_alloc(bytes);
+          new Float64Array(core.memory.buffer, ptr, flat.length).set(flat);
+          const id = core.fw_add_envelope(this.player, ptr, flat.length / 2, db ? 1 : 0);
+          core.fw_free(ptr, bytes);
+          return id;
+        };
+        for (const c of msg.clips) {
+          const gainEnv = envelope(c.gainPoints, true);
+          const panEnv = envelope(c.panPoints, false);
+          core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape, c.bus, c.track, gainEnv, panEnv);
+        }
         core.fw_clear_buses(this.player);
         for (const b of msg.buses) core.fw_add_bus(this.player, b.id, b.gain, b.pan);
         this.end = msg.end;
         break;
+      }
       case "seek":
         core.fw_seek(this.player, msg.position);
         this.report();

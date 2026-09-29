@@ -47,7 +47,15 @@ export interface Clip {
   take?: number;
 }
 
+/** An automation point: time in session samples; value in dB (volume) or -1 to 1 (pan). */
+export interface AutoPoint {
+  time: number;
+  value: number;
+}
+
 export interface Track {
+  /** Volume (dB) and pan automation; when present each replaces the track's static fader or pan. */
+  automation?: { volume?: AutoPoint[]; pan?: AutoPoint[] };
   id: string;
   name: string;
   channels: number;
@@ -112,6 +120,7 @@ export type Command =
   | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number } }
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
   | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
+  | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -163,6 +172,20 @@ function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): Se
 
 export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string): SessionDoc {
   switch (cmd.type) {
+    case "set-automation":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const [lo, hi] = cmd.param === "volume" ? [-60, 12] : [-1, 1];
+        const byTime = new Map<number, number>();
+        for (const p of cmd.points) {
+          if (!Number.isFinite(p.time) || !Number.isFinite(p.value)) continue;
+          byTime.set(Math.max(0, Math.round(p.time)), Math.min(hi, Math.max(lo, Math.round(p.value * 100) / 100)));
+        }
+        const points = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
+        const current = t.automation?.[cmd.param] ?? [];
+        if (points.length === current.length && points.every((p, i) => p.time === current[i].time && p.value === current[i].value)) return t;
+        const automation = { ...t.automation, [cmd.param]: points.length ? points : undefined };
+        return { ...t, automation };
+      });
     case "comp-range":
       return mapTrack(doc, cmd.trackId, (t) => {
         const index = t.clips.findIndex((c) => c.id === cmd.clipId);

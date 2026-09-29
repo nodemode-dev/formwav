@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.30.0
-Last updated: 2026-09-28 · take lanes: every take shown under its track; drag across a take to comp that range
+Current build version: v0.31.0
+Last updated: 2026-09-28 · volume and pan automation (document, player); a volume automation lane to draw it
 
 ---
 
@@ -1011,3 +1011,21 @@ A take clip keeps `sourceIn === takes[take]`, every offset pointing at the same 
 - logged: v0.30.0 · 2026-09-28
 
 A track with loop-recorded takes shows a Takes toggle; expanded (interface state, like the selection) it adds one row per take under its main row, in the lane grid's body column. Each take segment is the clip drawn by the existing `clipNode` and `updateClip` from that take's offset, without fades or gain and with a synthetic id so it never shows as selected, marked `aria-current` where that take plays; rows and segments are patched by key, written only on change. Dragging across a take segment previews the range with the marquee overlay and commits `comp-range`, which splits the piece at the range edges (each piece's take offsets shifted to its start) and gives the middle the dragged take, one undo step; a click without dragging chooses that take for the whole piece; Grid snaps the range. Presses in the take rows never start clip gestures or the marquee. Two layout defects were found by the harness before release: lanes were fixed at 96 px by the container's `grid-auto-rows`, so expanded rows overflowed (a second track's lane would have been drawn over); lanes may now grow, with the first row pinned so the head, main clips and meters are unchanged; and pinning the row at 96 px made every lane 97 px because the lane's bottom border now added to it, so the row is 96 px less 1 px. The head column beside the take rows has no row labels yet, and a very narrow piece's badge is clipped; cosmetic. Verified with two loop-recorded takes over 1 to 2 s: the toggle showed two rows with the playing take marked, segments aligned with the main clip at x = 292; the lane grew from 96 to 193 px, its rows ending above a second track's lane, and collapsing restored 96; dragging 1.25 to 1.75 s across take 1 gave, in one step, take 2 then take 1 from 60,000 to 84,000 then take 2, each part of the render equal to its take's media exactly and the tone outside exact, the rows' marks following; clicking the middle piece in the take 2 row switched it exactly; undo walked back; no page errors; layout shift 0; timeline, marquee, track meter and selection regressions unchanged.
+
+---
+
+## v0.31.0 · automation
+
+### src/engine/document.ts, src/audio/player.ts, player-worklet.ts · volume and pan automation
+- refers-to: src/engine/document.ts :: `AutoPoint`, `Track.automation`, `set-automation`; src/audio/player.ts :: `planClips`; src/audio/player-worklet.ts :: `WorkletClip.gainPoints`, `WorkletClip.panPoints`, the clips handler
+- kind: rationale
+- logged: v0.31.0 · 2026-09-28
+
+A track may carry volume automation (dB) and pan automation (-1 to 1) as time-sorted points, set a parameter at a time by `set-automation` (rounded times, clamped values, one point per time, an empty list removing it; one undo step). When present, each replaces the track's static fader or pan; clip gain still applies. The player gives each of the track's clips the flattened points, and the worklet loads them as core envelopes as it loads the clips, copying each into core memory and freeing it straight after, so repeated edits do not leak. Verified: browser and engine renders identical with volume automation (0.0) and within 3e-8 with pan automation.
+
+### src/ui/lanes.ts · the volume automation lane
+- refers-to: src/ui/lanes.ts :: `autoTracks`, `drawVolumeLane`, `updateLane`, Auto toggle, `autoPointAt`, `startAuto`, `previewAuto`, `endAuto`, pointer-down; src/styles/shell.css :: `.fw-auto-rows`, `.fw-auto-row`, `.fw-auto-svg`, `.fw-auto-line`, `.fw-auto-toggle`
+- kind: warning-context
+- logged: v0.31.0 · 2026-09-28
+
+The Auto toggle in each lane head shows a volume automation lane under the track, in the same growable lane row as take lanes: an SVG line through the points (held before the first and after the last) with a circle per point, written only on change; with no automation a dashed line shows the static fader level. A click on the lane adds a point and a drag moves it (kept between its neighbours, snapped to the grid), Alt-click deletes one; each gesture is one `set-automation`. Pan automation plays but has no lane yet. Defect fixed before release: the pointer was mapped against the lane container, whose 1 px top border the drawing does not include, so a point landed about 0.7 dB from the cursor (-0.7 instead of 0); it is now mapped against the drawn row. Verified with the 10 s tone at 100 px per second: clicks added (48,000, 0 dB) and (144,000, -12 dB), one step each; a drag moved the second to (168,000, -24 dB) in one step; the browser's render equalled the engine's exactly and the gain equalled f32 interpolation exactly at 355 probes; Alt-click deleted a point; undo walked back to no automation; the lane added 49 px and collapsing restored 96; no page errors; layout shift 0; take lane and browser-versus-engine regressions unchanged.

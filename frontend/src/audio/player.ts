@@ -36,6 +36,8 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
   for (const track of doc.tracks) {
     if (track.mute || (soloed && !track.solo) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
     const bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
+    const volumePoints = track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
+    const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
     for (const clip of track.clips) {
       const media = doc.media[clip.mediaId];
       const source = sources.get(clip.mediaId);
@@ -49,8 +51,10 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         start: clip.start,
         sourceIn: clip.sourceIn,
         length: clip.length,
-        gain: dbToGain(track.gainDb + clip.gainDb),
-        pan: track.pan ?? 0,
+        gain: dbToGain((volumePoints ? 0 : track.gainDb) + clip.gainDb),
+        pan: panPoints ? 0 : track.pan ?? 0,
+        gainPoints: volumePoints,
+        panPoints,
         fadeIn: clip.fadeIn ?? 0,
         fadeOut: clip.fadeOut ?? 0,
         fadeShape: FADE_SHAPES[clip.fadeShape ?? "linear"] ?? 0,

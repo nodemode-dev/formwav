@@ -1,5 +1,5 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
-import { documentLength, fadeCurve, nextFadeShape, sessionLength } from "../engine/document";
+import { documentLength, fadeCurve, nextFadeShape, sessionLength, type AutoPoint } from "../engine/document";
 import { fetchPeaks, type PeakData } from "../io/media-client";
 import { gridEnabled, shuffleEnabled, snapSamples, spotEnabled } from "./grid";
 import { armedTrack, onArm, setArmedTrack } from "./arm";
@@ -226,7 +226,7 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle" hidden aria-expanded="false" title="Show every take as a lane; drag across a take to comp that range">Takes</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div></div><div class="fw-lane-body"></div><div class="fw-take-rows" hidden></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle" hidden aria-expanded="false" title="Show every take as a lane; drag across a take to comp that range">Takes</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><button type="button" class="fw-auto-toggle" aria-expanded="false" title="Show volume automation: click the line to add a point, drag to move it, Alt-click to delete it">Auto</button></div><div class="fw-lane-body"></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-rows" hidden></div>`;
   return lane;
 }
 
@@ -249,6 +249,14 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
     },
     update: (n, c) => updateClip(n, c, doc, spp),
   });
+  const autoOpen = autoTracks.has(track.id);
+  const autoToggle = node.querySelector<HTMLElement>(".fw-auto-toggle");
+  if (autoToggle && autoToggle.getAttribute("aria-expanded") !== String(autoOpen)) autoToggle.setAttribute("aria-expanded", String(autoOpen));
+  const autoRows = node.querySelector<HTMLElement>(".fw-auto-rows");
+  if (autoRows) {
+    if (autoRows.hidden === autoOpen) autoRows.hidden = !autoOpen;
+    if (autoOpen) drawVolumeLane(autoRows, track, spp);
+  }
   const takeClips = track.clips.filter((c) => (c.takes?.length ?? 0) > 1);
   const count = takeClips.reduce((most, c) => Math.max(most, c.takes?.length ?? 0), 0);
   const open = count > 0 && expandedTracks.has(track.id);
@@ -296,6 +304,42 @@ function updateTakeSegment(seg: HTMLElement, c: Clip, k: number, doc: SessionDoc
 
 /** Tracks whose take lanes are shown (interface state, like the selection). */
 const expandedTracks = new Set<string>();
+
+/** Tracks whose volume automation lane is shown (interface state). */
+const autoTracks = new Set<string>();
+const AUTO_ROW_H = 48;
+
+/** Draws a track's volume automation: the line through its points (held before the first and after the last), a circle per point. */
+function drawVolumeLane(rows: HTMLElement, track: Track, spp: number): void {
+  const svg = rows.querySelector<SVGSVGElement>(".fw-auto-svg");
+  const line = svg?.querySelector<SVGPolylineElement>(".fw-auto-line");
+  const group = svg?.querySelector<SVGGElement>(".fw-auto-points");
+  if (!svg || !line || !group) return;
+  const points = track.automation?.volume ?? [];
+  const y = (db: number) => (gainFraction(db) * AUTO_ROW_H).toFixed(1);
+  const x = (time: number) => (time / spp).toFixed(1);
+  const last = points[points.length - 1];
+  const coords = points.length
+    ? [`0,${y(points[0].value)}`, ...points.map((p) => `${x(p.time)},${y(p.value)}`), `${(last.time / spp + 100000).toFixed(1)},${y(last.value)}`]
+    : [`0,${y(track.gainDb)}`, `100000,${y(track.gainDb)}`];
+  const attr = coords.join(" ");
+  if (line.getAttribute("points") !== attr) line.setAttribute("points", attr);
+  const fader = String(points.length === 0);
+  if (line.dataset.static !== fader) line.dataset.static = fader;
+  while (group.children.length > points.length) group.lastElementChild?.remove();
+  while (group.children.length < points.length) {
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("r", "4");
+    group.append(c);
+  }
+  points.forEach((p, i) => {
+    const c = group.children[i];
+    const cx = x(p.time);
+    const cy = y(p.value);
+    if (c.getAttribute("cx") !== cx) c.setAttribute("cx", cx);
+    if (c.getAttribute("cy") !== cy) c.setAttribute("cy", cy);
+  });
+}
 
 export function mountLanes(host: HTMLElement, engine: Engine): void {
   const stage = host.querySelector<HTMLElement>(".fw-stage");
@@ -415,6 +459,71 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const clip = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === clipId);
     if (clip?.takes) engine.dispatch({ type: "set-clip-take", trackId, clipId, take: (clip.take ?? clip.takes.length - 1) + 1 });
   });
+
+  lanes.addEventListener("click", (e) => {
+    const toggle = (e.target as HTMLElement).closest<HTMLElement>(".fw-auto-toggle");
+    const id = toggle?.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    if (!toggle || !id) return;
+    if (autoTracks.has(id)) autoTracks.delete(id);
+    else autoTracks.add(id);
+    render(engine.get("document"));
+  });
+
+  let autoDrag: { trackId: string; rows: HTMLElement; index: number; points: AutoPoint[]; moved: boolean } | null = null;
+  const autoPointAt = (rows: HTMLElement, e: PointerEvent): AutoPoint => {
+    const doc = engine.get("document");
+    const spp = samplesPerPixel(doc);
+    const r = (rows.querySelector<HTMLElement>(".fw-auto-row") ?? rows).getBoundingClientRect();
+    const time = Math.round(snapSamples(Math.max(0, e.clientX - r.left) * spp, doc.sampleRate, doc.sampleRate / spp));
+    const frac = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    return { time, value: Math.round((GAIN_TOP_DB - frac * GAIN_SPAN_DB) * 10) / 10 };
+  };
+  const previewAuto = (d: NonNullable<typeof autoDrag>) => {
+    const track = engine.get("document").tracks.find((t) => t.id === d.trackId);
+    if (track) drawVolumeLane(d.rows, { ...track, automation: { ...track.automation, volume: d.points } }, samplesPerPixel(engine.get("document")));
+  };
+  const startAuto = (e: PointerEvent, rows: HTMLElement) => {
+    const trackId = rows.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    const track = engine.get("document").tracks.find((t) => t.id === trackId);
+    if (!trackId || !track) return;
+    e.preventDefault();
+    const points = [...(track.automation?.volume ?? [])];
+    const circle = (e.target as Element).closest("circle");
+    let index = circle?.parentElement ? Array.from(circle.parentElement.children).indexOf(circle) : -1;
+    if (index >= 0 && e.altKey) {
+      points.splice(index, 1);
+      engine.dispatch({ type: "set-automation", trackId, param: "volume", points });
+      return;
+    }
+    if (index < 0) {
+      const added = autoPointAt(rows, e);
+      points.push(added);
+      points.sort((a, b) => a.time - b.time);
+      index = points.indexOf(added);
+    }
+    autoDrag = { trackId, rows, index, points, moved: false };
+    rows.setPointerCapture(e.pointerId);
+    previewAuto(autoDrag);
+  };
+  lanes.addEventListener("pointermove", (e) => {
+    const d = autoDrag;
+    if (!d) return;
+    d.moved = true;
+    const next = autoPointAt(d.rows, e);
+    const lo = d.index > 0 ? d.points[d.index - 1].time + 1 : 0;
+    const hi = d.index < d.points.length - 1 ? d.points[d.index + 1].time - 1 : Number.MAX_SAFE_INTEGER;
+    d.points[d.index] = { time: Math.min(hi, Math.max(lo, next.time)), value: next.value };
+    previewAuto(d);
+  });
+  const endAuto = (apply: boolean) => {
+    const d = autoDrag;
+    autoDrag = null;
+    if (!d) return;
+    if (apply) engine.dispatch({ type: "set-automation", trackId: d.trackId, param: "volume", points: d.points });
+    else render(engine.get("document"));
+  };
+  lanes.addEventListener("pointerup", () => endAuto(true));
+  lanes.addEventListener("pointercancel", () => endAuto(false));
 
   const spot = document.createElement("div");
   spot.className = "fw-spot";
@@ -577,6 +686,11 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   lanes.addEventListener("pointerdown", (e) => {
     const target = e.target as HTMLElement;
     if (target.closest(".fw-take")) return;
+    const autoRows = target.closest<HTMLElement>(".fw-auto-rows");
+    if (autoRows) {
+      if (e.button === 0) startAuto(e, autoRows);
+      return;
+    }
     if (target.closest(".fw-take-rows")) {
       const seg = target.closest<HTMLElement>(".fw-take-seg");
       if (seg && e.button === 0) startTakeDrag(e, seg);
