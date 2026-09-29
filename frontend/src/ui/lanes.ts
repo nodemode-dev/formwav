@@ -395,6 +395,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       },
       update: (n, t) => updateLane(n, t, doc, spp),
     });
+    lanes.dispatchEvent(new Event("fw-lanes-rendered"));
   };
 
   document.addEventListener("nm:ui-settings-changed", () => {
@@ -555,6 +556,84 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   lanes.addEventListener("pointerup", () => endAuto(true));
   lanes.addEventListener("pointercancel", () => endAuto(false));
 
+  /** Smart Tool range (interface state): a time range on one track, made by dragging in a clip's upper half. */
+  let range: { trackId: string; start: number; end: number } | null = null;
+  let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean } | null = null;
+  let hovered: HTMLElement | null = null;
+  const rangeBox = document.createElement("div");
+  rangeBox.className = "fw-range";
+  rangeBox.hidden = true;
+  const rangeAt = (body: HTMLElement, clientX: number) => {
+    const doc = engine.get("document");
+    const spp = samplesPerPixel(doc);
+    const raw = Math.max(0, clientX - body.getBoundingClientRect().left) * spp;
+    return Math.round(snapSamples(raw, doc.sampleRate, doc.sampleRate / spp));
+  };
+  const drawRange = () => {
+    const body = range ? lanes.querySelector<HTMLElement>(`.fw-lane[data-key="${range.trackId}"] .fw-lane-body`) : null;
+    if (!range || !body) {
+      if (!rangeBox.hidden) rangeBox.hidden = true;
+      return;
+    }
+    if (rangeBox.parentElement !== body) body.append(rangeBox);
+    const spp = samplesPerPixel(engine.get("document"));
+    const transform = `translateX(${(range.start / spp).toFixed(1)}px)`;
+    const width = `${((range.end - range.start) / spp).toFixed(1)}px`;
+    if (rangeBox.style.transform !== transform) rangeBox.style.transform = transform;
+    if (rangeBox.style.width !== width) rangeBox.style.width = width;
+    if (rangeBox.hidden) rangeBox.hidden = false;
+  };
+  const clearRange = () => {
+    if (!range) return;
+    range = null;
+    drawRange();
+  };
+  lanes.addEventListener("fw-lanes-rendered", drawRange);
+  lanes.addEventListener("pointerdown", () => clearRange(), true);
+  const startRange = (e: PointerEvent, trackId: string, node: HTMLElement) => {
+    const body = node.closest<HTMLElement>(".fw-lane-body");
+    if (!body) return;
+    rangeDrag = { trackId, body, x0: e.clientX, moved: false };
+    body.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+  lanes.addEventListener("pointermove", (e) => {
+    const d = rangeDrag;
+    if (d) {
+      if (!d.moved && Math.abs(e.clientX - d.x0) < 3) return;
+      d.moved = true;
+      const a = rangeAt(d.body, d.x0);
+      const b = rangeAt(d.body, e.clientX);
+      range = { trackId: d.trackId, start: Math.min(a, b), end: Math.max(a, b) };
+      drawRange();
+      return;
+    }
+    if (e.buttons) return;
+    const clip = (e.target as HTMLElement).closest<HTMLElement>(".fw-lane-body .fw-clip");
+    if (hovered && hovered !== clip) {
+      delete hovered.dataset.zone;
+      hovered = null;
+    }
+    if (!clip) return;
+    const r = clip.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const onHandle = !!(e.target as HTMLElement).closest(".fw-gain-line, .fw-fade-handle, .fw-take");
+    const zone = onHandle || x < EDGE_PX || x > r.width - EDGE_PX ? "" : e.clientY - r.top < r.height / 2 ? "range" : "grab";
+    if ((clip.dataset.zone ?? "") !== zone) {
+      if (zone) clip.dataset.zone = zone;
+      else delete clip.dataset.zone;
+    }
+    hovered = clip;
+  });
+  const endRange = (apply: boolean) => {
+    const d = rangeDrag;
+    rangeDrag = null;
+    if (!d) return;
+    if (!apply || !d.moved || (range && range.end <= range.start)) clearRange();
+  };
+  lanes.addEventListener("pointerup", () => endRange(true));
+  lanes.addEventListener("pointercancel", () => endRange(false));
+
   const spot = document.createElement("div");
   spot.className = "fw-spot";
   spot.hidden = true;
@@ -685,7 +764,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
   };
 
-  type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out" | "gain";
+  type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out" | "gain" | "range";
   type Member = { trackId: string; clip: Clip; node: HTMLElement };
   type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number; group: Member[]; ripple: boolean; followers: Member[]; reorder: boolean };
   let drag: Gesture | null = null;
@@ -710,6 +789,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         return [-(clip.length - fadeIn - fadeOut) / spp, fadeOut / spp];
       case "gain":
         return [-Infinity, Infinity];
+      case "range":
+        return [0, 0];
     }
   };
 
@@ -754,8 +835,10 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
             ? "trim-left"
             : x > rect.width - EDGE_PX
               ? "trim-right"
-              : "move";
-    if (spotEnabled() && kind === "move" && !e.shiftKey) {
+              : e.clientY - rect.top < rect.height / 2
+                ? "range"
+                : "move";
+    if (spotEnabled() && (kind === "move" || kind === "range") && !e.shiftKey) {
       e.preventDefault();
       selectedClipIds.clear();
       selectedClipIds.add(clip.id);
@@ -763,7 +846,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       openSpot(trackId, clip, node);
       return;
     }
-    if (e.shiftKey && kind === "move") {
+    if (e.shiftKey && (kind === "move" || kind === "range")) {
       if (selectedClipIds.has(clip.id)) selectedClipIds.delete(clip.id);
       else selectedClipIds.add(clip.id);
       markSelected();
@@ -775,6 +858,10 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       selectedClipIds.add(clip.id);
     }
     markSelected();
+    if (kind === "range") {
+      startRange(e, trackId, node);
+      return;
+    }
     const doc = engine.get("document");
     const spp = samplesPerPixel(doc);
     let [low, high] = limits(kind, clip, spp);
@@ -1065,6 +1152,19 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (e.key === "=" || e.key === "+") setZoom(zoom * 2);
     else if (e.key === "-") setZoom(zoom / 2);
     else if (e.key === "0") setZoom(1);
+    else if (range && (e.key === "Delete" || e.key === "Backspace")) {
+      const r = range;
+      clearRange();
+      engine.dispatch({ type: "clear-range", trackId: r.trackId, start: r.start, end: r.end, ripple: shuffleEnabled() });
+    } else if (range && e.key.toLowerCase() === "s") {
+      const r = range;
+      const clips = engine.get("document").tracks.find((t) => t.id === r.trackId)?.clips ?? [];
+      // End first: a split keeps the left piece's id, so the start split still finds the same clip.
+      const commands = clips.flatMap((c) =>
+        [r.end, r.start].filter((at) => at > c.start && at < c.start + c.length).map((at) => ({ type: "split-clip" as const, trackId: r.trackId, clipId: c.id, at })),
+      );
+      if (commands.length) engine.dispatch({ type: "batch", commands });
+    } else if (range && e.key === "Escape") clearRange();
     else if (e.key.toLowerCase() === "s" && selectedClipIds.size) {
       const at = engine.get("transport").positionSamples;
       const commands = selection()

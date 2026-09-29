@@ -502,6 +502,21 @@ html, body, #app { height: 100%; }
 
 .fw-take[hidden] { display: none; }
 
+.fw-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-raised);
+  background: var(--accent-color);
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.fw-range[hidden] { display: none; }
+.fw-clip[data-zone="range"] { cursor: text; }
+.fw-clip[data-zone="grab"] { cursor: grab; }
+
 .fw-take-rows { grid-column: 2; border-top: 1px dashed var(--border-color); }
 .fw-take-rows[hidden] { display: none; }
 .fw-take-row { position: relative; block-size: calc(var(--space-8) * 1.5); }

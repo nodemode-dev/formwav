@@ -123,6 +123,7 @@ export type Command =
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
   | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
+  | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -178,6 +179,46 @@ function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): Se
 
 export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string): SessionDoc {
   switch (cmd.type) {
+    case "clear-range": {
+      const from = Math.max(0, Math.round(Math.min(cmd.start, cmd.end)));
+      const to = Math.round(Math.max(cmd.start, cmd.end));
+      const span = to - from;
+      if (span <= 0) return doc;
+      return mapTrack(doc, cmd.trackId, (t) => {
+        let changed = false;
+        const clips: Clip[] = [];
+        for (const c of t.clips) {
+          const end = c.start + c.length;
+          if (end <= from) {
+            clips.push(c);
+            continue;
+          }
+          if (c.start >= to) {
+            clips.push(cmd.ripple ? { ...c, start: c.start - span } : c);
+            changed ||= cmd.ripple;
+            continue;
+          }
+          changed = true;
+          if (c.start < from) clips.push({ ...c, length: from - c.start, fadeIn: Math.min(c.fadeIn ?? 0, from - c.start), fadeOut: 0 });
+          if (end > to) {
+            const media = doc.media[c.mediaId];
+            const ratio = media ? media.sampleRate / doc.sampleRate : 1;
+            const offset = Math.round((to - c.start) * ratio);
+            clips.push({
+              ...c,
+              id: c.start < from ? newId() : c.id,
+              start: cmd.ripple ? from : to,
+              sourceIn: c.sourceIn + offset,
+              length: end - to,
+              fadeIn: 0,
+              fadeOut: Math.min(c.fadeOut ?? 0, end - to),
+              ...(c.takes ? { takes: c.takes.map((o) => o + offset) } : {}),
+            });
+          }
+        }
+        return changed ? { ...t, clips } : t;
+      });
+    }
     case "set-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
         const [lo, hi] = cmd.param === "volume" ? [-60, 12] : [-1, 1];
