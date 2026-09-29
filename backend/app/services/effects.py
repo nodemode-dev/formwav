@@ -117,10 +117,10 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
-    ("Audacity effects", [("amplify-up", "Amplify +6 dB"), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo +10%"), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch +1 semitone"), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed +10%"), ("extreme-stretch", "Extreme stretch x4")]),
+    ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch...")]),
     ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
-    ("Mastering", [("peak-normalize", "Peak normalize to -1 dB"), ("loudness-streaming", "Loudness: streaming -14 LUFS"), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
+    ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
 LABELS = {key: label for _, items in GROUPS for key, label in items}
 #: Effects that make a stereo image, so their output is stereo even from mono.
@@ -129,15 +129,65 @@ STEREO = {"wide-stage", "stereo-bloom"}
 STEREO_ONLY = {"center-extract", "center-remove", "swap-channels", "mid-side-encode", "mid-side-decode", "azimuth"}
 
 
+def _lin(db: float) -> float:
+    return 10 ** (db / 20)
+
+
+#: Adjustable effects: each parameter is (label, min, max, default, unit); the builder makes the chain from clamped values.
+#: Enhance speech's strength follows formcut's own voice-clean strength control (noise floor and ratio scale with it).
+PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]] = {
+    "voice-clean": ({"strength": ("Strength", 0, 100, 50, "%")}, lambda v: f"highpass=f=90,afftdn=nf={-15 - 20 * v['strength'] / 100:.1f},acompressor=threshold=0.12:ratio={1.5 + 3 * v['strength'] / 100:.2f},alimiter"),
+    "amplify-up": ({"db": ("Gain", -24, 24, 6, "dB")}, lambda v: f"volume={v['db']:.2f}dB"),
+    "peak-normalize": ({"target": ("Peak", -24, 0, -1, "dBFS")}, None),
+    "loudness-streaming": ({"target": ("Target", -36, -8, -14, "LUFS")}, lambda v: f"loudnorm=I={v['target']:.1f}:TP=-1:LRA=11"),
+    "compress": ({"threshold": ("Threshold", -60, 0, -18, "dB"), "ratio": ("Ratio", 1, 20, 4, ":1")}, lambda v: f"acompressor=threshold={_lin(v['threshold']):.5f}:ratio={v['ratio']:.2f}:attack=10:release=150"),
+    "noise-gate": ({"threshold": ("Threshold", -80, 0, -20, "dB")}, lambda v: f"agate=threshold={_lin(v['threshold']):.5f}:ratio=6:attack=5:release=120:range=0.05"),
+    "tempo-faster": ({"percent": ("Tempo", -50, 100, 10, "%")}, lambda v: f"rubberband=tempo={1 + v['percent'] / 100:.5f}"),
+    "pitch-up-semitone": ({"semitones": ("Pitch", -12, 12, 1, "st")}, lambda v: f"rubberband=pitch={2 ** (v['semitones'] / 12):.6f}"),
+    "speed-faster": ({"percent": ("Speed", -50, 100, 10, "%")}, lambda v: f"aresample=48000,asetrate={round(48000 * (1 + v['percent'] / 100))},aresample=48000"),
+    "extreme-stretch": ({"factor": ("Stretch", 1.5, 10, 4, "x")}, lambda v: f"rubberband=tempo={1 / v['factor']:.5f}"),
+    "truncate-silence": ({"threshold": ("Below", -80, -20, -45, "dB"), "seconds": ("Longer than", 0.1, 5, 0.5, "s")}, lambda v: f"silenceremove=stop_periods=-1:stop_duration={v['seconds']:.2f}:stop_threshold={v['threshold']:.1f}dB"),
+    "denoise": ({"floor": ("Noise floor", -80, -20, -25, "dB")}, lambda v: f"afftdn=nf={v['floor']:.1f}"),
+    "de-ess-strong": ({"intensity": ("Intensity", 0, 100, 80, "%")}, lambda v: f"deesser=i={v['intensity'] / 100:.2f}:m=0.5:f=0.5"),
+    "bass": ({"gain": ("Gain", -20, 20, 8, "dB")}, lambda v: f"bass=g={v['gain']:.1f}:f=120"),
+    "treble": ({"gain": ("Gain", -20, 20, 6, "dB")}, lambda v: f"treble=g={v['gain']:.1f}:f=3500"),
+    "presence-lift": ({"freq": ("Frequency", 200, 12000, 3000, "Hz"), "gain": ("Gain", -15, 15, 5, "dB")}, lambda v: f"equalizer=f={v['freq']:.0f}:t=q:w=1.2:g={v['gain']:.1f}"),
+    "echo": ({"delay": ("Delay", 20, 2000, 100, "ms"), "decay": ("Decay", 5, 90, 40, "%")}, lambda v: f"aecho=0.8:0.7:{v['delay']:.0f}:{v['decay'] / 100:.2f}"),
+}
+
+
+def _values(name: str, given: dict | None) -> dict[str, float]:
+    """The effect's parameter values: given ones clamped to their ranges, defaults for the rest."""
+    spec = PARAMS.get(name, ({}, None))[0]
+    out = {}
+    for key, (_, lo, hi, default, _) in spec.items():
+        try:
+            value = float((given or {}).get(key, default))
+        except (TypeError, ValueError):
+            value = default
+        out[key] = min(max(value, lo), hi)
+    return out
+
+
+def _controls(key: str) -> list[dict]:
+    spec = PARAMS.get(key, ({}, None))[0]
+    return [{"id": p, "label": label, "min": lo, "max": hi, "default": default, "unit": unit} for p, (label, lo, hi, default, unit) in spec.items()]
+
+
 def catalogue() -> list[dict]:
-    return [{"group": group, "effects": [{"id": key, "label": label} for key, label in items]} for group, items in GROUPS]
+    return [{"group": group, "effects": [{"id": key, "label": label, "params": _controls(key)} for key, label in items]} for group, items in GROUPS]
 
 
-def apply(media_id: str, name: str) -> dict:
-    """Renders `name` over a stored media file into new media at the same rate; the source is kept."""
+def apply(media_id: str, name: str, params: dict | None = None) -> dict:
+    """Renders `name` (with `params` for an adjustable effect) over a stored media file into new media at the same rate;
+    the source is kept."""
     chain = ALL_CHAINS.get(name)
     if chain is None:
         raise media.MediaError(f"no effect named {name}")
+    values = _values(name, params)
+    builder = PARAMS.get(name, ({}, None))[1]
+    if callable(builder):
+        chain = builder(values)
     info = media.media_info(media_id)
     rate, channels = int(info["sampleRate"]), int(info["channels"])
     source = media_dir() / f"{media_id}.wav"
@@ -149,7 +199,7 @@ def apply(media_id: str, name: str) -> dict:
         peak_db = stats(media_id).get("peakDb")
         if peak_db is None or peak_db <= -90:
             raise media.MediaError("the clip is silent; there is nothing to normalize")
-        chain = f"volume={-1.0 - peak_db:.6f}dB"
+        chain = f"volume={values['target'] - peak_db:.6f}dB"
     stereo = name in STEREO
     af = ("aformat=channel_layouts=stereo," if stereo else "") + chain + f",aresample={rate}"
     with tempfile.TemporaryDirectory() as tmp:
@@ -161,4 +211,6 @@ def apply(media_id: str, name: str) -> dict:
             raise media.MediaError(f"{LABELS.get(name, name)} failed: {done.stderr.decode(errors='replace').strip()[-300:]}")
         data = out.read_bytes()
     stem = str(info["name"]).rsplit(".", 1)[0]
-    return media.import_wav(f"{stem} ({LABELS.get(name, name)}).wav", data)
+    spec = PARAMS.get(name, ({}, None))[0]
+    detail = "".join(f" {values[k]:g}{spec[k][4]}" for k in spec)
+    return media.import_wav(f"{stem} ({LABELS.get(name, name).rstrip('.')}{detail}).wav", data)

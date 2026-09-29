@@ -93,11 +93,19 @@ def list_effects() -> list[dict]:
 
 
 @router.post("/media/{media_id}/effect", status_code=201)
-def apply_effect(media_id: str, name: str) -> dict:
+def apply_effect(media_id: str, name: str, params: str = "") -> dict:
+    import json
+
     from ..services import effects
 
     try:
-        return effects.apply(media_id, name)
+        values = json.loads(params) if params else None
+    except json.JSONDecodeError as err:
+        raise HTTPException(422, "params must be a JSON object") from err
+    if values is not None and not isinstance(values, dict):
+        raise HTTPException(422, "params must be a JSON object")
+    try:
+        return effects.apply(media_id, name, values)
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err
     except media.CoreMissing as err:
