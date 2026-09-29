@@ -136,6 +136,12 @@ pub unsafe extern "C" fn fw_clear_envelopes(player: *mut Player) {
     (*player).clear_envelopes();
 }
 
+/// Sets the master fader in dB (0 turns the master stage off).
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_master_db(player: *mut Player, db: f64) {
+    (*player).set_master_db(db);
+}
+
 /// Adds an envelope from `count` (time, value) f64 pairs at `points`; `db` != 0 means dB values. Returns its 1-based index.
 #[no_mangle]
 pub unsafe extern "C" fn fw_add_envelope(player: *mut Player, points: *const f64, count: u32, db: u32) -> u32 {

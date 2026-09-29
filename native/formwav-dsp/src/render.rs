@@ -98,6 +98,7 @@ pub struct Player {
     meter_right: Vec<f32>,
     loudness: Option<crate::loudness::LiveLoudness>,
     envelopes: Vec<Envelope>,
+    master_gain: Option<f32>,
 }
 
 impl Player {
@@ -119,6 +120,12 @@ impl Player {
 
     pub fn clear_envelopes(&mut self) {
         self.envelopes.clear();
+    }
+
+    /// Master fader in dB, applied to the finished mix before the peak and loudness meters. 0 dB turns the
+    /// stage off entirely, so a session at 0 dB renders exactly as it did without a master stage.
+    pub fn set_master_db(&mut self, db: f64) {
+        self.master_gain = if db == 0.0 { None } else { Some(10f64.powf(db / 20.0) as f32) };
     }
 
     /// Adds an envelope from (time, value) points and returns its 1-based index. With `db`, values are dB
@@ -172,6 +179,12 @@ impl Player {
                 if self.position == end {
                     self.position = start;
                 }
+            }
+        }
+        if let Some(g) = self.master_gain {
+            for i in 0..n {
+                left[i] *= g;
+                right[i] *= g;
             }
         }
         for i in 0..n {

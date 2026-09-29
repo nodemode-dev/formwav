@@ -18,8 +18,10 @@ fn render<'py>(
     frames: usize,
     buses: Vec<(u32, f32, f32)>,
     envelopes: Vec<(Vec<(u64, f64)>, bool)>,
+    master_db: f64,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let mut player = Player::new();
+    player.set_master_db(master_db);
     for (id, bytes) in &sources {
         let buf = decode_wav(bytes.as_bytes()).map_err(|e| PyValueError::new_err(e.to_string()))?;
         player.load_source(*id, buf);

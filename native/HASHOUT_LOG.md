@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.31.0
-Last updated: 2026-09-28 · volume and pan automation envelopes in the player
+Current build version: v0.34.0
+Last updated: 2026-09-28 · master fader applied to the finished mix; off at 0 dB
 
 ---
 
@@ -327,3 +327,10 @@ A track's level is the peak of the sum of its clips, which can exceed any single
 - logged: v0.31.0 · 2026-09-28
 
 The player holds an envelope table; a clip may reference a volume envelope (linear gain on top of its own gain) and a pan envelope (replacing its pan), each evaluated per sample by linear interpolation between points, the first and last values held. Volume points arrive in dB as f64 on both paths (wasm and pyo3) and are converted to linear gain once, in Rust, on load, so the browser and the engine compute identical gains. Clips without envelopes keep the exact previous arithmetic. Verified in Node on the wasm32 build: a 0 to -20 dB ramp over 48,000 samples equalled f32 linear interpolation of the gains exactly (0), and the hold after the last point exactly; browser and engine renders with volume automation were identical (0.0 over 480,000 frames), and with pan automation too within 3e-8 (sine and cosine in the two math libraries).
+
+### src/render.rs, src/wasm.rs, src/python.rs · master fader
+- refers-to: src/render.rs :: `Player::master_gain`, `Player::set_master_db`, `render`; src/wasm.rs :: `fw_set_master_db`; src/python.rs :: `render` (`master_db`)
+- kind: rationale
+- logged: v0.34.0 · 2026-09-28
+
+The master fader scales the finished mix after the buses and before the peak scan and live loudness, so those meters report what is heard. The dB value is converted once, in Rust, on both the wasm and pyo3 paths; 0 dB clears the stage entirely rather than multiplying by one, so every session at 0 dB renders exactly as before. Verified in Node on the wasm32 build over 288,000 samples: at 0 dB the output was bit-identical to a player never given a master level, and at -6 dB every sample equalled the unity output times f32(10^(-6/20)) exactly.
