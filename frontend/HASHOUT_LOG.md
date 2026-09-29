@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.15.0
-Last updated: 2026-09-28 · grid snapping, clip gain line, transport bar as a flex row
+Current build version: v0.16.0
+Last updated: 2026-09-28 · multi-clip selection, group move, split and delete as batches; snapped seeks
 
 ---
 
@@ -759,3 +759,28 @@ Each clip has a line whose height maps +12 dB at the top to -36 dB at the bottom
 - logged: v0.15.0 · 2026-09-28
 
 The bar was a grid of three columns (`auto auto 1fr`) made for the controls and the clock; the meter appended in v0.5.0 took the third, and the Grid button, a fourth child, fell onto an implicit second row that overflowed the bar and pushed the meter out of it. Only the screenshot showed it. The bar is now a flex row: controls, clock, Grid and meter measured in one row inside the bar after the fix, and the recording regression's meter reading was unchanged.
+
+---
+
+## v0.16.0 · selections of several clips
+
+### src/engine/document.ts · batch
+- refers-to: src/engine/document.ts :: `batch`
+- kind: rationale
+- logged: v0.16.0 · 2026-09-28
+
+`batch` applies a list of commands in order to the running document, so any group edit is one undo step and reuses the single-clip rules exactly; if nothing changes, nothing is recorded (verified: a clamped group move added no step).
+
+### src/ui/lanes.ts · selection as a set, group gestures
+- refers-to: src/ui/lanes.ts :: `selectedClipIds`, `Member`, `Gesture.group`, pointer-down, `preview`, `restore`, `commit`, keydown
+- kind: rationale
+- logged: v0.16.0 · 2026-09-28
+
+Shift-click on a clip's body toggles it in the selection without dragging; a plain press on an unselected clip selects only that clip, on a selected clip keeps the group. Moving any selected clip moves the whole selection by the same amount, previewed by `transform` on every member; the left limit is the tightest across the group, so no member can pass time zero; in Grid mode the grabbed clip's edge snaps and the rest follow. Trims, fades and gain still act on the clip under the pointer. Cmd or Ctrl A selects all; S splits every selected clip the playhead is inside; Delete removes the selection; each is one `batch`. Escape or a plain press on empty lane space clears the selection; with Shift held it is kept. Verified with two clips on two tracks: a group move of 50 px moved both by 24,000 in one step and undo returned both; a -200 px group move held at the earlier clip's zero and recorded nothing; Shift-toggle, select all, Escape and the empty-space rules behaved; a group split made 2 + 2 clips and a group delete removed all, each one step.
+
+### src/ui/transport.ts and ruler.ts · snapped seeks
+- refers-to: src/ui/transport.ts :: lanes click; src/ui/ruler.ts :: pointerdown
+- kind: explainer
+- logged: v0.16.0 · 2026-09-28
+
+In Grid mode a click on empty lane space or on the ruler moves the playhead to the nearest grid tick. Verified at 37 px: 19,200 with the grid, 17,760 without, on both. The first harness run clicked the lane where a clip lay (clicks on clips deliberately do not seek) and read stale positions; the saved harness clicks an empty lane. Each selected clip shows its gain label, and on a long clip it can be cut off at the window's edge (seen in the screenshot); cosmetic.

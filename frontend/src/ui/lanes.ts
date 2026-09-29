@@ -31,7 +31,7 @@ function peaksFor(id: string): Promise<PeakData> {
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 16;
 let zoom = 1;
-let selectedClipId: string | null = null;
+const selectedClipIds = new Set<string>();
 const zoomListeners = new Set<() => void>();
 
 export function getZoom(): number {
@@ -175,7 +175,7 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
     node.dataset.width = width;
     node.style.width = width;
   }
-  const selected = String(clip.id === selectedClipId);
+  const selected = String(selectedClipIds.has(clip.id));
   if (node.getAttribute("aria-selected") !== selected) node.setAttribute("aria-selected", selected);
   const handles: [string, string][] = [
     [".fw-fade-in", `translateX(${((clip.fadeIn ?? 0) / spp).toFixed(2)}px)`],
@@ -270,13 +270,14 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
 
   const markSelected = () => {
     for (const node of lanes.querySelectorAll<HTMLElement>(".fw-clip")) {
-      const on = String(node.dataset.key === selectedClipId);
+      const on = String(node.dataset.key !== undefined && selectedClipIds.has(node.dataset.key));
       if (node.getAttribute("aria-selected") !== on) node.setAttribute("aria-selected", on);
     }
   };
 
   type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out" | "gain";
-  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number };
+  type Member = { trackId: string; clip: Clip; node: HTMLElement };
+  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number; group: Member[] };
   let drag: Gesture | null = null;
   const EDGE_PX = 6;
 
@@ -307,8 +308,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const node = target.closest<HTMLElement>(".fw-clip");
     const trackId = node?.closest<HTMLElement>(".fw-lane")?.dataset.key;
     if (!node || !trackId || !node.dataset.key || e.button !== 0) {
-      if (selectedClipId !== null && !target.closest(".fw-lane-head")) {
-        selectedClipId = null;
+      if (selectedClipIds.size && !e.shiftKey && !target.closest(".fw-lane-head")) {
+        selectedClipIds.clear();
         markSelected();
       }
       return;
@@ -328,10 +329,34 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
             : x > box.width - EDGE_PX
               ? "trim-right"
               : "move";
-    const [low, high] = limits(kind, clip, samplesPerPixel(engine.get("document")));
-    selectedClipId = clip.id;
+    if (e.shiftKey && kind === "move") {
+      if (selectedClipIds.has(clip.id)) selectedClipIds.delete(clip.id);
+      else selectedClipIds.add(clip.id);
+      markSelected();
+      e.preventDefault();
+      return;
+    }
+    if (!selectedClipIds.has(clip.id)) {
+      selectedClipIds.clear();
+      selectedClipIds.add(clip.id);
+    }
     markSelected();
-    drag = { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low, high };
+    const doc = engine.get("document");
+    const spp = samplesPerPixel(doc);
+    let [low, high] = limits(kind, clip, spp);
+    const group: Member[] = [{ trackId, clip, node }];
+    if (kind === "move") {
+      for (const track of doc.tracks) {
+        for (const other of track.clips) {
+          if (other.id === clip.id || !selectedClipIds.has(other.id)) continue;
+          const otherNode = lanes.querySelector<HTMLElement>(`.fw-clip[data-key="${other.id}"]`);
+          if (!otherNode) continue;
+          group.push({ trackId: track.id, clip: other, node: otherNode });
+          low = Math.max(low, -other.start / spp);
+        }
+      }
+    }
+    drag = { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low, high, group };
     node.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
@@ -347,7 +372,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       return;
     }
     const shift = `translateX(${d.dx.toFixed(1)}px)`;
-    if (d.kind === "move") d.node.style.transform = shift;
+    if (d.kind === "move") for (const member of d.group) member.node.style.transform = shift;
     else if (d.kind === "trim-left") {
       d.node.style.transform = shift;
       d.node.style.width = `${Math.max(1, d.clip.length / spp - d.dx).toFixed(2)}px`;
@@ -360,7 +385,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   };
 
   const restore = (d: Gesture) => {
-    d.node.style.transform = "";
+    for (const member of d.group) member.node.style.transform = "";
     if (d.node.dataset.width) d.node.style.width = d.node.dataset.width;
     for (const handle of d.node.querySelectorAll<HTMLElement>(".fw-fade-handle")) handle.style.transform = handle.dataset.tx ?? "";
     const line = d.node.querySelector<HTMLElement>(".fw-gain-line");
@@ -378,7 +403,11 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const delta = Math.round(d.dx * spp);
     const c = d.clip;
     const ids = { trackId: d.trackId, clipId: c.id };
-    if (d.kind === "move") engine.dispatch({ type: "move-clip", ...ids, start: c.start + delta });
+    if (d.kind === "move")
+      engine.dispatch({
+        type: "batch",
+        commands: d.group.map((m) => ({ type: "move-clip" as const, trackId: m.trackId, clipId: m.clip.id, start: m.clip.start + delta })),
+      });
     else if (d.kind === "trim-left") engine.dispatch({ type: "set-clip-bounds", ...ids, start: c.start + delta, sourceIn: c.sourceIn + delta, length: c.length - delta });
     else if (d.kind === "trim-right") engine.dispatch({ type: "set-clip-bounds", ...ids, start: c.start, sourceIn: c.sourceIn, length: c.length + delta });
     else if (d.kind === "fade-in") engine.dispatch({ type: "set-clip-fades", ...ids, fadeIn: (c.fadeIn ?? 0) + delta, fadeOut: c.fadeOut ?? 0 });
@@ -422,22 +451,32 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   window.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement | null;
     if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      for (const track of engine.get("document").tracks) for (const clip of track.clips) selectedClipIds.add(clip.id);
+      markSelected();
+      return;
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const selection = () =>
+      engine
+        .get("document")
+        .tracks.flatMap((t) => t.clips.filter((c) => selectedClipIds.has(c.id)).map((c) => ({ trackId: t.id, clip: c })));
     if (e.key === "=" || e.key === "+") setZoom(zoom * 2);
     else if (e.key === "-") setZoom(zoom / 2);
     else if (e.key === "0") setZoom(1);
-    else if (e.key.toLowerCase() === "s" && selectedClipId) {
-      const clipId = selectedClipId;
-      const track = engine.get("document").tracks.find((t) => t.clips.some((c) => c.id === clipId));
-      if (track) engine.dispatch({ type: "split-clip", trackId: track.id, clipId, at: engine.get("transport").positionSamples });
-    }
-    else if ((e.key === "Delete" || e.key === "Backspace") && selectedClipId) {
-      const clipId = selectedClipId;
-      const track = engine.get("document").tracks.find((t) => t.clips.some((c) => c.id === clipId));
-      selectedClipId = null;
-      if (track) engine.dispatch({ type: "remove-clip", trackId: track.id, clipId });
-    } else if (e.key === "Escape" && selectedClipId) {
-      selectedClipId = null;
+    else if (e.key.toLowerCase() === "s" && selectedClipIds.size) {
+      const at = engine.get("transport").positionSamples;
+      const commands = selection()
+        .filter(({ clip }) => at > clip.start && at < clip.start + clip.length)
+        .map(({ trackId, clip }) => ({ type: "split-clip" as const, trackId, clipId: clip.id, at }));
+      if (commands.length) engine.dispatch({ type: "batch", commands });
+    } else if ((e.key === "Delete" || e.key === "Backspace") && selectedClipIds.size) {
+      const commands = selection().map(({ trackId, clip }) => ({ type: "remove-clip" as const, trackId, clipId: clip.id }));
+      selectedClipIds.clear();
+      if (commands.length) engine.dispatch({ type: "batch", commands });
+    } else if (e.key === "Escape" && selectedClipIds.size) {
+      selectedClipIds.clear();
       markSelected();
     } else return;
     e.preventDefault();

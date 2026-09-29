@@ -1,7 +1,7 @@
 import type { Engine } from "../engine";
 import type { Player } from "../audio/player";
 import { documentLength } from "../engine/document";
-import { labelStep } from "./grid";
+import { labelStep, snapSamples } from "./grid";
 import { onZoom, samplesPerPixel } from "./lanes";
 
 const MIN_MINOR_PX = 6;
@@ -83,7 +83,10 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
 
   canvas.addEventListener("pointerdown", (e) => {
     const doc = engine.get("document");
-    if (doc.tracks.length) player.seek(e.offsetX * samplesPerPixel(doc));
+    if (doc.tracks.length) {
+      const spp = samplesPerPixel(doc);
+      player.seek(snapSamples(e.offsetX * spp, doc.sampleRate, doc.sampleRate / spp));
+    }
   });
   engine.subscribe("document", draw);
   onZoom(draw);

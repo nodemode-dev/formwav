@@ -2,6 +2,7 @@ import type { Engine, SessionDoc, TransportState } from "../engine";
 import type { Player } from "../audio/player";
 import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
 import { onZoom, samplesPerPixel } from "./lanes";
+import { snapSamples } from "./grid";
 
 export function mountTransport(host: HTMLElement, engine: Engine, player: Player): void {
   const button = (action: string) => host.querySelector<HTMLButtonElement>(`.fw-tbtn[data-action="${action}"]`);
@@ -84,7 +85,9 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
     const body = (e.target as HTMLElement).closest<HTMLElement>(".fw-lane-body");
     if (!body) return;
     const px = e.clientX - body.getBoundingClientRect().left;
-    player.seek(px * samplesPerPixel(engine.get("document")));
+    const doc = engine.get("document");
+    const spp = samplesPerPixel(doc);
+    player.seek(snapSamples(px * spp, doc.sampleRate, doc.sampleRate / spp));
   });
   window.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement | null;
