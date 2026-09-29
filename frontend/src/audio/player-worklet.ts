@@ -20,6 +20,7 @@ interface CoreExports {
   fw_add_bus(player: number, id: number, gain: number, pan: number): void;
   fw_take_peaks(player: number, out: number): void;
   fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
+  fw_take_bus_peaks(player: number, out: number, maxBuses: number): number;
   fw_loudness_reset(player: number, rate: number): void;
   fw_loudness(player: number, out: number): void;
   fw_seek(player: number, position: number): void;
@@ -65,13 +66,14 @@ export type WorkletReply =
   | { type: "ready" }
   | { type: "error"; message: string }
   | { type: "loaded"; id: number; frames: number }
-  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; trackPeaks: number[]; loudness: number[] }
+  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; trackPeaks: number[]; loudness: number[]; busPeaks: number[] }
   | { type: "ended"; position: number };
 
 /** The AudioWorkletGlobalScope's context sample rate. */
 declare const sampleRate: number;
 const MAX_FRAMES = 4096;
 const MAX_METERED_TRACKS = 256;
+const MAX_METERED_BUSES = 64;
 const REPORT_EVERY = 8;
 
 class PlayerProcessor extends AudioWorkletProcessor {
@@ -107,6 +109,8 @@ class PlayerProcessor extends AudioWorkletProcessor {
     const tracks = core.fw_take_track_peaks(this.player, this.peaks + 8, MAX_METERED_TRACKS);
     const loudnessAt = this.peaks + 8 + MAX_METERED_TRACKS * 8;
     core.fw_loudness(this.player, loudnessAt);
+    const busesAt = loudnessAt + 12;
+    const buses = core.fw_take_bus_peaks(this.player, busesAt, MAX_METERED_BUSES);
     const peaks = new Float32Array(core.memory.buffer, this.peaks, 2 + tracks * 2);
     this.reply({
       type: "position",
@@ -116,6 +120,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       peakRight: peaks[1],
       trackPeaks: Array.from(peaks.subarray(2)),
       loudness: Array.from(new Float32Array(core.memory.buffer, loudnessAt, 3)),
+      busPeaks: Array.from(new Float32Array(core.memory.buffer, busesAt, buses * 2)),
     });
   }
 
@@ -126,7 +131,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       this.player = core.fw_player_new();
       this.left = core.fw_alloc(MAX_FRAMES * 4);
       this.right = core.fw_alloc(MAX_FRAMES * 4);
-      this.peaks = core.fw_alloc(8 + MAX_METERED_TRACKS * 8 + 12);
+      this.peaks = core.fw_alloc(8 + MAX_METERED_TRACKS * 8 + 12 + MAX_METERED_BUSES * 8);
       this.reply({ type: "ready" });
       return;
     }

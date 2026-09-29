@@ -162,20 +162,32 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     else if (button.classList.contains("fw-strip-solo") && !s.bus) engine.dispatch({ type: "set-track-solo", trackId: s.id, solo: on });
   });
 
-  const shown = [-Infinity, -Infinity];
+  const shown = new Map<string, number[]>();
   let lastTime = performance.now();
-  player.onOutputLevel((left, right) => {
+  const drive = (key: string, selector: string, pair: [number, number], silent: boolean, fall: number) => {
+    const previous = shown.get(key) ?? [-Infinity, -Infinity];
+    const next = pair.map((peak, c) => (silent ? -Infinity : Math.max(peak > 0 ? 20 * Math.log10(peak) : -Infinity, previous[c] - fall)));
+    shown.set(key, next);
+    const bars = panel.querySelectorAll<HTMLElement>(selector);
+    next.forEach((db, c) => {
+      const bar = bars[c];
+      if (!bar) return;
+      const transform = `scaleX(${Math.max(0, Math.min(1, (db + 60) / 60)).toFixed(3)})`;
+      if (bar.style.transform !== transform) bar.style.transform = transform;
+    });
+  };
+  player.onOutputLevel((left, right, _tracks, _loudness, buses) => {
     const now = performance.now();
     const fall = ((now - lastTime) / 1000) * 20;
     lastTime = now;
-    const bars = panel.querySelectorAll<HTMLElement>('.fw-strip[data-kind="master"] .fw-strip-meter .fw-out-bar');
-    [left, right].forEach((peak, c) => {
-      const silent = left === 0 && right === 0;
-      shown[c] = silent ? -Infinity : Math.max(peak > 0 ? 20 * Math.log10(peak) : -Infinity, shown[c] - fall);
-      const bar = bars[c];
-      if (!bar) return;
-      const transform = `scaleX(${Math.max(0, Math.min(1, (shown[c] + 60) / 60)).toFixed(3)})`;
-      if (bar.style.transform !== transform) bar.style.transform = transform;
-    });
+    drive("master", '.fw-strip[data-kind="master"] .fw-strip-meter .fw-out-bar', [left, right], left === 0 && right === 0, fall);
+    // The core meters buses in plan order, which leaves muted buses out; walk the document's buses the same way.
+    let k = 0;
+    for (const bus of engine.get("document").buses ?? []) {
+      const live = !bus.mute;
+      const pair: [number, number] = live ? [buses[2 * k] ?? 0, buses[2 * k + 1] ?? 0] : [0, 0];
+      if (live) k++;
+      drive(bus.id, `.fw-strip[data-key="${bus.id}"] .fw-strip-meter .fw-out-bar`, pair, !live || buses.length === 0, fall);
+    }
   });
 }

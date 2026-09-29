@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.34.0
-Last updated: 2026-09-28 · master fader and a Master strip in the mixer
+Current build version: v0.35.0
+Last updated: 2026-09-28 · bus strips meter their buses
 
 ---
 
@@ -1071,3 +1071,14 @@ A Mixer button in the transport bar (or X) shows a panel docked over the bottom 
 - logged: v0.34.0 · 2026-09-28
 
 The session carries an optional master fader (`masterGainDb`, absent meaning 0 dB), set by `set-master-gain` (clamped, tenths of a dB, one undo step). The plan carries it, both the live and the bounce sends pass it, and the worklet hands it to the core. The mixer ends with a Master strip holding only a fader, its readout and a meter driven by the output peaks on the same scale and fall-back as the other meters. The first build failed `tsc` because `masterDb` was added to the plan's returned object but not to the `ClipPlan` type (the dev server does not type-check, so the harness ran regardless); the type and the player's initial empty plan now carry it. Bus metering, planned beside the master fader, was split into its own release. Verified: the Master strip came last with pan, mute, solo and output hidden; a -6 dB move was one undo step; the bounce equalled the engine's render exactly and equalled the unity bounce times f32(10^(-6/20)) exactly; during playback the Master strip's meter equalled the OUT meter (0.8, the 0.5 tone at -12 dBFS); undo restored 0 dB; no page errors; layout shift 0; mixer and render-parity regressions unchanged.
+
+---
+
+## v0.35.0 · bus metering
+
+### src/audio/player-worklet.ts, player.ts, src/ui/mixer.ts, shell.css · bus meters on the strips
+- refers-to: src/audio/player-worklet.ts :: `MAX_METERED_BUSES`, peaks buffer, `report`, `busPeaks`; src/audio/player.ts :: `onOutputLevel`, `emitLevel`; src/ui/mixer.ts :: meter driver; src/styles/shell.css :: `.fw-strip[data-kind="bus"]`
+- kind: warning-context
+- logged: v0.35.0 · 2026-09-28
+
+Position replies now carry per-bus peak pairs, taken into the same buffer after the loudness values (up to 64 buses). Level listeners receive them as an optional last argument that defaults to empty, so every stop, end and not-playing path publishes silent bus levels unchanged. The mixer drives the Master and bus strips from one function with the other meters' scale and fall-back, and bus strips show their meter again (v0.33.0 hid it while it could not work). Ordering hazard, checked before wiring: the core reports buses in plan order, and the plan leaves muted buses out, so matching peaks to strips by document index would show a later bus's level on the wrong strip whenever an earlier bus is muted; the mixer walks the document's buses, advancing only past unmuted ones, and a muted bus reads silent. Verified with two tracks each routed to its own bus: bus meters visible; during playback each bus strip equalled its track's lane meter (0.9 and 0.9; 0.753 and 0.867); with the first bus muted it read silent and the second still showed its own track's level (0.756 and 0.867); no page errors; layout shift 0; mixer, master, buses (browser equal to engine), track meter and output meter regressions unchanged.

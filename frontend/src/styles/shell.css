@@ -601,7 +601,6 @@ html, body, #app { height: 100%; }
 .fw-strip > :not(.fw-strip-fader) { min-inline-size: 0; max-inline-size: 100%; }
 
 .fw-strip[data-kind="bus"] { border-color: var(--accent-color-dim); }
-.fw-strip[data-kind="bus"] .fw-strip-meter { visibility: hidden; }
 .fw-strip[data-kind="master"] { border-color: var(--accent-color); }
 .fw-strip [hidden] { display: none; }
 .fw-strip-name { max-inline-size: 100%; overflow: hidden; font-size: var(--fs-12); color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
