@@ -105,7 +105,7 @@ export interface Selection {
 }
 
 export type Command =
-  | { type: "import-media"; media: MediaRef; at: number }
+  | { type: "import-media"; media: MediaRef; at: number; trackId?: string }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -167,6 +167,15 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         sourceIn: 0,
         gainDb: 0,
       };
+      const media = { ...doc.media, [cmd.media.id]: cmd.media };
+      const target = cmd.trackId ? doc.tracks.find((t) => t.id === cmd.trackId) : undefined;
+      if (target) {
+        return {
+          ...doc,
+          media,
+          tracks: doc.tracks.map((t) => (t.id === target.id ? { ...t, clips: [...t.clips, clip].sort((a, b) => a.start - b.start) } : t)),
+        };
+      }
       const track: Track = {
         id: newId(),
         name: cmd.media.name.replace(/\.[^.]+$/, "") || "Track",
@@ -176,7 +185,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         solo: false,
         clips: [clip],
       };
-      return { ...doc, sampleRate, media: { ...doc.media, [cmd.media.id]: cmd.media }, tracks: [...doc.tracks, track] };
+      return { ...doc, sampleRate, media, tracks: [...doc.tracks, track] };
     }
     case "remove-track": {
       const tracks = doc.tracks.filter((t) => t.id !== cmd.trackId);

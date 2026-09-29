@@ -3,6 +3,7 @@ import type { Player } from "../audio/player";
 import { encodeWav, startRecording, type Recording } from "../audio/recorder";
 import { importFile } from "../io/media-client";
 import { setText } from "../vendor/nodemode/dom-stable";
+import { armedTrack, recordingTrack, setRecordingTrack } from "./arm";
 
 function reason(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -44,6 +45,12 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       lastNow = now;
       meter.setAttribute("aria-valuenow", now);
     }
+    const target = recordingTrack();
+    if (target) {
+      for (const laneBar of host.querySelectorAll<HTMLElement>(`.fw-lane[data-key="${target}"] .fw-lane-meter .fw-out-bar`)) {
+        if (laneBar.style.transform !== scale) laneBar.style.transform = scale;
+      }
+    }
   };
   showLevel(0);
 
@@ -61,11 +68,14 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
     busy = true;
     try {
       setText(notice, "Waiting for the microphone");
+      const armed = engine.get("document").tracks.find((t) => t.id === armedTrack());
+      setRecordingTrack(armed?.id ?? null);
       active = await startRecording(player, engine.get("transport").positionSamples, showLevel);
       engine.setTransport({ recording: true });
-      setText(notice, "Recording");
+      setText(notice, armed ? `Recording into ${armed.name}` : "Recording");
     } catch (err) {
       active = null;
+      setRecordingTrack(null);
       const refused = err instanceof DOMException && err.name === "NotAllowedError";
       setText(notice, refused ? "Microphone access was refused" : `Could not start recording: ${reason(err)}`);
     } finally {
@@ -91,12 +101,13 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       takes++;
       const file = new File([encodeWav(take.channels, take.sampleRate)], `Take ${takes}.wav`, { type: "audio/wav" });
       const media = await importFile(file);
-      engine.dispatch({ type: "import-media", media, at: current.startPosition });
+      engine.dispatch({ type: "import-media", media, at: current.startPosition, trackId: recordingTrack() ?? undefined });
       setText(notice, `Recorded ${file.name}`);
     } catch (err) {
       setText(notice, `Could not save the take: ${reason(err)}`);
     } finally {
       busy = false;
+      setRecordingTrack(null);
     }
   };
 

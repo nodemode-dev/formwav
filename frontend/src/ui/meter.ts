@@ -1,5 +1,6 @@
 import type { Player } from "../audio/player";
 import type { Engine } from "../engine";
+import { recordingTrack } from "./arm";
 
 const FLOOR_DB = -60;
 const FALL_DB_PER_SECOND = 20;
@@ -65,6 +66,7 @@ export function mountTrackMeters(host: HTMLElement, engine: Engine, player: Play
     const fall = ((now - lastTime) / 1000) * FALL_DB_PER_SECOND;
     lastTime = now;
     engine.get("document").tracks.forEach((track, i) => {
+      if (track.id === recordingTrack()) return;
       const bars = host.querySelectorAll<HTMLElement>(`.fw-lane[data-key="${track.id}"] .fw-lane-meter .fw-out-bar`);
       if (bars.length < 2) return;
       const previous = shown.get(track.id) ?? [-Infinity, -Infinity];

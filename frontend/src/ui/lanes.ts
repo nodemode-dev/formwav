@@ -2,6 +2,7 @@ import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import { documentLength, fadeCurve, nextFadeShape, sessionLength } from "../engine/document";
 import { fetchPeaks, type PeakData } from "../io/media-client";
 import { gridEnabled, shuffleEnabled, snapSamples, spotEnabled } from "./grid";
+import { armedTrack, onArm, setArmedTrack } from "./arm";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
 const PEAK_SPP = 256;
@@ -212,12 +213,15 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div></div><div class="fw-lane-body"></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div></div><div class="fw-lane-body"></div>`;
   return lane;
 }
 
 function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: number): void {
   setText(node.querySelector(".fw-lane-name"), track.name);
+  const arm = node.querySelector<HTMLElement>(".fw-arm");
+  const armed = String(armedTrack() === track.id);
+  if (arm && arm.getAttribute("aria-pressed") !== armed) arm.setAttribute("aria-pressed", armed);
   const first = track.clips[0];
   const media = first ? doc.media[first.mediaId] : undefined;
   setText(node.querySelector(".fw-lane-meta"), media ? `${channelLabel(track.channels)} · ${media.format} · ${(media.sampleRate / 1000).toFixed(1)} kHz` : channelLabel(track.channels));
@@ -277,6 +281,14 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     stage.scrollLeft = Math.max(0, position / samplesPerPixel(doc) - offset);
   });
   render(engine.get("document"));
+
+  lanes.addEventListener("click", (e) => {
+    const arm = (e.target as HTMLElement).closest<HTMLElement>(".fw-arm");
+    const id = arm?.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    if (!arm || !id) return;
+    setArmedTrack(armedTrack() === id ? null : id);
+  });
+  onArm(() => render(engine.get("document")));
 
   const spot = document.createElement("div");
   spot.className = "fw-spot";

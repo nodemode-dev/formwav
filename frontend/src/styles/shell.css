@@ -466,6 +466,21 @@ html, body, #app { height: 100%; }
 
 .fw-lane-meter .fw-out-bar { transform: scaleX(0); }
 
+.fw-arm {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  inline-size: 14px;
+  block-size: 14px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  cursor: pointer;
+}
+
+.fw-arm[aria-pressed="true"] { background: var(--danger); border-color: var(--danger); }
+
 .fw-meter-label {
   font-family: var(--font-mono);
   font-size: var(--fs-11);

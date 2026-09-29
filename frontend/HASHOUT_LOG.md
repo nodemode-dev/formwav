@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.24.0
-Last updated: 2026-09-28 · loudness normalization; group trims
+Current build version: v0.25.0
+Last updated: 2026-09-28 · track arming: record into the armed track, input shown in its header meter
 
 ---
 
@@ -48,6 +48,7 @@ frontend/
     │   ├── grid.ts              the ruler's step, Grid mode (button and G) and snapping to its ticks
     │   ├── meter.ts             stereo output meter in the transport bar, 20 dB/s fall-back, latching clip indicator
     │   ├── normalize.ts         Loudness button and popover: BS.1770 normalization of the selected or all clips to a target
+    │   ├── arm.ts               record arming: the armed track (interface state) and the track being recorded
     │   ├── record.ts            Record button and R key, input meter, takes into the session
     │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
     ├── audio/
@@ -99,6 +100,7 @@ frontend/
 - [src/ui/grid.ts, the clip gain line and the transport row (v0.15.0)](#src-ui-grid)
 - [src/ui/meter.ts and the output level path (v0.17.0)](#src-ui-meter)
 - [src/ui/normalize.ts and group trims (v0.24.0)](#src-ui-normalize)
+- [src/ui/arm.ts and recording into a track (v0.25.0)](#src-ui-arm)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -936,3 +938,14 @@ A Loudness button after Export opens a popover (created once, fixed, placed by `
 - logged: v0.24.0 · 2026-09-28
 
 Outside Shuffle mode, dragging either edge of a selected clip trims every selected clip by the same amount, with the tightest limits across the group, every member previewed, and one `batch` of bounds; in Shuffle mode a trim still ripples its own track only. The commit function's unused locals were removed. Verified on a 10 s sine split in three: trimming the starts of the first two by 50 px moved both starts and sources by 24,000 in one step and rendered 0.0 against the expected silence-and-source layout; trimming the ends of the first and last by 50 px did the same, the middle clip untouched. The first run of the second case trimmed all three clips because the selection from the first case was still active; that was correct behaviour and the harness now clears the selection first.
+
+---
+
+## src/ui/arm.ts and recording into a track (v0.25.0) {#src-ui-arm}
+
+### src/ui/arm.ts, lanes.ts, record.ts, meter.ts, src/engine/document.ts · track arming
+- refers-to: src/ui/arm.ts :: `armedTrack`, `setArmedTrack`, `onArm`, `recordingTrack`, `setRecordingTrack`; src/ui/lanes.ts :: lane markup, `updateLane`, arm click; src/ui/record.ts :: `showLevel`, `begin`, `finish`; src/ui/meter.ts :: `mountTrackMeters`; src/engine/document.ts :: `import-media` `trackId`
+- kind: rationale
+- logged: v0.25.0 · 2026-09-28
+
+Each lane head has a record-arm button; one track can be armed at a time, and arming is interface state like the selection, so it never enters undo history or the saved session. Recording starts into the armed track if it still exists (the notice names it); while it runs, the input level that drives the transport IN meter also drives that track's header meter, and the playback meter leaves that track alone so the two never write the same bars. On stop the take is imported with `import-media` naming the track, which adds the take as a clip on it at the recording's start instead of creating a track; with nothing armed recording makes a new track as before. The recording track is cleared on every path, saved, empty or failed. Verified with Chromium's fake microphone fed a continuous 440 Hz file: arming one track then another left exactly one armed and clicking again disarmed, with no undo steps; recording from 5 s showed scaleX(0.9) on the armed track's header, equal to the IN meter (the 0.5-peak tone), and 0 on the other track, whose clip had ended; the take landed on the armed track at exactly 240,000 in one undo step and undo removed it; the header meter reset after stop; unarmed recording made a new track; layout shift 0. The first run used the default fake microphone, which beeps once a second, and read 0 between beeps on both the IN meter and the header; the harness now uses the same capture file as the v0.5.0 recording harness. The unarmed button is faint against the header; cosmetic.
