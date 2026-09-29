@@ -16,6 +16,7 @@ interface SessionWord {
   filler: boolean;
   start: number;
   end: number;
+  speaker: string;
 }
 
 const GAP_OVER = 0.75;
@@ -43,6 +44,7 @@ function sessionWords(doc: SessionDoc, transcripts: Map<string, MediaWord[]>): S
           key: `${clip.id}:${i}`,
           text: w.text,
           filler: w.filler,
+          speaker: track.name,
           start: Math.round(clip.start + (Math.max(s, clip.sourceIn) - clip.sourceIn) * toSession),
           end: Math.round(clip.start + (Math.min(e, srcEnd) - clip.sourceIn) * toSession),
         });
@@ -68,6 +70,34 @@ function rangesOf(words: SessionWord[], pick: (w: SessionWord) => boolean): { st
   return ranges;
 }
 
+const RETAKE_RUN = 4;
+const RETAKE_WINDOW = 40;
+const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9']/g, "");
+
+/**
+ * Retakes, lexically: a run of RETAKE_RUN words said again within RETAKE_WINDOW words means the first attempt was
+ * abandoned, so it goes from its first word up to where the retake starts, keeping the last take as Descript does.
+ * Four words, not three: a single take can repeat three ("can do for you" ... "can do for your").
+ */
+function retakeRanges(words: SessionWord[]): { start: number; end: number }[] {
+  const n = words.map((w) => norm(w.text));
+  const ranges: { start: number; end: number }[] = [];
+  let i = 0;
+  while (i + RETAKE_RUN <= words.length) {
+    let found = -1;
+    for (let j = i + RETAKE_RUN; j + RETAKE_RUN <= words.length && j <= i + RETAKE_WINDOW && found < 0; j++) {
+      let same = true;
+      for (let k = 0; k < RETAKE_RUN && same; k++) same = n[i + k] !== "" && n[i + k] === n[j + k];
+      if (same) found = j;
+    }
+    if (found >= 0) {
+      ranges.push({ start: words[i].start, end: words[found].start });
+      i = found;
+    } else i += 1;
+  }
+  return ranges;
+}
+
 export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: Player): void {
   const body = host.querySelector<HTMLElement>(".fw-transcript-body");
   if (!body) return;
@@ -78,6 +108,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
   <button type="button" class="fw-ibtn" data-t="delete">Delete selected words</button>
   <button type="button" class="fw-ibtn" data-t="fillers">Remove filler words</button>
   <button type="button" class="fw-ibtn" data-t="gaps">Shorten gaps over ${GAP_OVER} s</button>
+  <button type="button" class="fw-ibtn" data-t="retakes">Remove retakes</button>
 </div>
 <div class="fw-transcript-text" role="listbox" aria-multiselectable="true" aria-label="Transcript"></div>`;
   const notice = host.querySelector<HTMLElement>(".fw-notice");
@@ -101,20 +132,27 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
 
   const render = () => {
     words = sessionWords(engine.get("document"), transcripts);
-    const next = words.map((w) => `${w.key}@${w.start}`).join("|");
+    const next = words.map((w) => `${w.key}@${w.start}@${w.speaker}`).join("|");
     if (next !== signature && text) {
       signature = next;
       current = null;
-      text.replaceChildren(
-        ...words.map((w) => {
-          const span = document.createElement("span");
-          span.className = w.filler ? "fw-word is-filler" : "fw-word";
-          span.dataset.key = w.key;
-          span.setAttribute("role", "option");
-          span.textContent = w.text;
-          return span;
-        }),
-      );
+      const several = new Set(words.map((w) => w.speaker)).size > 1;
+      const nodes: HTMLElement[] = [];
+      words.forEach((w, i) => {
+        if (several && (i === 0 || words[i - 1].speaker !== w.speaker)) {
+          const label = document.createElement("span");
+          label.className = "fw-speaker";
+          label.textContent = w.speaker;
+          nodes.push(label);
+        }
+        const span = document.createElement("span");
+        span.className = w.filler ? "fw-word is-filler" : "fw-word";
+        span.dataset.key = w.key;
+        span.setAttribute("role", "option");
+        span.textContent = w.text;
+        nodes.push(span);
+      });
+      text.replaceChildren(...nodes);
       const live = new Set(words.map((w) => w.key));
       selected = new Set([...selected].filter((k) => live.has(k)));
     }
@@ -183,6 +221,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
     const action = target.closest<HTMLElement>("[data-t]")?.dataset.t;
     if (action === "delete") cut(rangesOf(words, (w) => selected.has(w.key)), "the selected words");
     else if (action === "fillers") cut(rangesOf(words, (w) => w.filler), "filler words");
+    else if (action === "retakes") cut(retakeRanges(words), "earlier takes");
     else if (action === "gaps") {
       const rate = engine.get("document").sampleRate;
       const ranges: { start: number; end: number }[] = [];
