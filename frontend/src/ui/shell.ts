@@ -1,6 +1,7 @@
 import type { Engine, LinkState, TransportState } from "../engine";
 import { delayedIndicator, mountOnce, setText } from "../vendor/nodemode/dom-stable";
 import { ICON_SIZE, icon, type IconName } from "./icons";
+import { icon as fvIcon } from "../vendor/formvis/icons";
 
 const TRANSPORT: { name: IconName; label: string; action: string; built: boolean }[] = [
   { name: "skipBack", label: "Go to start", action: "to-start", built: true },
@@ -39,6 +40,8 @@ function shellHtml(): string {
       <span class="fw-notice" role="status" aria-live="polite"></span>
     </div>
     <div class="fw-topbar-actions">
+      <button type="button" class="fw-panel-toggle" data-pane="media" aria-pressed="true" aria-label="Media pane" title="Show or hide the Media pane">${fvIcon("collapseLeft", 16)}</button>
+      <button type="button" class="fw-panel-toggle" data-pane="inspector" aria-pressed="true" aria-label="Inspector pane" title="Show or hide the Inspector pane">${fvIcon("collapseRight", 16)}</button>
       <span class="fw-engine" data-state="pending" role="status" aria-live="polite">
         <span class="fw-engine-dot"></span>
         <span class="fw-engine-text"></span>
@@ -52,6 +55,7 @@ function shellHtml(): string {
       <div class="fw-pane-body fw-media-list" data-panel="media"></div>
       <div class="fw-pane-body fw-voice-body" data-panel="voice" hidden></div>
     </aside>
+    <div class="fw-pane-divider" data-side="media" role="separator" aria-orientation="vertical" aria-label="Resize the Media pane" tabindex="0"></div>
     <section class="fw-pane fw-pane-timeline" aria-label="Timeline">
       <div class="fw-tool-tray" role="toolbar" aria-label="Edit modes"></div>
       <main class="fw-stage" data-view="empty">
@@ -68,6 +72,7 @@ function shellHtml(): string {
         <output class="fw-clock">00:00:00.000</output>
       </footer>
     </section>
+    <div class="fw-pane-divider" data-side="inspector" role="separator" aria-orientation="vertical" aria-label="Resize the Inspector pane" tabindex="0"></div>
     <aside class="fw-pane fw-pane-inspector" aria-label="Inspector">
       <div class="fw-pane-header"><span class="fw-pane-title">Inspector</span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
       <div class="fw-pane-body fw-inspector-body"></div>

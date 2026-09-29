@@ -26,11 +26,35 @@
 
 .fw-workspace {
   display: grid;
-  grid-template-columns: minmax(200px, 17%) minmax(360px, 1fr) minmax(240px, 20%);
-  gap: 7px;
+  grid-template-columns: var(--fw-media-w, 240px) var(--fw-media-gap, 7px) minmax(360px, 1fr) var(--fw-inspector-gap, 7px) var(--fw-inspector-w, 284px);
   padding: 0 7px 7px;
   min-block-size: 0;
 }
+
+.fw-pane-media { grid-column: 1; }
+.fw-pane-divider[data-side="media"] { grid-column: 2; }
+.fw-pane-timeline { grid-column: 3; }
+.fw-pane-divider[data-side="inspector"] { grid-column: 4; }
+.fw-pane-inspector { grid-column: 5; }
+.fw-workspace[data-media="off"] { --fw-media-w: 0px; --fw-media-gap: 0px; }
+.fw-workspace[data-inspector="off"] { --fw-inspector-w: 0px; --fw-inspector-gap: 0px; }
+.fw-workspace[data-media="off"] :is(.fw-pane-media, .fw-pane-divider[data-side="media"]),
+.fw-workspace[data-inspector="off"] :is(.fw-pane-inspector, .fw-pane-divider[data-side="inspector"]) { display: none; }
+
+/* formcut's pane dividers (containers.css .pane-divider). */
+.fw-pane-divider { border-radius: 6px; cursor: col-resize; touch-action: none; transition: background 120ms ease; }
+.fw-pane-divider:hover,
+.fw-pane-divider.is-dragging { background: var(--accent-tint-strong); }
+.fw-pane-divider:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -1px; background: var(--accent-tint-strong); }
+
+/* formcut's titlebar icon buttons (.iconbtn, .is-off). */
+.fw-panel-toggle { display: grid; place-items: center; inline-size: 28px; block-size: 28px; padding: 0; color: var(--text-secondary); background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
+.fw-panel-toggle:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.fw-panel-toggle[aria-pressed="false"] { color: var(--text-muted); opacity: 0.55; }
+.fw-panel-toggle svg { inline-size: 16px; block-size: 16px; }
+
+.fw-voice-body .fw-field:has([data-v="load"]) { grid-template-columns: 64px minmax(0, 1fr); row-gap: 6px; }
+.fw-voice-body [data-v="load"] { grid-column: 2; justify-self: start; }
 
 .fw-pane {
   display: flex;
