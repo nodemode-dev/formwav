@@ -11,6 +11,7 @@ import { mountShell } from "./ui/shell";
 import { mountSession } from "./ui/session";
 import { mountTransport } from "./ui/transport";
 import { mountLoop } from "./ui/loop";
+import { mountExport } from "./ui/export";
 import { mountRecord } from "./ui/record";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
@@ -26,6 +27,7 @@ if (host) {
   mountSession(host, engine);
   mountTransport(host, engine, player);
   mountLoop(host, engine);
+  mountExport(host, engine);
   mountRecord(host, engine, player);
   mountProjects(host, engine, player);
 }

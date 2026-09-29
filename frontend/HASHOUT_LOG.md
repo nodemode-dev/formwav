@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.9.0
-Last updated: 2026-09-28 · regions and loop range; Loop button, L key and loop band
+Current build version: v0.10.0
+Last updated: 2026-09-28 · Export button and render client
 
 ---
 
@@ -42,6 +42,7 @@ frontend/
     │   ├── shortcuts.ts         Cmd or Ctrl with Z, Shift Z and Y
     │   ├── transport.ts         transport buttons, playhead, click to seek, Space and Home
     │   ├── loop.ts              Loop button, L key, loop band over the lanes
+    │   ├── export.ts            Export button and Cmd or Ctrl Shift E: the engine's mix as a WAV download
     │   ├── record.ts            Record button and R key, input meter, takes into the session
     │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
     ├── audio/
@@ -88,6 +89,7 @@ frontend/
 - [src/ui/projects.ts](#src-ui-projects)
 - [src/io/projects-client.ts](#src-io-projects-client)
 - [src/ui/loop.ts](#src-ui-loop)
+- [src/ui/export.ts and src/io/render-client.ts](#src-ui-export)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -630,3 +632,14 @@ When the loop covers exactly a clip, as in the first-loop default, the band's ti
 - logged: v0.9.0 · 2026-09-28
 
 Both are optional on the document, so older sessions open without them, and both are saved in `.fmw` with the rest of the document. Commands normalise reversed bounds, refuse empty ranges, trim labels ("Region" when empty) and are no-ops when nothing changes. Loop changes are undo steps because the loop range is part of the saved session (verified: undo re-armed a disarmed loop, a second undo removed it). Regions have no interface yet. `sendPlan` sends the loop to the worklet and drops the end-stop while it is on, so a loop reaching past the last clip keeps playing.
+
+---
+
+## src/ui/export.ts and src/io/render-client.ts {#src-ui-export}
+
+### src/ui/export.ts · Export
+- refers-to: src/ui/export.ts :: `mountExport`, `run`; src/io/render-client.ts :: `renderMix`
+- kind: explainer
+- logged: v0.10.0 · 2026-09-28
+
+Export (button or Cmd or Ctrl Shift E, disabled without tracks) posts the document to `/api/render` and downloads the returned WAV under the session name, with characters that file systems refuse replaced by hyphens. The download goes through a detached anchor, so nothing is inserted into the page, and the object URL is released after ten seconds. The notice reports the loudest peak in dBFS and the integrated loudness in LUFS ("silent" when there is none), and counts clips left out for being at another sample rate; "Exporting" appears only after 300 ms. Verified v0.10.0: the file saved by the browser was byte-identical to `/api/render` for the same document, the notice matched the response headers, layout shift 0. `render-client.ts` sits in `io/` beside the other clients; the io lines of the map above were not updated for it in this series.
