@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.16.0
-Last updated: 2026-09-28 · multi-clip selection, group move, split and delete as batches; snapped seeks
+Current build version: v0.17.0
+Last updated: 2026-09-28 · stereo output meter with clip indicator
 
 ---
 
@@ -46,6 +46,7 @@ frontend/
     │   ├── export.ts            Export button and Cmd or Ctrl Shift E: the engine's mix as a WAV download
     │   ├── ruler.ts             timeline ruler on one canvas: time labels, loop range, regions; click to seek
     │   ├── grid.ts              the ruler's step, Grid mode (button and G) and snapping to its ticks
+    │   ├── meter.ts             stereo output meter in the transport bar, 20 dB/s fall-back, latching clip indicator
     │   ├── record.ts            Record button and R key, input meter, takes into the session
     │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
     ├── audio/
@@ -95,6 +96,7 @@ frontend/
 - [src/ui/export.ts and src/io/render-client.ts](#src-ui-export)
 - [src/ui/ruler.ts and the v0.13.0 timeline](#src-ui-ruler)
 - [src/ui/grid.ts, the clip gain line and the transport row (v0.15.0)](#src-ui-grid)
+- [src/ui/meter.ts and the output level path (v0.17.0)](#src-ui-meter)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -784,3 +786,21 @@ Shift-click on a clip's body toggles it in the selection without dragging; a pla
 - logged: v0.16.0 · 2026-09-28
 
 In Grid mode a click on empty lane space or on the ruler moves the playhead to the nearest grid tick. Verified at 37 px: 19,200 with the grid, 17,760 without, on both. The first harness run clicked the lane where a clip lay (clicks on clips deliberately do not seek) and read stale positions; the saved harness clicks an empty lane. Each selected clip shows its gain label, and on a long clip it can be cut off at the window's edge (seen in the screenshot); cosmetic.
+
+---
+
+## src/ui/meter.ts and the output level path (v0.17.0) {#src-ui-meter}
+
+### src/audio/player-worklet.ts and player.ts · peaks to listeners
+- refers-to: src/audio/player-worklet.ts :: `report`, `peaks`; src/audio/player.ts :: `onOutputLevel`, `emitLevel`, `onReply`, `stop`
+- kind: warning-context
+- logged: v0.17.0 · 2026-09-28
+
+Every position report (about every 21 ms while playing) takes the master peaks from the core into a two-float buffer allocated once at init and carries them to the main thread, where the player publishes them to its level listeners. Stop publishes silence. The first version froze the meter after stop: the worklet answers the stop message with a position report whose leftover peaks arrived after the silence, and no further report ever lowered them. Levels are now published only while the transport is playing, so that late report, and reports from seeking while stopped, are ignored (verified: both bars at 0 after stop).
+
+### src/ui/meter.ts · the meter
+- refers-to: src/ui/meter.ts :: `mountOutputMeter`
+- kind: explainer
+- logged: v0.17.0 · 2026-09-28
+
+Created once at mount in the transport bar: two bars (left, right) on the input meter's -60 to 0 dBFS scale, moved by `scaleX` only and written only when the value changes; each bar shows the new peak or falls back at 20 dB per second, whichever is higher, and a report of two zeros empties both. A peak at or above 1.0 latches the clip indicator (the danger token) until it is clicked. Verified on the stereo test file: the right bar held exactly scaleX(0.867), which is -7.96 dBFS for its 0.4 sine, while the left bar climbed with its ramp; at +12 dB the clip indicator latched and a click reset it; during playback only the meter, clock, playhead and Play's pressed state changed; layout shift 0. The output and input meters sit side by side without labels (seen in the screenshot); "IN" and "OUT" labels are the next small fix. Loudness is not metered live yet.

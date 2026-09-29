@@ -14,6 +14,7 @@ import { mountLoop } from "./ui/loop";
 import { mountExport } from "./ui/export";
 import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
+import { mountOutputMeter } from "./ui/meter";
 import { mountRecord } from "./ui/record";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
@@ -32,6 +33,7 @@ if (host) {
   mountExport(host, engine);
   mountRuler(host, engine, player);
   mountGrid(host);
+  mountOutputMeter(host, player);
   mountRecord(host, engine, player);
   mountProjects(host, engine, player);
 }

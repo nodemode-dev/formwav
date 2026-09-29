@@ -115,6 +115,16 @@ export class Player {
     });
   }
 
+  private levelListeners = new Set<(left: number, right: number) => void>();
+
+  onOutputLevel(listener: (left: number, right: number) => void): void {
+    this.levelListeners.add(listener);
+  }
+
+  private emitLevel(left: number, right: number): void {
+    for (const listener of this.levelListeners) listener(left, right);
+  }
+
   get skipped(): number {
     return this.lastPlan.skipped;
   }
@@ -162,7 +172,10 @@ export class Player {
 
   private onReply = (e: MessageEvent<WorkletReply>): void => {
     const reply = e.data;
-    if (reply.type === "position") this.engine.setTransport({ positionSamples: reply.position });
+    if (reply.type === "position") {
+      this.engine.setTransport({ positionSamples: reply.position });
+      if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight);
+    }
     else if (reply.type === "ended") this.engine.setTransport({ positionSamples: reply.position, playing: false });
   };
 
@@ -212,6 +225,7 @@ export class Player {
   stop(): void {
     this.open = false;
     if (this.node) send(this.node, { type: "stop" });
+    this.emitLevel(0, 0);
     this.engine.setTransport({ playing: false });
   }
 
