@@ -28,12 +28,23 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         buses[bus["id"]] = (len(buses) + 1, math.pow(10, float(bus.get("gainDb", 0)) / 20), float(bus.get("pan") or 0))
     sources: dict[str, int] = {}
     clips: list[tuple] = []
+    envelopes: list[tuple] = []
     end = 0
     skipped = 0
     for track in tracks:
         if track.get("mute") or (soloed and not track.get("solo")) or track.get("busId") in muted_buses:
             continue
         bus_index = buses[track["busId"]][0] if track.get("busId") in buses else 0
+        automation = track.get("automation") or {}
+        gain_env = pan_env = 0
+        if automation.get("volume"):
+            envelopes.append(([(int(p["time"]), float(p["value"])) for p in automation["volume"]], True))
+            gain_env = len(envelopes)
+        if automation.get("pan"):
+            envelopes.append(([(int(p["time"]), float(p["value"])) for p in automation["pan"]], False))
+            pan_env = len(envelopes)
+        track_db = 0.0 if gain_env else float(track.get("gainDb", 0))
+        track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
         for clip in track.get("clips", []):
             info = doc["media"].get(clip.get("mediaId"))
             if not isinstance(info, dict):
@@ -42,12 +53,12 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
                 skipped += 1
                 continue
             source = sources.setdefault(clip["mediaId"], len(sources) + 1)
-            gain = math.pow(10, (float(track.get("gainDb", 0)) + float(clip.get("gainDb", 0))) / 20)
+            gain = math.pow(10, (track_db + float(clip.get("gainDb", 0))) / 20)
             start, length = int(clip["start"]), int(clip["length"])
             fade_shape = {"linear": 0, "equal-power": 1, "s-curve": 2, "exponential": 3}.get(clip.get("fadeShape") or "linear", 0)
-            clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, float(track.get("pan") or 0), int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index))
+            clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, track_pan, int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index, gain_env, pan_env))
             end = max(end, start + length)
-    return rate, sources, clips, end, skipped, list(buses.values())
+    return rate, sources, clips, end, skipped, list(buses.values()), envelopes
 
 
 def wav_float32_stereo(interleaved: bytes, rate: int) -> bytes:
@@ -64,7 +75,7 @@ def dbfs(peak: float) -> str:
 
 def render(doc: object) -> dict:
     native = media._require_core()
-    rate, sources, clips, end, skipped, buses = plan(doc)
+    rate, sources, clips, end, skipped, buses, envelopes = plan(doc)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -72,7 +83,7 @@ def render(doc: object) -> dict:
         if not path.exists():
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes)
     loudness = native.loudness(interleaved, 2, rate)
     return {
         "wav": wav_float32_stereo(interleaved, rate),
