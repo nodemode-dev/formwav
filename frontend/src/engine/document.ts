@@ -125,6 +125,9 @@ export type Command =
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
+  | { type: "set-track-mute"; trackId: string; mute: boolean }
+  | { type: "set-track-solo"; trackId: string; solo: boolean }
+  | { type: "set-bus-mute"; busId: string; mute: boolean }
   | { type: "add-clip"; trackId: string; mediaId: string; start: number; sourceIn: number; length: number }
   | { type: "paste-clip"; trackId: string; clip: Omit<Clip, "id"> }
   | { type: "remove-clip"; trackId: string; clipId: string }
@@ -428,6 +431,16 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-track-pan": {
       const pan = Math.max(-1, Math.min(1, cmd.pan));
       return mapTrack(doc, cmd.trackId, (t) => ((t.pan ?? 0) === pan ? t : { ...t, pan }));
+    }
+    case "set-track-mute":
+      return mapTrack(doc, cmd.trackId, (t) => (t.mute === cmd.mute ? t : { ...t, mute: cmd.mute }));
+    case "set-track-solo":
+      return mapTrack(doc, cmd.trackId, (t) => (t.solo === cmd.solo ? t : { ...t, solo: cmd.solo }));
+    case "set-bus-mute": {
+      const buses = doc.buses ?? [];
+      const bus = buses.find((b) => b.id === cmd.busId);
+      if (!bus || (bus.mute ?? false) === cmd.mute) return doc;
+      return { ...doc, buses: buses.map((b) => (b.id === cmd.busId ? { ...b, mute: cmd.mute } : b)) };
     }
     case "move-clip": {
       const start = Math.max(0, Math.round(cmd.start));

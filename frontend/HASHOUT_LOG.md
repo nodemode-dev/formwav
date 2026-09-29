@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.32.0
-Last updated: 2026-09-28 · a pan automation lane beside volume; automation labels in the header column
+Current build version: v0.33.0
+Last updated: 2026-09-28 · console-style mixer; mute, solo and bus mute commands
 
 ---
 
@@ -49,6 +49,7 @@ frontend/
     │   ├── meter.ts             stereo output meter in the transport bar, 20 dB/s fall-back, latching clip indicator
     │   ├── normalize.ts         Loudness button and popover: BS.1770 normalization of the selected or all clips to a target
     │   ├── arm.ts               record arming: the armed track (interface state) and the track being recorded
+    │   ├── mixer.ts             console-style mixer: a strip per track and bus (meter, fader, pan, mute, solo, output)
     │   ├── record.ts            Record button and R key, input meter, takes into the session
     │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
     ├── audio/
@@ -101,6 +102,7 @@ frontend/
 - [src/ui/meter.ts and the output level path (v0.17.0)](#src-ui-meter)
 - [src/ui/normalize.ts and group trims (v0.24.0)](#src-ui-normalize)
 - [src/ui/arm.ts and recording into a track (v0.25.0)](#src-ui-arm)
+- [src/ui/mixer.ts and the mute and solo commands (v0.33.0)](#src-ui-mixer)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -1040,3 +1042,21 @@ The Auto toggle in each lane head shows a volume automation lane under the track
 - logged: v0.32.0 · 2026-09-28
 
 The Auto panel now holds a Volume row and a Pan row. Drawing and gestures are one implementation keyed by parameter: `autoFraction` and `autoValue` are the only mappings (volume +12 to -36 dB down the row; pan left at the top, centre in the middle, right at the bottom), so drawing and pointer input cannot disagree; each row's press finds its own row and parameter and commits one `set-automation`. With no pan automation a dashed line shows the track's static pan. The labels live in the lane grid's header column beside the rows, sticky on the left like the track head: the first version put them at each row's right end, which is the timeline's right end and off-screen on any session wider than the window (seen in the screenshot). While moving them, an edit dropped the take-rows container from the lane markup; it was restored before any build, and the take-lane harness passed afterwards. A point at an extreme value (hard pan, +12 or -36 dB) is drawn half-clipped by its row's edge; insetting it changes the coordinates the exact-value harnesses use, so it is left for a pass of its own. Verified with the 10 s tone at 100 px per second: clicks at the pan row's top and bottom edges added (48,000, -1) and (144,000, +1), one step each; a drag to mid-height gave (168,000, 0) in one step; the browser's render equalled the engine's (0.0 left, 3e-8 right), the right channel was exactly silent while hard left and the channels exactly equal while centred; Alt-click deleted and undo walked back; the volume row stayed untouched; the labels sat at x = 12 in the header column, each centred on its row; no page errors; layout shift 0; volume lane and take lane regressions unchanged.
+
+---
+
+## src/ui/mixer.ts and the mute and solo commands (v0.33.0) {#src-ui-mixer}
+
+### src/engine/document.ts · mute, solo and bus mute
+- refers-to: src/engine/document.ts :: `set-track-mute`, `set-track-solo`, `set-bus-mute`
+- kind: rationale
+- logged: v0.33.0 · 2026-09-28
+
+Tracks had `mute` and `solo` fields and buses a `mute` field, all honoured by the player and the engine since v0.11.0, but no command could set them; found while building the mixer. Three undoable commands now do, each a no-op when nothing changes.
+
+### src/ui/mixer.ts, meter.ts, main.ts, shell.css · the mixer
+- refers-to: src/ui/mixer.ts :: `mountMixer`, `stripNode`, `updateStrip`; src/ui/meter.ts :: `mountTrackMeters`; src/styles/shell.css :: `.fw-mixer`, `.fw-strip`, `.fw-strip-fader`
+- kind: warning-context
+- logged: v0.33.0 · 2026-09-28
+
+A Mixer button in the transport bar (or X) shows a panel docked over the bottom of the timeline, fixed, so the lanes never reflow. It holds a strip per track (name, stereo meter, vertical fader with a dB readout, pan, mute, solo, output to Master or a bus) and per bus (fader, pan, mute), patched by key and written only on change. A fader or pan drag updates the readout live and commits one command on release; controls that automation drives are disabled and say so. The track meter driver also feeds the strips' bars, so a strip and its lane show the same level. Found and fixed before release: the strips' single grid column sized itself to the range inputs' natural width, so their contents spilled into neighbouring strips (the column is now the strip's width); and in `writing-mode: vertical-lr` a range input's block size is its width, so the fader's intended height made it 128 px wide (its length is now set with `inline-size`, 16 by 128 px). Known gaps: buses are not metered yet, so bus strips hide their meter rather than show a meter that always reads silence; there is no master fader, and no sends or inserts; a focused mixer button handles Space itself (the browser's accessible default) rather than starting playback. Verified with two tracks and a bus: three strips in order, the bus without solo or output, the panel's bottom at the transport's top; a real fader drag was one undo step with the track's gain equal to the fader's value; pan landed exactly; muting, soloing the other track, and routing to a muted bus each left the mix exactly silent where only that track played, the browser's render equal to the engine's; automation disabled the fader and read "auto"; during playback a strip's meter equalled its lane's (0.758 and 0.867); no strip child overflowed its strip; no page errors; layout shift 0; the track meter regression unchanged. The harness first pressed Space with a Mute button still focused, so playback never started and every meter read 0; it now clears focus first.

@@ -16,6 +16,7 @@ import { mountNormalize } from "./ui/normalize";
 import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
 import { mountOutputMeter, mountTrackMeters } from "./ui/meter";
+import { mountMixer } from "./ui/mixer";
 import { mountRecord } from "./ui/record";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
@@ -37,6 +38,7 @@ if (host) {
   mountGrid(host);
   mountOutputMeter(host, player);
   mountTrackMeters(host, engine, player);
+  mountMixer(host, engine);
   mountRecord(host, engine, player);
   mountProjects(host, engine, player);
 }

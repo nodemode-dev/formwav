@@ -92,17 +92,17 @@ export function mountTrackMeters(host: HTMLElement, engine: Engine, player: Play
     lastTime = now;
     engine.get("document").tracks.forEach((track, i) => {
       if (track.id === recordingTrack()) return;
-      const bars = host.querySelectorAll<HTMLElement>(`.fw-lane[data-key="${track.id}"] .fw-lane-meter .fw-out-bar`);
+      const bars = host.querySelectorAll<HTMLElement>(`.fw-lane[data-key="${track.id}"] .fw-lane-meter .fw-out-bar, .fw-strip[data-key="${track.id}"] .fw-strip-meter .fw-out-bar`);
       if (bars.length < 2) return;
       const previous = shown.get(track.id) ?? [-Infinity, -Infinity];
       const next = [0, 1].map((c) => (tracks.length === 0 ? -Infinity : Math.max(toDb(tracks[2 * i + c] ?? 0), previous[c] - fall)));
       shown.set(track.id, next);
-      next.forEach((db, c) => {
-        const v = Math.max(0, Math.min(1, (db - FLOOR_DB) / -FLOOR_DB));
+      bars.forEach((bar, j) => {
+        const v = Math.max(0, Math.min(1, (next[j % 2] - FLOOR_DB) / -FLOOR_DB));
         const transform = `scaleX(${v.toFixed(3)})`;
-        if (written.get(bars[c]) !== transform) {
-          written.set(bars[c], transform);
-          bars[c].style.transform = transform;
+        if (written.get(bar) !== transform) {
+          written.set(bar, transform);
+          bar.style.transform = transform;
         }
       });
     });
