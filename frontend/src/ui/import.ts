@@ -20,7 +20,8 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
       () => setText(notice, final),
     );
     try {
-      const media = await importFile(file);
+      const doc = engine.get("document");
+      const media = await importFile(file, doc.tracks.length ? doc.sampleRate : undefined);
       engine.dispatch({ type: "import-media", media, at: 0 });
       final = `Imported ${file.name}`;
     } catch (err) {

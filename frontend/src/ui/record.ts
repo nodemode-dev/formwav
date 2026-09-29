@@ -158,7 +158,8 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       }
       takes++;
       const file = new File([encodeWav(channels, take.sampleRate)], `Take ${takes}.wav`, { type: "audio/wav" });
-      const media = await importFile(file);
+      const session = engine.get("document");
+      const media = await importFile(file, session.tracks.length ? session.sampleRate : undefined);
       const loop = loopRange;
       loopRange = null;
       let shape: { sourceIn: number; length: number; takes: number[]; take: number } | undefined;

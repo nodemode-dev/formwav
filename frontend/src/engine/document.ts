@@ -124,6 +124,7 @@ export type Command =
   | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
+  | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -179,6 +180,53 @@ function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): Se
 
 export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string): SessionDoc {
   switch (cmd.type) {
+    case "resample-session": {
+      const r = cmd.sampleRate / doc.sampleRate;
+      const swaps = new Map(cmd.swaps.map((s) => [s.from, s.to]));
+      if (r === 1 && swaps.size === 0) return doc;
+      const at = (n: number) => Math.round(n * r);
+      const media: Record<string, MediaRef> = { ...doc.media };
+      for (const s of cmd.swaps) {
+        delete media[s.from];
+        media[s.to.id] = s.to;
+      }
+      const tracks = doc.tracks.map((t) => ({
+        ...t,
+        clips: t.clips.map((c) => {
+          const to = swaps.get(c.mediaId);
+          const from = doc.media[c.mediaId];
+          const k = to && from ? to.sampleRate / from.sampleRate : 1;
+          const source = (n: number) => Math.round(n * k);
+          return {
+            ...c,
+            mediaId: to ? to.id : c.mediaId,
+            start: at(c.start),
+            length: Math.max(1, at(c.length)),
+            sourceIn: source(c.sourceIn),
+            ...(c.fadeIn !== undefined ? { fadeIn: at(c.fadeIn) } : {}),
+            ...(c.fadeOut !== undefined ? { fadeOut: at(c.fadeOut) } : {}),
+            ...(c.takes ? { takes: c.takes.map(source) } : {}),
+          };
+        }),
+        ...(t.automation
+          ? {
+              automation: {
+                volume: t.automation.volume?.map((p) => ({ ...p, time: at(p.time) })),
+                pan: t.automation.pan?.map((p) => ({ ...p, time: at(p.time) })),
+              },
+            }
+          : {}),
+      }));
+      return {
+        ...doc,
+        sampleRate: cmd.sampleRate,
+        media,
+        tracks,
+        markers: doc.markers.map((m) => ({ ...m, at: at(m.at) })),
+        ...(doc.regions ? { regions: doc.regions.map((g) => ({ ...g, start: at(g.start), end: at(g.end) })) } : {}),
+        ...(doc.loop ? { loop: { ...doc.loop, start: at(doc.loop.start), end: at(doc.loop.end) } } : {}),
+      };
+    }
     case "clear-range": {
       const from = Math.max(0, Math.round(Math.min(cmd.start, cmd.end)));
       const to = Math.round(Math.max(cmd.start, cmd.end));
