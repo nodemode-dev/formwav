@@ -29,6 +29,7 @@ export interface Track {
   mute: boolean;
   solo: boolean;
   pan?: number;
+  busId?: string;
   clips: readonly Clip[];
 }
 
@@ -58,6 +59,15 @@ export interface SessionDoc {
   markers: readonly Marker[];
   regions?: readonly Region[];
   loop?: LoopRange;
+  buses?: readonly Bus[];
+}
+
+export interface Bus {
+  id: string;
+  name: string;
+  gainDb: number;
+  pan?: number;
+  mute?: boolean;
 }
 
 export interface FrequencyBand {
@@ -85,6 +95,11 @@ export type Command =
   | { type: "set-loop"; start: number; end: number; enabled: boolean }
   | { type: "add-region"; start: number; end: number; label: string }
   | { type: "remove-region"; regionId: string }
+  | { type: "add-bus"; name: string }
+  | { type: "remove-bus"; busId: string }
+  | { type: "route-track"; trackId: string; busId: string | null }
+  | { type: "set-bus-gain"; busId: string; gainDb: number }
+  | { type: "set-bus-pan"; busId: string; pan: number }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "add-marker"; at: number; label: string };
 
@@ -146,6 +161,39 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "set-track-gain":
       return mapTrack(doc, cmd.trackId, (t) => (t.gainDb === cmd.gainDb ? t : { ...t, gainDb: cmd.gainDb }));
+    case "add-bus": {
+      const bus: Bus = { id: newId(), name: cmd.name.trim() || "Bus", gainDb: 0 };
+      return { ...doc, buses: [...(doc.buses ?? []), bus] };
+    }
+    case "remove-bus": {
+      const before = doc.buses ?? [];
+      const buses = before.filter((b) => b.id !== cmd.busId);
+      if (buses.length === before.length) return doc;
+      const tracks = doc.tracks.map((t) => (t.busId === cmd.busId ? { ...t, busId: undefined } : t));
+      return { ...doc, buses, tracks };
+    }
+    case "route-track": {
+      const busId = cmd.busId ?? undefined;
+      if (busId !== undefined && !(doc.buses ?? []).some((b) => b.id === busId)) return doc;
+      return mapTrack(doc, cmd.trackId, (t) => (t.busId === busId ? t : { ...t, busId }));
+    }
+    case "set-bus-gain":
+    case "set-bus-pan": {
+      let changed = false;
+      const buses = (doc.buses ?? []).map((b) => {
+        if (b.id !== cmd.busId) return b;
+        if (cmd.type === "set-bus-gain") {
+          if (b.gainDb === cmd.gainDb) return b;
+          changed = true;
+          return { ...b, gainDb: cmd.gainDb };
+        }
+        const pan = Math.max(-1, Math.min(1, cmd.pan));
+        if ((b.pan ?? 0) === pan) return b;
+        changed = true;
+        return { ...b, pan };
+      });
+      return changed ? { ...doc, buses } : doc;
+    }
     case "set-loop": {
       const start = Math.max(0, Math.round(Math.min(cmd.start, cmd.end)));
       const end = Math.max(0, Math.round(Math.max(cmd.start, cmd.end)));

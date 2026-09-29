@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.10.0
-Last updated: 2026-09-28 · Export button and render client
+Current build version: v0.11.0
+Last updated: 2026-09-28 · buses in the document, planner and worklet; render-client.ts added to the map
 
 ---
 
@@ -32,7 +32,8 @@ frontend/
     ├── io/
     │   ├── engine-client.ts     fetchHealth with timeout
     │   ├── media-client.ts      importFile, fetchPeaks
-    │   └── projects-client.ts   listProjects, saveProject, openProject
+    │   ├── projects-client.ts   listProjects, saveProject, openProject
+    │   └── render-client.ts     renderMix: POST /api/render, the WAV with its frames, peaks and loudness
     ├── ui/
     │   ├── icons.ts             fifteen NodeMode icons plus the icon() helper
     │   ├── shell.ts             mounts the shell once, patches status and clock in place
@@ -643,3 +644,21 @@ Both are optional on the document, so older sessions open without them, and both
 - logged: v0.10.0 · 2026-09-28
 
 Export (button or Cmd or Ctrl Shift E, disabled without tracks) posts the document to `/api/render` and downloads the returned WAV under the session name, with characters that file systems refuse replaced by hyphens. The download goes through a detached anchor, so nothing is inserted into the page, and the object URL is released after ten seconds. The notice reports the loudest peak in dBFS and the integrated loudness in LUFS ("silent" when there is none), and counts clips left out for being at another sample rate; "Exporting" appears only after 300 ms. Verified v0.10.0: the file saved by the browser was byte-identical to `/api/render` for the same document, the notice matched the response headers, layout shift 0. `render-client.ts` sits in `io/` beside the other clients; the io lines of the map above were not updated for it in this series.
+
+---
+
+## v0.11.0 · buses
+
+### src/engine/document.ts · buses and routing
+- refers-to: src/engine/document.ts :: `Bus`, `Track.busId`, `add-bus`, `remove-bus`, `route-track`, `set-bus-gain`, `set-bus-pan`
+- kind: rationale
+- logged: v0.11.0 · 2026-09-28
+
+Buses are optional on the document and a track without `busId` feeds master, so older sessions open unchanged. `add-bus` trims the name ("Bus" when empty); `remove-bus` routes its tracks back to master in the same undo step; `route-track` refuses a bus that does not exist (verified: no undo step) and takes `null` for master; gain and pan setters are no-ops when unchanged. Verified: undoing a bus removal restored the bus and its routing. There is no bus strip in the interface yet: the mixer is Phase 3.
+
+### src/audio/player.ts · bus resolution twin
+- refers-to: src/audio/player.ts :: `planClips`, `ClipPlan.buses`; src/audio/player-worklet.ts :: `WorkletBus`, the clips handler
+- kind: warning-context
+- logged: v0.11.0 · 2026-09-28
+
+`planClips` numbers unmuted buses from 1 in document order, drops tracks on muted buses, and gives each clip its bus index (0 for master or an unknown bus), exactly as `plan` in `backend/app/services/render.py`; the clips message carries the bus list and the worklet rebuilds the core's buses on every plan. Change both twins together and rerun `verify_buses.py`. The map gap noted for `render-client.ts` in v0.10.0 is closed above.

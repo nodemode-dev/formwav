@@ -11,7 +11,9 @@ interface CoreExports {
   fw_player_new(): number;
   fw_load_wav(player: number, id: number, ptr: number, len: number): number;
   fw_clear_clips(player: number): void;
-  fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number): void;
+  fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number, bus: number): void;
+  fw_clear_buses(player: number): void;
+  fw_add_bus(player: number, id: number, gain: number, pan: number): void;
   fw_seek(player: number, position: number): void;
   fw_set_loop(player: number, start: number, end: number): void;
   fw_position(player: number): number;
@@ -28,12 +30,19 @@ export interface WorkletClip {
   fadeIn: number;
   fadeOut: number;
   fadeShape: number;
+  bus: number;
+}
+
+export interface WorkletBus {
+  id: number;
+  gain: number;
+  pan: number;
 }
 
 export type WorkletMessage =
   | { type: "init"; bytes: ArrayBuffer }
   | { type: "load"; id: number; bytes: ArrayBuffer }
-  | { type: "clips"; clips: WorkletClip[]; end: number }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[] }
   | { type: "play" }
   | { type: "stop" }
   | { type: "seek"; position: number }
@@ -102,7 +111,9 @@ class PlayerProcessor extends AudioWorkletProcessor {
       }
       case "clips":
         core.fw_clear_clips(this.player);
-        for (const c of msg.clips) core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape);
+        for (const c of msg.clips) core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape, c.bus);
+        core.fw_clear_buses(this.player);
+        for (const b of msg.buses) core.fw_add_bus(this.player, b.id, b.gain, b.pan);
         this.end = msg.end;
         break;
       case "seek":

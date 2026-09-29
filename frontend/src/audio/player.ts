@@ -1,5 +1,5 @@
 import type { Engine, SessionDoc } from "../engine";
-import type { WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
+import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
 
 const CORE_URL = "/core/formwav_dsp.wasm";
@@ -8,6 +8,7 @@ export interface ClipPlan {
   clips: WorkletClip[];
   end: number;
   skipped: number;
+  buses: WorkletBus[];
 }
 
 export function dbToGain(db: number): number {
@@ -16,11 +17,24 @@ export function dbToGain(db: number): number {
 
 export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPlan {
   const soloed = doc.tracks.some((t) => t.solo);
+  const busIndex = new Map<string, number>();
+  const mutedBuses = new Set<string>();
+  const buses: WorkletBus[] = [];
+  for (const bus of doc.buses ?? []) {
+    if (bus.mute) {
+      mutedBuses.add(bus.id);
+      continue;
+    }
+    const id = buses.length + 1;
+    busIndex.set(bus.id, id);
+    buses.push({ id, gain: dbToGain(bus.gainDb), pan: bus.pan ?? 0 });
+  }
   const clips: WorkletClip[] = [];
   let end = 0;
   let skipped = 0;
   for (const track of doc.tracks) {
-    if (track.mute || (soloed && !track.solo)) continue;
+    if (track.mute || (soloed && !track.solo) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
+    const bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
     for (const clip of track.clips) {
       const media = doc.media[clip.mediaId];
       const source = sources.get(clip.mediaId);
@@ -39,11 +53,12 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         fadeIn: clip.fadeIn ?? 0,
         fadeOut: clip.fadeOut ?? 0,
         fadeShape: clip.fadeShape === "equal-power" ? 1 : 0,
+        bus,
       });
       end = Math.max(end, clip.start + clip.length);
     }
   }
-  return { clips, end, skipped };
+  return { clips, end, skipped, buses };
 }
 
 function send(node: AudioWorkletNode, message: WorkletMessage, transfer: Transferable[] = []): void {
@@ -90,7 +105,7 @@ export class Player {
   private module: Promise<ArrayBuffer> | null = null;
   private sources = new Map<string, number>();
   private counter = 0;
-  private lastPlan: ClipPlan = { clips: [], end: 0, skipped: 0 };
+  private lastPlan: ClipPlan = { clips: [], end: 0, skipped: 0, buses: [] };
   private pending = new Map<string, Promise<void>>();
 
   constructor(private readonly engine: Engine) {
@@ -141,7 +156,7 @@ export class Player {
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
@@ -229,7 +244,7 @@ export class Player {
     const node = await makeNode(ctx, await this.core());
     await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter)));
     const plan = planClips(doc, sources);
-    send(node, { type: "clips", clips: plan.clips, end: plan.end });
+    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses });
     send(node, { type: "play" });
     await request(node, { type: "seek", position: 0 }, (r) => r.type === "position");
     const rendered = await ctx.startRendering();
