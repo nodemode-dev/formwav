@@ -127,6 +127,7 @@ export type Command =
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
   | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean }
+  | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -191,6 +192,42 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       for (const r of ranges)
         for (const trackId of cmd.trackIds) next = applyCommand(next, { type: "clear-range", trackId, start: r.start, end: r.end, ripple: cmd.ripple }, newId);
       return next;
+    }
+    case "set-range-media": {
+      let changed = false;
+      const next = mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.flatMap((c) => {
+          if (c.id !== cmd.clipId) return [c];
+          const end = c.start + c.length;
+          const from = Math.max(c.start, Math.round(Math.min(cmd.start, cmd.end)));
+          const to = Math.min(end, Math.round(Math.max(cmd.start, cmd.end)));
+          if (to <= from) return [c];
+          changed = true;
+          const source = doc.media[c.mediaId];
+          const ratio = source ? source.sampleRate / doc.sampleRate : 1;
+          const piece = (a: number, b: number, id: string, mediaId: string): Clip => {
+            const offset = Math.round((a - c.start) * ratio);
+            return {
+              ...c,
+              id,
+              mediaId,
+              start: a,
+              length: b - a,
+              sourceIn: c.sourceIn + offset,
+              fadeIn: a === c.start ? Math.min(c.fadeIn ?? 0, b - a) : 0,
+              fadeOut: b === end ? Math.min(c.fadeOut ?? 0, b - a) : 0,
+              ...(c.takes ? { takes: c.takes.map((o) => o + offset) } : {}),
+            };
+          };
+          const out: Clip[] = [];
+          if (from > c.start) out.push(piece(c.start, from, c.id, c.mediaId));
+          out.push(piece(from, to, from > c.start ? newId() : c.id, cmd.media.id));
+          if (to < end) out.push(piece(to, end, newId(), c.mediaId));
+          return out;
+        }),
+      }));
+      return changed ? { ...next, media: { ...doc.media, [cmd.media.id]: cmd.media } } : doc;
     }
     case "set-clip-media": {
       let changed = false;

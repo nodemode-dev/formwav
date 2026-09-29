@@ -44,9 +44,17 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const field = <T extends HTMLElement>(name: string) => body.querySelector<T>(`[data-f="${name}"]`);
   const out = (name: string) => body.querySelector<HTMLElement>(`[data-o="${name}"]`);
   let selected: string[] = [];
+  let range: { trackId: string; start: number; end: number } | null = null;
 
   const find = (doc: SessionDoc): { track: Track; clip: Clip } | null => {
-    if (selected.length !== 1) return null;
+    if (selected.length !== 1) {
+      // A Smart Tool range with no single selected clip inspects the clip under the range's start.
+      const r = range;
+      if (!r) return null;
+      const track = doc.tracks.find((t) => t.id === r.trackId);
+      const clip = track?.clips.find((c) => c.start <= r.start && r.start < c.start + c.length);
+      return track && clip ? { track, clip } : null;
+    }
     for (const track of doc.tracks) {
       const clip = track.clips.find((c) => c.id === selected[0]);
       if (clip) return { track, clip };
@@ -169,12 +177,21 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     );
   };
   const currentParams = () => Object.fromEntries([...(paramsBox?.querySelectorAll<HTMLInputElement>("input[data-param]") ?? [])].map((i) => [i.dataset.param, Number(i.value)]));
+  const retiming = new Set<string>();
+  host.addEventListener("fw-range", (e) => {
+    range = (e as CustomEvent<{ trackId: string; start: number; end: number } | null>).detail;
+    render();
+  });
   pick?.addEventListener("change", showControls);
   void fetch("/api/effects")
     .then((res) => (res.ok ? res.json() : []))
-    .then((groups: { group: string; effects: { id: string; label: string; params?: Control[] }[] }[]) => {
+    .then((groups: { group: string; effects: { id: string; label: string; params?: Control[]; retimes?: boolean }[] }[]) => {
       if (!pick) return;
-      for (const g of groups) for (const fx of g.effects) if (fx.params?.length) controls.set(fx.id, fx.params);
+      for (const g of groups)
+        for (const fx of g.effects) {
+          if (fx.params?.length) controls.set(fx.id, fx.params);
+          if (fx.retimes) retiming.add(fx.id);
+        }
       pick.replaceChildren(
         ...groups.map((g) => {
           const group = document.createElement("optgroup");
@@ -198,12 +215,26 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const label = action === "enhance" ? "Enhance speech" : pick?.selectedOptions[0]?.textContent ?? name;
     setText(notice, `Applying ${label}...`);
     try {
+      // While a Smart Tool range exists it is the target (as Audacity processes its selection): the clip it overlaps on
+      // its track, whichever piece is selected; otherwise the selected clip, whole.
+      const r = range;
+      const rangeTrack = r ? engine.get("document").tracks.find((t) => t.id === r.trackId) : undefined;
+      const rangeClip = r && rangeTrack ? rangeTrack.clips.find((c) => c.start < r.end && r.start < c.start + c.length) : undefined;
+      const target = rangeTrack && rangeClip ? { track: rangeTrack, clip: rangeClip } : hit;
+      const inRange = rangeClip && r ? r : null;
+      if (inRange && retiming.has(name)) throw new Error(`${label} changes timing, so it applies to whole clips: clear the range first`);
       const params = action === "apply" ? currentParams() : {};
-      const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}`, { method: "POST" });
+      const res = await fetch(`/api/media/${target.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
-      engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
-      setText(notice, `Applied ${label} to the clip`);
+      if (inRange) {
+        engine.dispatch({ type: "set-range-media", trackId: target.track.id, clipId: target.clip.id, start: inRange.start, end: inRange.end, media: out as unknown as MediaRef });
+        const rate = engine.get("document").sampleRate;
+        setText(notice, `Applied ${label} to ${((Math.min(inRange.end, target.clip.start + target.clip.length) - Math.max(inRange.start, target.clip.start)) / rate).toFixed(2)} s of the clip`);
+      } else {
+        engine.dispatch({ type: "set-clip-media", trackId: target.track.id, clipId: target.clip.id, media: out as unknown as MediaRef });
+        setText(notice, `Applied ${label} to the clip`);
+      }
     } catch (err) {
       setText(notice, `Could not apply ${label}: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

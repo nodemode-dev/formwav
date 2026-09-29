@@ -598,6 +598,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   const clearRange = () => {
     if (!range) return;
     range = null;
+    lanes.dispatchEvent(new CustomEvent("fw-range", { bubbles: true, detail: null }));
     drawRange();
   };
   lanes.addEventListener("fw-lanes-rendered", drawRange);
@@ -617,6 +618,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       const a = rangeAt(d.body, d.x0);
       const b = rangeAt(d.body, e.clientX);
       range = { trackId: d.trackId, start: Math.min(a, b), end: Math.max(a, b) };
+      lanes.dispatchEvent(new CustomEvent("fw-range", { bubbles: true, detail: range }));
       drawRange();
       return;
     }

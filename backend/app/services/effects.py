@@ -174,8 +174,13 @@ def _controls(key: str) -> list[dict]:
     return [{"id": p, "label": label, "min": lo, "max": hi, "default": default, "unit": unit} for p, (label, lo, hi, default, unit) in spec.items()]
 
 
+#: Effects whose output does not line up sample for sample with the source (length or order changes), so they apply to a
+#: whole clip only, never to a range inside one.
+RETIMING = {"tempo-faster", "tempo-slower", "speed-faster", "extreme-stretch", "truncate-silence", "reverse"}
+
+
 def catalogue() -> list[dict]:
-    return [{"group": group, "effects": [{"id": key, "label": label, "params": _controls(key)} for key, label in items]} for group, items in GROUPS]
+    return [{"group": group, "effects": [{"id": key, "label": label, "params": _controls(key), "retimes": key in RETIMING} for key, label in items]} for group, items in GROUPS]
 
 
 def apply(media_id: str, name: str, params: dict | None = None) -> dict:
