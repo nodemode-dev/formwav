@@ -102,6 +102,7 @@ export type Command =
   | { type: "set-bus-pan"; busId: string; pan: number }
   | { type: "split-clip"; trackId: string; clipId: string; at: number }
   | { type: "set-clip-bounds"; trackId: string; clipId: string; start: number; sourceIn: number; length: number }
+  | { type: "set-clip-gain"; trackId: string; clipId: string; gainDb: number }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "add-marker"; at: number; label: string };
 
@@ -215,6 +216,18 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const before = doc.regions ?? [];
       const regions = before.filter((r) => r.id !== cmd.regionId);
       return regions.length === before.length ? doc : { ...doc, regions };
+    }
+    case "set-clip-gain": {
+      const gainDb = Math.max(-60, Math.min(12, Math.round(cmd.gainDb * 10) / 10));
+      return mapTrack(doc, cmd.trackId, (t) => {
+        let changed = false;
+        const clips = t.clips.map((c) => {
+          if (c.id !== cmd.clipId || c.gainDb === gainDb) return c;
+          changed = true;
+          return { ...c, gainDb };
+        });
+        return changed ? { ...t, clips } : t;
+      });
     }
     case "split-clip":
       return mapTrack(doc, cmd.trackId, (t) => {

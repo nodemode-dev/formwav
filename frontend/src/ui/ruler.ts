@@ -1,11 +1,10 @@
 import type { Engine } from "../engine";
 import type { Player } from "../audio/player";
 import { documentLength } from "../engine/document";
+import { labelStep } from "./grid";
 import { onZoom, samplesPerPixel } from "./lanes";
 
-const LABEL_SPACING_PX = 80;
 const MIN_MINOR_PX = 6;
-const STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
 
 function label(seconds: number, step: number): string {
   const minutes = Math.floor(seconds / 60 + 1e-9);
@@ -51,7 +50,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     ctx.textBaseline = "top";
 
     const pxPerSecond = doc.sampleRate / spp;
-    const step = STEPS.find((s) => s * pxPerSecond >= LABEL_SPACING_PX) ?? STEPS[STEPS.length - 1];
+    const step = labelStep(pxPerSecond);
     const minor = step / 5;
     const drawMinor = minor * pxPerSecond >= MIN_MINOR_PX;
     ctx.fillStyle = style.color;

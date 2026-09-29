@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v0.14.0
-Last updated: 2026-09-28 · split, trim, fade handles and drawn fades
+Current build version: v0.15.0
+Last updated: 2026-09-28 · grid snapping, clip gain line, transport bar as a flex row
 
 ---
 
@@ -45,6 +45,7 @@ frontend/
     │   ├── loop.ts              Loop button, L key, loop band over the lanes
     │   ├── export.ts            Export button and Cmd or Ctrl Shift E: the engine's mix as a WAV download
     │   ├── ruler.ts             timeline ruler on one canvas: time labels, loop range, regions; click to seek
+    │   ├── grid.ts              the ruler's step, Grid mode (button and G) and snapping to its ticks
     │   ├── record.ts            Record button and R key, input meter, takes into the session
     │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
     ├── audio/
@@ -93,6 +94,7 @@ frontend/
 - [src/ui/loop.ts](#src-ui-loop)
 - [src/ui/export.ts and src/io/render-client.ts](#src-ui-export)
 - [src/ui/ruler.ts and the v0.13.0 timeline](#src-ui-ruler)
+- [src/ui/grid.ts, the clip gain line and the transport row (v0.15.0)](#src-ui-grid)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
@@ -732,3 +734,28 @@ The pointer-down target decides the gesture: a fade handle is a fade, within 6 p
 - logged: v0.14.0 · 2026-09-28
 
 Each clip is created with two fade handles in its top corners, placed by `transform` at the fade's length and shown on hover or selection. The trim zones are pseudo-elements down the clip's sides below a top band, so their `ew-resize` cursor shows without script and the corners stay with the handles. `paint` shades the cut-away area above each fade curve with the canvas's computed `outline-color` and follows the fade's shape. S splits the selected clip at the playhead. Verified: the fade-in handle dragged 50 px set 24,000 samples and the render ramped k / 24,000 within 2.7e-8; the fade-out handle dragged 100 px set 48,000; the screenshot showed both fades drawn and the handles in place. Grid snapping and shuffle mode are still to come.
+
+---
+
+## src/ui/grid.ts, the clip gain line and the transport row (v0.15.0) {#src-ui-grid}
+
+### src/ui/grid.ts · one step for the ruler and the grid
+- refers-to: src/ui/grid.ts :: `labelStep`, `snapSamples`, `mountGrid`; src/ui/ruler.ts :: `draw`
+- kind: rationale
+- logged: v0.15.0 · 2026-09-28
+
+The step list the ruler used moved here so the ruler's labels and the grid's snap points cannot drift apart. Grid mode (the Grid button in the transport bar, or G) snaps the anchor edge of a move or a trim to the ruler's minor ticks, a fifth of the labelled step at the current zoom, so the grid tightens as you zoom in. Fades and gain are not snapped; seeks are not snapped yet. Verified at 100 px per second (0.2 s grid): a 37 px move landed on 17,760 without the grid and on 19,200 with it; a right-edge trim of -130 px put the end on 441,600.
+
+### src/ui/lanes.ts · the clip gain line
+- refers-to: src/ui/lanes.ts :: `gainFraction`, `gainLabel`, `dragGain`, `clipNode`, `updateClip`, the `gain` gesture; src/engine/document.ts :: `set-clip-gain`
+- kind: rationale
+- logged: v0.15.0 · 2026-09-28
+
+Each clip has a line whose height maps +12 dB at the top to -36 dB at the bottom (0 dB a quarter of the way down), measured against the clip's client height, the same box its `top` percentage uses. Dragging it vertically previews by `transform` with a live dB label and commits one `set-clip-gain` (clamped to -60 to +12 dB, tenths, no-op when unchanged). The waveform is drawn scaled by the clip gain. Verified: a 22 px drag on an 86 px clip gave -12.3 dB (22 / 86 x 48); the render equalled the source times 10^(-12.3 / 20) within 6e-9; undo returned 0 dB. The first expectation of -12.0 dB used the clip's bounding height, borders included; the app's mapping was right.
+
+### src/styles/shell.css · transport bar as a flex row, defect fixed
+- refers-to: src/styles/shell.css :: `.fw-transport`
+- kind: warning-context
+- logged: v0.15.0 · 2026-09-28
+
+The bar was a grid of three columns (`auto auto 1fr`) made for the controls and the clock; the meter appended in v0.5.0 took the third, and the Grid button, a fourth child, fell onto an implicit second row that overflowed the bar and pushed the meter out of it. Only the screenshot showed it. The bar is now a flex row: controls, clock, Grid and meter measured in one row inside the bar after the fix, and the recording regression's meter reading was unchanged.

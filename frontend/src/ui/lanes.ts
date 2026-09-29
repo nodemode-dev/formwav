@@ -1,6 +1,7 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import { documentLength, sessionLength } from "../engine/document";
 import { fetchPeaks, type PeakData } from "../io/media-client";
+import { gridEnabled, snapSamples } from "./grid";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
 const PEAK_SPP = 256;
@@ -75,6 +76,7 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
   const startBlock = info.clip.sourceIn / peaks.samplesPerPeak;
   const rowH = h / ch;
   const half = (rowH / 2) * 0.9;
+  const clipGain = 10 ** (info.clip.gainDb / 20);
   for (let x = 0; x < w; x++) {
     const b0 = Math.floor(startBlock + x * blocksPerPx);
     if (b0 >= peaks.blocks) break;
@@ -89,8 +91,8 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
       }
       if (hi < lo) continue;
       const mid = rowH * c + rowH / 2;
-      const top = mid - Math.min(1, hi) * half;
-      const bottom = mid - Math.max(-1, lo) * half;
+      const top = mid - Math.min(1, hi * clipGain) * half;
+      const bottom = mid - Math.max(-1, lo * clipGain) * half;
       ctx.fillRect(x, top, 1, Math.max(1, bottom - top));
     }
   }
@@ -131,6 +133,22 @@ function schedulePaint(canvas: HTMLCanvasElement, mediaId: string): void {
     .catch(() => undefined);
 }
 
+const GAIN_TOP_DB = 12;
+const GAIN_SPAN_DB = 48;
+
+function gainFraction(db: number): number {
+  return Math.min(1, Math.max(0, (GAIN_TOP_DB - db) / GAIN_SPAN_DB));
+}
+
+function gainLabel(db: number): string {
+  return `${db > 0 ? "+" : ""}${db.toFixed(1)} dB`;
+}
+
+function dragGain(db: number, dy: number, height: number): number {
+  const next = db - (dy / Math.max(1, height)) * GAIN_SPAN_DB;
+  return Math.round(Math.min(GAIN_TOP_DB, Math.max(GAIN_TOP_DB - GAIN_SPAN_DB, next)) * 10) / 10;
+}
+
 function clipNode(): HTMLElement {
   const node = document.createElement("div");
   node.className = "fw-clip";
@@ -140,7 +158,9 @@ function clipNode(): HTMLElement {
   fadeIn.className = "fw-fade-handle fw-fade-in";
   const fadeOut = document.createElement("span");
   fadeOut.className = "fw-fade-handle fw-fade-out";
-  node.append(canvas, fadeIn, fadeOut);
+  const gain = document.createElement("span");
+  gain.className = "fw-gain-line";
+  node.append(canvas, fadeIn, fadeOut, gain);
   return node;
 }
 
@@ -161,6 +181,16 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
     [".fw-fade-in", `translateX(${((clip.fadeIn ?? 0) / spp).toFixed(2)}px)`],
     [".fw-fade-out", `translateX(${(-(clip.fadeOut ?? 0) / spp).toFixed(2)}px)`],
   ];
+  const line = node.querySelector<HTMLElement>(".fw-gain-line");
+  if (line) {
+    const top = `${(gainFraction(clip.gainDb) * 100).toFixed(2)}%`;
+    if (line.dataset.top !== top) {
+      line.dataset.top = top;
+      line.style.top = top;
+    }
+    const db = gainLabel(clip.gainDb);
+    if (line.dataset.db !== db) line.dataset.db = db;
+  }
   for (const [selector, transform] of handles) {
     const handle = node.querySelector<HTMLElement>(selector);
     if (handle && handle.dataset.tx !== transform) {
@@ -245,8 +275,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
   };
 
-  type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out";
-  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; dx: number; moved: boolean; low: number; high: number };
+  type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out" | "gain";
+  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number };
   let drag: Gesture | null = null;
   const EDGE_PX = 6;
 
@@ -267,6 +297,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         return [-fadeIn / spp, (clip.length - fadeOut - fadeIn) / spp];
       case "fade-out":
         return [-(clip.length - fadeIn - fadeOut) / spp, fadeOut / spp];
+      case "gain":
+        return [-Infinity, Infinity];
     }
   };
 
@@ -285,24 +317,35 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (!clip) return;
     const box = node.getBoundingClientRect();
     const x = e.clientX - box.left;
-    const kind: GestureKind = target.classList.contains("fw-fade-in")
-      ? "fade-in"
-      : target.classList.contains("fw-fade-out")
-        ? "fade-out"
-        : x < EDGE_PX
-          ? "trim-left"
-          : x > box.width - EDGE_PX
-            ? "trim-right"
-            : "move";
+    const kind: GestureKind = target.classList.contains("fw-gain-line")
+      ? "gain"
+      : target.classList.contains("fw-fade-in")
+        ? "fade-in"
+        : target.classList.contains("fw-fade-out")
+          ? "fade-out"
+          : x < EDGE_PX
+            ? "trim-left"
+            : x > box.width - EDGE_PX
+              ? "trim-right"
+              : "move";
     const [low, high] = limits(kind, clip, samplesPerPixel(engine.get("document")));
     selectedClipId = clip.id;
     markSelected();
-    drag = { kind, node, trackId, clip, startX: e.clientX, dx: 0, moved: false, low, high };
+    drag = { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low, high };
     node.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
 
   const preview = (d: Gesture, spp: number) => {
+    if (d.kind === "gain") {
+      const line = d.node.querySelector<HTMLElement>(".fw-gain-line");
+      if (!line) return;
+      const height = d.node.clientHeight;
+      const db = dragGain(d.clip.gainDb, d.dy, height);
+      line.style.transform = `translateY(${((gainFraction(db) - gainFraction(d.clip.gainDb)) * height).toFixed(1)}px)`;
+      line.dataset.db = gainLabel(db);
+      return;
+    }
     const shift = `translateX(${d.dx.toFixed(1)}px)`;
     if (d.kind === "move") d.node.style.transform = shift;
     else if (d.kind === "trim-left") {
@@ -320,9 +363,18 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     d.node.style.transform = "";
     if (d.node.dataset.width) d.node.style.width = d.node.dataset.width;
     for (const handle of d.node.querySelectorAll<HTMLElement>(".fw-fade-handle")) handle.style.transform = handle.dataset.tx ?? "";
+    const line = d.node.querySelector<HTMLElement>(".fw-gain-line");
+    if (line) {
+      line.style.transform = "";
+      line.dataset.db = gainLabel(d.clip.gainDb);
+    }
   };
 
   const commit = (d: Gesture, spp: number) => {
+    if (d.kind === "gain") {
+      engine.dispatch({ type: "set-clip-gain", trackId: d.trackId, clipId: d.clip.id, gainDb: dragGain(d.clip.gainDb, d.dy, d.node.clientHeight) });
+      return;
+    }
     const delta = Math.round(d.dx * spp);
     const c = d.clip;
     const ids = { trackId: d.trackId, clipId: c.id };
@@ -336,10 +388,25 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   lanes.addEventListener("pointermove", (e) => {
     if (!drag) return;
     const dx = e.clientX - drag.startX;
-    if (!drag.moved && Math.abs(dx) < 3) return;
+    const dy = e.clientY - drag.startY;
+    if (!drag.moved && Math.abs(drag.kind === "gain" ? dy : dx) < 3) return;
     drag.moved = true;
-    drag.dx = Math.min(drag.high, Math.max(drag.low, dx));
-    preview(drag, samplesPerPixel(engine.get("document")));
+    const doc = engine.get("document");
+    const spp = samplesPerPixel(doc);
+    if (drag.kind === "gain") {
+      drag.dy = dy;
+      preview(drag, spp);
+      return;
+    }
+    let next = Math.min(drag.high, Math.max(drag.low, dx));
+    const anchor =
+      drag.kind === "move" || drag.kind === "trim-left" ? drag.clip.start : drag.kind === "trim-right" ? drag.clip.start + drag.clip.length : null;
+    if (anchor !== null && gridEnabled()) {
+      const snapped = snapSamples(anchor + next * spp, doc.sampleRate, doc.sampleRate / spp);
+      next = Math.min(drag.high, Math.max(drag.low, (snapped - anchor) / spp));
+    }
+    drag.dx = next;
+    preview(drag, spp);
   });
 
   const endDrag = (apply: boolean) => {

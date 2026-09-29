@@ -78,8 +78,7 @@ html, body, #app { height: 100%; }
 .fw-empty-body { color: var(--text-secondary); line-height: 1.5; }
 
 .fw-transport {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
+  display: flex;
   align-items: center;
   column-gap: var(--space-4);
   padding: 0 var(--space-4);
@@ -369,3 +368,49 @@ html, body, #app { height: 100%; }
 .fw-clip:hover .fw-fade-handle,
 .fw-clip[aria-selected="true"] .fw-fade-handle { opacity: 1; }
 .fw-wave { outline: 0 none var(--bg-primary); }
+
+.fw-gain-line {
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  block-size: 8px;
+  margin-top: -4px;
+  cursor: ns-resize;
+  opacity: 0;
+}
+
+.fw-gain-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 4px;
+  border-top: 1px solid var(--text-primary);
+}
+
+.fw-gain-line::after {
+  content: attr(data-db);
+  position: absolute;
+  right: 0;
+  bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-primary);
+}
+
+.fw-clip:hover .fw-gain-line,
+.fw-clip[aria-selected="true"] .fw-gain-line { opacity: 1; }
+
+.fw-mode {
+  block-size: var(--ctl-md);
+  margin-inline-start: var(--space-3);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+
+.fw-mode[aria-pressed="true"] { color: var(--accent-color); border-color: var(--accent-color-dim); }
