@@ -35,6 +35,42 @@ async def import_media(request: Request) -> dict:
         raise HTTPException(415, str(err)) from err
 
 
+@router.post("/generate", status_code=201)
+def generate_signal(kind: str, seconds: float = 5.0, rate: int = 48000, freq: float = 440.0, digits: str = "") -> dict:
+    from ..services import tools
+
+    try:
+        return tools.generate(kind, seconds, _rate(str(rate)) or rate, freq, digits)
+    except media.CoreMissing as err:
+        raise HTTPException(503, str(err)) from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
+@router.get("/media/{media_id}/stats")
+def media_stats(media_id: str) -> dict:
+    from ..services import tools
+
+    try:
+        return tools.stats(media_id)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
+@router.get("/media/{media_id}/spectrogram.png")
+def media_spectrogram(media_id: str) -> Response:
+    from ..services import tools
+
+    try:
+        return Response(content=tools.spectrogram_png(media_id), media_type="image/png")
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/effects")
 def list_effects() -> list[dict]:
     from ..services import effects

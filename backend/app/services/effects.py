@@ -65,6 +65,49 @@ AUDIO_CHAINS = {
     "deep-denoise": "afftdn=nf=-35:nr=20:tn=1",
 }
 
+#: formwav's own chains, written against the behaviour of Audacity's built-in effects, iZotope RX's modules and
+#: Audition's processes (references only; no code taken). "peak-normalize" is measured first, so its chain is built in apply().
+FORMWAV_CHAINS = {
+    "amplify-up": "volume=6dB",
+    "amplify-down": "volume=-6dB",
+    "invert": "aeval=-val(ch):c=same",
+    "reverse": "areverse",
+    "dc-offset": "highpass=f=5:poles=1",
+    "click-removal": "adeclick",
+    "gap-repair": "adeclick=w=10:o=50:a=4",
+    "truncate-silence": "silenceremove=stop_periods=-1:stop_duration=0.5:stop_threshold=-45dB",
+    "graphic-eq-voice": "superequalizer=1b=0.7:2b=0.8:3b=0.9:4b=1:5b=1:6b=1.1:7b=1.2:8b=1.3:9b=1.3:10b=1.2:11b=1.1:12b=1:13b=1:14b=1:15b=0.9:16b=0.9:17b=0.8:18b=0.8",
+    "filter-curve-lowcut": "firequalizer=gain_entry='entry(0,-30);entry(80,-30);entry(120,0);entry(20000,0)'",
+    "tempo-faster": "rubberband=tempo=1.1",
+    "tempo-slower": "rubberband=tempo=0.9",
+    "pitch-up-semitone": "rubberband=pitch=1.0594631",
+    "pitch-down-semitone": "rubberband=pitch=0.9438743",
+    "speed-faster": "aresample=48000,asetrate=52800,aresample=48000",
+    "extreme-stretch": "rubberband=tempo=0.25",
+    "de-clip": "adeclip",
+    "de-crackle": "adeclick=w=20:o=75:t=5",
+    "mouth-declick": "highpass=f=60,adeclick=w=10:o=75:t=2",
+    "de-plosive": "highpass=f=100:poles=2",
+    "de-wind": "highpass=f=150:poles=2,afftdn=nf=-30",
+    "voice-denoise": "anlmdn=s=7:p=0.002:r=0.006",
+    "guitar-denoise": "afftdn=nf=-40:tn=1",
+    "de-ess-strong": "deesser=i=0.8:m=0.5:f=0.5",
+    "leveler": "speechnorm=e=6:r=0.0001:l=1",
+    "dither": "aresample=osf=s16:dither_method=shibata,aresample=osf=flt",
+    "phase-rotate": "aphaseshift=shift=0.25",
+    "azimuth": "adelay=delays=0|1",
+    "center-extract": "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1",
+    "center-remove": "pan=stereo|c0=c0-c1|c1=c1-c0",
+    "swap-channels": "pan=stereo|c0=c1|c1=c0",
+    "mid-side-encode": "stereotools=mode=lr>ms",
+    "mid-side-decode": "stereotools=mode=ms>lr",
+    "peak-normalize": "",
+    "loudness-streaming": "loudnorm=I=-14:TP=-1:LRA=11",
+    "loudness-broadcast": "loudnorm=I=-23:TP=-2:LRA=15",
+    "exciter": "aexciter=amount=2",
+}
+ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
+
 #: Menu groups for formwav's Inspector; every chain appears exactly once.
 GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Clean up", [("voice-clean", "Enhance speech"), ("denoise", "Denoise"), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess")]),
@@ -74,10 +117,16 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
+    ("Audacity effects", [("amplify-up", "Amplify +6 dB"), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo +10%"), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch +1 semitone"), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed +10%"), ("extreme-stretch", "Extreme stretch x4")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms")]),
+    ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
+    ("Mastering", [("peak-normalize", "Peak normalize to -1 dB"), ("loudness-streaming", "Loudness: streaming -14 LUFS"), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
 LABELS = {key: label for _, items in GROUPS for key, label in items}
 #: Effects that make a stereo image, so their output is stereo even from mono.
 STEREO = {"wide-stage", "stereo-bloom"}
+#: Effects that work between two channels and so need a stereo source.
+STEREO_ONLY = {"center-extract", "center-remove", "swap-channels", "mid-side-encode", "mid-side-decode", "azimuth"}
 
 
 def catalogue() -> list[dict]:
@@ -86,11 +135,21 @@ def catalogue() -> list[dict]:
 
 def apply(media_id: str, name: str) -> dict:
     """Renders `name` over a stored media file into new media at the same rate; the source is kept."""
-    chain = AUDIO_CHAINS.get(name)
+    chain = ALL_CHAINS.get(name)
     if chain is None:
         raise media.MediaError(f"no effect named {name}")
     info = media.media_info(media_id)
     rate, channels = int(info["sampleRate"]), int(info["channels"])
+    source = media_dir() / f"{media_id}.wav"
+    if name in STEREO_ONLY and channels < 2:
+        raise media.MediaError(f"{LABELS.get(name, name)} works between two channels and needs a stereo clip")
+    if name == "peak-normalize":
+        from .tools import stats
+
+        peak_db = stats(media_id).get("peakDb")
+        if peak_db is None or peak_db <= -90:
+            raise media.MediaError("the clip is silent; there is nothing to normalize")
+        chain = f"volume={-1.0 - peak_db:.6f}dB"
     stereo = name in STEREO
     af = ("aformat=channel_layouts=stereo," if stereo else "") + chain + f",aresample={rate}"
     with tempfile.TemporaryDirectory() as tmp:
