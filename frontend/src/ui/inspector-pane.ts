@@ -10,6 +10,7 @@ const BODY = `
   <label class="fw-field"><span>Start</span><input type="number" step="0.001" min="0" data-f="start"><output>s</output></label>
   <div class="fw-field"><span>Length</span><output data-o="length"></output><span></span></div>
   <label class="fw-field"><span>Clip gain</span><input type="range" min="-24" max="24" step="0.1" data-f="gain" data-default="0"><output data-o="gain"></output></label>
+  <label class="fw-field"><span>Pitch</span><input type="range" min="-12" max="12" step="1" value="0" data-pitch data-default="0" title="Non-destructive: the original is kept"><output data-pitch-out>0 st</output></label>
   <label class="fw-field"><span>Fade in</span><input type="number" step="0.01" min="0" data-f="fadeIn"><output>s</output></label>
   <label class="fw-field"><span>Fade out</span><input type="number" step="0.01" min="0" data-f="fadeOut"><output>s</output></label>
   <label class="fw-field"><span>Fade curve</span><select data-f="shape"><option value="linear">Linear</option><option value="equal-power">Equal power</option><option value="s-curve">S-curve</option><option value="exponential">Exponential</option></select><span></span></label>
@@ -573,6 +574,45 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, merged.length ? `Ducked ${hit.track.name} by ${amount} dB in ${merged.length} place${merged.length === 1 ? "" : "s"} under ${controlName}` : `${controlName} is silent; nothing to duck`);
     } catch (err) {
       setText(notice, `Could not duck: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // Non-destructive clip pitch (Audacity's clip pitch shift): a render of the ORIGINAL media at the chosen pitch is
+  // what plays; the original is never altered, so pitches never compound, and 0 drops the render.
+  const pitchInput = body.querySelector<HTMLInputElement>("[data-pitch]");
+  const pitchOut = body.querySelector<HTMLElement>("[data-pitch-out]");
+  const label = (st: number) => `${st > 0 ? "+" : ""}${st} st`;
+  const syncPitch = () => {
+    const st = find(engine.get("document"))?.clip.pitch ?? 0;
+    if (pitchInput && document.activeElement !== pitchInput && pitchInput.value !== String(st)) pitchInput.value = String(st);
+    setText(pitchOut, label(Number(pitchInput?.value ?? st)));
+  };
+  engine.subscribe("document", syncPitch);
+  host.addEventListener("fw-selection", () => queueMicrotask(syncPitch));
+  pitchInput?.addEventListener("input", () => setText(pitchOut, label(Number(pitchInput.value))));
+  pitchInput?.addEventListener("change", async () => {
+    const hit = find(engine.get("document"));
+    if (!hit || !pitchInput) return;
+    const st = Math.round(Number(pitchInput.value));
+    if (st === (hit.clip.pitch ?? 0)) return;
+    if (st === 0) {
+      engine.dispatch({ type: "set-clip-pitch", trackId: hit.track.id, clipId: hit.clip.id, semitones: 0, media: null });
+      setText(notice, "Pitch reset: the clip plays its original");
+      return;
+    }
+    setText(notice, `Pitching the clip ${label(st)}...`);
+    try {
+      const params = encodeURIComponent(JSON.stringify({ semitones: st }));
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=pitch-up-semitone&params=${params}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      const now = find(engine.get("document"));
+      if (!now || now.clip.id !== hit.clip.id) return; // the selection moved on while rendering; do not pitch another clip
+      engine.dispatch({ type: "set-clip-pitch", trackId: hit.track.id, clipId: hit.clip.id, semitones: st, media: out as unknown as MediaRef });
+      setText(notice, `Pitched ${label(st)}; the original is kept`);
+    } catch (err) {
+      setText(notice, `Could not pitch the clip: ${err instanceof Error ? err.message : String(err)}`);
+      syncPitch();
     }
   });
 

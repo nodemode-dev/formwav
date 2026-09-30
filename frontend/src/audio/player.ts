@@ -66,8 +66,10 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     const volumePoints = track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
     const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
     for (const clip of track.clips) {
-      const media = doc.media[clip.mediaId];
-      const source = sources.get(clip.mediaId);
+      // A pitched clip plays its derived render (non-destructive pitch; same length as the original).
+      const playId = clip.pitchMediaId && doc.media[clip.pitchMediaId] ? clip.pitchMediaId : clip.mediaId;
+      const media = doc.media[playId];
+      const source = sources.get(playId);
       if (!media || source === undefined) continue;
       if (media.sampleRate !== doc.sampleRate) {
         skipped++;

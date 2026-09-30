@@ -47,6 +47,10 @@ export interface Clip {
   take?: number;
   /** Clips sharing a group id select, move and delete together (Audacity's clip groups). */
   groupId?: string;
+  /** Non-destructive pitch shift in semitones (Audacity's clip pitch): `mediaId` stays the original, and playback and
+   * export play `pitchMediaId`, a same-length render of the original at this pitch. */
+  pitch?: number;
+  pitchMediaId?: string;
 }
 
 /** An automation point: time in session samples; value in dB (volume) or -1 to 1 (pan). */
@@ -208,6 +212,7 @@ export type Command =
   | { type: "batch"; commands: Command[] }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "move-clip-to-track"; trackId: string; clipId: string; toTrackId: string; start: number }
+  | { type: "set-clip-pitch"; trackId: string; clipId: string; semitones: number; media: MediaRef | null }
   | { type: "add-marker"; at: number; label: string };
 
 export function emptyDocument(sampleRate: number): SessionDoc {
@@ -295,10 +300,12 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           // material re-timed, so its trim, length and fades scale by the same ratio (they had been left as they
           // were, cutting a slowed clip short and leaving a sped-up one running past its audio).
           const before = old(c);
+          // A pitch render was made from the old media, so new media leaves the clip unpitched (set the pitch again).
+          const { pitch: _p, pitchMediaId: _pm, ...base } = c;
           const r = before && before.frames > 0 && cmd.media.frames > 0 ? cmd.media.frames / before.frames : 1;
-          if (Math.abs(r - 1) < 1e-9) return { ...c, mediaId: cmd.media.id };
+          if (Math.abs(r - 1) < 1e-9) return { ...base, mediaId: cmd.media.id };
           const scale = (n: number | undefined) => (n === undefined ? undefined : Math.max(0, Math.round(n * r)));
-          return { ...c, mediaId: cmd.media.id, sourceIn: scale(c.sourceIn) ?? 0, length: Math.max(1, scale(c.length) ?? c.length), fadeIn: scale(c.fadeIn), fadeOut: scale(c.fadeOut) };
+          return { ...base, mediaId: cmd.media.id, sourceIn: scale(c.sourceIn) ?? 0, length: Math.max(1, scale(c.length) ?? c.length), fadeIn: scale(c.fadeIn), fadeOut: scale(c.fadeOut) };
         }),
       }));
       return changed ? { ...next, media: { ...doc.media, [cmd.media.id]: cmd.media } } : doc;
@@ -349,6 +356,23 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         ...(doc.regions ? { regions: doc.regions.map((g) => ({ ...g, start: at(g.start), end: at(g.end) })) } : {}),
         ...(doc.loop ? { loop: { ...doc.loop, start: at(doc.loop.start), end: at(doc.loop.end) } } : {}),
       };
+    }
+    case "set-clip-pitch": {
+      const st = Math.max(-12, Math.min(12, Math.round(cmd.semitones)));
+      let changed = false;
+      const next = mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.map((c) => {
+          if (c.id !== cmd.clipId) return c;
+          const { pitch: _p, pitchMediaId: _m, ...rest } = c;
+          const target: Clip = st === 0 || !cmd.media ? rest : { ...rest, pitch: st, pitchMediaId: cmd.media.id };
+          if ((c.pitch ?? 0) === (target.pitch ?? 0) && c.pitchMediaId === target.pitchMediaId) return c;
+          changed = true;
+          return target;
+        }),
+      }));
+      if (!changed) return doc;
+      return st !== 0 && cmd.media ? { ...next, media: { ...doc.media, [cmd.media.id]: cmd.media } } : next;
     }
     case "move-clip-to-track": {
       if (cmd.toTrackId === cmd.trackId) return applyCommand(doc, { type: "move-clip", trackId: cmd.trackId, clipId: cmd.clipId, start: cmd.start }, newId);
