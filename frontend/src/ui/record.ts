@@ -1,6 +1,7 @@
 import type { Engine, TransportState } from "../engine";
 import type { Player } from "../audio/player";
 import { encodeWav, startRecording, type Recording } from "../audio/recorder";
+import { trackInput } from "./inputs";
 import { importFile } from "../io/media-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { armedTrack, recordingTrack, setRecordingTrack } from "./arm";
@@ -117,7 +118,7 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       punchRange = punchEnabled() && armed && doc.loop && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
       loopRange = !punchRange && doc.loop?.enabled && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
       lastPosition = position;
-      active = await startRecording(player, position, showLevel);
+      active = await startRecording(player, position, showLevel, armed ? trackInput(armed.id) : "");
       engine.setTransport({ recording: true });
       const seconds = (s: number) => (s / doc.sampleRate).toFixed(3);
       setText(

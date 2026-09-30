@@ -55,9 +55,9 @@ export function encodeWav(channels: Float32Array[], sampleRate: number): ArrayBu
   return buffer;
 }
 
-export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void): Promise<Recording> {
+export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = ""): Promise<Recording> {
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
   });
   try {
     const ctx = await player.context();

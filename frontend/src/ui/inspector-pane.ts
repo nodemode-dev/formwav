@@ -2,6 +2,7 @@ import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import type { FadeShape, TrackFx } from "../engine/document";
 import { loadPresets, savePresets, type Preset } from "../io/presets-client";
 import { setText } from "../vendor/nodemode/dom-stable";
+import { inputDevices, inputSignature, onInputsChanged, refreshInputs, setTrackInput, trackInput } from "./inputs";
 
 const BODY = `
 <p class="fw-empty-note fw-insp-empty"></p>
@@ -44,6 +45,8 @@ const BODY = `
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
+  <label class="fw-field"><span>Input</span><select data-track-input aria-label="Input device for recording on this track"><option value="">System default</option></select><span></span></label>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="delete" title="Delete this track and its clips (undo brings it back)">Delete track</button></div>
   <label class="fw-field"><span>Volume</span><input type="range" min="-60" max="12" step="0.1" data-f="volume" data-default="0"><output data-o="volume"></output></label>
   <label class="fw-field"><span>Pan</span><input type="range" min="-1" max="1" step="0.01" data-f="pan" data-default="0"><output data-o="pan"></output></label>
@@ -132,6 +135,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     put(field<HTMLInputElement>("fadeOut"), ((clip.fadeOut ?? 0) / rate).toFixed(2));
     put(field<HTMLSelectElement>("shape"), clip.fadeShape ?? "linear");
     setText(body.querySelector(".fw-insp-track-name"), `Track · ${track.name}`);
+    fillInputs();
     const automated = track.automation;
     const volume = field<HTMLInputElement>("volume");
     const pan = field<HTMLInputElement>("pan");
@@ -612,6 +616,28 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   // Controls for commands the interface never issued (the reachability audit at v0.80.0 found them): rename and delete
   // a track, and crossfade the selected clip with the clip it overlaps on its track.
   const nameInput = body.querySelector<HTMLInputElement>("[data-track-name]");
+  const inputSelect = body.querySelector<HTMLSelectElement>("[data-track-input]");
+  let inputsShown = "";
+  const fillInputs = () => {
+    if (!inputSelect) return;
+    const sig = inputSignature();
+    if (sig !== inputsShown) {
+      inputsShown = sig;
+      inputSelect.replaceChildren(new Option("System default", ""), ...inputDevices().map((d) => new Option(d.label, d.id)));
+    }
+    const hit = find(engine.get("document"));
+    const want = hit ? trackInput(hit.track.id) : "";
+    if (inputSelect.value !== want) inputSelect.value = want;
+  };
+  onInputsChanged(fillInputs);
+  inputSelect?.addEventListener("change", () => {
+    const hit = find(engine.get("document"));
+    if (!hit) return;
+    setTrackInput(hit.track.id, inputSelect.value);
+    const label = inputSelect.selectedOptions[0]?.textContent ?? "System default";
+    setText(notice, `${hit.track.name} records from ${label}`);
+  });
+  void refreshInputs().then(fillInputs);
   const crossBtn = body.querySelector<HTMLButtonElement>('[data-clip-act="crossfade"]');
   const overlapOf = (doc: SessionDoc) => {
     const hit = find(doc);
@@ -649,6 +675,12 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       if (!hit) return;
       engine.dispatch({ type: "remove-track", trackId: hit.track.id });
       setText(notice, `Deleted track ${hit.track.name}; undo brings it back`);
+    } else if (b.dataset.trackAct === "refresh-inputs") {
+      setText(notice, "Listing inputs...");
+      void refreshInputs(true).then((list) => {
+        fillInputs();
+        setText(notice, list.length ? `${list.length} input${list.length === 1 ? "" : "s"} listed` : "No input device found; the system default is used");
+      });
     } else if (b.dataset.clipAct === "crossfade") {
       const o = overlapOf(doc);
       if (!o) return;
