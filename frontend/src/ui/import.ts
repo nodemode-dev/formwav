@@ -9,7 +9,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   let queue: Promise<void> = Promise.resolve();
 
-  const importOne = async (file: File) => {
+  const importOne = async (file: File, at = 0) => {
     let final = "";
     let shown = false;
     const dismiss = delayedIndicator(
@@ -22,7 +22,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
     try {
       const doc = engine.get("document");
       const media = await importFile(file, doc.tracks.length ? doc.sampleRate : undefined);
-      engine.dispatch({ type: "import-media", media, at: 0 });
+      engine.dispatch({ type: "import-media", media, at });
       final = `Imported ${file.name}`;
     } catch (err) {
       final = `Could not import ${file.name}: ${err instanceof Error ? err.message : String(err)}`;
@@ -31,8 +31,8 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
     if (!shown) setText(notice, final);
   };
 
-  const importAll = (files: FileList) => {
-    for (const file of Array.from(files)) queue = queue.then(() => importOne(file));
+  const importAll = (files: FileList, at = 0) => {
+    for (const file of Array.from(files)) queue = queue.then(() => importOne(file, at));
   };
 
   button?.addEventListener("click", () => input?.click());
@@ -49,5 +49,14 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
     if (!e.dataTransfer || !e.dataTransfer.files.length) return;
     e.preventDefault();
     importAll(e.dataTransfer.files);
+  });
+  // Audacity takes audio files from the OS clipboard: each pasted file becomes a track at the playhead.
+  window.addEventListener("paste", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("input, textarea, [contenteditable]")) return;
+    const files = e.clipboardData?.files;
+    if (!files || !files.length) return;
+    e.preventDefault();
+    importAll(files, engine.get("transport").positionSamples);
   });
 }

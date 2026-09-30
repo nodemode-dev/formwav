@@ -1227,3 +1227,10 @@ A Spectrogram toggle in the tool tray; with it on, each clip shows its file's sp
 - logged: v0.51.0 (in progress) · 2026-09-29
 
 Export opens a native dialog (the browser's top layer, so no stacking rules): the format (WAV float, 24 or 16-bit, FLAC, MP3 320 or 192, OGG, M4A) and what to export (the mix, stems as a zip, or multichannel). The file is named from what the engine made; Ctrl or Cmd with Shift and E exports straight away with the last choice; Loudness still renders the float mix (the client's defaults are unchanged). Verified in Chromium (verify_export.py): the dialog opened, FLAC chosen, the download was "Untitled session.flac", the dialog closed and the notice reported peak and loudness; no page errors.
+
+### src/ui/import.ts · audio files pasted from the OS clipboard (coverage wave 5)
+- refers-to: src/ui/import.ts :: `importOne` (`at`), `importAll` (`at`), the `paste` listener
+- kind: explainer
+- logged: v0.52.0 (in progress) · 2026-09-29
+
+Audacity takes audio files from the OS clipboard: a paste carrying files now imports each (converted to the session rate, one after another) onto a new track at the playhead; a paste into a text field is left to the field. Dropping files onto the timeline already existed here and keeps its place at 0; the import path gained a position so both share it. Verified in Chromium (verify_paste_files.py) with real File objects in genuine events: a paste with the playhead at 2 s made a "pasted" track starting at 2 s; the same paste on the session-name field did nothing; a drop still made a track at 0; no page errors.
