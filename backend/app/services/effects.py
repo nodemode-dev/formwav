@@ -107,6 +107,7 @@ FORMWAV_CHAINS = {
     "exciter": "aexciter=amount=2",
     "eq-3band": "lowshelf=g=0:f=120,equalizer=f=1000:t=q:w=1:g=0,highshelf=g=0:f=8000",
     "graphic-eq-5": "firequalizer=gain_entry='entry(60,0);entry(250,0);entry(1000,0);entry(4000,0);entry(12000,0)'",
+    "band-gain": "firequalizer=gain_entry='entry(0,0);entry(1940,0);entry(2000,-30);entry(4000,-30);entry(4120,0);entry(24000,0)'",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
@@ -120,7 +121,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -156,6 +157,12 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "presence-lift": ({"freq": ("Frequency", 200, 12000, 3000, "Hz"), "gain": ("Gain", -15, 15, 5, "dB")}, lambda v: f"equalizer=f={v['freq']:.0f}:t=q:w=1.2:g={v['gain']:.1f}"),
     "echo": ({"delay": ("Delay", 20, 2000, 100, "ms"), "decay": ("Decay", 5, 90, 40, "%")}, lambda v: f"aecho=0.8:0.7:{v['delay']:.0f}:{v['decay'] / 100:.2f}"),
     "click-removal": ({"threshold": ("Threshold", 1, 20, 2, ""), "window": ("Window", 10, 100, 55, "ms")}, lambda v: f"adeclick=w={v['window']:.0f}:t={v['threshold']:.1f}"),
+    "band-gain": (
+        {"low": ("From", 20, 20000, 2000, "Hz"), "high": ("To", 40, 22000, 4000, "Hz"), "gain": ("Gain", -60, 24, -30, "dB")},
+        lambda v: (lambda lo, hi, g: f"firequalizer=gain_entry='entry(0,0);entry({lo * 0.97:.1f},0);entry({lo:.1f},{g:.1f});entry({hi:.1f},{g:.1f});entry({hi * 1.03:.1f},0);entry(24000,0)'")(
+            min(v["low"], v["high"]), max(v["high"], v["low"] * 1.05), v["gain"]
+        ),
+    ),
     "eq-3band": (
         {"low": ("Low shelf 120 Hz", -15, 15, 0, "dB"), "freq": ("Mid frequency", 200, 8000, 1000, "Hz"), "mid": ("Mid gain", -15, 15, 0, "dB"), "high": ("High shelf 8 kHz", -15, 15, 0, "dB")},
         lambda v: f"lowshelf=g={v['low']:.1f}:f=120,equalizer=f={v['freq']:.0f}:t=q:w=1:g={v['mid']:.1f},highshelf=g={v['high']:.1f}:f=8000",

@@ -369,3 +369,10 @@ Wave 3 continues: a three-band parametric EQ (120 Hz low shelf, a mid band at an
 - logged: v0.50.0 · 2026-09-29
 
 The spectrogram route takes a size (clamped to 64 to 8192 by 32 to 1024) and can leave out the legend, so the image is the bare plot and its width maps to the file's length exactly, which the timeline's spectrogram view relies on. Verified through verify_spectrogram_view.py (a 2048 by 256 PNG, aligned under split clips).
+
+### app/services/effects.py · Band gain, the first spectral edit
+- refers-to: app/services/effects.py :: `band-gain` (chain, group, controls)
+- kind: rationale
+- logged: v0.50.0 · 2026-09-29
+
+A gain curve 0 dB outside a frequency band and the chosen gain inside it (-60 to +24 dB), with 3% transitions at the edges (firequalizer), the edges sorted if given in reverse. It keeps timing, so it applies inside a Smart Tool range: a time and frequency selection's gain, and at -60 dB an attenuation of that region, until drawn spectral selections exist. Verified (verify_band_gain.py) on 440 Hz, 1 kHz and 3 kHz tones: -30 dB on 2 to 4 kHz gave 0.0316 at 3 kHz and 1.0000 at the others; +12 dB gave 3.9811 at 3 kHz; reversed edges gave the same; 88 effects, 21 adjustable.
