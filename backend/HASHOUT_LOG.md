@@ -418,3 +418,10 @@ iZotope RX's streaming preview: the mix rendered, encoded with a lossy codec (MP
 - logged: v0.57.0 (in progress) · 2026-09-30
 
 iZotope RX's Deconstruct, as a reference: harmonic-percussive separation with PyTorch (scipy is not in the runtime; torch is, for separation): a 2048-point STFT, a 17-wide median along time for the tonal envelope and along frequency for the transient one, a part claiming a bin when its envelope exceeds twice the other's and the noisy part taking the rest. The masks partition the spectrum, so the parts sum back to the range. Verified on a 440 Hz tone at 0.3 with a click every 0.5 s at 0.9 and white noise at 0.05: the parts summed to the input within 2.4e-7; tonal correlated 0.999 with the tone; transient held the clicks (0.569 at the click times) and not the tone (0.017); noisy's level was 0.0285 against the noise's 0.029, with part of the broadband clicks (0.31), which firm masks cannot keep out.
+
+### app/routers/render.py · a track's active regions, for automatic ducking (coverage wave 10)
+- refers-to: app/routers/render.py :: `track_activity`
+- kind: warning-context
+- logged: v0.58.0 (in progress) · 2026-09-30
+
+POST /api/render/activity renders one track alone (others muted, solos cleared) and returns where it is active: silences over 0.3 s found by silencedetect, inverted. Two faults found on the JFK recording: a fixed -40 dBFS threshold never saw its pause (the background sits at -41 to -39 dB), so the threshold now defaults to the track's loud level (the 90th percentile of 50 ms RMS windows, measured natively by astats) minus 20 dB within -60 to -20 dBFS, -31.3 dB there; and a 2.6 ms noise spike inside the pause came back as activity and chained the ducking across it, so active regions under 0.1 s are dropped. Verified: the pause found (regions 0.33 to 2.5 s and 3.22 to 11 s), and through the app the ducking measured below.
