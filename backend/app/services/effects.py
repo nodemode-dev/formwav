@@ -110,6 +110,7 @@ FORMWAV_CHAINS = {
     "graphic-eq-5": "firequalizer=gain_entry='entry(60,0);entry(250,0);entry(1000,0);entry(4000,0);entry(12000,0)'",
     "band-gain": "firequalizer=gain_entry='entry(0,0);entry(1940,0);entry(2000,-30);entry(4000,-30);entry(4120,0);entry(24000,0)'",
     "dialogue-isolate": "",
+    "reverb": "asplit=3[d][s][m];[s]atrim=0:1.5,aeval=(random(0)*2-1)*exp(-t/0.8):c=same[ir];[m][ir]afir=dry=1:wet=1:gtype=rms[w];[d][w]amix=inputs=2:weights=0.7 0.3:normalize=0",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
@@ -118,7 +119,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Clean up", [("voice-clean", "Enhance speech"), ("denoise", "Denoise"), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess"), ("dialogue-isolate", "Dialogue isolate (neural)...")]),
     ("Dynamics", [("compress", "Compress"), ("normalize", "Normalize to -16 LUFS"), ("level-rider", "Level rider"), ("peak-limiter", "Peak limiter")]),
     ("Tone", [("bass", "Bass boost"), ("treble", "Treble boost"), ("warm-lows", "Warm lows"), ("presence-lift", "Presence lift"), ("mid-scoop", "Mid scoop"), ("crisp-detail", "Crisp detail"), ("eq-3band", "Parametric EQ, 3 bands..."), ("graphic-eq-5", "Graphic EQ, 5 bands...")]),
-    ("Space", [("room", "Room echo"), ("hall", "Hall echo"), ("cathedral", "Cathedral echo"), ("plate", "Plate echo"), ("echo", "Echo"), ("slapback", "Slapback"), ("long-tail", "Long tail"), ("tunnel", "Tunnel"), ("small-booth", "Small booth"), ("far-away", "Far away"), ("wide-stage", "Wide stage"), ("stereo-bloom", "Stereo bloom")]),
+    ("Space", [("reverb", "Reverb..."), ("room", "Room echo"), ("hall", "Hall echo"), ("cathedral", "Cathedral echo"), ("plate", "Plate echo"), ("echo", "Echo"), ("slapback", "Slapback"), ("long-tail", "Long tail"), ("tunnel", "Tunnel"), ("small-booth", "Small booth"), ("far-away", "Far away"), ("wide-stage", "Wide stage"), ("stereo-bloom", "Stereo bloom")]),
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
@@ -192,6 +193,10 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "hum-remover": (
         {"harmonics": ("Harmonics", 1, 6, 2, ""), "width": ("Notch width", 1, 30, 4, "Q")},
         lambda v: ",".join(f"bandreject=f={f * k}:width_type=q:w={v['width']:.1f}" for k in range(1, int(round(v["harmonics"])) + 1) for f in (50, 60)),
+    ),
+    "reverb": (
+        {"size": ("Size", 0.2, 6, 1.5, "s"), "decay": ("Decay", 0.1, 5, 0.8, "s"), "mix": ("Mix", 0, 100, 30, "%")},
+        lambda v: f"asplit=3[d][s][m];[s]atrim=0:{v['size']:.2f},aeval=(random(0)*2-1)*exp(-t/{v['decay']:.2f}):c=same[ir];[m][ir]afir=dry=1:wet=1:gtype=rms[w];[d][w]amix=inputs=2:weights={1 - v['mix'] / 100:.2f} {v['mix'] / 100:.2f}:normalize=0",
     ),
     "band-gain": (
         {"low": ("From", 20, 20000, 2000, "Hz"), "high": ("To", 40, 22000, 4000, "Hz"), "gain": ("Gain", -60, 24, -30, "dB")},
