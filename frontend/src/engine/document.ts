@@ -110,6 +110,8 @@ export interface Track {
   solo: boolean;
   pan?: number;
   busId?: string;
+  /** The VCA whose gain and mute also apply to this track (its own fader stays where it is). */
+  vcaId?: string;
   clips: readonly Clip[];
 }
 
@@ -146,6 +148,17 @@ export interface SessionDoc {
   regions?: readonly Region[];
   loop?: LoopRange;
   buses?: readonly Bus[];
+  /** VCA masters (Pro Tools' VCA mixing): group faders that scale their member tracks without carrying audio. */
+  vcas?: readonly Vca[];
+}
+
+/** A VCA (Pro Tools' VCA masters): a fader and mute for a group of tracks with no audio passing through it; a member
+ * plays at its own fader plus the VCA's gain, and its own fader does not move. */
+export interface Vca {
+  id: string;
+  name: string;
+  gainDb: number;
+  mute?: boolean;
 }
 
 export interface Bus {
@@ -207,6 +220,11 @@ export type Command =
   | { type: "add-bus"; name: string }
   | { type: "remove-bus"; busId: string }
   | { type: "route-track"; trackId: string; busId: string | null }
+  | { type: "add-vca"; name: string }
+  | { type: "remove-vca"; vcaId: string }
+  | { type: "assign-vca"; trackId: string; vcaId: string | null }
+  | { type: "set-vca-gain"; vcaId: string; gainDb: number }
+  | { type: "set-vca-mute"; vcaId: string; mute: boolean }
   | { type: "set-bus-gain"; busId: string; gainDb: number }
   | { type: "set-bus-pan"; busId: string; pan: number }
   | { type: "split-clip"; trackId: string; clipId: string; at: number }
@@ -579,6 +597,39 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       if (buses.length === before.length) return doc;
       const tracks = doc.tracks.map((t) => (t.busId === cmd.busId ? { ...t, busId: undefined } : t));
       return { ...doc, buses, tracks };
+    }
+    case "add-vca": {
+      const vca: Vca = { id: newId(), name: cmd.name.trim() || "VCA", gainDb: 0 };
+      return { ...doc, vcas: [...(doc.vcas ?? []), vca] };
+    }
+    case "remove-vca": {
+      const before = doc.vcas ?? [];
+      const vcas = before.filter((v) => v.id !== cmd.vcaId);
+      if (vcas.length === before.length) return doc;
+      const tracks = doc.tracks.map((t) => (t.vcaId === cmd.vcaId ? { ...t, vcaId: undefined } : t));
+      return { ...doc, vcas, tracks };
+    }
+    case "assign-vca": {
+      const vcaId = cmd.vcaId ?? undefined;
+      if (vcaId !== undefined && !(doc.vcas ?? []).some((v) => v.id === vcaId)) return doc;
+      return mapTrack(doc, cmd.trackId, (t) => (t.vcaId === vcaId ? t : { ...t, vcaId }));
+    }
+    case "set-vca-gain":
+    case "set-vca-mute": {
+      let changed = false;
+      const vcas = (doc.vcas ?? []).map((v) => {
+        if (v.id !== cmd.vcaId) return v;
+        if (cmd.type === "set-vca-gain") {
+          const gainDb = Math.max(-60, Math.min(12, cmd.gainDb));
+          if (v.gainDb === gainDb) return v;
+          changed = true;
+          return { ...v, gainDb };
+        }
+        if ((v.mute ?? false) === cmd.mute) return v;
+        changed = true;
+        return { ...v, mute: cmd.mute };
+      });
+      return changed ? { ...doc, vcas } : doc;
     }
     case "route-track": {
       const busId = cmd.busId ?? undefined;

@@ -683,7 +683,8 @@ html, body, #app { height: 100%; }
 
 .fw-strip-mute[aria-pressed="true"] { color: var(--danger); border-color: var(--danger); }
 .fw-strip-solo[aria-pressed="true"] { color: var(--accent-color); border-color: var(--accent-color); }
-.fw-strip-out { inline-size: 100%; font-size: var(--fs-11); color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); }
+.fw-strip-out, .fw-strip-vca { inline-size: 100%; font-size: var(--fs-11); color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); }
+.fw-mixer-bar { display: flex; gap: 6px; padding: 6px 8px 0; }
 .fw-takes-toggle[aria-expanded="true"] { color: var(--accent-color); border-color: var(--accent-color); }
 
 .fw-lufs {

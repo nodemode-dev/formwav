@@ -55,7 +55,8 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
   let end = 0;
   let skipped = 0;
   for (const track of doc.tracks) {
-    if (track.mute || (soloed && !track.solo) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
+    const vca = track.vcaId !== undefined ? (doc.vcas ?? []).find((v) => v.id === track.vcaId) : undefined;
+    if (track.mute || vca?.mute || (soloed && !track.solo) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
     let bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
     let fxFlat = flatFx(track.fx);
     if (bus === 0 && (track.fx ?? []).some((f) => f.kind === "compressor" && !f.bypass)) {
@@ -81,7 +82,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         start: clip.start,
         sourceIn: clip.sourceIn,
         length: clip.length,
-        gain: dbToGain((volumePoints ? 0 : track.gainDb) + clip.gainDb),
+        gain: dbToGain((volumePoints ? 0 : track.gainDb) + (vca?.gainDb ?? 0) + clip.gainDb),
         pan: panPoints ? 0 : track.pan ?? 0,
         gainPoints: volumePoints,
         panPoints,

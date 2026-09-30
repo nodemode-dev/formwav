@@ -1,10 +1,10 @@
 import type { Player } from "../audio/player";
 import type { Engine, SessionDoc, Track } from "../engine";
-import type { Bus } from "../engine/document";
+import type { Bus, Vca } from "../engine/document";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 import { icon as fcIcon } from "../vendor/formcut/icons";
 
-type Strip = { kind: "track"; item: Track } | { kind: "bus"; item: Bus } | { kind: "master"; item: { id: string; name: string; gainDb: number } };
+type Strip = { kind: "track"; item: Track } | { kind: "bus"; item: Bus } | { kind: "vca"; item: Vca } | { kind: "master"; item: { id: string; name: string; gainDb: number } };
 
 function stripNode(kind: Strip["kind"]): HTMLElement {
   const node = document.createElement("div");
@@ -15,9 +15,10 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
     `<div class="fw-strip-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div>` +
     `<input class="fw-strip-fader" type="range" min="-60" max="12" step="0.1" data-default="0" aria-label="Volume">` +
     `<output class="fw-strip-db"></output>` +
-    `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" data-default="0" aria-label="Pan"${kind === "master" ? " hidden" : ""}>` +
+    `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" data-default="0" aria-label="Pan"${kind === "master" || kind === "vca" ? " hidden" : ""}>` +
     `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute"><span class="fw-glyph-off">${fcIcon("speaker")}</span><span class="fw-glyph-on">${fcIcon("mute")}</span></button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo"${kind !== "track" ? " hidden" : ""}>${fcIcon("headphones")}</button></div>` +
-    `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>`;
+    `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>` +
+    `<select class="fw-strip-vca" aria-label="VCA"${kind !== "track" ? " hidden" : ""}></select>`;
   return node;
 }
 
@@ -50,7 +51,7 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
     setAttr(fader, "title", volumeAuto ? "Volume follows this track's automation" : "Volume");
     setText(node.querySelector(".fw-strip-db"), volumeAuto ? "auto" : dbText(strip.item.gainDb));
   }
-  if (pan) {
+  if (pan && strip.kind !== "vca") {
     const value = String(strip.item.pan ?? 0);
     if (pan.value !== value) pan.value = value;
     if (pan.disabled !== panAuto) pan.disabled = panAuto;
@@ -69,6 +70,17 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
       }
       const value = strip.item.busId ?? "";
       if (out.value !== value) out.value = value;
+    }
+    const vcaSel = node.querySelector<HTMLSelectElement>(".fw-strip-vca");
+    if (vcaSel) {
+      const options = [["", "No VCA"], ...(doc.vcas ?? []).map((v) => [v.id, v.name])];
+      const signature = JSON.stringify(options);
+      if (vcaSel.dataset.options !== signature) {
+        vcaSel.dataset.options = signature;
+        vcaSel.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+      }
+      const value = strip.item.vcaId ?? "";
+      if (vcaSel.value !== value) vcaSel.value = value;
     }
   }
 }
@@ -90,7 +102,17 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   panel.setAttribute("aria-label", "Mixer");
   const strips = document.createElement("div");
   strips.className = "fw-mixer-strips";
-  panel.append(strips);
+  // Buses and VCAs are made here: buses had routing but no way to be created from the interface.
+  const bar = document.createElement("div");
+  bar.className = "fw-mixer-bar";
+  bar.innerHTML = `<button type="button" class="fw-ibtn" data-mix="add-bus">Add bus</button><button type="button" class="fw-ibtn" data-mix="add-vca" title="A fader for a group of tracks, with no audio through it">Add VCA</button>`;
+  bar.addEventListener("click", (e) => {
+    const action = (e.target as HTMLElement).closest<HTMLElement>("[data-mix]")?.dataset.mix;
+    const doc = engine.get("document");
+    if (action === "add-bus") engine.dispatch({ type: "add-bus", name: `Bus ${(doc.buses ?? []).length + 1}` });
+    else if (action === "add-vca") engine.dispatch({ type: "add-vca", name: `VCA ${(doc.vcas ?? []).length + 1}` });
+  });
+  panel.append(bar, strips);
   if (transport) transport.before(panel);
   else host.append(panel);
 
@@ -99,6 +121,7 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     const items: Strip[] = [
       ...doc.tracks.map((item) => ({ kind: "track" as const, item })),
       ...(doc.buses ?? []).map((item) => ({ kind: "bus" as const, item })),
+      ...(doc.vcas ?? []).map((item) => ({ kind: "vca" as const, item })),
       { kind: "master" as const, item: { id: "master", name: "Master", gainDb: doc.masterGainDb ?? 0 } },
     ];
     patchList(strips, items, {
@@ -146,12 +169,15 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
       delete s.node.dataset.dragging;
       const gainDb = Number(el.value);
       if (s.node.dataset.kind === "master") engine.dispatch({ type: "set-master-gain", gainDb });
+      else if (s.node.dataset.kind === "vca") engine.dispatch({ type: "set-vca-gain", vcaId: s.id, gainDb });
       else engine.dispatch(s.bus ? { type: "set-bus-gain", busId: s.id, gainDb } : { type: "set-track-gain", trackId: s.id, gainDb });
     } else if (el.classList.contains("fw-strip-pan")) {
       const pan = Number(el.value);
       engine.dispatch(s.bus ? { type: "set-bus-pan", busId: s.id, pan } : { type: "set-track-pan", trackId: s.id, pan });
     } else if (el.classList.contains("fw-strip-out")) {
       engine.dispatch({ type: "route-track", trackId: s.id, busId: el.value || null });
+    } else if (el.classList.contains("fw-strip-vca")) {
+      engine.dispatch({ type: "assign-vca", trackId: s.id, vcaId: el.value || null });
     }
   });
   panel.addEventListener("click", (e) => {
@@ -159,8 +185,11 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     const button = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
     if (!s || !button) return;
     const on = button.getAttribute("aria-pressed") !== "true";
-    if (button.classList.contains("fw-strip-mute")) engine.dispatch(s.bus ? { type: "set-bus-mute", busId: s.id, mute: on } : { type: "set-track-mute", trackId: s.id, mute: on });
-    else if (button.classList.contains("fw-strip-solo") && !s.bus) engine.dispatch({ type: "set-track-solo", trackId: s.id, solo: on });
+    const vca = s.node.dataset.kind === "vca";
+    if (button.classList.contains("fw-strip-mute")) {
+      if (vca) engine.dispatch({ type: "set-vca-mute", vcaId: s.id, mute: on });
+      else engine.dispatch(s.bus ? { type: "set-bus-mute", busId: s.id, mute: on } : { type: "set-track-mute", trackId: s.id, mute: on });
+    } else if (button.classList.contains("fw-strip-solo") && !s.bus && !vca) engine.dispatch({ type: "set-track-solo", trackId: s.id, solo: on });
   });
 
   const shown = new Map<string, number[]>();
