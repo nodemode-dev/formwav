@@ -20,6 +20,8 @@ interface CoreExports {
   fw_add_bus(player: number, id: number, gain: number, pan: number): void;
   fw_set_rate(player: number, rate: number): void;
   fw_add_clip_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
+  fw_clear_master_fx(player: number): void;
+  fw_add_master_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
   fw_take_peaks(player: number, out: number): void;
   fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
   fw_take_bus_peaks(player: number, out: number, maxBuses: number): number;
@@ -60,7 +62,7 @@ export interface WorkletBus {
 export type WorkletMessage =
   | { type: "init"; bytes: ArrayBuffer }
   | { type: "load"; id: number; bytes: ArrayBuffer }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[] }
   | { type: "play" }
   | { type: "stop" }
   | { type: "seek"; position: number }
@@ -173,6 +175,9 @@ class PlayerProcessor extends AudioWorkletProcessor {
         }
         core.fw_clear_buses(this.player);
         for (const b of msg.buses) core.fw_add_bus(this.player, b.id, b.gain, b.pan);
+        core.fw_clear_master_fx(this.player);
+        const mfx = msg.masterFx ?? [];
+        for (let k = 0; k + 3 < mfx.length; k += 4) core.fw_add_master_fx(this.player, mfx[k], mfx[k + 1], mfx[k + 2], mfx[k + 3]);
         core.fw_set_master_db(this.player, msg.masterDb);
         this.end = msg.end;
         break;

@@ -39,8 +39,13 @@ const BODY = `
   <label class="fw-field"><span>By</span><input type="range" min="3" max="30" step="1" value="12" data-duck="amount"><output data-duck-out>12 dB</output></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
   <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
-  <div class="fw-rtfx-list"></div>
-  <div class="fw-analyze-buttons"><select data-rtfx="kind" aria-label="Realtime effect to add"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-rtfx-list" data-scope="track"></div>
+  <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+</div>
+<div class="fw-insp-section fw-insp-master" hidden>
+  <div class="fw-insp-head">Master effects</div>
+  <div class="fw-rtfx-list" data-scope="master"></div>
+  <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>`;
 
 const db = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
@@ -528,8 +533,14 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // Realtime track effects (Audacity's realtime stacks): filters the core runs live, in playback and export alike.
-  const rtfxList = body.querySelector<HTMLElement>(".fw-rtfx-list");
+  // Realtime effects (Audacity's realtime stacks): filters the core runs live, in playback and export alike, on the
+  // selected track (run per clip) or on the master (the summed mix, before the master fader); rows can be reordered.
+  type FxScope = "track" | "master";
+  const fxLists: { scope: FxScope; list: HTMLElement | null; sig: string }[] = [
+    { scope: "track", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="track"]'), sig: "" },
+    { scope: "master", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="master"]'), sig: "" },
+  ];
+  const masterSection = body.querySelector<HTMLElement>(".fw-insp-master");
   const RTFX_LABEL: Record<TrackFx["kind"], string> = { highpass: "High-pass", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf" };
   const RTFX_DEFAULT: Record<TrackFx["kind"], TrackFx> = {
     highpass: { kind: "highpass", freq: 100, gainDb: 0, q: 0.707 },
@@ -538,20 +549,24 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     lowshelf: { kind: "lowshelf", freq: 200, gainDb: 0, q: 0.707 },
     highshelf: { kind: "highshelf", freq: 6000, gainDb: 0, q: 0.707 },
   };
-  let rtfxSig = "";
-  const renderRtfx = (force = false) => {
-    if (!rtfxList) return;
-    const fx = find(engine.get("document"))?.track.fx ?? [];
+  const getFx = (scope: FxScope): readonly TrackFx[] => {
+    const doc = engine.get("document");
+    return scope === "master" ? doc.masterFx ?? [] : find(doc)?.track.fx ?? [];
+  };
+  const renderFxList = (entry: (typeof fxLists)[number], force: boolean) => {
+    const list = entry.list;
+    if (!list) return;
+    const fx = getFx(entry.scope);
     const sig = JSON.stringify(fx);
-    if (!force && (sig === rtfxSig || rtfxList.contains(document.activeElement))) return;
-    rtfxSig = sig;
-    rtfxList.replaceChildren(
+    if (!force && (sig === entry.sig || list.contains(document.activeElement))) return;
+    entry.sig = sig;
+    list.replaceChildren(
       ...fx.map((f, i) => {
         const row = document.createElement("div");
         row.className = "fw-rtfx-row";
         row.dataset.index = String(i);
         const shaped = f.kind === "peak" || f.kind === "lowshelf" || f.kind === "highshelf";
-        row.innerHTML = `<span class="fw-rtfx-name"></span><label>Hz <input type="number" min="20" max="20000" step="1" data-p="freq"></label>${shaped ? '<label>dB <input type="number" min="-24" max="24" step="0.5" data-p="gainDb"></label>' : ""}<label>Q <input type="number" min="0.1" max="18" step="0.1" data-p="q"></label><label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button>`;
+        row.innerHTML = `<span class="fw-rtfx-name"></span><label>Hz <input type="number" min="20" max="20000" step="1" data-p="freq"></label>${shaped ? '<label>dB <input type="number" min="-24" max="24" step="0.5" data-p="gainDb"></label>' : ""}<label>Q <input type="number" min="0.1" max="18" step="0.1" data-p="q"></label><label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="up">Up</button><button type="button" class="fw-ibtn" data-rtfx="down">Down</button><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button>`;
         const name = row.querySelector<HTMLElement>(".fw-rtfx-name");
         if (name) name.textContent = RTFX_LABEL[f.kind];
         for (const input of row.querySelectorAll<HTMLInputElement>("input[data-p]")) {
@@ -559,36 +574,67 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
           if (p === "on") input.checked = !f.bypass;
           else if (p === "freq" || p === "gainDb" || p === "q") input.value = String(f[p]);
         }
+        const up = row.querySelector<HTMLButtonElement>('[data-rtfx="up"]');
+        const down = row.querySelector<HTMLButtonElement>('[data-rtfx="down"]');
+        if (up) up.disabled = i === 0;
+        if (down) down.disabled = i === fx.length - 1;
         return row;
       }),
     );
   };
+  const renderRtfx = (force = false) => {
+    for (const entry of fxLists) renderFxList(entry, force);
+    const show = engine.get("document").tracks.length > 0;
+    if (masterSection && masterSection.hidden === show) masterSection.hidden = !show;
+  };
   engine.subscribe("document", () => renderRtfx());
   host.addEventListener("fw-selection", () => queueMicrotask(() => renderRtfx(true)));
-  const commitRtfx = (mutate: (fx: TrackFx[]) => TrackFx[]) => {
+  const commitRtfx = (scope: FxScope, mutate: (fx: TrackFx[]) => TrackFx[]) => {
+    if (scope === "master") {
+      engine.dispatch({ type: "set-master-fx", fx: mutate([...(engine.get("document").masterFx ?? [])]) });
+      return;
+    }
     const hit = find(engine.get("document"));
     if (hit) engine.dispatch({ type: "set-track-fx", trackId: hit.track.id, fx: mutate([...(hit.track.fx ?? [])]) });
   };
-  rtfxList?.addEventListener("change", (e) => {
+  const scopeOf = (el: HTMLElement): FxScope | null => {
+    const s = el.closest<HTMLElement>("[data-scope]")?.dataset.scope;
+    return s === "track" || s === "master" ? s : null;
+  };
+  body.addEventListener("change", (e) => {
     const input = e.target as HTMLInputElement;
+    if (!input.closest(".fw-rtfx-list")) return;
+    const scope = scopeOf(input);
     const index = Number(input.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
     const p = input.dataset.p;
-    if (!Number.isInteger(index) || !p) return;
-    commitRtfx((fx) => fx.map((f, k) => (k !== index ? f : p === "on" ? { ...f, bypass: !input.checked } : { ...f, [p]: Number(input.value) })));
+    if (!scope || !Number.isInteger(index) || !p) return;
+    commitRtfx(scope, (fx) => fx.map((f, k) => (k !== index ? f : p === "on" ? { ...f, bypass: !input.checked } : { ...f, [p]: Number(input.value) })));
   });
   body.addEventListener("click", (e) => {
     const button = (e.target as HTMLElement).closest<HTMLElement>("[data-rtfx]");
     const action = button?.dataset.rtfx;
+    const scope = button ? scopeOf(button) : null;
+    if (!button || !scope || !action || action === "kind") return;
     if (action === "add") {
-      const kind = body.querySelector<HTMLSelectElement>('[data-rtfx="kind"]')?.value as TrackFx["kind"] | undefined;
-      if (kind && RTFX_DEFAULT[kind]) commitRtfx((fx) => [...fx, { ...RTFX_DEFAULT[kind] }]);
+      const kind = button.closest<HTMLElement>("[data-scope]")?.querySelector<HTMLSelectElement>('[data-rtfx="kind"]')?.value as TrackFx["kind"] | undefined;
+      if (kind && RTFX_DEFAULT[kind]) commitRtfx(scope, (fx) => [...fx, { ...RTFX_DEFAULT[kind] }]);
       renderRtfx(true);
-    } else if (action === "remove" && button) {
-      const index = Number(button.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
-      button.blur();
-      commitRtfx((fx) => fx.filter((_, k) => k !== index));
-      renderRtfx(true);
+      return;
     }
+    const index = Number(button.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
+    if (!Number.isInteger(index)) return;
+    button.blur();
+    if (action === "remove") commitRtfx(scope, (fx) => fx.filter((_, k) => k !== index));
+    else if (action === "up" || action === "down") {
+      const to = action === "up" ? index - 1 : index + 1;
+      commitRtfx(scope, (fx) => {
+        if (to < 0 || to >= fx.length) return fx;
+        const next = [...fx];
+        [next[index], next[to]] = [next[to], next[index]];
+        return next;
+      });
+    }
+    renderRtfx(true);
   });
 
   // Mic check (Adobe Podcast's mic analysis, RX's Repair Assistant): findings with the effect that addresses each.

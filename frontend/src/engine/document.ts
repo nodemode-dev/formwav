@@ -64,6 +64,16 @@ export interface TrackFx {
   bypass?: boolean;
 }
 
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf"]);
+
+/** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
+export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
+  const clamp = (v: number, lo: number, hi: number, fallback: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
+  return fx
+    .filter((f) => FX_KINDS.has(f.kind))
+    .map((f) => ({ kind: f.kind, freq: clamp(f.freq, 20, 20000, 1000), gainDb: clamp(f.gainDb, -24, 24, 0), q: clamp(f.q, 0.1, 18, 0.707), ...(f.bypass ? { bypass: true } : {}) }));
+}
+
 export interface Track {
   /** Realtime effects in order (Audacity's realtime stack); bypassed ones are skipped. */
   fx?: TrackFx[];
@@ -103,6 +113,8 @@ export interface SessionDoc {
   sampleRate: number;
   /** Master fader in dB, applied after the buses; absent means 0 dB. */
   masterGainDb?: number;
+  /** Realtime effects on the summed mix, before the master fader (Audacity's master stack). */
+  masterFx?: TrackFx[];
   tracks: readonly Track[];
   media: Readonly<Record<string, MediaRef>>;
   markers: readonly Marker[];
@@ -138,6 +150,7 @@ export type Command =
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
   | { type: "set-clip-group"; clipIds: string[]; groupId: string | null }
   | { type: "set-track-fx"; trackId: string; fx: TrackFx[] }
+  | { type: "set-master-fx"; fx: TrackFx[] }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
@@ -348,15 +361,17 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "set-track-fx":
       return mapTrack(doc, cmd.trackId, (t) => {
-        const kinds = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf"]);
-        const clamp = (v: number, lo: number, hi: number, fallback: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
-        const fx = cmd.fx
-          .filter((f) => kinds.has(f.kind))
-          .map((f) => ({ kind: f.kind, freq: clamp(f.freq, 20, 20000, 1000), gainDb: clamp(f.gainDb, -24, 24, 0), q: clamp(f.q, 0.1, 18, 0.707), ...(f.bypass ? { bypass: true } : {}) }));
+        const fx = cleanFx(cmd.fx);
         if (JSON.stringify(fx) === JSON.stringify(t.fx ?? [])) return t;
         const { fx: _old, ...rest } = t;
         return fx.length ? { ...rest, fx } : rest;
       });
+    case "set-master-fx": {
+      const fx = cleanFx(cmd.fx);
+      if (JSON.stringify(fx) === JSON.stringify(doc.masterFx ?? [])) return doc;
+      const { masterFx: _old, ...rest } = doc;
+      return fx.length ? { ...rest, masterFx: fx } : rest;
+    }
     case "set-clip-group": {
       const ids = new Set(cmd.clipIds);
       let changed = false;

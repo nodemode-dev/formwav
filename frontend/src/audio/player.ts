@@ -1,5 +1,5 @@
 import type { Engine, SessionDoc } from "../engine";
-import { FADE_SHAPES } from "../engine/document";
+import { FADE_SHAPES, type TrackFx } from "../engine/document";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
 
@@ -16,6 +16,12 @@ export interface ClipPlan {
 
 export function dbToGain(db: number): number {
   return Math.pow(10, db / 20);
+}
+
+/** Enabled effect stages as flat [kind, freq, gainDb, q, ...] in the core's codes (backend render.py FX_KINDS, core fx.rs). */
+export function flatFx(fx: readonly TrackFx[] | undefined): number[] {
+  const codes = { highpass: 1, lowpass: 2, peak: 3, lowshelf: 4, highshelf: 5 } as const;
+  return (fx ?? []).filter((f) => !f.bypass).flatMap((f) => [codes[f.kind], f.freq, f.gainDb, f.q]);
 }
 
 export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPlan {
@@ -40,9 +46,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     const bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
     const volumePoints = track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
     const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
-    // The same kind codes as the export render (backend render.py FX_KINDS, core fx.rs).
-    const fxCodes = { highpass: 1, lowpass: 2, peak: 3, lowshelf: 4, highshelf: 5 } as const;
-    const fxFlat = (track.fx ?? []).filter((f) => !f.bypass).flatMap((f) => [fxCodes[f.kind], f.freq, f.gainDb, f.q]);
+    const fxFlat = flatFx(track.fx);
     for (const clip of track.clips) {
       const media = doc.media[clip.mediaId];
       const source = sources.get(clip.mediaId);
@@ -180,7 +184,7 @@ export class Player {
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatFx(doc.masterFx) });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
