@@ -73,6 +73,7 @@ function shellHtml(): string {
         <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>
         <output class="fw-clock">00:00:00.000</output>
         <label class="fw-speed" title="Play at speed: faster or slower, pitch following (playback only)">Speed <select data-speed aria-label="Playback speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+        <label class="fw-speed" title="Recording latency compensation: each take lands this many milliseconds earlier, undoing the round trip from playback to your microphone. Measure it once with a loopback cable (spikes/latency in the planning docs) and type it here; 0 leaves takes where they were recorded">Latency <input type="number" data-latency min="0" max="500" step="1" value="0" aria-label="Recording latency compensation in milliseconds"> ms</label>
       </footer>
     </section>
     <div class="fw-pane-divider" data-side="inspector" role="separator" aria-orientation="vertical" aria-label="Resize the Inspector pane" tabindex="0"></div>

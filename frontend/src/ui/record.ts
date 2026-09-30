@@ -15,6 +15,23 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
   const stop = host.querySelector<HTMLButtonElement>('.fw-tbtn[data-action="stop"]');
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   const transport = host.querySelector<HTMLElement>(".fw-transport");
+  const latencyField = host.querySelector<HTMLInputElement>("[data-latency]");
+  const LATENCY_KEY = "formwav.recordLatencyMs";
+  const latencyMs = (): number => Math.min(500, Math.max(0, Number(latencyField?.value) || 0));
+  try {
+    const saved = localStorage.getItem(LATENCY_KEY);
+    if (latencyField && saved !== null && latencyField.value !== saved) latencyField.value = saved;
+  } catch {
+    latencyField?.setAttribute("data-storage", "none");
+  }
+  latencyField?.addEventListener("change", () => {
+    if (latencyField.value !== String(latencyMs())) latencyField.value = String(latencyMs());
+    try {
+      localStorage.setItem(LATENCY_KEY, latencyField.value);
+    } catch {
+      latencyField.setAttribute("data-storage", "none");
+    }
+  });
 
   const meter = document.createElement("div");
   meter.className = "fw-meter";
@@ -144,17 +161,25 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       const punch = punchRange;
       punchRange = null;
       const target = recordingTrack();
-      let channels = take.channels;
-      let at = current.startPosition;
+      const lag = Math.round((latencyMs() / 1000) * take.sampleRate);
+      const drop = Math.max(0, lag - current.startPosition);
+      const origin = current.startPosition - lag + drop;
+      const frames = take.frames - drop;
+      if (frames <= 0) {
+        setText(notice, "The take is shorter than the latency compensation; nothing was recorded");
+        return;
+      }
+      let channels = drop ? take.channels.map((c) => c.subarray(drop)) : take.channels;
+      let at = origin;
       if (punch && target) {
-        const from = Math.max(0, punch.start - current.startPosition);
-        const to = Math.min(take.frames, punch.end - current.startPosition);
+        const from = Math.max(0, punch.start - origin);
+        const to = Math.min(frames, punch.end - origin);
         if (to <= from) {
           setText(notice, "Stopped before the punch range; nothing was recorded");
           return;
         }
-        channels = take.channels.map((c) => c.slice(from, to));
-        at = current.startPosition + from;
+        channels = channels.map((c) => c.slice(from, to));
+        at = origin + from;
       }
       takes++;
       const file = new File([encodeWav(channels, take.sampleRate)], `Take ${takes}.wav`, { type: "audio/wav" });
@@ -165,9 +190,9 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       let shape: { sourceIn: number; length: number; takes: number[]; take: number } | undefined;
       if (!punch && loop) {
         const length = loop.end - loop.start;
-        const first = current.startPosition <= loop.start ? loop.start - current.startPosition : loop.end - current.startPosition;
+        const first = origin <= loop.start ? loop.start - origin : loop.end - origin;
         const offsets: number[] = [];
-        for (let o = first; o + length <= take.frames; o += length) offsets.push(o);
+        for (let o = first; o + length <= frames; o += length) offsets.push(o);
         if (offsets.length) {
           shape = { sourceIn: offsets[offsets.length - 1], length, takes: offsets, take: offsets.length - 1 };
           at = loop.start;
@@ -175,13 +200,14 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       }
       const cuts = (punch || shape) && target ? punchCommands(target, at, at + (shape ? shape.length : channels[0].length)) : [];
       engine.dispatch({ type: "batch", commands: [...cuts, { type: "import-media", media, at, trackId: target ?? undefined, clip: shape }] });
+      const shifted = lag ? ` (shifted ${latencyMs()} ms earlier for latency)` : "";
       setText(
         notice,
         punch && target
-          ? `Punched in ${file.name}`
+          ? `Punched in ${file.name}${shifted}`
           : shape
-            ? `Recorded ${shape.takes.length} take${shape.takes.length === 1 ? "" : "s"} in ${file.name}; the last one plays`
-            : `Recorded ${file.name}`,
+            ? `Recorded ${shape.takes.length} take${shape.takes.length === 1 ? "" : "s"} in ${file.name}; the last one plays${shifted}`
+            : `Recorded ${file.name}${shifted}`,
       );
     } catch (err) {
       setText(notice, `Could not save the take: ${reason(err)}`);
