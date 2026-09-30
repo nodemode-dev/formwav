@@ -45,6 +45,8 @@ export interface Clip {
   takes?: number[];
   /** Index into `takes` of the take that plays. */
   take?: number;
+  /** Clips sharing a group id select, move and delete together (Audacity's clip groups). */
+  groupId?: string;
 }
 
 /** An automation point: time in session samples; value in dB (volume) or -1 to 1 (pan). */
@@ -123,6 +125,7 @@ export type Command =
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
   | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
+  | { type: "set-clip-group"; clipIds: string[]; groupId: string | null }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
@@ -330,6 +333,23 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         }
         return changed ? { ...t, clips } : t;
       });
+    }
+    case "set-clip-group": {
+      const ids = new Set(cmd.clipIds);
+      let changed = false;
+      const tracks = doc.tracks.map((t) => {
+        let touched = false;
+        const clips = t.clips.map((c) => {
+          if (!ids.has(c.id) || (c.groupId ?? null) === cmd.groupId) return c;
+          touched = true;
+          const { groupId: _old, ...rest } = c;
+          return cmd.groupId ? { ...rest, groupId: cmd.groupId } : rest;
+        });
+        if (!touched) return t;
+        changed = true;
+        return { ...t, clips };
+      });
+      return changed ? { ...doc, tracks } : doc;
     }
     case "set-automation":
       return mapTrack(doc, cmd.trackId, (t) => {

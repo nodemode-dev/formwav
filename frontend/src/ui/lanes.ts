@@ -771,7 +771,32 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (!marquee.hidden) marquee.hidden = true;
   };
 
+  // Audacity's clip groups: selecting any member selects the whole group, so the existing multi-clip move and delete
+  // carry the group; grouped clips carry data-group for their outline.
+  const groupOf = () => {
+    const map = new Map<string, string>();
+    for (const t of engine.get("document").tracks) for (const c of t.clips) if (c.groupId) map.set(c.id, c.groupId);
+    return map;
+  };
+  const expandGroups = () => {
+    const groups = groupOf();
+    const wanted = new Set([...selectedClipIds].map((id) => groups.get(id)).filter((g): g is string => !!g));
+    if (!wanted.size) return;
+    for (const [id, g] of groups) if (wanted.has(g)) selectedClipIds.add(id);
+  };
+  const markGroups = () => {
+    const groups = groupOf();
+    for (const node of lanes.querySelectorAll<HTMLElement>(".fw-clip")) {
+      const g = node.dataset.key !== undefined ? groups.get(node.dataset.key) : undefined;
+      if ((node.dataset.group ?? undefined) !== g) {
+        if (g) node.dataset.group = g;
+        else delete node.dataset.group;
+      }
+    }
+  };
+  engine.subscribe("document", () => queueMicrotask(markGroups));
   const markSelected = () => {
+    markGroups();
     for (const node of lanes.querySelectorAll<HTMLElement>(".fw-clip")) {
       const on = String(node.dataset.key !== undefined && selectedClipIds.has(node.dataset.key));
       if (node.getAttribute("aria-selected") !== on) node.setAttribute("aria-selected", on);
@@ -862,8 +887,9 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       return;
     }
     if (e.shiftKey && (kind === "move" || kind === "range")) {
-      if (selectedClipIds.has(clip.id)) selectedClipIds.delete(clip.id);
-      else selectedClipIds.add(clip.id);
+      const members = clip.groupId ? [...groupOf()].filter(([, g]) => g === clip.groupId).map(([id]) => id) : [clip.id];
+      if (selectedClipIds.has(clip.id)) for (const id of members) selectedClipIds.delete(id);
+      else for (const id of members) selectedClipIds.add(id);
       markSelected();
       e.preventDefault();
       return;
@@ -871,6 +897,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (!selectedClipIds.has(clip.id)) {
       selectedClipIds.clear();
       selectedClipIds.add(clip.id);
+      expandGroups();
     }
     markSelected();
     if (kind === "range") {
@@ -1137,6 +1164,15 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   window.addEventListener("keydown", (e) => {
     const target = e.target as HTMLElement | null;
     if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "g") {
+      const ids = [...selectedClipIds];
+      if (e.shiftKey ? !ids.length : ids.length < 2) return;
+      e.preventDefault();
+      const groupId = e.shiftKey ? null : `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      engine.dispatch({ type: "set-clip-group", clipIds: ids, groupId });
+      markSelected();
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
       const key = e.key.toLowerCase();
       if (key === "a") {

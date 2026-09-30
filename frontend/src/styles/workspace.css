@@ -163,6 +163,7 @@
 .fw-chain-step { padding-inline-start: 2px; }
 .fw-chain-step > span { margin-inline-end: 6px; }
 .fw-chain-step .fw-ibtn { padding: 1px 6px; font-size: 11px; }
+.fw-clip[data-group] { outline: 1px dashed var(--accent-color); outline-offset: -3px; }
 
 .fw-export-dialog { inline-size: min(360px, calc(100vw - 32px)); padding: 16px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; }
 .fw-export-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
