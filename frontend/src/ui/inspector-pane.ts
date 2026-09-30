@@ -808,7 +808,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         }
         setText(notice, `Stretching from ${own.toFixed(1)} to ${doc.tempo.bpm.toFixed(1)} BPM...`);
         const params = encodeURIComponent(JSON.stringify({ percent: (factor - 1) * 100 }));
-        const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=tempo-faster&params=${params}`, { method: "POST" });
+        const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=stretch-rhythmic&params=${params}`, { method: "POST" });
         const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
         if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
         engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });

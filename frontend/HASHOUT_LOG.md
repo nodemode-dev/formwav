@@ -1381,3 +1381,10 @@ Audacity's beats and measures ruler: the session holds one tempo (BPM and beats 
 - logged: v0.68.0 (in progress) · 2026-09-30
 
 A fault found while building Stretch to tempo, present since the timing-changing effects arrived: set-clip-media swapped only the media id, so a clip re-timed by Change tempo kept its old length, cutting a slowed clip short and leaving a sped-up one running past its audio. When the new media's length differs, the clip's trim, length and fades now scale by the same ratio. Stretch to tempo (in Quantize) detects the clip's tempo, divides the session's by it and renders the pitch-keeping tempo effect at that factor (0.5 to 2 times), one undo step. Verified in Chromium (verify_stretch.py): Change tempo at -50% took the clip from 8.2 to 16.4 s and undo back to 8.2 (before the fix it stayed 8.2); from 99.9 to 110 BPM the clip became 7.447 s, exactly 8.2 x 99.9 / 110, in one step. Open, to fix before release: re-detection read 107.8 BPM from 5 transients, because Rubber Band at its default options smears these bursts' attacks (6 onsets of 12 at sensitivity 0.5, 26 split ones at 0.9, spacing 0.5601 s against 0.5449); a short window keeps the spacing (0.5435 s, 16 onsets), so a rhythmic stretch with window=short is next.
+
+### src/ui/inspector-pane.ts · Stretch to tempo uses the rhythmic stretch (the open issue above, resolved)
+- refers-to: src/ui/inspector-pane.ts :: the `stretch-tempo` action
+- kind: explainer
+- logged: v0.68.0 (in progress) · 2026-09-30
+
+Stretch to tempo renders with Change tempo, rhythmic (Rubber Band's short window). Verified in Chromium (verify_stretch.py): from 99.9 to 110 BPM the clip became 7.447 s in one step and now re-detects at 109.4 BPM from 16 transients (107.8 from 5 with the default stretch); the half-speed length fix unchanged (8.2 to 16.4 s, undo 8.2); the Quantize section wraps to three rows at 1024 px with no overflow (screenshot); containment clean; no page errors.
