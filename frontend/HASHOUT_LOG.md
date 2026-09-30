@@ -1458,3 +1458,10 @@ The folder half of Pro Tools' folder tracks: a header row before the first track
 - logged: v0.78.0 (in progress) · 2026-09-30
 
 In the Effects section, a menu of the session's other clips (track and start) and Match EQ: the selected clip takes the tonal balance of the chosen clip's visible region (its trim point for its length), swapped in as one undo step; a result arriving after the selection moved is dropped, and with no other clip the button is disabled. Verified in Chromium (verify_eqmatch.py): the menu listed the bright clip; Match EQ gave new media in one undo step with the clip's start and length unchanged, and moved the band deviation from the reference from 8.54 dB to 0.38 dB; undo restored the original; production build passes; containment clean; screenshot inspected; no page errors.
+
+### src/ui/inspector-pane.ts · EQ match between Smart Tool ranges (coverage wave 10, completing RX-20)
+- refers-to: src/ui/inspector-pane.ts :: `learned`, `rangeOnClip`, the `data-eqm="learn"` control, the Match EQ handler
+- kind: explainer
+- logged: v0.79.0 (in progress) · 2026-09-30
+
+RX's Learn and Apply: Learn reference takes the part of the current Smart Tool range that lies on its clip as the reference, listed first in the menu as "Learned range · from to s"; with a range active, Match EQ targets that range on its clip, measured there and replaced there only through set-range-media, and otherwise the whole selected clip as before. Verified in Chromium (verify_eqmatch_range.py) on one clip of 3 s bright then 3 s dark noise: a 0.5 to 2.5 s range learned and chosen; a 3.5 to 5.5 s range matched in one undo step, splitting the clip at 3.5 and 5.5 s; in the export the matched span sat 0.58 dB from the reference while the untouched dark tail stayed 8.48 dB from it; undo restored the single clip; the whole-clip match unchanged (8.54 to 0.38 dB); the row fits at 1024 px (screenshot); production build passes; containment clean; no page errors.

@@ -22,7 +22,7 @@ const BODY = `
   <label class="fw-field fw-field-stack"><span>Effect</span><select data-fx="pick"></select></label>
   <div class="fw-fx-params"></div>
   <div class="fw-analyze-buttons"><select data-preset="fx" aria-label="Preset for this effect"><option value="">Presets</option></select><button type="button" class="fw-ibtn" data-preset="fx-save">Save preset</button><button type="button" class="fw-ibtn" data-preset="fx-delete">Delete</button></div>
-  <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip the tonal balance of the reference clip">Match EQ</button></div>
+  <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
   <ol class="fw-chain" hidden></ol>
@@ -625,39 +625,80 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   // EQ match (iZotope RX's EQ Match): the selected clip takes the tonal balance of another clip's visible region.
   const eqmRef = body.querySelector<HTMLSelectElement>('[data-eqm="ref"]');
   const eqmGo = body.querySelector<HTMLButtonElement>('[data-eqm="go"]');
+  // A reference learned from a Smart Tool range (RX's Learn), kept as its media and media-seconds region.
+  let learned: { mediaId: string; start: number; end: number; label: string } | null = null;
+  /** The part of the current Smart Tool range that lies on a clip of its track, in session samples and media seconds. */
+  const rangeOnClip = () => {
+    const doc = engine.get("document");
+    const r = range;
+    const track = r ? doc.tracks.find((t) => t.id === r.trackId) : undefined;
+    const clip = r && track ? track.clips.find((c) => c.start < r.end && r.start < c.start + c.length) : undefined;
+    const media = clip ? doc.media[clip.mediaId] : undefined;
+    if (!r || !track || !clip || !media) return null;
+    const from = Math.max(r.start, clip.start);
+    const to = Math.min(r.end, clip.start + clip.length);
+    const toMedia = (s: number) => clip.sourceIn / media.sampleRate + (s - clip.start) / doc.sampleRate;
+    return { track, clip, from, to, mediaStart: toMedia(from), mediaEnd: toMedia(to), rate: doc.sampleRate };
+  };
   const fillEqm = () => {
     const doc = engine.get("document");
     const hit = find(doc);
     if (!eqmRef) return;
     const others = doc.tracks.flatMap((t) => t.clips.filter((c) => c.id !== hit?.clip.id).map((c) => ({ id: c.id, label: `${t.name} · ${(c.start / doc.sampleRate).toFixed(2)} s` })));
-    const sig = others.map((o) => `${o.id}=${o.label}`).join("|");
+    const options = [...(learned ? [{ id: "learned", label: learned.label }] : []), ...others];
+    const sig = options.map((o) => `${o.id}=${o.label}`).join("|");
     if (eqmRef.dataset.sig !== sig) {
       const keep = eqmRef.value;
       eqmRef.dataset.sig = sig;
-      eqmRef.replaceChildren(...(others.length ? others.map((o) => new Option(o.label, o.id)) : [new Option("No other clip", "")]));
-      if (others.some((o) => o.id === keep)) eqmRef.value = keep;
+      eqmRef.replaceChildren(...(options.length ? options.map((o) => new Option(o.label, o.id)) : [new Option("No other clip", "")]));
+      if (options.some((o) => o.id === keep)) eqmRef.value = keep;
     }
-    if (eqmGo && eqmGo.disabled === others.length > 0) eqmGo.disabled = others.length === 0;
+    if (eqmGo && eqmGo.disabled === options.length > 0) eqmGo.disabled = options.length === 0;
   };
   engine.subscribe("document", fillEqm);
   host.addEventListener("fw-selection", () => queueMicrotask(fillEqm));
+  const eqmLearn = body.querySelector<HTMLButtonElement>('[data-eqm="learn"]');
+  eqmLearn?.addEventListener("click", () => {
+    const on = rangeOnClip();
+    if (!on) {
+      setText(notice, "Select a range on a clip to learn from");
+      return;
+    }
+    learned = { mediaId: on.clip.mediaId, start: on.mediaStart, end: on.mediaEnd, label: `Learned range · ${(on.from / on.rate).toFixed(2)} to ${(on.to / on.rate).toFixed(2)} s` };
+    fillEqm();
+    if (eqmRef) eqmRef.value = "learned";
+    setText(notice, "Learned the range as the EQ match reference");
+  });
   eqmGo?.addEventListener("click", async () => {
     const doc = engine.get("document");
-    const hit = find(doc);
-    const ref = doc.tracks.flatMap((t) => t.clips).find((c) => c.id === eqmRef?.value);
-    const refMedia = ref ? doc.media[ref.mediaId] : undefined;
-    if (!hit || !ref || !refMedia) return;
-    const start = ref.sourceIn / refMedia.sampleRate;
-    const end = start + ref.length / doc.sampleRate;
+    // The reference: a learned range, or another clip's visible region.
+    let reference: { mediaId: string; start: number; end: number } | null = null;
+    if (eqmRef?.value === "learned" && learned) reference = learned;
+    else {
+      const ref = doc.tracks.flatMap((t) => t.clips).find((c) => c.id === eqmRef?.value);
+      const refMedia = ref ? doc.media[ref.mediaId] : undefined;
+      if (ref && refMedia) {
+        const s = ref.sourceIn / refMedia.sampleRate;
+        reference = { mediaId: ref.mediaId, start: s, end: s + ref.length / doc.sampleRate };
+      }
+    }
+    // The target: while a Smart Tool range exists, its part of its clip (measured there, and only that span replaced);
+    // otherwise the selected clip, whole.
+    const on = rangeOnClip();
+    const target = on ? { track: on.track, clip: on.clip } : find(doc);
+    if (!reference || !target) return;
     setText(notice, "Matching the EQ...");
     try {
-      const q = `reference=${encodeURIComponent(ref.mediaId)}&start=${start.toFixed(6)}&end=${end.toFixed(6)}`;
-      const res = await fetch(`/api/media/${hit.clip.mediaId}/eq-match?${q}`, { method: "POST" });
+      let q = `reference=${encodeURIComponent(reference.mediaId)}&start=${reference.start.toFixed(6)}&end=${reference.end.toFixed(6)}`;
+      if (on) q += `&tstart=${on.mediaStart.toFixed(6)}&tend=${on.mediaEnd.toFixed(6)}`;
+      const res = await fetch(`/api/media/${target.clip.mediaId}/eq-match?${q}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
-      if (find(engine.get("document"))?.clip.id !== hit.clip.id) return; // the selection moved on while matching
-      engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
-      setText(notice, "EQ matched to the reference; undo to go back");
+      const still = engine.get("document").tracks.find((t) => t.id === target.track.id)?.clips.some((c) => c.id === target.clip.id);
+      if (!still) return; // the clip changed while matching
+      if (on) engine.dispatch({ type: "set-range-media", trackId: target.track.id, clipId: target.clip.id, start: on.from, end: on.to, media: out as unknown as MediaRef });
+      else engine.dispatch({ type: "set-clip-media", trackId: target.track.id, clipId: target.clip.id, media: out as unknown as MediaRef });
+      setText(notice, on ? "EQ matched in the range; undo to go back" : "EQ matched to the reference; undo to go back");
     } catch (err) {
       setText(notice, `Could not match the EQ: ${err instanceof Error ? err.message : String(err)}`);
     }
