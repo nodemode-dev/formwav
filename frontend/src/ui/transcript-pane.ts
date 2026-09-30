@@ -1,5 +1,5 @@
 import type { Player } from "../audio/player";
-import type { Engine, SessionDoc } from "../engine";
+import type { Engine, MediaRef, SessionDoc } from "../engine";
 import { setText } from "../vendor/nodemode/dom-stable";
 
 /** A word in its media file's own seconds, as the engine's transcript returns it. */
@@ -17,6 +17,9 @@ interface SessionWord {
   start: number;
   end: number;
   speaker: string;
+  mediaId: string;
+  mediaStart: number;
+  mediaEnd: number;
 }
 
 const GAP_OVER = 0.75;
@@ -45,6 +48,9 @@ function sessionWords(doc: SessionDoc, transcripts: Map<string, MediaWord[]>): S
           text: w.text,
           filler: w.filler,
           speaker: track.name,
+          mediaId: clip.mediaId,
+          mediaStart: Math.max(s, clip.sourceIn) / media.sampleRate,
+          mediaEnd: Math.min(e, srcEnd) / media.sampleRate,
           start: Math.round(clip.start + (Math.max(s, clip.sourceIn) - clip.sourceIn) * toSession),
           end: Math.round(clip.start + (Math.min(e, srcEnd) - clip.sourceIn) * toSession),
         });
@@ -109,6 +115,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
   <button type="button" class="fw-ibtn" data-t="fillers">Remove filler words</button>
   <button type="button" class="fw-ibtn" data-t="gaps">Shorten gaps over ${GAP_OVER} s</button>
   <button type="button" class="fw-ibtn" data-t="retakes">Remove retakes</button>
+  <button type="button" class="fw-ibtn" data-t="clip">Make a clip from selected words</button>
 </div>
 <div class="fw-transcript-text" role="listbox" aria-multiselectable="true" aria-label="Transcript"></div>`;
   const notice = host.querySelector<HTMLElement>(".fw-notice");
@@ -222,6 +229,28 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
     if (action === "delete") cut(rangesOf(words, (w) => selected.has(w.key)), "the selected words");
     else if (action === "fillers") cut(rangesOf(words, (w) => w.filler), "filler words");
     else if (action === "retakes") cut(retakeRanges(words), "earlier takes");
+    else if (action === "clip") {
+      const picked = words.filter((w) => selected.has(w.key));
+      if (!picked.length) {
+        setText(notice, "Select the words to make a clip of");
+        return;
+      }
+      if (new Set(picked.map((w) => w.mediaId)).size > 1) {
+        setText(notice, "Select words from one recording to make a clip");
+        return;
+      }
+      const start = Math.min(...picked.map((w) => w.mediaStart));
+      const end = Math.max(...picked.map((w) => w.mediaEnd));
+      const res = await fetch(`/api/media/${picked[0].mediaId}/excerpt?start=${start}&end=${end}`, { method: "POST" });
+      const made = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      if (!res.ok) {
+        setText(notice, `Could not make a clip: ${typeof made.detail === "string" ? made.detail : `the engine answered ${res.status}`}`);
+        return;
+      }
+      const media = made as unknown as MediaRef;
+      engine.dispatch({ type: "import-media", media, at: engine.get("transport").positionSamples });
+      setText(notice, `Made a ${(end - start).toFixed(2)} s clip of ${picked.length} words on a new track at the playhead`);
+    }
     else if (action === "gaps") {
       const rate = engine.get("document").sampleRate;
       const ranges: { start: number; end: number }[] = [];
