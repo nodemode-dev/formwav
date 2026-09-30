@@ -1220,3 +1220,10 @@ The document already had markers and regions (with add-marker, add-region, remov
 - logged: v0.50.0 · 2026-09-29
 
 A Spectrogram toggle in the tool tray; with it on, each clip shows its file's spectrogram under it and the waveform is hidden. One bare image of the whole file (2048 by 256, no legend, cached per file) is drawn as the clip's background, sized to the clip's width times file frames over clip frames and offset by the clip's trim, so it follows splits and trims without re-rendering; styles are written only when they change, after each timeline render (`fw-lanes-rendered`). The module does not touch lanes.ts. Verified (verify_spectrogram_view.py): the whole 10 s clip at 1000 px with the image at offset 0; after a 2 to 4 s cut the right 600 px piece showed the 1000 px image at exactly -400 px (its 4 s trim); a 2048 by 256 PNG; the tray without overflow at 1024; off restored the waveform; no page errors; containment clean at three sizes; the timeline regression unchanged. The first run's pass line compared "1000.00px" with the browser's normalized "1000px" and reported FAIL on matching values; it now compares numbers.
+
+### src/ui/export.ts, src/io/render-client.ts, styles/workspace.css · the export dialog
+- refers-to: src/ui/export.ts :: the dialog, `choice`, `run`; src/io/render-client.ts :: `ExportOptions`, `Mix.ext`, `Mix.stems`; src/styles/workspace.css :: `.fw-export-dialog`
+- kind: explainer
+- logged: v0.51.0 (in progress) · 2026-09-29
+
+Export opens a native dialog (the browser's top layer, so no stacking rules): the format (WAV float, 24 or 16-bit, FLAC, MP3 320 or 192, OGG, M4A) and what to export (the mix, stems as a zip, or multichannel). The file is named from what the engine made; Ctrl or Cmd with Shift and E exports straight away with the last choice; Loudness still renders the float mix (the client's defaults are unchanged). Verified in Chromium (verify_export.py): the dialog opened, FLAC chosen, the download was "Untitled session.flac", the dialog closed and the notice reported peak and loudness; no page errors.

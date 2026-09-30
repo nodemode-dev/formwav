@@ -7,6 +7,15 @@ export interface Mix {
   peakRight: number;
   loudness: number;
   skipped: number;
+  /** The file's extension, from the engine's Content-Disposition (wav, flac, mp3, ogg, m4a, zip). */
+  ext: string;
+  /** Tracks rendered separately (stems or multichannel), else 0. */
+  stems: number;
+}
+
+export interface ExportOptions {
+  format?: string;
+  what?: "mix" | "stems" | "multichannel";
 }
 
 function decibels(value: string | null): number {
@@ -14,8 +23,9 @@ function decibels(value: string | null): number {
   return Number(value);
 }
 
-export async function renderMix(doc: SessionDoc): Promise<Mix> {
-  const res = await fetch("/api/render", {
+export async function renderMix(doc: SessionDoc, options: ExportOptions = {}): Promise<Mix> {
+  const query = new URLSearchParams({ format: options.format ?? "wav", what: options.what ?? "mix" });
+  const res = await fetch(`/api/render?${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(doc),
@@ -31,5 +41,7 @@ export async function renderMix(doc: SessionDoc): Promise<Mix> {
     peakRight: decibels(res.headers.get("X-Peak-Right-dBFS")),
     loudness: decibels(res.headers.get("X-Loudness-LUFS")),
     skipped: Number(res.headers.get("X-Skipped-Clips")),
+    ext: /filename="[^"]*\.([a-z0-9]+)"/i.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "wav",
+    stems: Number(res.headers.get("X-Stems") ?? 0),
   };
 }
