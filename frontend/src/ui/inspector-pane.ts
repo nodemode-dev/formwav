@@ -1,5 +1,6 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import type { FadeShape, TrackFx } from "../engine/document";
+import { loadPresets, savePresets, type Preset } from "../io/presets-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 
 const BODY = `
@@ -19,6 +20,7 @@ const BODY = `
   <input type="search" class="fw-fx-search" data-fx="search" placeholder="Search effects" aria-label="Search effects">
   <label class="fw-field fw-field-stack"><span>Effect</span><select data-fx="pick"></select></label>
   <div class="fw-fx-params"></div>
+  <div class="fw-analyze-buttons"><select data-preset="fx" aria-label="Preset for this effect"><option value="">Presets</option></select><button type="button" class="fw-ibtn" data-preset="fx-save">Save preset</button><button type="button" class="fw-ibtn" data-preset="fx-delete">Delete</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
   <ol class="fw-chain" hidden></ol>
@@ -574,6 +576,84 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
+  // Presets (Audacity's one preset system across built-in, destructive and realtime effects): one store in the engine,
+  // rendered effects keyed "fx:<id>" and realtime ones "rt:<kind>", each preset the settings that effect's controls hold.
+  let presets: Preset[] = [];
+  const fillPresets = (select: HTMLSelectElement | null, effect: string) => {
+    if (!select) return;
+    const names = presets.filter((p) => p.effect === effect).map((p) => p.name);
+    const keep = select.value;
+    select.replaceChildren(new Option(names.length ? "Presets" : "No presets", ""), ...names.map((n) => new Option(n, n)));
+    if (names.includes(keep)) select.value = keep;
+  };
+  const fxPresetSelect = body.querySelector<HTMLSelectElement>('[data-preset="fx"]');
+  const refreshPresets = () => {
+    fillPresets(fxPresetSelect, `fx:${pick?.value ?? ""}`);
+    renderRtfx(true);
+  };
+  const storePresets = async (next: Preset[], message: string) => {
+    try {
+      presets = await savePresets(next);
+      refreshPresets();
+      setText(notice, message);
+    } catch (err) {
+      setText(notice, `Could not save presets: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  void loadPresets()
+    .then((list) => {
+      presets = list;
+      refreshPresets();
+    })
+    .catch(() => undefined);
+  pick?.addEventListener("change", () => fillPresets(fxPresetSelect, `fx:${pick.value}`));
+  fxPresetSelect?.addEventListener("change", () => {
+    const p = presets.find((x) => x.effect === `fx:${pick?.value}` && x.name === fxPresetSelect.value);
+    if (!p) return;
+    for (const input of body.querySelectorAll<HTMLInputElement>(".fw-fx-params input[data-param]")) {
+      const v = p.params[input.dataset.param ?? ""];
+      if (v === undefined) continue;
+      input.value = String(v);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    setText(notice, `Loaded preset ${p.name}`);
+  });
+  body.addEventListener("change", (e) => {
+    const select = (e.target as HTMLElement).closest<HTMLSelectElement>('[data-preset="rt"]');
+    const scope = select ? scopeOf(select) : null;
+    const index = Number(select?.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
+    const f = scope && Number.isInteger(index) ? getFx(scope)[index] : undefined;
+    const p = f && select ? presets.find((x) => x.effect === `rt:${f.kind}` && x.name === select.value) : undefined;
+    if (!scope || !p) return;
+    commitRtfx(scope, (fx) => fx.map((x, k) => (k === index ? ({ ...x, ...p.params } as TrackFx) : x)));
+    select?.blur();
+    setText(notice, `Loaded preset ${p.name}`);
+  });
+  body.addEventListener("click", (e) => {
+    const button = (e.target as HTMLElement).closest<HTMLElement>("[data-preset]");
+    const action = button?.dataset.preset;
+    if (action === "fx-save" && pick?.value) {
+      const name = window.prompt("Preset name", fxPresetSelect?.value || "")?.trim();
+      if (!name) return;
+      const effect = `fx:${pick.value}`;
+      void storePresets([...presets.filter((p) => !(p.effect === effect && p.name === name)), { name, effect, params: currentParams() as Record<string, number> }], `Saved preset ${name}`);
+    } else if (action === "fx-delete" && pick?.value) {
+      const name = fxPresetSelect?.value;
+      if (!name) return;
+      void storePresets(presets.filter((p) => !(p.effect === `fx:${pick.value}` && p.name === name)), `Deleted preset ${name}`);
+    } else if (action === "rt-save" && button) {
+      const scope = scopeOf(button);
+      const index = Number(button.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
+      const f = scope && Number.isInteger(index) ? getFx(scope)[index] : undefined;
+      if (!f) return;
+      const name = window.prompt("Preset name", "")?.trim();
+      if (!name) return;
+      const effect = `rt:${f.kind}`;
+      const params = Object.fromEntries(Object.entries(f).filter(([k, v]) => k !== "kind" && k !== "bypass" && typeof v === "number")) as Record<string, number>;
+      void storePresets([...presets.filter((p) => !(p.effect === effect && p.name === name)), { name, effect, params }], `Saved preset ${name}`);
+    }
+  });
+
   // Realtime effects (Audacity's realtime stacks): filters the core runs live, in playback and export alike, on the
   // selected track (run per clip) or on the master (the summed mix, before the master fader); rows can be reordered.
   type FxScope = "track" | "master";
@@ -613,7 +693,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
           f.kind === "compressor"
             ? num("Thr dB", "thresholdDb", -60, 0, 0.5) + num("Ratio", "ratio", 1, 20, 0.5) + num("Atk ms", "attackMs", 0.1, 200, 1) + num("Rel ms", "releaseMs", 1, 2000, 10) + num("Gain dB", "makeupDb", 0, 24, 0.5)
             : num("Hz", "freq", 20, 20000, 1) + (shaped ? num("dB", "gainDb", -24, 24, 0.5) : "") + num("Q", "q", 0.1, 18, 0.1);
-        row.innerHTML = `<span class="fw-rtfx-name"></span>${fields}<label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="up">Up</button><button type="button" class="fw-ibtn" data-rtfx="down">Down</button><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button>`;
+        row.innerHTML = `<span class="fw-rtfx-name"></span>${fields}<label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="up">Up</button><button type="button" class="fw-ibtn" data-rtfx="down">Down</button><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button><select data-preset="rt" aria-label="Preset for this effect"></select><button type="button" class="fw-ibtn" data-preset="rt-save">Save</button>`;
+        fillPresets(row.querySelector<HTMLSelectElement>('[data-preset="rt"]'), `rt:${f.kind}`);
         const name = row.querySelector<HTMLElement>(".fw-rtfx-name");
         if (name) name.textContent = RTFX_LABEL[f.kind];
         for (const input of row.querySelectorAll<HTMLInputElement>("input[data-p]")) {
