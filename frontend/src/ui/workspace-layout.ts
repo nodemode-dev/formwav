@@ -103,6 +103,65 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
     apply();
     save();
   });
+  // Audacity's saved workspaces: preset layouts and named ones the owner saves, kept with the browser's storage.
+  const SAVED = "formwav.layouts";
+  const PRESETS: Record<string, Partial<Layout>> = {
+    Default: { ...DEFAULTS },
+    "Timeline only": { showMedia: false, showInspector: false },
+    Editing: { showMedia: false, showInspector: true },
+    Transcript: { media: 380, showMedia: true, showInspector: false },
+  };
+  const readSaved = (): Record<string, Layout> => {
+    try {
+      return JSON.parse(localStorage.getItem(SAVED) ?? "{}") as Record<string, Layout>;
+    } catch {
+      return {};
+    }
+  };
+  const tray = host.querySelector<HTMLElement>(".fw-tool-tray");
+  const menu = document.createElement("select");
+  menu.className = "fw-layout-select";
+  menu.setAttribute("aria-label", "Workspace layout");
+  const fill = () => {
+    const saved = Object.keys(readSaved());
+    menu.replaceChildren(
+      new Option("Layout", ""),
+      ...Object.keys(PRESETS).map((name) => new Option(name, `preset:${name}`)),
+      ...saved.map((name) => new Option(name, `saved:${name}`)),
+      new Option("Save current layout...", "save"),
+    );
+    menu.value = "";
+  };
+  menu.addEventListener("change", () => {
+    const [kind, name] = [menu.value.split(":")[0], menu.value.slice(menu.value.indexOf(":") + 1)];
+    if (menu.value === "save") {
+      const label = window.prompt("Name this layout")?.trim();
+      if (label) {
+        try {
+          localStorage.setItem(SAVED, JSON.stringify({ ...readSaved(), [label]: layout }));
+        } catch {
+          /* storage refused */
+        }
+      }
+    } else if (kind === "preset" && PRESETS[name]) {
+      layout = { ...layout, ...PRESETS[name] };
+      apply();
+      save();
+    } else if (kind === "saved") {
+      const chosen = readSaved()[name];
+      if (chosen) {
+        layout = { ...DEFAULTS, ...chosen };
+        apply();
+        save();
+      }
+    }
+    fill();
+  });
+  if (tray) {
+    fill();
+    tray.append(menu);
+  }
+
   window.addEventListener("resize", apply);
   apply();
 }

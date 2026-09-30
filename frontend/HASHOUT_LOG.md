@@ -1241,3 +1241,10 @@ Audacity takes audio files from the OS clipboard: a paste carrying files now imp
 - logged: v0.52.0 · 2026-09-29
 
 A mix peaking above full scale clips in every export format except 32-bit float WAV, silently until now. The export notice now says so when it happens and points to the Master fader, Loudness or float WAV. Verified in Chromium (verify_clip_warning.py): a session peaking at -6.0 dBFS exported as FLAC without the warning; one peaking at +1.0 dBFS warned for FLAC and MP3 and not for float WAV.
+
+### src/ui/workspace-layout.ts, styles/workspace.css · saved workspace layouts (coverage wave 5)
+- refers-to: src/ui/workspace-layout.ts :: `PRESETS`, `readSaved`, the Layout menu; src/styles/workspace.css :: `.fw-layout-select`
+- kind: explainer
+- logged: v0.53.0 (in progress) · 2026-09-29
+
+Audacity's saved workspaces: a Layout menu in the tool tray applies preset layouts (Default, Timeline only, Editing, Transcript) and named layouts saved with Save current layout (a native prompt for the name, kept in browser storage beside the current layout), through the existing clamp-and-save path. Verified in Chromium (verify_layouts.py): Default 240 and 284 px; Timeline only hid both panes; Editing hid Media; saving as "Mine" added it to the menu; Transcript gave a 380 px left pane and no Inspector; Mine restored the saved arrangement exactly; Default restored 240 and 284; the menu reset after each choice; containment clean at three sizes; no page errors.

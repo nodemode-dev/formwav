@@ -139,6 +139,8 @@
 .is-spectral .fw-clip { background-repeat: no-repeat; }
 .is-spectral .fw-clip .fw-wave { opacity: 0; }
 .fw-spectral-toggle[aria-pressed="true"] { color: var(--accent-color); }
+.fw-layout-select { padding: 4px 8px; font: inherit; font-size: 13px; color: var(--text-secondary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
+.fw-layout-select:hover { color: var(--text-primary); }
 
 .fw-export-dialog { inline-size: min(360px, calc(100vw - 32px)); padding: 16px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; }
 .fw-export-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
