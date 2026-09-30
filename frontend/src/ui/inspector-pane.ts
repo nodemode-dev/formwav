@@ -14,6 +14,7 @@ const BODY = `
   <label class="fw-field"><span>Fade in</span><input type="number" step="0.01" min="0" data-f="fadeIn"><output>s</output></label>
   <label class="fw-field"><span>Fade out</span><input type="number" step="0.01" min="0" data-f="fadeOut"><output>s</output></label>
   <label class="fw-field"><span>Fade curve</span><select data-f="shape"><option value="linear">Linear</option><option value="equal-power">Equal power</option><option value="s-curve">S-curve</option><option value="exponential">Exponential</option></select><span></span></label>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-clip-act="crossfade" title="Fade this clip and the one it overlaps on its track across each other, equal power" disabled>Crossfade overlap</button></div>
 </div>
 <div class="fw-insp-section fw-insp-effects" hidden>
   <div class="fw-insp-head">Effects</div>
@@ -39,6 +40,8 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
+  <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="delete" title="Delete this track and its clips (undo brings it back)">Delete track</button></div>
   <label class="fw-field"><span>Volume</span><input type="range" min="-60" max="12" step="0.1" data-f="volume" data-default="0"><output data-o="volume"></output></label>
   <label class="fw-field"><span>Pan</span><input type="range" min="-1" max="1" step="0.01" data-f="pan" data-default="0"><output data-o="pan"></output></label>
   <label class="fw-field"><span>Duck under</span><select data-duck="control"></select><span></span></label>
@@ -580,6 +583,54 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, merged.length ? `Ducked ${hit.track.name} by ${amount} dB in ${merged.length} place${merged.length === 1 ? "" : "s"} under ${controlName}` : `${controlName} is silent; nothing to duck`);
     } catch (err) {
       setText(notice, `Could not duck: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // Controls for commands the interface never issued (the reachability audit at v0.80.0 found them): rename and delete
+  // a track, and crossfade the selected clip with the clip it overlaps on its track.
+  const nameInput = body.querySelector<HTMLInputElement>("[data-track-name]");
+  const crossBtn = body.querySelector<HTMLButtonElement>('[data-clip-act="crossfade"]');
+  const overlapOf = (doc: SessionDoc) => {
+    const hit = find(doc);
+    if (!hit) return null;
+    const c = hit.clip;
+    const other = hit.track.clips.find((o) => o.id !== c.id && o.start < c.start + c.length && c.start < o.start + o.length);
+    if (!other) return null;
+    const [left, right] = other.start <= c.start ? [other, c] : [c, other];
+    return { track: hit.track, left, right };
+  };
+  const syncTrackControls = () => {
+    const doc = engine.get("document");
+    const hit = find(doc);
+    if (nameInput && hit && document.activeElement !== nameInput && nameInput.value !== hit.track.name) nameInput.value = hit.track.name;
+    const can = !!overlapOf(doc);
+    if (crossBtn && crossBtn.disabled === can) crossBtn.disabled = !can;
+  };
+  engine.subscribe("document", syncTrackControls);
+  host.addEventListener("fw-selection", () => queueMicrotask(syncTrackControls));
+  nameInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") nameInput.blur();
+  });
+  nameInput?.addEventListener("change", () => {
+    const hit = find(engine.get("document"));
+    const name = nameInput.value.trim();
+    if (hit && name && name !== hit.track.name) engine.dispatch({ type: "rename-track", trackId: hit.track.id, name });
+    else if (hit) nameInput.value = hit.track.name;
+  });
+  body.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-track-act], [data-clip-act]");
+    if (!b) return;
+    const doc = engine.get("document");
+    if (b.dataset.trackAct === "delete") {
+      const hit = find(doc);
+      if (!hit) return;
+      engine.dispatch({ type: "remove-track", trackId: hit.track.id });
+      setText(notice, `Deleted track ${hit.track.name}; undo brings it back`);
+    } else if (b.dataset.clipAct === "crossfade") {
+      const o = overlapOf(doc);
+      if (!o) return;
+      engine.dispatch({ type: "crossfade", trackId: o.track.id, leftClipId: o.left.id, rightClipId: o.right.id });
+      setText(notice, "Crossfaded the overlap, equal power");
     }
   });
 

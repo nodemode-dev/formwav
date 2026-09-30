@@ -90,7 +90,7 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
       create: (m) => {
         const row = document.createElement("div");
         row.className = "fw-media-item";
-        row.innerHTML = `<span class="fw-media-name"></span><span class="fw-media-meta"></span><button type="button" class="fw-icon-btn fw-media-add" aria-label="Add to a new track" title="Add to a new track at the playhead">${fcIcon("addToTrack")}</button>`;
+        row.innerHTML = `<span class="fw-media-name"></span><span class="fw-media-meta"></span><button type="button" class="fw-icon-btn fw-media-place" aria-label="Place on the selected track" title="Place on the selected clip's track at the playhead">${fcIcon("plus")}</button><button type="button" class="fw-icon-btn fw-media-add" aria-label="Add to a new track" title="Add to a new track at the playhead">${fcIcon("addToTrack")}</button>`;
         fill(row, m);
         return row;
       },
@@ -98,10 +98,33 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
     });
   };
 
+  // The selected clips (from the lanes' fw-selection events): placing media uses the first one's track.
+  let selectedIds: string[] = [];
+  const notice = host.querySelector<HTMLElement>(".fw-notice");
+  host.addEventListener("fw-selection", (e) => {
+    selectedIds = (e as CustomEvent<string[]>).detail ?? [];
+  });
+
   list.addEventListener("click", (e) => {
-    const id = (e.target as HTMLElement).closest(".fw-media-add")?.closest<HTMLElement>(".fw-media-item")?.dataset.key;
-    const media = id ? engine.get("document").media[id] : undefined;
-    if (media) engine.dispatch({ type: "import-media", media, at: engine.get("transport").positionSamples });
+    const target = e.target as HTMLElement;
+    const id = target.closest(".fw-media-add, .fw-media-place")?.closest<HTMLElement>(".fw-media-item")?.dataset.key;
+    const doc = engine.get("document");
+    const media = id ? doc.media[id] : undefined;
+    if (!media) return;
+    const at = engine.get("transport").positionSamples;
+    if (target.closest(".fw-media-place")) {
+      // add-clip: this media on an existing track (imports always made a new one); lengths in session samples.
+      const track = doc.tracks.find((t) => t.clips.some((c) => selectedIds.includes(c.id)));
+      if (!track) {
+        setText(notice, "Select a clip on the track to place this on");
+        return;
+      }
+      const length = Math.round((media.frames * doc.sampleRate) / media.sampleRate);
+      engine.dispatch({ type: "add-clip", trackId: track.id, mediaId: media.id, start: at, sourceIn: 0, length });
+      setText(notice, `Placed ${media.name} on ${track.name}`);
+      return;
+    }
+    engine.dispatch({ type: "import-media", media, at });
   });
 
   engine.subscribe("document", render);

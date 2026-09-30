@@ -18,7 +18,8 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
     `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" data-default="0" aria-label="Pan"${kind === "master" || kind === "vca" ? " hidden" : ""}>` +
     `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute"><span class="fw-glyph-off">${fcIcon("speaker")}</span><span class="fw-glyph-on">${fcIcon("mute")}</span></button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo"${kind !== "track" ? " hidden" : ""}>${fcIcon("headphones")}</button></div>` +
     `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>` +
-    `<select class="fw-strip-vca" aria-label="VCA"${kind !== "track" ? " hidden" : ""}></select>`;
+    `<select class="fw-strip-vca" aria-label="VCA"${kind !== "track" ? " hidden" : ""}></select>` +
+    `<button type="button" class="fw-ibtn fw-strip-remove"${kind === "bus" || kind === "vca" ? "" : " hidden"} title="Remove; its tracks go back to the master or leave the VCA">Remove</button>`;
   return node;
 }
 
@@ -186,6 +187,11 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     if (!s || !button) return;
     const on = button.getAttribute("aria-pressed") !== "true";
     const vca = s.node.dataset.kind === "vca";
+    if (button.classList.contains("fw-strip-remove")) {
+      if (vca) engine.dispatch({ type: "remove-vca", vcaId: s.id });
+      else if (s.bus) engine.dispatch({ type: "remove-bus", busId: s.id });
+      return;
+    }
     if (button.classList.contains("fw-strip-mute")) {
       if (vca) engine.dispatch({ type: "set-vca-mute", vcaId: s.id, mute: on });
       else engine.dispatch(s.bus ? { type: "set-bus-mute", busId: s.id, mute: on } : { type: "set-track-mute", trackId: s.id, mute: on });
