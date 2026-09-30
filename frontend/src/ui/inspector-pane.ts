@@ -51,8 +51,35 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
-  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="1" value="120" data-q="bpm"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button></div>
 </div>`;
+
+/** Tempo from onset times (seconds): for each candidate from 60 to 180 BPM in 0.1 steps, how tightly the onsets share
+ * one phase of its period (the resultant length of their phases), weighted by how many of its beats hold an onset, so
+ * hits every second do not also read as 120 BPM. Null with fewer than four onsets. */
+export function estimateBpm(seconds: readonly number[]): number | null {
+  if (seconds.length < 4) return null;
+  const first = seconds[0];
+  const span = seconds[seconds.length - 1] - first;
+  if (span <= 0) return null;
+  let best: { bpm: number; score: number } | null = null;
+  for (let tenth = 600; tenth <= 1800; tenth++) {
+    const bpm = tenth / 10;
+    const period = 60 / bpm;
+    let re = 0;
+    let im = 0;
+    for (const t of seconds) {
+      const phase = (2 * Math.PI * (t - first)) / period;
+      re += Math.cos(phase);
+      im += Math.sin(phase);
+    }
+    const alignment = Math.hypot(re, im) / seconds.length;
+    const density = Math.min(1, seconds.length / (span / period + 1));
+    const score = alignment * density;
+    if (!best || score > best.score + 1e-9) best = { bpm, score };
+  }
+  return best && best.score > 0.5 ? best.bpm : null;
+}
 
 const db = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
 const panText = (v: number) => (v === 0 ? "C" : `${v < 0 ? "L" : "R"} ${Math.round(Math.abs(v) * 100)}`);
@@ -717,6 +744,26 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         setText(notice, `Split into ${found.at.length + 1} pieces at the transients`);
       } catch (err) {
         setText(notice, `Could not split at transients: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (action === "detect-bpm") {
+      const doc = engine.get("document");
+      if (!find(doc)) {
+        setText(notice, "Select one clip to detect its tempo");
+        return;
+      }
+      setText(notice, "Detecting the tempo...");
+      try {
+        const found = await clipTransients();
+        const bpm = found ? estimateBpm(found.at.map((t) => t / doc.sampleRate)) : null;
+        if (!found || bpm === null) {
+          setText(notice, "Not enough regular transients in this clip to find a tempo");
+          return;
+        }
+        const field = body.querySelector<HTMLInputElement>('[data-q="bpm"]');
+        if (field) field.value = bpm.toFixed(1);
+        setText(notice, `Detected ${bpm.toFixed(1)} BPM from ${found.at.length} transients`);
+      } catch (err) {
+        setText(notice, `Could not detect the tempo: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else if (action === "quantize") {
       const doc = engine.get("document");
