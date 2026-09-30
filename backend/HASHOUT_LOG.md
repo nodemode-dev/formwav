@@ -509,3 +509,10 @@ The target can be measured over a region (tstart, tend in its media's seconds) s
 - logged: v0.80.0 (in progress) · 2026-09-30
 
 A track assigned to a VCA plays at its fader (or its volume automation) plus the VCA's gain, and a muted VCA silences it; no audio passes through the VCA. Verified by FFT of exports with two of three tracks on a VCA: at -6 dB the members fell 6.00 dB and the unassigned track 0.00 dB; muted, the members fell over 169 dB and the unassigned track did not move.
+
+### app/services/tempo.py, app/routers/media.py · tempo detection that holds on real music
+- refers-to: app/services/tempo.py :: `envelope`, `estimate`, `detect`; app/routers/media.py :: `media_tempo`
+- kind: warning-context
+- logged: v0.82.0 (in progress) · 2026-09-30
+
+GET /api/media/{id}/tempo?start=&end= returns a tempo and confidence from an onset-strength envelope (log spectral flux at 22050 / 220 = 100.227 frames a second, local mean removed), scored per candidate from 60 to 200 BPM by its autocorrelation averaged over every multiple of the period within 12 s, with a gentle preference for tempos near 120 to settle half against whole tempo. It replaces a comb over discrete onset times, which returned confidence 0.08 to 0.18 on the owner's 2:44 song. Assuming 100 frames a second read every tempo 0.23% low; the exact rate fixed it. Measured: the song 126.9 BPM at confidence 0.474, its drum stem 126.9 at 0.551, a 30 s region 126.9, and every 30 s window of the song 126.8 to 127.0; synthetic beats 100.0, 60.0 and 137.0 at 0.34 to 0.42; irregular hits and speech 0.025 and 0.028. The owner's tempo software reports 129. librosa's tempo estimate also reads 129.20 on this file, which is exactly its lag-20 bin at its default frame grid (60 x 22050 / 512 / 20; the next bin is 123.05), while librosa's own beat tracker spans 126.96 BPM from first to last of its 321 beats (127.10, 126.88 and 126.87 by thirds); a phase-coherence check on the drum onsets was inconclusive. The evidence says the file's average tempo is 126.9 and that 129 is a grid value; the owner is given click tracks at both tempos to judge by ear.

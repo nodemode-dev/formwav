@@ -163,6 +163,18 @@ def list_effects() -> list[dict]:
     return effects.catalogue()
 
 
+@router.get("/media/{media_id}/tempo")
+def media_tempo(media_id: str, start: float | None = None, end: float | None = None) -> dict:
+    """Tempo and confidence of the media, or of a region in its own seconds (see services/tempo.py)."""
+    from ..services import tempo
+    from ..services.media import MediaError
+
+    try:
+        return tempo.detect(media_id, start, end)
+    except MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/eq-match", status_code=201)
 def eq_match(media_id: str, reference: str, start: float | None = None, end: float | None = None,
              tstart: float | None = None, tend: float | None = None) -> dict:
