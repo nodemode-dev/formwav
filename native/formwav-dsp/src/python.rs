@@ -106,12 +106,24 @@ fn loudness(interleaved: &[u8], channels: usize, rate: u32) -> PyResult<Option<f
     Ok(crate::loudness::integrated_loudness(&planar, rate))
 }
 
+/// Transient positions (samples) in a WAV file's mono mix, with its rate (onsets.rs).
+#[pyfunction]
+#[pyo3(signature = (data, sensitivity = 0.5))]
+fn onsets(data: &[u8], sensitivity: f32) -> PyResult<(u32, Vec<u64>)> {
+    let buf = decode_wav(data).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let n = buf.channels.iter().map(|c| c.len()).min().unwrap_or(0);
+    let count = buf.channels.len().max(1) as f32;
+    let mono: Vec<f32> = (0..n).map(|i| buf.channels.iter().map(|c| c[i]).sum::<f32>() / count).collect();
+    Ok((buf.sample_rate, crate::onsets::detect(&mono, buf.sample_rate, sensitivity)))
+}
+
 #[pymodule]
 fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(probe, m)?)?;
     m.add_function(wrap_pyfunction!(peaks, m)?)?;
     m.add_function(wrap_pyfunction!(render, m)?)?;
     m.add_function(wrap_pyfunction!(loudness, m)?)?;
+    m.add_function(wrap_pyfunction!(onsets, m)?)?;
     m.add("__version__", crate::CRATE_VERSION)?;
     Ok(())
 }
