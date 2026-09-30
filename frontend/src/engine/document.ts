@@ -55,8 +55,8 @@ export interface AutoPoint {
   value: number;
 }
 
-/** A realtime track effect: a filter the audio core runs live in playback and export alike. */
-export interface TrackFx {
+/** A realtime filter the audio core runs live in playback and export alike. */
+export interface FilterFx {
   kind: "highpass" | "lowpass" | "peak" | "lowshelf" | "highshelf";
   freq: number;
   gainDb: number;
@@ -64,14 +64,33 @@ export interface TrackFx {
   bypass?: boolean;
 }
 
-const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf"]);
+/** A realtime compressor (nonlinear, so the core runs it on the track's sum or the master's). */
+export interface CompressorFx {
+  kind: "compressor";
+  thresholdDb: number;
+  ratio: number;
+  attackMs: number;
+  releaseMs: number;
+  makeupDb: number;
+  bypass?: boolean;
+}
+
+export type TrackFx = FilterFx | CompressorFx;
+
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor"]);
 
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
   const clamp = (v: number, lo: number, hi: number, fallback: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
   return fx
     .filter((f) => FX_KINDS.has(f.kind))
-    .map((f) => ({ kind: f.kind, freq: clamp(f.freq, 20, 20000, 1000), gainDb: clamp(f.gainDb, -24, 24, 0), q: clamp(f.q, 0.1, 18, 0.707), ...(f.bypass ? { bypass: true } : {}) }));
+    .map((f): TrackFx => {
+      const bypass = f.bypass ? { bypass: true } : {};
+      if (f.kind === "compressor") {
+        return { kind: "compressor", thresholdDb: clamp(f.thresholdDb, -60, 0, -20), ratio: clamp(f.ratio, 1, 20, 4), attackMs: clamp(f.attackMs, 0.1, 200, 10), releaseMs: clamp(f.releaseMs, 1, 2000, 150), makeupDb: clamp(f.makeupDb, 0, 24, 0), ...bypass };
+      }
+      return { kind: f.kind, freq: clamp(f.freq, 20, 20000, 1000), gainDb: clamp(f.gainDb, -24, 24, 0), q: clamp(f.q, 0.1, 18, 0.707), ...bypass };
+    });
 }
 
 export interface Track {

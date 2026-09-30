@@ -22,6 +22,8 @@ interface CoreExports {
   fw_add_clip_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
   fw_clear_master_fx(player: number): void;
   fw_add_master_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
+  fw_add_master_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
+  fw_add_bus_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
   fw_take_peaks(player: number, out: number): void;
   fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
   fw_take_bus_peaks(player: number, out: number, maxBuses: number): number;
@@ -57,6 +59,8 @@ export interface WorkletBus {
   id: number;
   gain: number;
   pan: number;
+  /** The bus's chain as flat [kind, a, b, c, d, e, ...] (core fx.rs Stage::design); a track's own bus carries its compressor. */
+  stages?: number[];
 }
 
 export type WorkletMessage =
@@ -174,10 +178,14 @@ class PlayerProcessor extends AudioWorkletProcessor {
           if (c.fx) for (let k = 0; k + 3 < c.fx.length; k += 4) core.fw_add_clip_fx(this.player, c.fx[k], c.fx[k + 1], c.fx[k + 2], c.fx[k + 3]);
         }
         core.fw_clear_buses(this.player);
-        for (const b of msg.buses) core.fw_add_bus(this.player, b.id, b.gain, b.pan);
+        for (const b of msg.buses) {
+          core.fw_add_bus(this.player, b.id, b.gain, b.pan);
+          const st = b.stages ?? [];
+          for (let k = 0; k + 5 < st.length; k += 6) core.fw_add_bus_stage(this.player, st[k], st[k + 1], st[k + 2], st[k + 3], st[k + 4], st[k + 5]);
+        }
         core.fw_clear_master_fx(this.player);
         const mfx = msg.masterFx ?? [];
-        for (let k = 0; k + 3 < mfx.length; k += 4) core.fw_add_master_fx(this.player, mfx[k], mfx[k + 1], mfx[k + 2], mfx[k + 3]);
+        for (let k = 0; k + 5 < mfx.length; k += 6) core.fw_add_master_stage(this.player, mfx[k], mfx[k + 1], mfx[k + 2], mfx[k + 3], mfx[k + 4], mfx[k + 5]);
         core.fw_set_master_db(this.player, msg.masterDb);
         this.end = msg.end;
         break;

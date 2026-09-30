@@ -40,12 +40,12 @@ const BODY = `
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
   <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
   <div class="fw-rtfx-list" data-scope="track"></div>
-  <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-master" hidden>
   <div class="fw-insp-head">Master effects</div>
   <div class="fw-rtfx-list" data-scope="master"></div>
-  <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>`;
 
 const db = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
@@ -541,13 +541,14 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     { scope: "master", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="master"]'), sig: "" },
   ];
   const masterSection = body.querySelector<HTMLElement>(".fw-insp-master");
-  const RTFX_LABEL: Record<TrackFx["kind"], string> = { highpass: "High-pass", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf" };
+  const RTFX_LABEL: Record<TrackFx["kind"], string> = { highpass: "High-pass", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor" };
   const RTFX_DEFAULT: Record<TrackFx["kind"], TrackFx> = {
     highpass: { kind: "highpass", freq: 100, gainDb: 0, q: 0.707 },
     lowpass: { kind: "lowpass", freq: 8000, gainDb: 0, q: 0.707 },
     peak: { kind: "peak", freq: 1000, gainDb: 0, q: 1 },
     lowshelf: { kind: "lowshelf", freq: 200, gainDb: 0, q: 0.707 },
     highshelf: { kind: "highshelf", freq: 6000, gainDb: 0, q: 0.707 },
+    compressor: { kind: "compressor", thresholdDb: -20, ratio: 4, attackMs: 10, releaseMs: 150, makeupDb: 0 },
   };
   const getFx = (scope: FxScope): readonly TrackFx[] => {
     const doc = engine.get("document");
@@ -566,13 +567,18 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         row.className = "fw-rtfx-row";
         row.dataset.index = String(i);
         const shaped = f.kind === "peak" || f.kind === "lowshelf" || f.kind === "highshelf";
-        row.innerHTML = `<span class="fw-rtfx-name"></span><label>Hz <input type="number" min="20" max="20000" step="1" data-p="freq"></label>${shaped ? '<label>dB <input type="number" min="-24" max="24" step="0.5" data-p="gainDb"></label>' : ""}<label>Q <input type="number" min="0.1" max="18" step="0.1" data-p="q"></label><label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="up">Up</button><button type="button" class="fw-ibtn" data-rtfx="down">Down</button><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button>`;
+        const num = (label: string, p: string, min: number, max: number, step: number) => `<label>${label} <input type="number" min="${min}" max="${max}" step="${step}" data-p="${p}"></label>`;
+        const fields =
+          f.kind === "compressor"
+            ? num("Thr dB", "thresholdDb", -60, 0, 0.5) + num("Ratio", "ratio", 1, 20, 0.5) + num("Atk ms", "attackMs", 0.1, 200, 1) + num("Rel ms", "releaseMs", 1, 2000, 10) + num("Gain dB", "makeupDb", 0, 24, 0.5)
+            : num("Hz", "freq", 20, 20000, 1) + (shaped ? num("dB", "gainDb", -24, 24, 0.5) : "") + num("Q", "q", 0.1, 18, 0.1);
+        row.innerHTML = `<span class="fw-rtfx-name"></span>${fields}<label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="up">Up</button><button type="button" class="fw-ibtn" data-rtfx="down">Down</button><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button>`;
         const name = row.querySelector<HTMLElement>(".fw-rtfx-name");
         if (name) name.textContent = RTFX_LABEL[f.kind];
         for (const input of row.querySelectorAll<HTMLInputElement>("input[data-p]")) {
           const p = input.dataset.p;
           if (p === "on") input.checked = !f.bypass;
-          else if (p === "freq" || p === "gainDb" || p === "q") input.value = String(f[p]);
+          else if (p) input.value = String((f as unknown as Record<string, number>)[p] ?? "");
         }
         const up = row.querySelector<HTMLButtonElement>('[data-rtfx="up"]');
         const down = row.querySelector<HTMLButtonElement>('[data-rtfx="down"]');

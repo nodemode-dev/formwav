@@ -21,7 +21,19 @@ export function dbToGain(db: number): number {
 /** Enabled effect stages as flat [kind, freq, gainDb, q, ...] in the core's codes (backend render.py FX_KINDS, core fx.rs). */
 export function flatFx(fx: readonly TrackFx[] | undefined): number[] {
   const codes = { highpass: 1, lowpass: 2, peak: 3, lowshelf: 4, highshelf: 5 } as const;
-  return (fx ?? []).filter((f) => !f.bypass).flatMap((f) => [codes[f.kind], f.freq, f.gainDb, f.q]);
+  return (fx ?? []).flatMap((f) => (f.bypass || f.kind === "compressor" ? [] : [codes[f.kind], f.freq, f.gainDb, f.q]));
+}
+
+/** Enabled stages of any kind as flat [kind, a, b, c, d, e, ...] for bus and master chains (backend render.py _stage,
+ * core fx.rs Stage::design): filters carry frequency, gain and Q; the compressor (6) threshold, ratio, attack, release
+ * and makeup. */
+export function flatStages(fx: readonly TrackFx[] | undefined): number[] {
+  const codes = { highpass: 1, lowpass: 2, peak: 3, lowshelf: 4, highshelf: 5 } as const;
+  return (fx ?? []).flatMap((f) => {
+    if (f.bypass) return [];
+    if (f.kind === "compressor") return [6, f.thresholdDb, f.ratio, f.attackMs, f.releaseMs, f.makeupDb];
+    return [codes[f.kind], f.freq, f.gainDb, f.q, 0, 0];
+  });
 }
 
 export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPlan {
@@ -43,10 +55,16 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
   let skipped = 0;
   for (const track of doc.tracks) {
     if (track.mute || (soloed && !track.solo) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
-    const bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
+    let bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
+    let fxFlat = flatFx(track.fx);
+    if (bus === 0 && (track.fx ?? []).some((f) => f.kind === "compressor" && !f.bypass)) {
+      // A compressor must see the track's sum: its own bus (unity, centre) carries the whole chain, as in exports.
+      bus = buses.length + 1;
+      buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx) });
+      fxFlat = [];
+    }
     const volumePoints = track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
     const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
-    const fxFlat = flatFx(track.fx);
     for (const clip of track.clips) {
       const media = doc.media[clip.mediaId];
       const source = sources.get(clip.mediaId);
@@ -184,7 +202,7 @@ export class Player {
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatFx(doc.masterFx) });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx) });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
