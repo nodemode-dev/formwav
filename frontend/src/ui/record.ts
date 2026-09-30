@@ -1,7 +1,7 @@
 import type { Engine, TransportState } from "../engine";
 import type { Player } from "../audio/player";
 import { encodeWav, startRecording, type Recording } from "../audio/recorder";
-import { trackInput } from "./inputs";
+import { onMonitorChanged, trackInput, trackMonitor } from "./inputs";
 import { importFile } from "../io/media-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { armedTrack, recordingTrack, setRecordingTrack } from "./arm";
@@ -80,6 +80,9 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
   }
 
   let active: Recording | null = null;
+  onMonitorChanged((trackId, on) => {
+    if (active && trackId === armedTrack()) active.setMonitor(on);
+  });
   let punchRange: { start: number; end: number } | null = null;
   let loopRange: { start: number; end: number } | null = null;
   let lastPosition = 0;
@@ -118,7 +121,7 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       punchRange = punchEnabled() && armed && doc.loop && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
       loopRange = !punchRange && doc.loop?.enabled && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
       lastPosition = position;
-      active = await startRecording(player, position, showLevel, armed ? trackInput(armed.id) : "");
+      active = await startRecording(player, position, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false);
       engine.setTransport({ recording: true });
       const seconds = (s: number) => (s / doc.sampleRate).toFixed(3);
       setText(

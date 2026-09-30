@@ -10,6 +10,7 @@ export interface Take {
 
 export interface Recording {
   startPosition: number;
+  setMonitor(on: boolean): void;
   stop(): Promise<Take>;
 }
 
@@ -55,7 +56,7 @@ export function encodeWav(channels: Float32Array[], sampleRate: number): ArrayBu
   return buffer;
 }
 
-export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = ""): Promise<Recording> {
+export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = "", monitor = false): Promise<Recording> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
   });
@@ -83,9 +84,11 @@ export async function startRecording(player: Player, startPosition: number, onLe
       else onStopped?.();
     };
     await player.play(true);
+    node.port.postMessage({ type: "monitor", on: monitor } satisfies RecorderMessage);
     node.port.postMessage({ type: "start" } satisfies RecorderMessage);
     return {
       startPosition,
+      setMonitor: (on: boolean) => node.port.postMessage({ type: "monitor", on } satisfies RecorderMessage),
       stop: () =>
         new Promise<Take>((resolve) => {
           onStopped = () => {

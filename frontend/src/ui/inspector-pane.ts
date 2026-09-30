@@ -2,7 +2,7 @@ import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import type { FadeShape, TrackFx } from "../engine/document";
 import { loadPresets, savePresets, type Preset } from "../io/presets-client";
 import { setText } from "../vendor/nodemode/dom-stable";
-import { inputDevices, inputSignature, onInputsChanged, refreshInputs, setTrackInput, trackInput } from "./inputs";
+import { inputDevices, inputSignature, onInputsChanged, refreshInputs, setTrackInput, setTrackMonitor, trackInput, trackMonitor } from "./inputs";
 
 const BODY = `
 <p class="fw-empty-note fw-insp-empty"></p>
@@ -46,7 +46,7 @@ const BODY = `
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
   <label class="fw-field"><span>Input</span><select data-track-input aria-label="Input device for recording on this track"><option value="">System default</option></select><span></span></label>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button><label class="fw-sam-opt" title="Hear this track's input through the speakers while it records (software playthrough; a headphone mix avoids feedback)"><input type="checkbox" data-track-monitor> Monitor input</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="delete" title="Delete this track and its clips (undo brings it back)">Delete track</button></div>
   <label class="fw-field"><span>Volume</span><input type="range" min="-60" max="12" step="0.1" data-f="volume" data-default="0"><output data-o="volume"></output></label>
   <label class="fw-field"><span>Pan</span><input type="range" min="-1" max="1" step="0.01" data-f="pan" data-default="0"><output data-o="pan"></output></label>
@@ -628,7 +628,16 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const hit = find(engine.get("document"));
     const want = hit ? trackInput(hit.track.id) : "";
     if (inputSelect.value !== want) inputSelect.value = want;
+    const on = hit ? trackMonitor(hit.track.id) : false;
+    if (monitorBox && monitorBox.checked !== on) monitorBox.checked = on;
   };
+  const monitorBox = body.querySelector<HTMLInputElement>("[data-track-monitor]");
+  monitorBox?.addEventListener("change", () => {
+    const hit = find(engine.get("document"));
+    if (!hit) return;
+    setTrackMonitor(hit.track.id, monitorBox.checked);
+    setText(notice, monitorBox.checked ? `${hit.track.name} plays its input through while recording` : `${hit.track.name} records silently`);
+  });
   onInputsChanged(fillInputs);
   inputSelect?.addEventListener("change", () => {
     const hit = find(engine.get("document"));

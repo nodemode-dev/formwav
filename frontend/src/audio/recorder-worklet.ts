@@ -4,7 +4,7 @@ declare class AudioWorkletProcessor {
 }
 declare function registerProcessor(name: string, ctor: new () => AudioWorkletProcessor): void;
 
-export type RecorderMessage = { type: "start" } | { type: "stop" };
+export type RecorderMessage = { type: "start" } | { type: "stop" } | { type: "monitor"; on: boolean };
 
 export type RecorderReply =
   | { type: "chunk"; channels: Float32Array[] }
@@ -16,6 +16,7 @@ const LEVEL_EVERY = 8;
 
 class RecorderProcessor extends AudioWorkletProcessor {
   private recording = false;
+  private monitor = false;
   private buffers: Float32Array[] = [];
   private filled = 0;
   private peak = 0;
@@ -24,6 +25,10 @@ class RecorderProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.port.onmessage = (e: MessageEvent<RecorderMessage>) => {
+      if (e.data.type === "monitor") {
+        this.monitor = e.data.on;
+        return;
+      }
       if (e.data.type === "start") {
         this.recording = true;
         return;
@@ -46,8 +51,13 @@ class RecorderProcessor extends AudioWorkletProcessor {
     this.filled = 0;
   }
 
-  process(inputs: Float32Array[][]): boolean {
+  process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const input = inputs[0];
+    if (this.monitor && input && input.length && outputs[0]?.[0]) {
+      const out = outputs[0][0];
+      out.set(input[0]);
+      if (input.length > 1) for (let i = 0; i < out.length; i++) out[i] = (out[i] + (input[1]?.[i] ?? 0)) * 0.5;
+    }
     if (!this.recording || !input || input.length === 0) return true;
     const frames = input[0].length;
     if (this.filled + frames > CHUNK_FRAMES) this.flush();

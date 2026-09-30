@@ -14,6 +14,24 @@ export function setTrackInput(trackId: string, deviceId: string): void {
   else chosen.delete(trackId);
 }
 
+const monitored = new Set<string>();
+const monitorListeners = new Set<(trackId: string, on: boolean) => void>();
+
+export function trackMonitor(trackId: string): boolean {
+  return monitored.has(trackId);
+}
+
+export function setTrackMonitor(trackId: string, on: boolean): void {
+  if (on) monitored.add(trackId);
+  else monitored.delete(trackId);
+  for (const fn of monitorListeners) fn(trackId, on);
+}
+
+export function onMonitorChanged(fn: (trackId: string, on: boolean) => void): () => void {
+  monitorListeners.add(fn);
+  return () => monitorListeners.delete(fn);
+}
+
 export function inputDevices(): InputDevice[] {
   return devices;
 }
