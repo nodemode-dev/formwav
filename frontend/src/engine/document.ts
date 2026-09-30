@@ -207,6 +207,7 @@ export type Command =
   | { type: "set-clip-gain"; trackId: string; clipId: string; gainDb: number }
   | { type: "batch"; commands: Command[] }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
+  | { type: "move-clip-to-track"; trackId: string; clipId: string; toTrackId: string; start: number }
   | { type: "add-marker"; at: number; label: string };
 
 export function emptyDocument(sampleRate: number): SessionDoc {
@@ -348,6 +349,17 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         ...(doc.regions ? { regions: doc.regions.map((g) => ({ ...g, start: at(g.start), end: at(g.end) })) } : {}),
         ...(doc.loop ? { loop: { ...doc.loop, start: at(doc.loop.start), end: at(doc.loop.end) } } : {}),
       };
+    }
+    case "move-clip-to-track": {
+      if (cmd.toTrackId === cmd.trackId) return applyCommand(doc, { type: "move-clip", trackId: cmd.trackId, clipId: cmd.clipId, start: cmd.start }, newId);
+      const clip = doc.tracks.find((t) => t.id === cmd.trackId)?.clips.find((c) => c.id === cmd.clipId);
+      if (!clip || !doc.tracks.some((t) => t.id === cmd.toTrackId)) return doc;
+      const start = Math.max(0, Math.round(cmd.start));
+      // Audacity's free placement: the clip leaves its track for another, mono or stereo, where overlap replaces what
+      // lay under it (the same trim clear-range makes, later clips unmoved).
+      const without = mapTrack(doc, cmd.trackId, (t) => ({ ...t, clips: t.clips.filter((c) => c.id !== cmd.clipId) }));
+      const cleared = applyCommand(without, { type: "clear-range", trackId: cmd.toTrackId, start, end: start + clip.length, ripple: false }, newId);
+      return mapTrack(cleared, cmd.toTrackId, (t) => ({ ...t, clips: [...t.clips, { ...clip, start }].sort((a, b) => a.start - b.start) }));
     }
     case "clear-range": {
       const from = Math.max(0, Math.round(Math.min(cmd.start, cmd.end)));

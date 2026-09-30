@@ -1040,6 +1040,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   };
 
   lanes.addEventListener("pointermove", (e) => {
+    lastPointerY = e.clientY;
+    if (drag && drag.kind === "move" && drag.moved && drag.group.length === 1) markDropLane(laneAt(e.clientY), drag.group[0].trackId);
     if (box) {
       updateMarquee(e);
       return;
@@ -1067,10 +1069,34 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     preview(drag, spp);
   });
 
+  // Audacity's free clip placement: a single moved clip released over another lane goes to that track, mono or stereo,
+  // replacing what it overlaps there; the lane under the pointer is marked while dragging.
+  let lastPointerY = 0;
+  const laneAt = (y: number) =>
+    [...lanes.querySelectorAll<HTMLElement>(".fw-lane")].find((l) => {
+      const r = l.getBoundingClientRect();
+      return y >= r.top && y < r.bottom;
+    }) ?? null;
+  const markDropLane = (lane: HTMLElement | null, from: string | null) => {
+    for (const l of lanes.querySelectorAll<HTMLElement>(".fw-lane[data-drop]")) if (l !== lane || lane.dataset.key === from) delete l.dataset.drop;
+    if (lane && from !== null && lane.dataset.key !== from && lane.dataset.drop === undefined) lane.dataset.drop = "";
+  };
+
   const endDrag = (apply: boolean) => {
     const d = drag;
     drag = null;
+    markDropLane(null, null);
     if (!d) return;
+    if (apply && d.moved && d.kind === "move" && d.group.length === 1) {
+      const target = laneAt(lastPointerY)?.dataset.key;
+      const only = d.group[0];
+      if (target && target !== only.trackId) {
+        restore(d);
+        const start = Math.max(0, Math.round(only.clip.start + d.dx * samplesPerPixel(engine.get("document"))));
+        engine.dispatch({ type: "move-clip-to-track", trackId: only.trackId, clipId: only.clip.id, toTrackId: target, start });
+        return;
+      }
+    }
     if (!d.moved) {
       if (apply && (d.kind === "fade-in" || d.kind === "fade-out")) {
         const shape = nextFadeShape(d.clip.fadeShape);
