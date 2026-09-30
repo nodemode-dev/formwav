@@ -446,3 +446,10 @@ A track's `fx` list (kind, freq, gainDb, q, bypass) becomes filter stages on eac
 - logged: v0.62.0 (in progress) · 2026-09-30
 
 The document's `masterFx` (the same kinds and bypass rule as tracks) becomes the core's master chain in exports. Verified by FFT: a 2 kHz master high-pass -52.14 dB at 100 Hz, -12.38 dB at 1 kHz, -0.10 dB at 5 kHz; bypassed, byte for byte as none.
+
+### app/services/render.py · the compressor in the export plan
+- refers-to: app/services/render.py :: `FX_KINDS`, `_stage`, `plan` (`chains`, the track's own bus), `render`
+- kind: warning-context
+- logged: v0.63.0 (in progress) · 2026-09-30
+
+One `_stage` rule turns an effect entry into a core stage (filters: frequency, gain, Q; the compressor: threshold, ratio, attack, release, makeup). A track holding a compressor and routed to the master plays through a bus of its own (unity gain, centre) whose chain is the track's whole chain in order; the master's effects travel as ordered master stages, so it takes a compressor too. Not placed yet: a compressor on a track routed to a user bus (its filters still run per clip). Verified: see the core log's export measurements (-16.00 dBFS against the curve's -16.51; transparent below threshold to four decimals; the master matching; the high-pass regression at -40.03 dB).

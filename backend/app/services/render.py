@@ -9,8 +9,19 @@ class RenderError(ValueError):
     pass
 
 
-#: Track effect kinds, as the core's filter codes (formwav-dsp fx.rs).
-FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5}
+#: Track effect kinds, as the core's stage codes (formwav-dsp fx.rs).
+FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6}
+
+
+def _stage(f: dict) -> tuple | None:
+    """An effect entry as a core stage (kind, a, b, c, d, e); None when bypassed or unknown. Filters carry frequency,
+    gain and Q; the compressor carries threshold, ratio, attack and release (ms) and makeup gain."""
+    kind = FX_KINDS.get(f.get("kind")) if isinstance(f, dict) else None
+    if not kind or f.get("bypass"):
+        return None
+    if kind == 6:
+        return (6, float(f.get("thresholdDb", -20)), float(f.get("ratio", 4)), float(f.get("attackMs", 10)), float(f.get("releaseMs", 150)), float(f.get("makeupDb", 0)))
+    return (kind, float(f.get("freq") or 1000), float(f.get("gainDb") or 0), float(f.get("q") or 0.707), 0.0, 0.0)
 
 
 def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
@@ -34,6 +45,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     clips: list[tuple] = []
     envelopes: list[tuple] = []
     fx: list[tuple] = []
+    chains: list[tuple] = []
     end = 0
     skipped = 0
     for track in tracks:
@@ -50,8 +62,17 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             pan_env = len(envelopes)
         track_db = 0.0 if gain_env else float(track.get("gainDb", 0))
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
-        stages = [(FX_KINDS[f["kind"]], float(f.get("freq") or 1000), float(f.get("gainDb") or 0), float(f.get("q") or 0.707))
-                  for f in (track.get("fx") or []) if isinstance(f, dict) and f.get("kind") in FX_KINDS and not f.get("bypass")]
+        stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
+        if bus_index == 0 and any(s[0] == 6 for s in stages):
+            # A compressor is nonlinear, so it must see the track's sum: the track plays through a bus of its own
+            # (unity gain, centre) whose chain is the track's whole chain, in order.
+            buses[f"__track:{track.get('id')}"] = (len(buses) + 1, 1.0, 0.0)
+            bus_index = len(buses)
+            chains.extend((1, bus_index - 1, *s) for s in stages)
+            stages = []
+        else:
+            # Filters are linear and run per clip; a compressor on a track routed to a user bus is not placed yet.
+            stages = [s[:4] for s in stages if s[0] != 6]
         for clip in track.get("clips", []):
             info = doc["media"].get(clip.get("mediaId"))
             if not isinstance(info, dict):
@@ -66,7 +87,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, track_pan, int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index, gain_env, pan_env))
             fx.extend((len(clips) - 1, *stage) for stage in stages)
             end = max(end, start + length)
-    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx
+    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains
 
 
 def wav_float32_stereo(interleaved: bytes, rate: int) -> bytes:
@@ -83,7 +104,7 @@ def dbfs(peak: float) -> str:
 
 def render(doc: object) -> dict:
     native = media._require_core()
-    rate, sources, clips, end, skipped, buses, envelopes, fx = plan(doc)
+    rate, sources, clips, end, skipped, buses, envelopes, fx, chains = plan(doc)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -91,9 +112,8 @@ def render(doc: object) -> dict:
         if not path.exists():
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
-    master_fx = [(FX_KINDS[f["kind"]], float(f.get("freq") or 1000), float(f.get("gainDb") or 0), float(f.get("q") or 0.707))
-                 for f in (doc.get("masterFx") or []) if isinstance(f, dict) and f.get("kind") in FX_KINDS and not f.get("bypass")]
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, master_fx)
+    chains = chains + [(2, 0, *s) for s in (_stage(f) for f in (doc.get("masterFx") or [])) if s]
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains)
     loudness = native.loudness(interleaved, 2, rate)
     return {
         "wav": wav_float32_stereo(interleaved, rate),
