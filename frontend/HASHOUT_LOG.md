@@ -1388,3 +1388,10 @@ A fault found while building Stretch to tempo, present since the timing-changing
 - logged: v0.68.0 (in progress) · 2026-09-30
 
 Stretch to tempo renders with Change tempo, rhythmic (Rubber Band's short window). Verified in Chromium (verify_stretch.py): from 99.9 to 110 BPM the clip became 7.447 s in one step and now re-detects at 109.4 BPM from 16 transients (107.8 from 5 with the default stretch); the half-speed length fix unchanged (8.2 to 16.4 s, undo 8.2); the Quantize section wraps to three rows at 1024 px with no overflow (screenshot); containment clean; no page errors.
+
+### src/ui/import.ts, src/ui/inspector-pane.ts · tempo detection on import (coverage wave 10)
+- refers-to: src/ui/import.ts :: `offerTempo`, `importOne`; src/ui/inspector-pane.ts :: `tempoEstimate`, `estimateBpm`
+- kind: explainer
+- logged: v0.69.0 (in progress) · 2026-09-30
+
+Audacity's tempo detection on import: a file imported (chosen, dropped or pasted) into a session without a tempo has its tempo read from its transients, and a confident, regular beat (8 onsets or more, a score of at least 0.7 against Detect's 0.5) becomes the session tempo as its own undo step after the import, the notice saying so. Recordings, generated voice and separated stems are not imports and are left alone; an existing tempo is never replaced. The estimator now returns its score (tempoEstimate), and estimateBpm wraps it unchanged. Verified in Chromium (verify_import_tempo.py): JFK's speech and a file of 15 irregular hits set no tempo; beat100 set 99.9 BPM in a second undo step, one undo clearing the tempo and keeping the track; beat60 set 60.0 from exactly 8 hits; beat137 imported after beat100 left 99.9 in place; the Detect regression unchanged (99.9, 60.0, 137.0); containment clean; no page errors.

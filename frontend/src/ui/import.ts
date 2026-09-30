@@ -1,6 +1,7 @@
-import type { Engine } from "../engine";
+import type { Engine, MediaRef } from "../engine";
 import { importFile } from "../io/media-client";
 import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
+import { tempoEstimate } from "./inspector-pane";
 
 export function mountImport(host: HTMLElement, engine: Engine): void {
   const input = host.querySelector<HTMLInputElement>(".fw-file");
@@ -8,6 +9,24 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
   const stage = host.querySelector<HTMLElement>(".fw-stage");
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   let queue: Promise<void> = Promise.resolve();
+
+  // Audacity's tempo detection on import: a file imported into a session without a tempo has its tempo read from its
+  // transients, and a confident, regular beat (8 onsets or more, alignment at least 0.7, stricter than Detect's 0.5)
+  // becomes the session tempo as its own undo step after the import. Speech and irregular material set nothing.
+  const offerTempo = async (media: MediaRef, name: string): Promise<string | null> => {
+    if (engine.get("document").tempo) return null;
+    try {
+      const res = await fetch(`/api/media/${media.id}/transients`);
+      if (!res.ok) return null;
+      const seconds = ((await res.json()) as { seconds?: number[] }).seconds ?? [];
+      const est = seconds.length >= 8 ? tempoEstimate(seconds) : null;
+      if (!est || est.score < 0.7 || engine.get("document").tempo) return null;
+      engine.dispatch({ type: "set-tempo", bpm: est.bpm, beatsPerBar: 4 });
+      return `Imported ${name}; its tempo, ${est.bpm.toFixed(1)} BPM, is now the session tempo (undo to clear it)`;
+    } catch {
+      return null;
+    }
+  };
 
   const importOne = async (file: File, at = 0) => {
     let final = "";
@@ -23,7 +42,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
       const doc = engine.get("document");
       const media = await importFile(file, doc.tracks.length ? doc.sampleRate : undefined);
       engine.dispatch({ type: "import-media", media, at });
-      final = `Imported ${file.name}`;
+      final = (await offerTempo(media, file.name)) ?? `Imported ${file.name}`;
     } catch (err) {
       final = `Could not import ${file.name}: ${err instanceof Error ? err.message : String(err)}`;
     }

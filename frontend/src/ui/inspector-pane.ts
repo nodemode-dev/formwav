@@ -58,6 +58,12 @@ const BODY = `
  * one phase of its period (the resultant length of their phases), weighted by how many of its beats hold an onset, so
  * hits every second do not also read as 120 BPM. Null with fewer than four onsets. */
 export function estimateBpm(seconds: readonly number[]): number | null {
+  const est = tempoEstimate(seconds);
+  return est && est.score > 0.5 ? est.bpm : null;
+}
+
+/** The best tempo and its score (phase alignment times beat density, 0 to 1); null with fewer than four onsets. */
+export function tempoEstimate(seconds: readonly number[]): { bpm: number; score: number } | null {
   if (seconds.length < 4) return null;
   const first = seconds[0];
   const span = seconds[seconds.length - 1] - first;
@@ -78,7 +84,7 @@ export function estimateBpm(seconds: readonly number[]): number | null {
     const score = alignment * density;
     if (!best || score > best.score + 1e-9) best = { bpm, score };
   }
-  return best && best.score > 0.5 ? best.bpm : null;
+  return best;
 }
 
 const db = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
