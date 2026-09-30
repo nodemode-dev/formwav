@@ -136,6 +136,9 @@
 .fw-word.is-filler { color: var(--text-muted); text-decoration: underline dotted; }
 .fw-word.is-current { box-shadow: inset 0 -2px 0 var(--accent-color); }
 .fw-word.is-selected { color: var(--text-on-accent); background: var(--accent-color); }
+.is-spectral .fw-clip { background-repeat: no-repeat; }
+.is-spectral .fw-clip .fw-wave { opacity: 0; }
+.fw-spectral-toggle[aria-pressed="true"] { color: var(--accent-color); }
 .fw-speaker { flex-basis: 100%; margin-block-start: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-color); }
 
 .fw-voice-body { display: grid; align-content: start; gap: 8px; }
