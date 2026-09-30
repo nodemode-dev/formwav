@@ -106,6 +106,8 @@ pub struct Player {
     /// pass, since `meter_tracks` mixes every clip again and a shared state would advance twice a block.
     clip_fx: Vec<Vec<crate::fx::Biquad>>,
     meter_fx: Vec<Vec<crate::fx::Biquad>>,
+    /// The master chain, run on the summed mix before the master gain, meters and loudness.
+    master_fx: Vec<crate::fx::Biquad>,
 }
 
 impl Player {
@@ -145,8 +147,24 @@ impl Player {
         true
     }
 
+    pub fn clear_master_fx(&mut self) {
+        self.master_fx.clear();
+    }
+
+    /// Appends a filter stage to the master chain; false when the filter is refused (an unknown kind).
+    pub fn add_master_fx(&mut self, kind: u8, freq: f32, gain_db: f32, q: f32) -> bool {
+        let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
+        match crate::fx::Biquad::design(kind, freq, gain_db, q, rate) {
+            Some(f) => {
+                self.master_fx.push(f);
+                true
+            }
+            None => false,
+        }
+    }
+
     fn reset_fx(&mut self) {
-        for f in self.clip_fx.iter_mut().chain(self.meter_fx.iter_mut()).flatten() {
+        for f in self.clip_fx.iter_mut().chain(self.meter_fx.iter_mut()).flatten().chain(self.master_fx.iter_mut()) {
             f.reset();
         }
     }
@@ -208,6 +226,17 @@ impl Player {
             self.mix(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from, |c| c.bus == 0);
             self.mix_buses(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from);
             self.clip_fx = fx;
+            if !self.master_fx.is_empty() {
+                for i in done..done + len {
+                    let (mut l, mut r) = (left[i], right[i]);
+                    for f in self.master_fx.iter_mut() {
+                        l = f.process(0, l);
+                        r = f.process(1, r);
+                    }
+                    left[i] = l;
+                    right[i] = r;
+                }
+            }
             self.meter_tracks(from, len);
             done += len;
             self.position = from + span;

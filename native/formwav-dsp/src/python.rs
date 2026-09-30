@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new()))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new()))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -23,10 +23,14 @@ fn render<'py>(
     master_db: f64,
     rate: f32,
     fx: Vec<(usize, u8, f32, f32, f32)>,
+    master_fx: Vec<(u8, f32, f32, f32)>,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let mut player = Player::new();
     player.set_master_db(master_db);
     player.set_rate(rate);
+    for &(kind, freq, gain_db, q) in &master_fx {
+        player.add_master_fx(kind, freq, gain_db, q);
+    }
     for (id, bytes) in &sources {
         let buf = decode_wav(bytes.as_bytes()).map_err(|e| PyValueError::new_err(e.to_string()))?;
         player.load_source(*id, buf);

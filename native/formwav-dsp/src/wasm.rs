@@ -118,6 +118,20 @@ pub unsafe extern "C" fn fw_add_clip_fx(player: *mut Player, kind: u32, freq: f3
     (*player).add_clip_fx(kind as u8, freq, gain_db, q) as u32
 }
 
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_clear_master_fx(player: *mut Player) {
+    (*player).clear_master_fx();
+}
+
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_add_master_fx(player: *mut Player, kind: u32, freq: f32, gain_db: f32, q: f32) -> u32 {
+    (*player).add_master_fx(kind as u8, freq, gain_db, q) as u32
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_take_peaks(player: *mut Player, out: *mut f32) {
     let (left, right) = (*player).take_peaks();
