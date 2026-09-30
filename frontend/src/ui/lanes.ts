@@ -224,6 +224,26 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
   schedulePaint(canvas, media.id);
 }
 
+/** A folder header (Pro Tools' folder tracks): one per bus, before the first track routed to it. */
+function folderNode(): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "fw-folder";
+  row.innerHTML = `<button type="button" class="fw-folder-toggle" aria-expanded="true"><span class="fw-folder-icon" aria-hidden="true"></span><span class="fw-folder-name"></span></button>`;
+  return row;
+}
+
+function updateFolder(row: HTMLElement, bus: { id: string; name: string }, count: number, folded: boolean): void {
+  const toggle = row.querySelector<HTMLButtonElement>(".fw-folder-toggle");
+  const icon = row.querySelector<HTMLElement>(".fw-folder-icon");
+  const expanded = String(!folded);
+  if (toggle && (toggle.getAttribute("aria-expanded") !== expanded || !icon?.firstChild)) {
+    toggle.setAttribute("aria-expanded", expanded);
+    if (icon) icon.innerHTML = fcIcon(folded ? "chevR" : "chevD");
+  }
+  if (toggle && toggle.dataset.bus !== bus.id) toggle.dataset.bus = bus.id;
+  setText(row.querySelector(".fw-folder-name"), `${bus.name} · ${count} ${count === 1 ? "track" : "tracks"}${folded ? " (folded)" : ""}`);
+}
+
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
@@ -381,6 +401,15 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   const lanes = host.querySelector<HTMLElement>(".fw-lanes");
   if (!stage || !lanes) return;
 
+  const folded = new Set<string>();
+  lanes.addEventListener("click", (e) => {
+    const id = (e.target as HTMLElement).closest<HTMLElement>(".fw-folder-toggle")?.dataset.bus;
+    if (!id) return;
+    if (folded.has(id)) folded.delete(id);
+    else folded.add(id);
+    render(engine.get("document"));
+  });
+
   const render = (doc: SessionDoc) => {
     const view = doc.tracks.length ? "session" : "empty";
     if (stage.dataset.view !== view) stage.dataset.view = view;
@@ -391,14 +420,44 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       lanes.dataset.timeline = timeline;
       lanes.style.setProperty("--fw-timeline-w", timeline);
     }
-    patchList(lanes, [...doc.tracks], {
-      key: (t) => t.id,
-      create: (t) => {
+    // Folder view (Pro Tools' folder tracks): a header before the first track routed to each bus, and that bus's tracks
+    // hidden while it is folded. Folding is view state kept here: not saved with the session and not an undo step.
+    const buses = new Map((doc.buses ?? []).map((b) => [b.id, b]));
+    type Row = { track: Track } | { bus: { id: string; name: string }; count: number };
+    const rows: Row[] = [];
+    const headed = new Set<string>();
+    for (const t of doc.tracks) {
+      const bus = t.busId ? buses.get(t.busId) : undefined;
+      if (bus && !headed.has(bus.id)) {
+        headed.add(bus.id);
+        rows.push({ bus, count: doc.tracks.filter((x) => x.busId === bus.id).length });
+      }
+      rows.push({ track: t });
+    }
+    const hideLane = (n: HTMLElement, t: Track) => {
+      const hide = !!t.busId && buses.has(t.busId) && folded.has(t.busId);
+      if (n.hidden !== hide) n.hidden = hide;
+    };
+    patchList(lanes, rows, {
+      key: (r) => ("track" in r ? r.track.id : `folder:${r.bus.id}`),
+      create: (r) => {
+        if (!("track" in r)) {
+          const n = folderNode();
+          updateFolder(n, r.bus, r.count, folded.has(r.bus.id));
+          return n;
+        }
         const n = laneNode();
-        updateLane(n, t, doc, spp);
+        updateLane(n, r.track, doc, spp);
+        hideLane(n, r.track);
         return n;
       },
-      update: (n, t) => updateLane(n, t, doc, spp),
+      update: (n, r) => {
+        if (!("track" in r)) updateFolder(n, r.bus, r.count, folded.has(r.bus.id));
+        else {
+          updateLane(n, r.track, doc, spp);
+          hideLane(n, r.track);
+        }
+      },
     });
     lanes.dispatchEvent(new Event("fw-lanes-rendered"));
   };

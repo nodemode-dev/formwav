@@ -164,7 +164,9 @@ html, body, #app { height: 100%; }
 .fw-lanes {
   --fw-head-w: calc(var(--space-8) * 6);
   display: grid;
-  grid-auto-rows: minmax(calc(var(--space-8) * 3), auto);
+  /* Rows take their content's height: each .fw-lane sets its own (its internal row plus border), and a folder header
+     is a slim bar. A 96 px minimum here gave the header a full lane's row, leaving an empty band under it. */
+  grid-auto-rows: auto;
   align-content: start;
   inline-size: max(100%, calc(var(--fw-head-w) + var(--fw-timeline-w, 0px)));
 }
