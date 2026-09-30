@@ -108,12 +108,13 @@ FORMWAV_CHAINS = {
     "eq-3band": "lowshelf=g=0:f=120,equalizer=f=1000:t=q:w=1:g=0,highshelf=g=0:f=8000",
     "graphic-eq-5": "firequalizer=gain_entry='entry(60,0);entry(250,0);entry(1000,0);entry(4000,0);entry(12000,0)'",
     "band-gain": "firequalizer=gain_entry='entry(0,0);entry(1940,0);entry(2000,-30);entry(4000,-30);entry(4120,0);entry(24000,0)'",
+    "dialogue-isolate": "",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
 #: Menu groups for formwav's Inspector; every chain appears exactly once.
 GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
-    ("Clean up", [("voice-clean", "Enhance speech"), ("denoise", "Denoise"), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess")]),
+    ("Clean up", [("voice-clean", "Enhance speech"), ("denoise", "Denoise"), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess"), ("dialogue-isolate", "Dialogue isolate (neural)...")]),
     ("Dynamics", [("compress", "Compress"), ("normalize", "Normalize to -16 LUFS"), ("level-rider", "Level rider"), ("peak-limiter", "Peak limiter")]),
     ("Tone", [("bass", "Bass boost"), ("treble", "Treble boost"), ("warm-lows", "Warm lows"), ("presence-lift", "Presence lift"), ("mid-scoop", "Mid scoop"), ("crisp-detail", "Crisp detail"), ("eq-3band", "Parametric EQ, 3 bands..."), ("graphic-eq-5", "Graphic EQ, 5 bands...")]),
     ("Space", [("room", "Room"), ("hall", "Hall"), ("cathedral", "Cathedral"), ("plate", "Plate"), ("echo", "Echo"), ("slapback", "Slapback"), ("long-tail", "Long tail"), ("tunnel", "Tunnel"), ("small-booth", "Small booth"), ("far-away", "Far away"), ("wide-stage", "Wide stage"), ("stereo-bloom", "Stereo bloom")]),
@@ -136,9 +137,31 @@ def _lin(db: float) -> float:
     return 10 ** (db / 20)
 
 
+RNNOISE_URL = "https://raw.githubusercontent.com/GregorR/rnnoise-models/master/beguiling-drafter-2018-08-30/bd.rnnn"
+
+
+def _rnnoise_model() -> str:
+    """The RNNoise model (voice amid noise, from GregorR/rnnoise-models) for ffmpeg's arnndn, fetched once into the
+    git-ignored backend/models/rnnoise."""
+    path = Path(__file__).resolve().parents[2] / "models" / "rnnoise" / "bd.rnnn"
+    if not path.exists():
+        import urllib.request
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            data = urllib.request.urlopen(RNNOISE_URL, timeout=60).read()
+        except OSError as err:
+            raise media.MediaError(f"dialogue isolation needs its RNNoise model, which could not be fetched ({err}); place bd.rnnn in {path.parent}") from err
+        if not data.startswith(b"rnnoise"):
+            raise media.MediaError("the fetched RNNoise model is not a model file")
+        path.write_bytes(data)
+    return str(path)
+
+
 #: Adjustable effects: each parameter is (label, min, max, default, unit); the builder makes the chain from clamped values.
 #: Enhance speech's strength follows formcut's own voice-clean strength control (noise floor and ratio scale with it).
 PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]] = {
+    "dialogue-isolate": ({"strength": ("Strength", 0, 100, 100, "%")}, lambda v: f"arnndn=m={_rnnoise_model()}:mix={v['strength'] / 100:.2f}"),
     "voice-clean": ({"strength": ("Strength", 0, 100, 50, "%")}, lambda v: f"highpass=f=90,afftdn=nf={-15 - 20 * v['strength'] / 100:.1f},acompressor=threshold=0.12:ratio={1.5 + 3 * v['strength'] / 100:.2f},alimiter"),
     "amplify-up": ({"db": ("Gain", -24, 24, 6, "dB")}, lambda v: f"volume={v['db']:.2f}dB"),
     "peak-normalize": ({"target": ("Peak", -24, 0, -1, "dBFS")}, None),

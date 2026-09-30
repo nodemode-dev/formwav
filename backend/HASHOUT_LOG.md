@@ -390,3 +390,10 @@ The engine still renders 32-bit float WAV; ffmpeg encodes it to WAV 24-bit, WAV 
 - logged: v0.54.0 (in progress) · 2026-09-30
 
 After Adobe Podcast's mic analysis and iZotope RX's Repair Assistant (references only): integrated loudness (ebur128), clipped samples (volumedetect's 0 dB bin), noise floor (astats, with the mains frequencies notched out), mains hum (narrow 50 and 60 Hz bands against the whole signal) and DC offset, each finding naming the effect that addresses it. Checked against five crafted recordings: the first cut reported a 60 Hz hum as background noise too, the steady tone reading as the noise floor. Notching the mains frequencies, once and then twice, left about -45 dB of residue whose cause was not found, so a stated heuristic applies: with hum present, background noise is reported only above -40 dB (otherwise above -50). Verified: clean gave only its level; hum gave 60 Hz hum at -18.1 dB with Hum remover and a quiet background; noisy (pink noise at -35 dBFS) gave a -41.6 dB floor with Voice de-noise; clipped (+20 dB) gave 10,134 clipped samples with De-clip and very loud at -8.6 LUFS; quiet (-30 dB) gave -45.4 LUFS with the loudness effect.
+
+### app/services/effects.py · Dialogue isolate, a learned noise suppressor (coverage wave 7)
+- refers-to: app/services/effects.py :: `dialogue-isolate`, `_rnnoise_model`, `RNNOISE_URL`
+- kind: rationale
+- logged: v0.56.0 (in progress) · 2026-09-30
+
+The first of wave 7's AI features that runs on the CPU here and can be measured: ffmpeg's arnndn with an RNNoise model trained on voice amid noise (GregorR/rnnoise-models, "beguiling-drafter"), strength as arnndn's mix. The 300 kB model is fetched once into the git-ignored backend/models/rnnoise and checked to be a model file; without a network it says where to place it. Verified with Mic Check's measurements: the noisy recording's noise floor fell from -41.6 to -54.1 dB at 100% (-45.5 at 50%) while its loudness moved from -15.5 to -15.7 LUFS; the clean recording moved by 0.1 LU; with the model removed, applying fetched it again byte for byte.
