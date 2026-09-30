@@ -404,3 +404,10 @@ The first of wave 7's AI features that runs on the CPU here and can be measured:
 - logged: v0.56.0 · 2026-09-30
 
 Demucs htdemucs splits a time range of a file into vocals, drums, bass and other on the CPU (PyTorch's Apple GPU on the Mac), each written back at the file's rate through soxr so stems line up with the clip; the model (about 80 MB) caches in the git-ignored backend/models/torch; without Demucs the route answers 503 with the install line. A trap met here: installing demucs upgraded torchaudio to a CUDA 13 build this CPU-only machine could not load, breaking every PyTorch feature until the CPU builds were reinstalled; the requirements file pins torch and torchaudio 2.6.0 and says to install PyTorch's right build first. Verified on the JFK speech mixed with a 55 Hz tone and trimmed by 2 s: the vocals stem correlated 0.999 with the clean speech at zero lag (exact alignment to the trimmed range) and the other stems 0.003 to 0.061. Not good: the pure 55 Hz tone was largely dropped rather than placed in the bass stem (0.022 RMS against 0.125), so the stems summed to the piece only within 0.22; Demucs is trained on music, and how it treats real bass is not measured here for want of a music recording.
+
+### app/routers/render.py · streaming preview (coverage wave 6)
+- refers-to: app/routers/render.py :: `render_session` (`what=preview`)
+- kind: explainer
+- logged: v0.57.0 (in progress) · 2026-09-30
+
+iZotope RX's streaming preview: the mix rendered, encoded with a lossy codec (MP3, OGG or M4A) and decoded back at the session's rate into new media, so the codec's effect can be heard against the mix; lossless formats are refused. Verified (verify_preview.py) on the JFK session: an MP3 192 kbps preview of 11.0 s, correlation 1.0 with the float mix at zero lag (the decoder trims the encoder's padding), differing by up to 0.024; FLAC refused.
