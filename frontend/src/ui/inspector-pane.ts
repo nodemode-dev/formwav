@@ -28,6 +28,8 @@ const BODY = `
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
   <ol class="fw-chain" hidden></ol>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
+  <div class="fw-analyze-buttons"><input type="text" class="fw-sam-desc" data-sam="desc" maxlength="80" placeholder="Describe a sound" title="What to isolate, for example: man speaking, car horn" aria-label="Sound to isolate"><button type="button" class="fw-ibtn" data-sam="go" title="Put the described sound and everything else on new tracks (SAM-Audio); a selected range marks where the sound occurs">Isolate sound</button></div>
+  <div class="fw-sam-status" data-sam-status></div>
 </div>
 <div class="fw-insp-section fw-insp-analyze" hidden>
   <div class="fw-insp-head">Analyze</div>
@@ -491,6 +493,53 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, `Could not separate: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       for (const b of buttons) b.disabled = false;
+    }
+  });
+
+  // Isolate sound (SAM-Audio, an owner addition): the clip's trimmed range, a description and, when a Smart Tool range
+  // lies on the clip, that range as where the sound occurs; the sound and everything else land on new tracks at the
+  // clip's start with the original muted, one undo step, as stems do. The status line names what is missing.
+  const samStatus = body.querySelector<HTMLElement>("[data-sam-status]");
+  const samDesc = body.querySelector<HTMLInputElement>('[data-sam="desc"]');
+  const samGo = body.querySelector<HTMLButtonElement>('[data-sam="go"]');
+  void fetch("/api/sam-audio/status")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((s: { message?: string } | null) => setText(samStatus, s?.message ?? "SAM-Audio: status unavailable"))
+    .catch(() => setText(samStatus, "SAM-Audio: status unavailable"));
+  samDesc?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") samGo?.click();
+  });
+  samGo?.addEventListener("click", async () => {
+    const doc = engine.get("document");
+    const hit = find(doc);
+    const source = hit ? doc.media[hit.clip.mediaId] : undefined;
+    const description = samDesc?.value.trim() ?? "";
+    if (!hit || !source) return;
+    if (!description) {
+      setText(notice, "Describe the sound to isolate, for example: man speaking");
+      return;
+    }
+    const start = hit.clip.sourceIn / source.sampleRate;
+    const end = start + hit.clip.length / doc.sampleRate;
+    const on = rangeOnClip();
+    const spans = on && on.clip.id === hit.clip.id ? [[(on.from - hit.clip.start) / doc.sampleRate, (on.to - hit.clip.start) / doc.sampleRate]] : null;
+    samGo.disabled = true;
+    setText(notice, `Isolating "${description}"${spans ? " in the selected range" : ""} (slow without a GPU)...`);
+    try {
+      const q = `description=${encodeURIComponent(description)}&start=${start}&end=${end}${spans ? `&spans=${encodeURIComponent(JSON.stringify(spans))}` : ""}`;
+      const res = await fetch(`/api/media/${source.id}/isolate?${q}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown } | { source: string; media: MediaRef }[];
+      if (!res.ok || !Array.isArray(out)) throw new Error(!Array.isArray(out) && typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      const commands = [
+        ...out.map((s) => ({ type: "import-media" as const, media: s.media, at: hit.clip.start })),
+        { type: "set-track-mute" as const, trackId: hit.track.id, mute: true },
+      ];
+      engine.dispatch({ type: "batch", commands } as Parameters<Engine["dispatch"]>[0]);
+      setText(notice, `Isolated "${description}" and everything else on new tracks; the original track is muted`);
+    } catch (err) {
+      setText(notice, `Could not isolate: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      samGo.disabled = false;
     }
   });
 
