@@ -74,13 +74,15 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             # Filters are linear and run per clip; a compressor on a track routed to a user bus is not placed yet.
             stages = [s[:4] for s in stages if s[0] != 6]
         for clip in track.get("clips", []):
-            info = doc["media"].get(clip.get("mediaId"))
+            # A pitched clip plays its derived render (non-destructive pitch; same length as the original).
+            play_id = clip.get("pitchMediaId") if clip.get("pitchMediaId") in doc["media"] else clip.get("mediaId")
+            info = doc["media"].get(play_id)
             if not isinstance(info, dict):
                 continue
             if info.get("sampleRate") != rate:
                 skipped += 1
                 continue
-            source = sources.setdefault(clip["mediaId"], len(sources) + 1)
+            source = sources.setdefault(play_id, len(sources) + 1)
             gain = math.pow(10, (track_db + float(clip.get("gainDb", 0))) / 20)
             start, length = int(clip["start"]), int(clip["length"])
             fade_shape = {"linear": 0, "equal-power": 1, "s-curve": 2, "exponential": 3}.get(clip.get("fadeShape") or "linear", 0)

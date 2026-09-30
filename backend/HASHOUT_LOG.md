@@ -474,3 +474,10 @@ A pitch-keeping tempo change for rhythmic material: Rubber Band with a short win
 - logged: v0.73.0 (in progress) · 2026-09-30
 
 Audacity's one preset system across built-in, destructive and realtime effects: GET and PUT /api/presets over one JSON file in the data folder, so presets outlive a browser and a session. Each preset is a name, an effect key (rendered effects "fx:<id>", realtime ones "rt:<kind>") and its named numeric settings; the whole list is validated (at most 500 presets, 16 settings each, finite numbers) and written by atomic replacement. Verified through the app (the frontend log's verify_presets.py): saved presets appeared in the store with their settings, persisted across a reload, and a deleted one left it.
+
+### app/services/render.py · pitched clips in the export plan
+- refers-to: app/services/render.py :: `plan` (`play_id`)
+- kind: explainer
+- logged: v0.75.0 (in progress) · 2026-09-30
+
+A clip carrying `pitchMediaId` (non-destructive pitch) exports that same-length render instead of its original media, as playback does. Verified by FFT of exports (the frontend log's verify_pitch.py): 880.0 Hz at +12, 220.5 Hz at -12 and 440.0 Hz at 0 from a 440 Hz clip.
