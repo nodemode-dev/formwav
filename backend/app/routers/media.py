@@ -163,6 +163,18 @@ def list_effects() -> list[dict]:
     return effects.catalogue()
 
 
+@router.post("/media/{media_id}/eq-match", status_code=201)
+def eq_match(media_id: str, reference: str, start: float | None = None, end: float | None = None) -> dict:
+    """iZotope RX's EQ Match: new media with the reference region's tonal balance (see services/eqmatch.py)."""
+    from ..services import eqmatch
+    from ..services.media import MediaError
+
+    try:
+        return eqmatch.eq_match(media_id, reference, start, end)
+    except MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/effect", status_code=201)
 def apply_effect(media_id: str, name: str, params: str = "") -> dict:
     import json
