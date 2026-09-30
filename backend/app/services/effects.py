@@ -282,6 +282,9 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
         chain = f"volume={gain:.4f}dB"
         if peak_db + gain > -1:
             chain += f",alimiter=limit={10 ** (-1 / 20):.5f}:level=false"
+    delay = (int(rate / 40) if "afftdn" in chain else 0) + (int(rate * 0.008) if "anlmdn=s=7:p=0.002:r=0.006" in chain else 0) + (int(rate * 0.005) - 1 if "alimiter" in chain else 0)
+    if delay:
+        chain += f",atrim=start_sample={delay},apad=pad_len={delay}"
     stereo = name in STEREO
     af = ("aformat=channel_layouts=stereo," if stereo else "") + chain + f",aresample={rate}"
     with tempfile.TemporaryDirectory() as tmp:
