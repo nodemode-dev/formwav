@@ -1,0 +1,21 @@
+# Optional: isolate any sound by description (Isolate sound) with Meta's SAM-Audio, under the SAM License.
+#
+# Needs Python 3.11 or later. Install PyTorch for your hardware first, so pip does not swap in a build the machine
+# cannot run (SAM-Audio also needs torchvision and torchcodec at matching versions):
+#   NVIDIA GPU (recommended by Meta): the CUDA build from https://pytorch.org/get-started/locally/
+#   macOS (Apple Silicon runs on MPS, slowly): pip install torch torchaudio torchvision
+#   CPU only: works, very slowly
+# Then:
+#   pip install -r requirements_sam_audio.txt
+#
+# The checkpoints are gated. Request access on the model's Hugging Face page (manual approval), then log in:
+#   https://huggingface.co/facebook/sam-audio-small   (5.10 GB, the default)
+#   https://huggingface.co/facebook/sam-audio-base    (7.73 GB)
+#   https://huggingface.co/facebook/sam-audio-large   (14.86 GB)
+#   hf auth login
+# Pick one with FORMWAV_SAM_AUDIO_MODEL (for example facebook/sam-audio-base); the first isolation downloads it.
+# GET /api/sam-audio/status (and the Effects section) says which of these steps is still missing.
+#
+# Pinned to the commit formwav's integration was written against (2026-05-26); it pulls several git dependencies
+# (dacvae, ImageBind, CLAP, perception_models), so installation takes a while.
+sam_audio @ git+https://github.com/facebookresearch/sam-audio@bb4c6999d2677c7402360e426afc01ddfad6dce0

@@ -163,6 +163,38 @@ def list_effects() -> list[dict]:
     return effects.catalogue()
 
 
+@router.get("/sam-audio/status")
+def sam_audio_status() -> dict:
+    """Which of SAM-Audio's preconditions are met: installed, Hugging Face login or a cached checkpoint, device."""
+    from ..services import samaudio
+
+    return samaudio.status()
+
+
+@router.post("/media/{media_id}/isolate")
+def isolate_sound(media_id: str, description: str, start: float | None = None, end: float | None = None,
+                  spans: str = "", predict_spans: bool = False, candidates: int = 1) -> list:
+    """SAM-Audio: the described sound and everything else from the region, as two media aligned with it; spans is a JSON
+    list of [start, end] seconds from the region's start where the sound occurs (see services/samaudio.py)."""
+    import json
+
+    from ..services import samaudio
+    from ..services.media import MediaError
+
+    try:
+        parsed = json.loads(spans) if spans else None
+        if parsed is not None and not (isinstance(parsed, list) and all(isinstance(s, list) and len(s) == 2 for s in parsed)):
+            raise ValueError
+    except ValueError as err:
+        raise HTTPException(422, "spans must be a JSON list of [start, end] pairs in seconds") from err
+    try:
+        return samaudio.isolate(media_id, description, start, end, parsed, predict_spans, candidates)
+    except samaudio.Unavailable as err:
+        raise HTTPException(503, str(err)) from err
+    except MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/key")
 def media_key(media_id: str, start: float | None = None, end: float | None = None) -> dict:
     """Musical key, Camelot code and confidence of the media or a region in its own seconds (see services/key.py)."""
