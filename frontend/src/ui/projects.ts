@@ -147,6 +147,54 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
     });
   };
 
+  // Audacity's home screen of recent projects: the empty timeline lists the latest saved sessions.
+  const emptyStage = host.querySelector<HTMLElement>(".fw-empty");
+  const recent = document.createElement("div");
+  recent.className = "fw-recent";
+  recent.hidden = true;
+  emptyStage?.append(recent);
+  const showRecent = async () => {
+    let items: ProjectSummary[] = [];
+    try {
+      items = await listProjects();
+    } catch {
+      items = [];
+    }
+    const top = [...items].sort((a, b) => (b.savedAt ?? "").localeCompare(a.savedAt ?? "")).slice(0, 6);
+    const heading = document.createElement("h2");
+    heading.className = "fw-recent-title";
+    heading.textContent = "Recent sessions";
+    recent.replaceChildren(
+      ...(top.length ? [heading] : []),
+      ...top.map((p) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "fw-recent-row";
+        row.dataset.name = p.name;
+        const title = document.createElement("span");
+        title.className = "fw-recent-name";
+        title.textContent = p.name;
+        const meta = document.createElement("span");
+        meta.className = "fw-recent-meta";
+        meta.textContent = `${p.tracks} track${p.tracks === 1 ? "" : "s"}${p.savedAt ? ` · ${new Date(p.savedAt).toLocaleDateString()}` : ""}`;
+        row.append(title, meta);
+        return row;
+      }),
+    );
+    if (recent.hidden === top.length > 0) recent.hidden = top.length === 0;
+  };
+  recent.addEventListener("click", (e) => {
+    const row = (e.target as HTMLElement).closest<HTMLElement>(".fw-recent-row");
+    if (row?.dataset.name) open(row.dataset.name);
+  });
+  let wasEmpty = true;
+  engine.subscribe("document", (doc) => {
+    const isEmpty = doc.tracks.length === 0;
+    if (isEmpty && !wasEmpty) void showRecent();
+    wasEmpty = isEmpty;
+  });
+  void showRecent();
+
   saveButton?.addEventListener("click", () => void save());
   openButton?.setAttribute("aria-expanded", "false");
   openButton?.addEventListener("click", () => (popover.hidden ? void show() : close()));

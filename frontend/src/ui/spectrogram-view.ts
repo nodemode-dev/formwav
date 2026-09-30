@@ -14,7 +14,7 @@ export function mountSpectrogramView(host: HTMLElement, engine: Engine): void {
   if (!tray || !lanes) return;
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "fw-tool fw-spectral-toggle";
+  button.className = "fw-mode fw-spectral-toggle";
   button.setAttribute("aria-pressed", "false");
   button.title = "Show clips as spectrograms (frequency over time)";
   button.textContent = "Spectrogram";

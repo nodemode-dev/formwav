@@ -82,6 +82,7 @@
 .fw-pane-body { flex: 1; min-block-size: 0; overflow: auto; padding: 0 8px 8px; }
 
 .fw-pane-timeline .fw-stage { flex: 1; min-block-size: 0; }
+.fw-pane-timeline .fw-stage[data-view="empty"] { overflow: auto; }
 .fw-pane-timeline .fw-transport { flex-wrap: wrap; row-gap: 6px; padding-block: 8px; block-size: auto; min-block-size: calc(var(--ctl-xl) + var(--space-4)); }
 @media (max-width: 1180px) {
   .fw-topbar { grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 8px; }
@@ -97,7 +98,7 @@
   }
 }
 .fw-tool-tray { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); }
-.fw-pane-timeline .fw-transport { flex: none; block-size: calc(var(--ctl-xl) + var(--space-4)); }
+.fw-pane-timeline .fw-transport { flex: none; block-size: auto; min-block-size: calc(var(--ctl-xl) + var(--space-4)); }
 
 .fw-empty-note { margin: 0; padding: 4px 8px 8px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 .fw-empty-note[hidden] { display: none; }
@@ -141,6 +142,14 @@
 .fw-spectral-toggle[aria-pressed="true"] { color: var(--accent-color); }
 .fw-layout-select { padding: 4px 8px; font: inherit; font-size: 13px; color: var(--text-secondary); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
 .fw-layout-select:hover { color: var(--text-primary); }
+
+.fw-recent { display: grid; gap: 4px; inline-size: min(360px, 90%); margin-block-start: 16px; text-align: start; }
+.fw-recent[hidden] { display: none; }
+.fw-recent-title { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
+.fw-recent-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; font: inherit; color: var(--text-primary); text-align: start; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
+.fw-recent-row:hover { border-color: var(--accent-color); }
+.fw-recent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-recent-meta { flex: none; font-size: 12px; color: var(--text-secondary); }
 
 .fw-export-dialog { inline-size: min(360px, calc(100vw - 32px)); padding: 16px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; }
 .fw-export-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
