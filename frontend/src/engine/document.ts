@@ -284,12 +284,20 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "set-clip-media": {
       let changed = false;
+      const old = (c: Clip) => doc.media[c.mediaId];
       const next = mapTrack(doc, cmd.trackId, (t) => ({
         ...t,
         clips: t.clips.map((c) => {
           if (c.id !== cmd.clipId || c.mediaId === cmd.media.id) return c;
           changed = true;
-          return { ...c, mediaId: cmd.media.id };
+          // A timing-changing effect (tempo, stretch) returns media of another length: the clip then covers the same
+          // material re-timed, so its trim, length and fades scale by the same ratio (they had been left as they
+          // were, cutting a slowed clip short and leaving a sped-up one running past its audio).
+          const before = old(c);
+          const r = before && before.frames > 0 && cmd.media.frames > 0 ? cmd.media.frames / before.frames : 1;
+          if (Math.abs(r - 1) < 1e-9) return { ...c, mediaId: cmd.media.id };
+          const scale = (n: number | undefined) => (n === undefined ? undefined : Math.max(0, Math.round(n * r)));
+          return { ...c, mediaId: cmd.media.id, sourceIn: scale(c.sourceIn) ?? 0, length: Math.max(1, scale(c.length) ?? c.length), fadeIn: scale(c.fadeIn), fadeOut: scale(c.fadeOut) };
         }),
       }));
       return changed ? { ...next, media: { ...doc.media, [cmd.media.id]: cmd.media } } : doc;

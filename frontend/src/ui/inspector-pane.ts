@@ -51,7 +51,7 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
-  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button></div>
 </div>`;
 
 /** Tempo from onset times (seconds): for each candidate from 60 to 180 BPM in 0.1 steps, how tightly the onsets share
@@ -779,6 +779,42 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         setText(notice, `Detected ${bpm.toFixed(1)} BPM from ${found.at.length} transients`);
       } catch (err) {
         setText(notice, `Could not detect the tempo: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (action === "stretch-tempo") {
+      // Audacity's stretch to tempo: the clip's detected tempo against the session's gives the tempo factor for the
+      // pitch-keeping tempo effect (0.5 to 2 times); the clip's placement scales with the new length.
+      const doc = engine.get("document");
+      const hit = find(doc);
+      if (!hit || !doc.tempo) {
+        setText(notice, hit ? "Set a session tempo first (BPM, or Detect on the reference clip)" : "Select one clip to stretch");
+        return;
+      }
+      setText(notice, "Detecting this clip's tempo...");
+      try {
+        const found = await clipTransients();
+        const own = found ? estimateBpm(found.at.map((t) => t / doc.sampleRate)) : null;
+        if (own === null) {
+          setText(notice, "Not enough regular transients in this clip to find its tempo");
+          return;
+        }
+        const factor = doc.tempo.bpm / own;
+        if (factor < 0.5 || factor > 2) {
+          setText(notice, `From ${own.toFixed(1)} to ${doc.tempo.bpm.toFixed(1)} BPM is beyond the 0.5 to 2 times the stretch allows`);
+          return;
+        }
+        if (Math.abs(factor - 1) < 0.001) {
+          setText(notice, `This clip is already at ${doc.tempo.bpm.toFixed(1)} BPM`);
+          return;
+        }
+        setText(notice, `Stretching from ${own.toFixed(1)} to ${doc.tempo.bpm.toFixed(1)} BPM...`);
+        const params = encodeURIComponent(JSON.stringify({ percent: (factor - 1) * 100 }));
+        const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=tempo-faster&params=${params}`, { method: "POST" });
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
+        setText(notice, `Stretched from ${own.toFixed(1)} to ${doc.tempo.bpm.toFixed(1)} BPM`);
+      } catch (err) {
+        setText(notice, `Could not stretch: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else if (action === "quantize") {
       const doc = engine.get("document");
