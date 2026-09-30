@@ -95,12 +95,40 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     const spp = samplesPerPixel(doc);
     return snapSamples(Math.max(0, x) * spp, doc.sampleRate, doc.sampleRate / spp);
   };
+  // Audacity 4's draggable playhead: a press within 6 px of it grabs it, and dragging seeks (once a frame) instead of
+  // drawing a loop range; a press anywhere else keeps click-to-seek and drag-for-loop.
+  let dragHead = false;
+  let headRaf = 0;
+  let headX: number | null = null;
+  const headPx = () => engine.get("transport").positionSamples / samplesPerPixel(engine.get("document"));
+  const nearHead = (x: number) => engine.get("document").tracks.length > 0 && Math.abs(x - headPx()) <= 6;
+  const seekSoon = (x: number) => {
+    headX = x;
+    if (headRaf) return;
+    headRaf = requestAnimationFrame(() => {
+      headRaf = 0;
+      if (headX !== null) player.seek(toSamples(headX));
+    });
+  };
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || !engine.get("document").tracks.length) return;
+    if (nearHead(e.offsetX)) {
+      dragHead = true;
+      canvas.setPointerCapture(e.pointerId);
+      return;
+    }
     pressX = e.offsetX;
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener("pointermove", (e) => {
+    if (dragHead) {
+      seekSoon(e.offsetX);
+      return;
+    }
+    if (pressX === null) {
+      const cursor = nearHead(e.offsetX) ? "ew-resize" : "";
+      if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
+    }
     if (pressX === null || (!pending && Math.abs(e.offsetX - pressX) < 4)) return;
     const a = toSamples(pressX);
     const b = toSamples(e.offsetX);
@@ -108,6 +136,14 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     draw();
   });
   canvas.addEventListener("pointerup", (e) => {
+    if (dragHead) {
+      dragHead = false;
+      headX = null;
+      if (headRaf) cancelAnimationFrame(headRaf);
+      headRaf = 0;
+      player.seek(toSamples(e.offsetX));
+      return;
+    }
     if (pressX === null) return;
     const range = pending;
     pressX = null;
@@ -121,6 +157,8 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     }
   });
   canvas.addEventListener("pointercancel", () => {
+    dragHead = false;
+    headX = null;
     pressX = null;
     if (pending) {
       pending = null;

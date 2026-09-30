@@ -1311,3 +1311,10 @@ Deconstruct beside Separate into stems, through the same handler with its own ro
 - logged: v0.58.0 (in progress) · 2026-09-30
 
 Audacity's Auto Duck and Audition's content-based ducking: in the track section, Duck under (another track) and By (3 to 30 dB) write this track's volume automation from the other track's active regions (merged when closer than attack plus release; 0.15 s down, hold, 0.4 s back), one undo step, editable in the automation lane. Found in verification: the Duck under menu first offered the selected track itself, because it refreshed before the selection listener had updated; it now refreshes after it. Verified in Chromium (verify_duck.py) with the JFK speech over a steady tone: "Ducked bed by 12 dB in 2 places under jfk", the rendered tone at -45.12 dB during speech and -33.12 dB in the pause, 12.0 dB exactly; one undo step; undo removed the envelope; the menu offered only the other track; no overflow; screenshot inspected; containment clean; no page errors.
+
+### src/ui/ruler.ts · a draggable playhead (coverage wave 10)
+- refers-to: src/ui/ruler.ts :: `dragHead`, `nearHead`, `seekSoon`, the pointer handlers
+- kind: explainer
+- logged: v0.59.0 (in progress) · 2026-09-30
+
+Audacity 4's draggable playhead: a press on the ruler within 6 px of the playhead grabs it (the cursor shows ew-resize there) and dragging seeks once a frame, playing on if playing, instead of drawing a loop range; releasing seeks exactly where it was let go. A press anywhere else keeps click-to-seek and drag-for-loop. Verified in Chromium (verify_playhead_drag.py): the cursor at the playhead and not 60 px away; a drag from 2.0 s read 2.5, 3.0 ... 5.0 s as it moved and ended at 5.0 s with the loop unchanged; while playing, the playhead grabbed at 3.68 s and dragged back kept playing from about 1 s; a drag elsewhere still made a loop (0.4 to 1.4 s) and a click still seeked (1.7 s); containment clean; no page errors. The first run's loop and click checks failed because they aimed at 7 to 9 s, past the timeline pane's visible edge under the Inspector (the ruler canvas is 1,100 px wide, wider than the pane), so they never reached the ruler.
