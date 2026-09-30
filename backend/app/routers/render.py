@@ -1,14 +1,42 @@
 from fastapi import APIRouter, Body, HTTPException, Response
 
-from ..services import media, render
+from ..services import export, media, render
 
 router = APIRouter()
 
 
+def _safe(name: str) -> str:
+    return "".join("-" if ch in '\\/:*?"<>|' else ch for ch in name).strip() or "track"
+
+
 @router.post("/render")
-def render_session(document: dict = Body(...)) -> Response:
+def render_session(document: dict = Body(...), format: str = "wav", what: str = "mix") -> Response:
     try:
+        if what in ("stems", "multichannel"):
+            import io
+            import zipfile
+
+            tracks = list(document.get("tracks") or [])
+            if not tracks:
+                raise render.RenderError("there are no tracks to export")
+            stems_out = [
+                render.render({**document, "tracks": [{**t, "solo": False, "mute": bool(t.get("mute")) if j == i else True} for j, t in enumerate(tracks)]})
+                for i in range(len(tracks))
+            ]
+            stems = [s["wav"] for s in stems_out]
+            if what == "multichannel":
+                data, ext, mime = export.multichannel(stems, format, max(s["frames"] for s in stems_out))
+                headers = {"X-Stems": str(len(stems)), "Content-Disposition": f'attachment; filename="multichannel.{ext}"'}
+                return Response(content=data, media_type=mime, headers=headers)
+            session_frames = max(s["frames"] for s in stems_out)
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:
+                for i, (t, wav) in enumerate(zip(tracks, stems), start=1):
+                    data, ext, _ = export.encode(wav, format, session_frames)
+                    bundle.writestr(f"{i:02d} {_safe(str(t.get('name') or 'track'))}.{ext}", data)
+            return Response(content=buffer.getvalue(), media_type="application/zip", headers={"X-Stems": str(len(stems)), "Content-Disposition": 'attachment; filename="stems.zip"'})
         result = render.render(document)
+        data, ext, mime = export.encode(result["wav"], format)
     except KeyError as err:
         raise HTTPException(404, "the session uses media the engine does not have") from err
     except media.CoreMissing as err:
@@ -21,6 +49,6 @@ def render_session(document: dict = Body(...)) -> Response:
         "X-Peak-Right-dBFS": result["peakRight"],
         "X-Skipped-Clips": str(result["skipped"]),
         "X-Loudness-LUFS": result["loudness"],
-        "Content-Disposition": 'attachment; filename="mix.wav"',
+        "Content-Disposition": f'attachment; filename="mix.{ext}"',
     }
-    return Response(content=result["wav"], media_type="audio/wav", headers=headers)
+    return Response(content=data, media_type=mime, headers=headers)
