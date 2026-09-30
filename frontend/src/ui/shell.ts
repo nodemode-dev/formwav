@@ -67,7 +67,7 @@ function shellHtml(): string {
           <p class="fw-empty-body">Import any audio or video file, drop one here, or press Record to start a session.</p>
         </section>
         <div class="fw-lanes"></div>
-        <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi" multiple hidden>
+        <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi,.mxf" multiple hidden>
       </main>
       <footer class="fw-transport">
         <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>
