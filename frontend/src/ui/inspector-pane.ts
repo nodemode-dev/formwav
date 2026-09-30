@@ -66,39 +66,6 @@ const BODY = `
   <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button></div>
 </div>`;
 
-/** Tempo from onset times (seconds): for each candidate from 60 to 180 BPM in 0.1 steps, how tightly the onsets share
- * one phase of its period (the resultant length of their phases), weighted by how many of its beats hold an onset, so
- * hits every second do not also read as 120 BPM. Null with fewer than four onsets. */
-export function estimateBpm(seconds: readonly number[]): number | null {
-  const est = tempoEstimate(seconds);
-  return est && est.score > 0.5 ? est.bpm : null;
-}
-
-/** The best tempo and its score (phase alignment times beat density, 0 to 1); null with fewer than four onsets. */
-export function tempoEstimate(seconds: readonly number[]): { bpm: number; score: number } | null {
-  if (seconds.length < 4) return null;
-  const first = seconds[0];
-  const span = seconds[seconds.length - 1] - first;
-  if (span <= 0) return null;
-  let best: { bpm: number; score: number } | null = null;
-  for (let tenth = 600; tenth <= 1800; tenth++) {
-    const bpm = tenth / 10;
-    const period = 60 / bpm;
-    let re = 0;
-    let im = 0;
-    for (const t of seconds) {
-      const phase = (2 * Math.PI * (t - first)) / period;
-      re += Math.cos(phase);
-      im += Math.sin(phase);
-    }
-    const alignment = Math.hypot(re, im) / seconds.length;
-    const density = Math.min(1, seconds.length / (span / period + 1));
-    const score = alignment * density;
-    if (!best || score > best.score + 1e-9) best = { bpm, score };
-  }
-  return best;
-}
-
 const db = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
 const panText = (v: number) => (v === 0 ? "C" : `${v < 0 ? "L" : "R"} ${Math.round(Math.abs(v) * 100)}`);
 
@@ -989,6 +956,19 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
+  /** The engine's tempo of a clip's visible region, with its confidence (services/tempo.py). Detect needs 0.1; speech
+   * and irregular hits score about 0.03, synthetic beats 0.32 and up, the owner's song 0.47. */
+  const TEMPO_CONFIDENCE = 0.1;
+  const clipTempo = async (clip: Clip, doc: SessionDoc): Promise<{ bpm: number; confidence: number }> => {
+    const media = doc.media[clip.mediaId];
+    const start = clip.sourceIn / media.sampleRate;
+    const end = start + clip.length / doc.sampleRate;
+    const res = await fetch(`/api/media/${clip.mediaId}/tempo?start=${start.toFixed(6)}&end=${end.toFixed(6)}`);
+    const out = (await res.json().catch(() => ({}))) as { bpm?: number; confidence?: number; detail?: unknown };
+    if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+    return { bpm: out.bpm ?? 0, confidence: out.confidence ?? 0 };
+  };
+
   // The session tempo (the bars ruler, beat snapping and Quantize share it): BPM and Beats edit it, and follow it.
   const bpmField = body.querySelector<HTMLInputElement>('[data-q="bpm"]');
   const bpbField = body.querySelector<HTMLInputElement>('[data-q="bpb"]');
@@ -1050,16 +1030,17 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       }
       setText(notice, "Detecting the tempo...");
       try {
-        const found = await clipTransients();
-        const bpm = found ? estimateBpm(found.at.map((t) => t / doc.sampleRate)) : null;
-        if (!found || bpm === null) {
-          setText(notice, "Not enough regular transients in this clip to find a tempo");
+        const hit = find(doc);
+        const found = hit ? await clipTempo(hit.clip, doc) : null;
+        if (!found || found.confidence < TEMPO_CONFIDENCE) {
+          setText(notice, "Not enough steady rhythm in this clip to find a tempo");
           return;
         }
+        const bpm = found.bpm;
         const field = body.querySelector<HTMLInputElement>('[data-q="bpm"]');
         if (field) field.value = bpm.toFixed(1);
         commitTempo();
-        setText(notice, `Detected ${bpm.toFixed(1)} BPM from ${found.at.length} transients`);
+        setText(notice, `Detected ${bpm.toFixed(1)} BPM (confidence ${found.confidence.toFixed(2)})`);
       } catch (err) {
         setText(notice, `Could not detect the tempo: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -1074,12 +1055,12 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       }
       setText(notice, "Detecting this clip's tempo...");
       try {
-        const found = await clipTransients();
-        const own = found ? estimateBpm(found.at.map((t) => t / doc.sampleRate)) : null;
-        if (own === null) {
-          setText(notice, "Not enough regular transients in this clip to find its tempo");
+        const found = await clipTempo(hit.clip, doc);
+        if (found.confidence < TEMPO_CONFIDENCE) {
+          setText(notice, "Not enough steady rhythm in this clip to find its tempo");
           return;
         }
+        const own = found.bpm;
         const factor = doc.tempo.bpm / own;
         if (factor < 0.5 || factor > 2) {
           setText(notice, `From ${own.toFixed(1)} to ${doc.tempo.bpm.toFixed(1)} BPM is beyond the 0.5 to 2 times the stretch allows`);

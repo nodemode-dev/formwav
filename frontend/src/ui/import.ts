@@ -1,7 +1,6 @@
 import type { Engine, MediaRef } from "../engine";
 import { importFile } from "../io/media-client";
 import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
-import { tempoEstimate } from "./inspector-pane";
 
 export function mountImport(host: HTMLElement, engine: Engine): void {
   const input = host.querySelector<HTMLInputElement>(".fw-file");
@@ -10,19 +9,18 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   let queue: Promise<void> = Promise.resolve();
 
-  // Audacity's tempo detection on import: a file imported into a session without a tempo has its tempo read from its
-  // transients, and a confident, regular beat (8 onsets or more, alignment at least 0.7, stricter than Detect's 0.5)
-  // becomes the session tempo as its own undo step after the import. Speech and irregular material set nothing.
+  // Audacity's tempo detection on import: a file imported into a session without a tempo has its tempo measured by the
+  // engine (services/tempo.py), and a confident one (0.2, twice what Detect needs; speech and irregular hits score about
+  // 0.03, real beats 0.32 and up) becomes the session tempo as its own undo step after the import.
   const offerTempo = async (media: MediaRef, name: string): Promise<string | null> => {
     if (engine.get("document").tempo) return null;
     try {
-      const res = await fetch(`/api/media/${media.id}/transients`);
+      const res = await fetch(`/api/media/${media.id}/tempo`);
       if (!res.ok) return null;
-      const seconds = ((await res.json()) as { seconds?: number[] }).seconds ?? [];
-      const est = seconds.length >= 8 ? tempoEstimate(seconds) : null;
-      if (!est || est.score < 0.7 || engine.get("document").tempo) return null;
-      engine.dispatch({ type: "set-tempo", bpm: est.bpm, beatsPerBar: 4 });
-      return `Imported ${name}; its tempo, ${est.bpm.toFixed(1)} BPM, is now the session tempo (undo to clear it)`;
+      const found = (await res.json()) as { bpm?: number; confidence?: number };
+      if (!found.bpm || (found.confidence ?? 0) < 0.2 || engine.get("document").tempo) return null;
+      engine.dispatch({ type: "set-tempo", bpm: found.bpm, beatsPerBar: 4 });
+      return `Imported ${name}; its tempo, ${found.bpm.toFixed(1)} BPM, is now the session tempo (undo to clear it)`;
     } catch {
       return null;
     }
