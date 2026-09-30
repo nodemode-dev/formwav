@@ -59,6 +59,20 @@ def media_excerpt(media_id: str, start: float, end: float) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/separate", status_code=201)
+def media_separate(media_id: str, start: float = 0.0, end: float | None = None) -> list[dict]:
+    from ..services import separate
+
+    try:
+        return separate.separate(media_id, start, end)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except separate.SeparationUnavailable as err:
+        raise HTTPException(503, str(err)) from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/mic-check")
 def media_mic_check(media_id: str) -> dict:
     from ..services import tools

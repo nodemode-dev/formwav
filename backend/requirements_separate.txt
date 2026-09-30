@@ -1,0 +1,12 @@
+# Optional: music source separation (Separate into stems) with Demucs htdemucs.
+#
+# Install PyTorch first, then this file, so pip does not swap in a build the machine cannot run:
+#   macOS (Apple Silicon or Intel):  pip install torch==2.6.0 torchaudio==2.6.0
+#   Linux or Windows without CUDA:   pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+#   then:                            pip install -r requirements_separate.txt
+# Installing demucs alone upgraded torchaudio to a CUDA 13 build on a CPU-only Linux machine (libcudart.so.13 missing),
+# which broke every PyTorch feature until the CPU builds were reinstalled; the pins below keep the versions installed first.
+# The htdemucs model (about 80 MB) downloads on first use into backend/models/torch.
+torch==2.6.0
+torchaudio==2.6.0
+demucs==4.0.1
