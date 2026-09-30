@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v0.35.0
-Last updated: 2026-09-28 · per-bus peak metering after each bus's gain and pan
+Current build version: v0.85.0
+Last updated: 2026-09-30 · no Rust change since v0.64.0's transient detection (the last entry below); the header had read v0.35.0
 
 ---
 

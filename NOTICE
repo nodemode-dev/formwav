@@ -28,3 +28,10 @@ provides (sections 7 and 8), formwav is provided "as is", without warranties or
 conditions of any kind, and its contributors are not liable for its use or misuse.
 AI models formwav can download at a person's request are not part of formwav,
 are not distributed with it, and remain under their publishers' own licences.
+The optional components each install from their own requirements file in
+backend/ and are never bundled: faster-whisper (transcription), Demucs (stem
+separation), the Qwen3-TTS packages (voice generation), an RNNoise model from
+GregorR/rnnoise-models fetched on first use (noise suppression), and Meta's
+SAM-Audio (Isolate sound), which is licensed under Meta's SAM License and whose
+checkpoints are gated behind a manual access request on Hugging Face. Anyone
+installing a component accepts that component's licence, not formwav's.

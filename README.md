@@ -11,17 +11,18 @@
 
 ## What it is
 
-formwav is an open-source audio editor that runs on your own machine: record, edit, repair, mix & export w/o an account, an upload or a usage meter. It is built to sit beside formcut (video, `.fmc`) & formvis (image, `.fmv`) w/ the same architecture & design system, & it saves `.fmw` projects. Its target is a measured 90% on a sourced parity scoreboard against the leading audio editors. This is v0.6.0: import or drop a WAV, or record from your microphone, & it lands as a track w/ its waveform; play the session through the Rust core running as WebAssembly in the browser's audio thread; undo & redo every change; save the session as a self-contained `.fmw` & open it again. Editing follows.
+formwav is an open-source audio editor that runs on your own machine: record, edit, repair, mix & export w/o an account, an upload or a usage meter. It is built to sit beside formcut (video, `.fmc`) & formvis (image, `.fmv`) w/ the same architecture & design system, & it saves `.fmw` projects. Its target is a measured 90% on a sourced parity scoreboard against the leading audio editors. At v0.85.0 it is a multitrack editor: import any common audio format or the audio of a video, record, cut, trim, fade, group and move clips across tracks, edit speech by editing its transcript, apply 90 offline effects (23 with controls) to a clip or a selected range, run filters and a compressor live on tracks, buses and the master, mix with buses, VCAs and automation, detect tempo and key, separate stems, isolate a described sound, and export in any of eight formats with peak and BS.1770 loudness. Every edit is one undo step, the browser plays the session through the Rust core running as WebAssembly, and the engine renders exports through the same core. The measured gaps are listed under Not built or not verified yet.
 
-**Stack.** Vanilla TypeScript 7 & Vite 8 · Python 3.12 & FastAPI · Rust (`formwav-dsp`, also built into the engine as a Python module) · about 1,710 lines of formwav's own TypeScript, CSS, Python & Rust in v0.3.0, vendored design-system files excluded.
+**Stack.** Vanilla TypeScript 7 & Vite 8 · Python 3.12 & FastAPI · Rust (`formwav-dsp`, also built into the engine as a Python module) · about 12,800 lines of formwav's own TypeScript, CSS, Python & Rust at v0.85.0, vendored design-system & voice files excluded.
 
 ## Highlights
 
 - **Engine link, verified.** The interface asks the engine for its health through the dev proxy & shows the answer in place; an engine that is down reads as offline, not as a spinner.
 - **Zero-flash shell.** Mounted once & patched in place. Under 4x CPU throttling & a Fast 3G profile: layout shift 0, only the status chip's text & state change after mount, & the first frames are already the theme's background in dark & light profiles.
 - **NodeMode design system.** Tokens, the 14 theme profiles & the pre-paint theme boot, vendored verbatim, so formwav matches formvis & NodeMode surface for surface.
-- **Audio graph built for the whole plan.** Ports are N-channel audio or events from the first build, so MIDI, surround & ambisonics add nodes rather than reshape the graph. Kind mismatches, cycles & duplicate edges are refused.
-- **Import, see, undo.** Import or drop a WAV (PCM 8 to 32 bit, float 32 & 64) & it lands as a track w/ a waveform drawn from peaks the Rust core computes; every change is an undo step, 200 deep, on Cmd or Ctrl Z.
+- **One mixer, two places.** The Rust core mixes clips, fades, buses, VCAs, automation & the realtime effects the same way in the browser's audio thread & in the engine's export, so what plays is what renders. The crate also carries an N-channel port graph (audio & event ports, kind mismatches, cycles & duplicate edges refused) that the mixer does not use yet; MIDI, surround & ambisonics would start there.
+- **Import, edit, undo.** Import or drop MP3, M4A, FLAC, OGG, Opus, AIFF, WAV or a video's audio, resampled to the session's rate; every change is an undo step, 200 deep, on Cmd or Ctrl Z.
+- **Optional AI components, each under its own licence.** Transcription (faster-whisper), stem separation (Demucs), voice generation (the owner's formwave code with Qwen3-TTS), noise suppression (an RNNoise model fetched on first use) & Isolate sound (Meta's SAM-Audio, under Meta's SAM License, with weights gated behind a manual access request on Hugging Face). None is part of formwav or shipped with it; each has its own requirements file in `backend/`, the app runs without them & says what is missing.
 - **Loopback only.** The interface & the engine bind 127.0.0.1; nothing listens on the network unless `HOST` says so.
 
 ## Quick Start
@@ -72,25 +73,32 @@ formwav/
 ├── formwav_oc_install(.bat)           install both sides
 ├── assets/                            repo art (README logo), not app runtime files
 ├── backend/                           FastAPI engine, app.main:app, routes under /api
+│   ├── app/routers/                   health, media (import, analysis, effects, isolate), presets, projects, render
+│   ├── app/services/                  effects, eqmatch, export, key, media, projects, render, samaudio, separate, tempo, tools, transcript
+│   ├── app/voice/                     formwave's generative voice, vendored, mounted at /api/voice
+│   └── requirements*.txt              core, then one file per optional component
 ├── frontend/                          vanilla TypeScript & Vite interface
-│   ├── src/engine/                    headless state w/ granular events, no DOM
+│   ├── src/engine/                    the session document, its commands & undo history, no DOM
+│   ├── src/audio/                     AudioWorklet playback & recording over the wasm core
 │   ├── src/extensions/                registry & one folder per feature (engine-link)
-│   ├── src/io/                        engine client
-│   ├── src/ui/                        shell & icons
+│   ├── src/io/                        engine, media, presets, projects & render clients
+│   ├── src/ui/                        panes, lanes, mixer, ruler, transport, shell & icons
 │   ├── src/styles/                    formwav's own styles, tokens only
 │   └── src/vendor/nodemode/           verbatim NodeMode tokens, themes, DOM helpers (MIT)
-└── native/formwav-dsp/                Rust audio core: graph & port model, WAV decoding, peaks, Python module
+└── native/formwav-dsp/                Rust audio core: mixing, buses, effects, loudness, onsets, peaks, WAV, wasm & Python bindings
 ```
 
 Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoning the code would otherwise carry as comments. Read it before editing.
 
 ## Not built or not verified yet
 
-- **Editing.** Import, lanes, undo, playback, recording, save & open work (Space to play & stop, R to record, Home to the start, click a lane to seek, Cmd or Ctrl S to save & O to open); there is no clip editing yet, & takes are not yet shifted for audio latency. Loop is shown disabled so the transport's layout is fixed.
+- **Recording latency.** Takes are not shifted by the round-trip latency, so overdubs land late by it; one armed track records at a time.
+- **Bus routing in the core.** A compressor on a track routed to a user bus is not placed in export (nested buses); its filters still run per clip. There are no sends, & the 90 catalogue effects render offline rather than live.
+- **Isolate sound.** Wired end to end & verified against a test double of the SAM-Audio package; not yet run on the real, gated weights, so how well it isolates is unmeasured.
+- **Voice generation & separation.** Voice generation is verified on the owner's Mac only; stem separation runs on the CPU here (211 s for a 2:44 song). Key detection is tuned on one real song plus synthetic progressions.
 - **Windows scripts.** Written, not run on Windows yet.
-- **Desktop app.** The Tauri shell arrives w/ packaging; v0.1.0 runs in the browser only.
-- **Native core in the interface.** The interface runs `formwav-dsp` as WebAssembly for playback; the desktop build of the core comes w/ packaging. Clips at a sample rate other than the session's stay silent until resampling lands.
-- **Formats beyond WAV.** Import reads WAV (PCM 8 to 32 bit, float 32 & 64, extensible headers); other formats arrive w/ the ffmpeg sidecar.
+- **Desktop app.** The Tauri shell arrives w/ packaging; formwav runs in the browser only.
+- **The port graph.** `formwav-dsp` exports an N-channel port graph the mixer does not use yet; MIDI, surround & plug-in hosting are not built.
 
 ## Development
 
