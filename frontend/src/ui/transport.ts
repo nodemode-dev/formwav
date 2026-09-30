@@ -11,6 +11,8 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
   const stop = button("stop");
   const lanes = host.querySelector<HTMLElement>(".fw-lanes");
   const notice = host.querySelector<HTMLElement>(".fw-notice");
+  const speed = host.querySelector<HTMLSelectElement>("[data-speed]");
+  speed?.addEventListener("change", () => player.setSpeed(Number(speed.value) || 1));
   const playhead = document.createElement("div");
   playhead.className = "fw-playhead";
   playhead.setAttribute("aria-hidden", "true");

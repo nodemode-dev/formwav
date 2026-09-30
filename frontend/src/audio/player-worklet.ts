@@ -68,6 +68,7 @@ export type WorkletMessage =
   | { type: "load"; id: number; bytes: ArrayBuffer }
   | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[] }
   | { type: "play" }
+  | { type: "speed"; value: number }
   | { type: "stop" }
   | { type: "seek"; position: number }
   | { type: "loop"; start: number; end: number };
@@ -93,6 +94,13 @@ class PlayerProcessor extends AudioWorkletProcessor {
   private right = 0;
   private playing = false;
   private end = 0;
+  // Play-at-speed (Audacity's varispeed, pitch following speed): a read buffer the core refills 128 samples at a
+  // time, read at `speed` samples per output sample with linear interpolation; unused at 1x.
+  private speed = 1;
+  private readPos = 0;
+  private bufLen = 0;
+  private bufL = new Float32Array(1024);
+  private bufR = new Float32Array(1024);
   private quanta = 0;
   private peaks = 0;
   private views: { buffer: ArrayBuffer; frames: number; left: Float32Array; right: Float32Array } | null = null;
@@ -192,6 +200,8 @@ class PlayerProcessor extends AudioWorkletProcessor {
       }
       case "seek":
         core.fw_seek(this.player, msg.position);
+        this.readPos = 0;
+        this.bufLen = 0;
         this.report();
         break;
       case "loop":
@@ -199,8 +209,19 @@ class PlayerProcessor extends AudioWorkletProcessor {
         break;
       case "play":
         this.playing = true;
+        this.readPos = 0;
+        this.bufLen = 0;
         if (this.core) this.core.fw_loudness_reset(this.player, sampleRate);
         break;
+      case "speed": {
+        const value = Math.min(4, Math.max(0.25, Number(msg.value) || 1));
+        if (value !== this.speed) {
+          this.speed = value;
+          this.readPos = 0;
+          this.bufLen = 0;
+        }
+        break;
+      }
       case "stop":
         this.playing = false;
         this.report();
@@ -208,20 +229,62 @@ class PlayerProcessor extends AudioWorkletProcessor {
     }
   }
 
+  private chunk: { buffer: ArrayBuffer; left: Float32Array; right: Float32Array } | null = null;
+
+  /** Varispeed: each output sample interpolated at the read position, which advances by `speed`; the buffer keeps
+   * the sample before the read position across refills, so blocks join without a click. */
+  private renderAtSpeed(core: CoreExports, out: Float32Array[], frames: number): void {
+    const left = out[0];
+    const right = out[1];
+    for (let i = 0; i < frames; i++) {
+      while (this.readPos + 1 >= this.bufLen) this.refill(core);
+      const k = Math.floor(this.readPos);
+      const a = this.readPos - k;
+      left[i] = this.bufL[k] + (this.bufL[k + 1] - this.bufL[k]) * a;
+      if (right) right[i] = this.bufR[k] + (this.bufR[k + 1] - this.bufR[k]) * a;
+      this.readPos += this.speed;
+    }
+  }
+
+  private refill(core: CoreExports): void {
+    const keep = Math.floor(this.readPos);
+    if (keep > 0) {
+      this.bufL.copyWithin(0, keep, this.bufLen);
+      this.bufR.copyWithin(0, keep, this.bufLen);
+      this.bufLen -= keep;
+      this.readPos -= keep;
+    }
+    const n = 128;
+    core.fw_render(this.player, this.left, this.right, n);
+    const buffer = core.memory.buffer;
+    let chunk = this.chunk;
+    if (!chunk || chunk.buffer !== buffer) {
+      chunk = { buffer, left: new Float32Array(buffer, this.left, n), right: new Float32Array(buffer, this.right, n) };
+      this.chunk = chunk;
+    }
+    this.bufL.set(chunk.left, this.bufLen);
+    this.bufR.set(chunk.right, this.bufLen);
+    this.bufLen += n;
+  }
+
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const core = this.core;
     const out = outputs[0];
     if (!core || !this.playing || !out || out.length === 0) return true;
     const frames = Math.min(out[0].length, MAX_FRAMES);
-    core.fw_render(this.player, this.left, this.right, frames);
-    const buffer = core.memory.buffer;
-    let views = this.views;
-    if (!views || views.buffer !== buffer || views.frames !== frames) {
-      views = { buffer, frames, left: new Float32Array(buffer, this.left, frames), right: new Float32Array(buffer, this.right, frames) };
-      this.views = views;
+    if (this.speed !== 1) {
+      this.renderAtSpeed(core, out, frames);
+    } else {
+      core.fw_render(this.player, this.left, this.right, frames);
+      const buffer = core.memory.buffer;
+      let views = this.views;
+      if (!views || views.buffer !== buffer || views.frames !== frames) {
+        views = { buffer, frames, left: new Float32Array(buffer, this.left, frames), right: new Float32Array(buffer, this.right, frames) };
+        this.views = views;
+      }
+      out[0].set(views.left);
+      if (out[1]) out[1].set(views.right);
     }
-    out[0].set(views.left);
-    if (out[1]) out[1].set(views.right);
     this.quanta++;
     const position = core.fw_position(this.player);
     if (this.end > 0 && position >= this.end) {

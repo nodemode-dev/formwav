@@ -246,7 +246,16 @@ export class Player {
     node.port.addEventListener("message", this.onReply);
     this.ctx = ctx;
     this.node = node;
+    if (this.speed !== 1) send(node, { type: "speed", value: this.speed });
     return node;
+  }
+
+  private speed = 1;
+
+  /** Play-at-speed (Audacity's varispeed): 0.25 to 4 times, pitch following speed; playback only, exports unchanged. */
+  setSpeed(value: number): void {
+    this.speed = Math.min(4, Math.max(0.25, value));
+    if (this.node) send(this.node, { type: "speed", value: this.speed });
   }
 
   private open = false;
