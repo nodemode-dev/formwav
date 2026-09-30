@@ -22,6 +22,7 @@ const BODY = `
   <label class="fw-field fw-field-stack"><span>Effect</span><select data-fx="pick"></select></label>
   <div class="fw-fx-params"></div>
   <div class="fw-analyze-buttons"><select data-preset="fx" aria-label="Preset for this effect"><option value="">Presets</option></select><button type="button" class="fw-ibtn" data-preset="fx-save">Save preset</button><button type="button" class="fw-ibtn" data-preset="fx-delete">Delete</button></div>
+  <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip the tonal balance of the reference clip">Match EQ</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
   <ol class="fw-chain" hidden></ol>
@@ -618,6 +619,47 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     } catch (err) {
       setText(notice, `Could not pitch the clip: ${err instanceof Error ? err.message : String(err)}`);
       syncPitch();
+    }
+  });
+
+  // EQ match (iZotope RX's EQ Match): the selected clip takes the tonal balance of another clip's visible region.
+  const eqmRef = body.querySelector<HTMLSelectElement>('[data-eqm="ref"]');
+  const eqmGo = body.querySelector<HTMLButtonElement>('[data-eqm="go"]');
+  const fillEqm = () => {
+    const doc = engine.get("document");
+    const hit = find(doc);
+    if (!eqmRef) return;
+    const others = doc.tracks.flatMap((t) => t.clips.filter((c) => c.id !== hit?.clip.id).map((c) => ({ id: c.id, label: `${t.name} · ${(c.start / doc.sampleRate).toFixed(2)} s` })));
+    const sig = others.map((o) => `${o.id}=${o.label}`).join("|");
+    if (eqmRef.dataset.sig !== sig) {
+      const keep = eqmRef.value;
+      eqmRef.dataset.sig = sig;
+      eqmRef.replaceChildren(...(others.length ? others.map((o) => new Option(o.label, o.id)) : [new Option("No other clip", "")]));
+      if (others.some((o) => o.id === keep)) eqmRef.value = keep;
+    }
+    if (eqmGo && eqmGo.disabled === others.length > 0) eqmGo.disabled = others.length === 0;
+  };
+  engine.subscribe("document", fillEqm);
+  host.addEventListener("fw-selection", () => queueMicrotask(fillEqm));
+  eqmGo?.addEventListener("click", async () => {
+    const doc = engine.get("document");
+    const hit = find(doc);
+    const ref = doc.tracks.flatMap((t) => t.clips).find((c) => c.id === eqmRef?.value);
+    const refMedia = ref ? doc.media[ref.mediaId] : undefined;
+    if (!hit || !ref || !refMedia) return;
+    const start = ref.sourceIn / refMedia.sampleRate;
+    const end = start + ref.length / doc.sampleRate;
+    setText(notice, "Matching the EQ...");
+    try {
+      const q = `reference=${encodeURIComponent(ref.mediaId)}&start=${start.toFixed(6)}&end=${end.toFixed(6)}`;
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/eq-match?${q}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      if (find(engine.get("document"))?.clip.id !== hit.clip.id) return; // the selection moved on while matching
+      engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
+      setText(notice, "EQ matched to the reference; undo to go back");
+    } catch (err) {
+      setText(notice, `Could not match the EQ: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 
