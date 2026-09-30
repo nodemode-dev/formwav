@@ -23,7 +23,8 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-analyze" hidden>
   <div class="fw-insp-head">Analyze</div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="stats">Statistics</button><button type="button" class="fw-ibtn" data-an="spectrogram">Spectrogram</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="stats">Statistics</button><button type="button" class="fw-ibtn" data-an="spectrogram">Spectrogram</button><button type="button" class="fw-ibtn" data-an="mic">Mic check</button></div>
+  <ul class="fw-mic-findings" hidden></ul>
   <dl class="fw-stats"></dl>
   <img class="fw-spectrogram" alt="Spectrogram of the selected clip" hidden>
 </div>
@@ -338,6 +339,64 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       }
     } catch (err) {
       setText(notice, `Could not analyze the clip: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // Mic check (Adobe Podcast's mic analysis, RX's Repair Assistant): findings with the effect that addresses each.
+  const findingsList = body.querySelector<HTMLElement>(".fw-mic-findings");
+  host.addEventListener("fw-selection", () => {
+    if (findingsList && !findingsList.hidden) {
+      findingsList.hidden = true;
+      findingsList.replaceChildren();
+    }
+  });
+  body.addEventListener("click", async (e) => {
+    const target = e.target as HTMLElement;
+    const use = target.closest<HTMLElement>("[data-use]")?.dataset.use;
+    if (use && pick) {
+      if ([...pick.options].some((o) => o.value === use)) {
+        if (search && search.value) {
+          search.value = "";
+          search.dispatchEvent(new Event("input"));
+        }
+        pick.value = use;
+        showControls();
+        pick.focus();
+      }
+      return;
+    }
+    if (target.closest<HTMLElement>("[data-an]")?.dataset.an !== "mic") return;
+    const hit = find(engine.get("document"));
+    if (!hit || !findingsList) return;
+    setText(notice, "Checking the recording...");
+    try {
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/mic-check`);
+      if (!res.ok) throw new Error(`the engine answered ${res.status}`);
+      const report = (await res.json()) as { findings: { level: string; text: string; suggest: string | null }[] };
+      findingsList.replaceChildren(
+        ...report.findings.map((f) => {
+          const item = document.createElement("li");
+          item.className = `fw-finding is-${f.level}`;
+          const text = document.createElement("span");
+          text.textContent = f.text;
+          item.append(text);
+          const option = f.suggest && pick ? [...pick.options].find((o) => o.value === f.suggest) : undefined;
+          if (option && f.suggest) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "fw-ibtn";
+            button.dataset.use = f.suggest;
+            button.textContent = `Use ${(option.textContent ?? f.suggest).replace(/\.+$/, "")}`;
+            item.append(button);
+          }
+          return item;
+        }),
+      );
+      findingsList.hidden = false;
+      const open = report.findings.filter((f) => f.level !== "ok").length;
+      setText(notice, open ? `Mic check: ${open} thing${open === 1 ? "" : "s"} to look at` : "Mic check: the recording looks good");
+    } catch (err) {
+      setText(notice, `Could not check the recording: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 

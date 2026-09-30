@@ -151,6 +151,13 @@
 .fw-recent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fw-recent-meta { flex: none; font-size: 12px; color: var(--text-secondary); }
 .fw-fx-search { inline-size: 100%; padding: 4px 8px; font: inherit; font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
+.fw-mic-findings { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.fw-mic-findings[hidden] { display: none; }
+.fw-finding { display: grid; gap: 4px; padding: 6px 8px; border-inline-start: 3px solid var(--border-color); border-radius: 4px; background: var(--bg-tertiary); }
+.fw-finding.is-ok { border-inline-start-color: var(--success-color, #3fb950); }
+.fw-finding.is-warn { border-inline-start-color: var(--accent-color); }
+.fw-finding.is-bad { border-inline-start-color: var(--error-color, #f85149); }
+.fw-finding .fw-ibtn { justify-self: start; }
 
 .fw-export-dialog { inline-size: min(360px, calc(100vw - 32px)); padding: 16px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; }
 .fw-export-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
@@ -186,7 +193,8 @@
 .fw-generate .fw-field { grid-template-columns: 64px minmax(0, 1fr) auto; }
 .fw-generate .fw-field.fw-field-stack { grid-template-columns: minmax(0, 1fr); }
 .fw-field input[type="text"] { inline-size: 100%; padding: 3px 6px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
-.fw-analyze-buttons { display: flex; gap: 6px; }
+.fw-analyze-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.fw-analyze-buttons .fw-ibtn { white-space: nowrap; }
 .fw-stats { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: 12px; }
 .fw-stats:empty { display: none; }
 .fw-stats dt { color: var(--text-secondary); }

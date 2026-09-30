@@ -1262,3 +1262,10 @@ Audacity's home screen of recent projects: the empty timeline lists the six late
 - logged: v0.54.0 (in progress) · 2026-09-30
 
 iZotope RX's module search: a search box filters the Effects menu by effect or group name as you type, hiding empty groups and moving the choice to the first match when the current one is hidden. Batch processing (Adobe Podcast's queue, RX's batch processor): Apply to all clips runs the chosen effect with its current controls on every clip, rendering each distinct file once and switching every clip in one batch command, one undo step. Verified in Chromium (verify_batch_search.py): "de-" left the nine de- effects; "zzz" left no options and no groups; clearing restored 88; Amplify -6 dB on all clips of a two-track session changed both in one undo step at 0.5012 of their peaks, and undo restored both; no Inspector overflow; containment with vertical overflow clean at three sizes; screenshot inspected; no page errors.
+
+### src/ui/inspector-pane.ts, styles/workspace.css · Mic check in Analyze
+- refers-to: src/ui/inspector-pane.ts :: the `mic` action, `.fw-mic-findings`, the `data-use` buttons; src/styles/workspace.css :: `.fw-finding`, `.fw-analyze-buttons`
+- kind: explainer
+- logged: v0.54.0 (in progress) · 2026-09-30
+
+Analyze gains Mic check: the engine's findings for the inspected clip, marked OK, warning or problem, each with a Use button that selects its suggested effect (clearing any effect search) and shows its controls, ready to apply; findings clear when the selection changes. The screenshot showed the third Analyze button's label wrapping inside the button, which the overflow measures could not see: labels in these rows now never wrap and the row wraps whole buttons. Verified in Chromium (verify_mic_check.py) on the hum recording: two OK findings and one warning with Use Hum remover, which selected it, and Apply produced "hum (Hum remover).wav"; every Analyze and Apply button one line (28 px); no overflow; containment with vertical overflow clean at three sizes; no page errors.
