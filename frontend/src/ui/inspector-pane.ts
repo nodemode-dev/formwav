@@ -29,6 +29,7 @@ const BODY = `
   <ol class="fw-chain" hidden></ol>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
   <div class="fw-analyze-buttons"><input type="text" class="fw-sam-desc" data-sam="desc" maxlength="80" placeholder="Describe a sound" title="What to isolate, for example: man speaking, car horn" aria-label="Sound to isolate"><button type="button" class="fw-ibtn" data-sam="go" title="Put the described sound and everything else on new tracks (SAM-Audio); a selected range marks where the sound occurs">Isolate sound</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Let the model find where the described sound occurs from the text alone; a selected range is used instead when there is one"><input type="checkbox" data-sam="predict"> Find where it occurs</label><label class="fw-sam-opt" title="Separate this many candidates and keep the one the model's judge ranks best; slower with more"><span>Candidates</span><select data-sam="candidates" aria-label="Candidate separations to re-rank"><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option></select></label></div>
   <div class="fw-sam-status" data-sam-status></div>
 </div>
 <div class="fw-insp-section fw-insp-analyze" hidden>
@@ -502,6 +503,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const samStatus = body.querySelector<HTMLElement>("[data-sam-status]");
   const samDesc = body.querySelector<HTMLInputElement>('[data-sam="desc"]');
   const samGo = body.querySelector<HTMLButtonElement>('[data-sam="go"]');
+  const samPredict = body.querySelector<HTMLInputElement>('[data-sam="predict"]');
+  const samCandidates = body.querySelector<HTMLSelectElement>('[data-sam="candidates"]');
   void fetch("/api/sam-audio/status")
     .then((r) => (r.ok ? r.json() : null))
     .then((s: { message?: string } | null) => setText(samStatus, s?.message ?? "SAM-Audio: status unavailable"))
@@ -523,10 +526,12 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const end = start + hit.clip.length / doc.sampleRate;
     const on = rangeOnClip();
     const spans = on && on.clip.id === hit.clip.id ? [[(on.from - hit.clip.start) / doc.sampleRate, (on.to - hit.clip.start) / doc.sampleRate]] : null;
+    const predict = !spans && (samPredict?.checked ?? false);
+    const candidates = Math.max(1, Math.min(8, Number(samCandidates?.value) || 1));
     samGo.disabled = true;
-    setText(notice, `Isolating "${description}"${spans ? " in the selected range" : ""} (slow without a GPU)...`);
+    setText(notice, `Isolating "${description}"${spans ? " in the selected range" : predict ? ", finding where it occurs" : ""}${candidates > 1 ? ` from ${candidates} candidates` : ""} (slow without a GPU)...`);
     try {
-      const q = `description=${encodeURIComponent(description)}&start=${start}&end=${end}${spans ? `&spans=${encodeURIComponent(JSON.stringify(spans))}` : ""}`;
+      const q = `description=${encodeURIComponent(description)}&start=${start}&end=${end}${spans ? `&spans=${encodeURIComponent(JSON.stringify(spans))}` : ""}&predict_spans=${predict}&candidates=${candidates}`;
       const res = await fetch(`/api/media/${source.id}/isolate?${q}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown } | { source: string; media: MediaRef }[];
       if (!res.ok || !Array.isArray(out)) throw new Error(!Array.isArray(out) && typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
