@@ -481,3 +481,10 @@ Audacity's one preset system across built-in, destructive and realtime effects: 
 - logged: v0.75.0 (in progress) · 2026-09-30
 
 A clip carrying `pitchMediaId` (non-destructive pitch) exports that same-length render instead of its original media, as playback does. Verified by FFT of exports (the frontend log's verify_pitch.py): 880.0 Hz at +12, 220.5 Hz at -12 and 440.0 Hz at 0 from a 440 Hz clip.
+
+### app/services/render.py · a user bus's effects in the export plan
+- refers-to: app/services/render.py :: `plan` (`bus_chains`)
+- kind: explainer
+- logged: v0.76.0 (in progress) · 2026-09-30
+
+A user bus's `fx` become stage chains on that bus (target 1, its index), collected while buses are read and placed first in `chains`, so the core processes the sum of every track routed to the bus. Verified by FFT of exports (the frontend log's verify_busfx.py): a 2000 Hz high-pass on a bus cut its routed track's 100 Hz by 52.14 dB and left an unrouted track's 1 kHz unchanged.

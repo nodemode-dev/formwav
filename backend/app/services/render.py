@@ -34,6 +34,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     soloed = any(t.get("solo") for t in tracks)
     buses: dict[str, tuple[int, float, float]] = {}
     muted_buses: set[str] = set()
+    bus_chains: list[tuple] = []
     for bus in doc.get("buses") or []:
         if not isinstance(bus, dict) or not isinstance(bus.get("id"), str):
             continue
@@ -41,11 +42,13 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             muted_buses.add(bus["id"])
             continue
         buses[bus["id"]] = (len(buses) + 1, math.pow(10, float(bus.get("gainDb", 0)) / 20), float(bus.get("pan") or 0))
+        # A bus's own effects (Pro Tools' routing folders process the summed stem) run on its sum, in order.
+        bus_chains.extend((1, len(buses) - 1, *s) for s in (_stage(f) for f in (bus.get("fx") or [])) if s)
     sources: dict[str, int] = {}
     clips: list[tuple] = []
     envelopes: list[tuple] = []
     fx: list[tuple] = []
-    chains: list[tuple] = []
+    chains: list[tuple] = list(bus_chains)
     end = 0
     skipped = 0
     for track in tracks:
