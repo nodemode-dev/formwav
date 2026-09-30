@@ -185,6 +185,7 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "presence-lift": ({"freq": ("Frequency", 200, 12000, 3000, "Hz"), "gain": ("Gain", -15, 15, 5, "dB")}, lambda v: f"equalizer=f={v['freq']:.0f}:t=q:w=1.2:g={v['gain']:.1f}"),
     "echo": ({"delay": ("Delay", 20, 2000, 100, "ms"), "decay": ("Decay", 5, 90, 40, "%")}, lambda v: f"aecho=0.8:0.7:{v['delay']:.0f}:{v['decay'] / 100:.2f}"),
     "click-removal": ({"threshold": ("Threshold", 1, 20, 2, ""), "window": ("Window", 10, 100, 55, "ms")}, lambda v: f"adeclick=w={v['window']:.0f}:t={v['threshold']:.1f}"),
+    "gap-repair": ({"window": ("Window", 10, 100, 10, "ms"), "order": ("Order", 0, 25, 4, "")}, lambda v: f"adeclick=w={v['window']:.0f}:o=50:a={v['order']:.0f}"),
     "de-clip": ({"threshold": ("Threshold", 1, 100, 10, ""), "window": ("Window", 10, 100, 55, "ms")}, lambda v: f"adeclip=w={v['window']:.0f}:t={v['threshold']:.1f}"),
     "de-crackle": ({"threshold": ("Threshold", 1, 20, 5, ""), "window": ("Window", 10, 100, 20, "ms")}, lambda v: f"adeclick=w={v['window']:.0f}:o=75:t={v['threshold']:.1f}"),
     "mouth-declick": ({"threshold": ("Threshold", 1, 20, 2, ""), "window": ("Window", 10, 100, 10, "ms")}, lambda v: f"highpass=f=60,adeclick=w={v['window']:.0f}:o=75:t={v['threshold']:.1f}"),
