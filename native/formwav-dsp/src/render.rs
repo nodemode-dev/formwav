@@ -100,6 +100,12 @@ pub struct Player {
     envelopes: Vec<Envelope>,
     master_gain: Option<f32>,
     bus_peaks: Vec<(f32, f32)>,
+    /// The session's sample rate, for designing filters (48 kHz when unset).
+    rate: f32,
+    /// Each clip's track effect chain, parallel to `clips`: one copy advanced by the audio mix, one by the meter
+    /// pass, since `meter_tracks` mixes every clip again and a shared state would advance twice a block.
+    clip_fx: Vec<Vec<crate::fx::Biquad>>,
+    meter_fx: Vec<Vec<crate::fx::Biquad>>,
 }
 
 impl Player {
@@ -113,10 +119,36 @@ impl Player {
 
     pub fn clear_clips(&mut self) {
         self.clips.clear();
+        self.clip_fx.clear();
+        self.meter_fx.clear();
     }
 
     pub fn add_clip(&mut self, clip: PlayClip) {
         self.clips.push(clip);
+        self.clip_fx.push(Vec::new());
+        self.meter_fx.push(Vec::new());
+    }
+
+    pub fn set_rate(&mut self, rate: f32) {
+        self.rate = rate;
+    }
+
+    /// Appends a filter stage to the most recently added clip's chain; false when there is no clip or the filter is
+    /// refused (an unknown kind).
+    pub fn add_clip_fx(&mut self, kind: u8, freq: f32, gain_db: f32, q: f32) -> bool {
+        let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
+        let (Some(chain), Some(meter), Some(f)) = (self.clip_fx.last_mut(), self.meter_fx.last_mut(), crate::fx::Biquad::design(kind, freq, gain_db, q, rate)) else {
+            return false;
+        };
+        chain.push(f);
+        meter.push(f);
+        true
+    }
+
+    fn reset_fx(&mut self) {
+        for f in self.clip_fx.iter_mut().chain(self.meter_fx.iter_mut()).flatten() {
+            f.reset();
+        }
     }
 
     pub fn clear_envelopes(&mut self) {
@@ -151,6 +183,7 @@ impl Player {
 
     pub fn seek(&mut self, position: u64) {
         self.position = position;
+        self.reset_fx();
     }
 
     pub fn position(&self) -> u64 {
@@ -171,14 +204,17 @@ impl Player {
                 }
             }
             let len = span as usize;
-            self.mix(&mut left[done..done + len], &mut right[done..done + len], from, |c| c.bus == 0);
-            self.mix_buses(&mut left[done..done + len], &mut right[done..done + len], from);
+            let mut fx = std::mem::take(&mut self.clip_fx);
+            self.mix(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from, |c| c.bus == 0);
+            self.mix_buses(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from);
+            self.clip_fx = fx;
             self.meter_tracks(from, len);
             done += len;
             self.position = from + span;
             if let Some((start, end)) = self.loop_range {
                 if self.position == end {
                     self.position = start;
+                    self.reset_fx();
                 }
             }
         }
@@ -209,7 +245,7 @@ impl Player {
         self.buses.push(bus);
     }
 
-    fn mix_buses(&mut self, left: &mut [f32], right: &mut [f32], from: u64) {
+    fn mix_buses(&mut self, fx: &mut [Vec<crate::fx::Biquad>], left: &mut [f32], right: &mut [f32], from: u64) {
         if self.buses.is_empty() {
             return;
         }
@@ -228,7 +264,7 @@ impl Player {
             scratch_left[..n].fill(0.0);
             scratch_right[..n].fill(0.0);
             let id = bus.id;
-            self.mix(&mut scratch_left[..n], &mut scratch_right[..n], from, |c| c.bus == id);
+            self.mix(fx, &mut scratch_left[..n], &mut scratch_right[..n], from, |c| c.bus == id);
             let (pan_left, pan_right) = pan_gains(bus.pan);
             let gain_left = bus.gain * pan_left;
             let gain_right = bus.gain * pan_right;
@@ -247,16 +283,17 @@ impl Player {
         self.scratch_right = scratch_right;
     }
 
-    fn mix(&self, left: &mut [f32], right: &mut [f32], from: u64, select: impl Fn(&PlayClip) -> bool) {
+    fn mix(&self, fx: &mut [Vec<crate::fx::Biquad>], left: &mut [f32], right: &mut [f32], from: u64, select: impl Fn(&PlayClip) -> bool) {
         let n = left.len().min(right.len());
         let to = from + n as u64;
-        for clip in &self.clips {
+        for (index, clip) in self.clips.iter().enumerate() {
             if !select(clip) {
                 continue;
             }
             let Some(src) = self.sources.get(&clip.source) else { continue };
             let Some(l) = src.channels.first() else { continue };
             let r = src.channels.get(1).unwrap_or(l);
+            let mut chain = fx.get_mut(index).filter(|c| !c.is_empty());
             let a = from.max(clip.start);
             let b = to.min(clip.start + clip.length);
             let (pan_left, pan_right) = pan_gains(clip.pan);
@@ -278,14 +315,21 @@ impl Player {
                     fade *= fade_curve((clip.length - k) as f32 / fade_out as f32, clip.fade_shape);
                 }
                 let i = (t - from) as usize;
+                let (mut xl, mut xr) = (l[s], r[s]);
+                if let Some(stages) = chain.as_deref_mut() {
+                    for f in stages.iter_mut() {
+                        xl = f.process(0, xl);
+                        xr = f.process(1, xr);
+                    }
+                }
                 if clip.gain_env == 0 && clip.pan_env == 0 {
-                    left[i] += l[s] * gain_left * fade;
-                    right[i] += r[s] * gain_right * fade;
+                    left[i] += xl * gain_left * fade;
+                    right[i] += xr * gain_right * fade;
                 } else {
                     let gain = clip.gain * self.envelope(clip.gain_env).map_or(1.0, |e| e.value_at(t));
                     let (pl, pr) = self.envelope(clip.pan_env).map_or((pan_left, pan_right), |e| pan_gains(e.value_at(t)));
-                    left[i] += l[s] * (gain * pl) * fade;
-                    right[i] += r[s] * (gain * pr) * fade;
+                    left[i] += xl * (gain * pl) * fade;
+                    right[i] += xr * (gain * pr) * fade;
                 }
             }
         }
@@ -315,16 +359,18 @@ impl Player {
             meter_left.resize(n, 0.0);
             meter_right.resize(n, 0.0);
         }
+        let mut meter_fx = std::mem::take(&mut self.meter_fx);
         for track in 1..=count as u32 {
             meter_left[..n].fill(0.0);
             meter_right[..n].fill(0.0);
-            self.mix(&mut meter_left[..n], &mut meter_right[..n], from, |c| c.track == track);
+            self.mix(&mut meter_fx, &mut meter_left[..n], &mut meter_right[..n], from, |c| c.track == track);
             let peak = &mut self.track_peaks[track as usize];
             for i in 0..n {
                 peak.0 = peak.0.max(meter_left[i].abs());
                 peak.1 = peak.1.max(meter_right[i].abs());
             }
         }
+        self.meter_fx = meter_fx;
         self.meter_left = meter_left;
         self.meter_right = meter_right;
     }

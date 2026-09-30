@@ -11,6 +11,8 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new()))]
+#[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
     sources: Vec<(u32, Bound<'py, PyBytes>)>,
@@ -19,9 +21,12 @@ fn render<'py>(
     buses: Vec<(u32, f32, f32)>,
     envelopes: Vec<(Vec<(u64, f64)>, bool)>,
     master_db: f64,
+    rate: f32,
+    fx: Vec<(usize, u8, f32, f32, f32)>,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let mut player = Player::new();
     player.set_master_db(master_db);
+    player.set_rate(rate);
     for (id, bytes) in &sources {
         let buf = decode_wav(bytes.as_bytes()).map_err(|e| PyValueError::new_err(e.to_string()))?;
         player.load_source(*id, buf);
@@ -29,8 +34,11 @@ fn render<'py>(
     for (points, db) in &envelopes {
         player.add_envelope(points, *db);
     }
-    for (source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, gain_env, pan_env) in clips {
+    for (index, (source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, gain_env, pan_env)) in clips.into_iter().enumerate() {
         player.add_clip(PlayClip { source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, track: 0, gain_env, pan_env });
+        for &(_, kind, freq, gain_db, q) in fx.iter().filter(|f| f.0 == index) {
+            player.add_clip_fx(kind, freq, gain_db, q);
+        }
     }
     for (id, gain, pan) in buses {
         player.add_bus(crate::render::Bus { id, gain, pan });

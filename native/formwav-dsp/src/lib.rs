@@ -1,3 +1,4 @@
+pub mod fx;
 pub mod graph;
 pub mod loudness;
 pub mod peaks;
