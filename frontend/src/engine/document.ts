@@ -55,7 +55,18 @@ export interface AutoPoint {
   value: number;
 }
 
+/** A realtime track effect: a filter the audio core runs live in playback and export alike. */
+export interface TrackFx {
+  kind: "highpass" | "lowpass" | "peak" | "lowshelf" | "highshelf";
+  freq: number;
+  gainDb: number;
+  q: number;
+  bypass?: boolean;
+}
+
 export interface Track {
+  /** Realtime effects in order (Audacity's realtime stack); bypassed ones are skipped. */
+  fx?: TrackFx[];
   /** Volume (dB) and pan automation; when present each replaces the track's static fader or pan. */
   automation?: { volume?: AutoPoint[]; pan?: AutoPoint[] };
   id: string;
@@ -126,6 +137,7 @@ export type Command =
   | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
   | { type: "set-clip-group"; clipIds: string[]; groupId: string | null }
+  | { type: "set-track-fx"; trackId: string; fx: TrackFx[] }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
@@ -334,6 +346,17 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         return changed ? { ...t, clips } : t;
       });
     }
+    case "set-track-fx":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const kinds = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf"]);
+        const clamp = (v: number, lo: number, hi: number, fallback: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
+        const fx = cmd.fx
+          .filter((f) => kinds.has(f.kind))
+          .map((f) => ({ kind: f.kind, freq: clamp(f.freq, 20, 20000, 1000), gainDb: clamp(f.gainDb, -24, 24, 0), q: clamp(f.q, 0.1, 18, 0.707), ...(f.bypass ? { bypass: true } : {}) }));
+        if (JSON.stringify(fx) === JSON.stringify(t.fx ?? [])) return t;
+        const { fx: _old, ...rest } = t;
+        return fx.length ? { ...rest, fx } : rest;
+      });
     case "set-clip-group": {
       const ids = new Set(cmd.clipIds);
       let changed = false;

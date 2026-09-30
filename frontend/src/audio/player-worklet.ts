@@ -18,6 +18,8 @@ interface CoreExports {
   fw_free(ptr: number, bytes: number): void;
   fw_clear_buses(player: number): void;
   fw_add_bus(player: number, id: number, gain: number, pan: number): void;
+  fw_set_rate(player: number, rate: number): void;
+  fw_add_clip_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
   fw_take_peaks(player: number, out: number): void;
   fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
   fw_take_bus_peaks(player: number, out: number, maxBuses: number): number;
@@ -45,6 +47,8 @@ export interface WorkletClip {
   gainPoints?: number[];
   /** Track pan automation as flat [time, pan, ...]; replaces the track pan. */
   panPoints?: number[];
+  /** The track's realtime filters as flat [kind, freq, gainDb, q, ...] (core codes, fx.rs). */
+  fx?: number[];
 }
 
 export interface WorkletBus {
@@ -129,6 +133,8 @@ class PlayerProcessor extends AudioWorkletProcessor {
       const core = new WebAssembly.Instance(new WebAssembly.Module(msg.bytes), {}).exports as unknown as CoreExports;
       this.core = core;
       this.player = core.fw_player_new();
+      // The worklet scope's own sampleRate: filters are designed at the rate that actually plays.
+      core.fw_set_rate(this.player, sampleRate);
       this.left = core.fw_alloc(MAX_FRAMES * 4);
       this.right = core.fw_alloc(MAX_FRAMES * 4);
       this.peaks = core.fw_alloc(8 + MAX_METERED_TRACKS * 8 + 12 + MAX_METERED_BUSES * 8);
@@ -163,6 +169,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
           const gainEnv = envelope(c.gainPoints, true);
           const panEnv = envelope(c.panPoints, false);
           core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape, c.bus, c.track, gainEnv, panEnv);
+          if (c.fx) for (let k = 0; k + 3 < c.fx.length; k += 4) core.fw_add_clip_fx(this.player, c.fx[k], c.fx[k + 1], c.fx[k + 2], c.fx[k + 3]);
         }
         core.fw_clear_buses(this.player);
         for (const b of msg.buses) core.fw_add_bus(this.player, b.id, b.gain, b.pan);

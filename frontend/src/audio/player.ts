@@ -40,6 +40,9 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     const bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
     const volumePoints = track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
     const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
+    // The same kind codes as the export render (backend render.py FX_KINDS, core fx.rs).
+    const fxCodes = { highpass: 1, lowpass: 2, peak: 3, lowshelf: 4, highshelf: 5 } as const;
+    const fxFlat = (track.fx ?? []).filter((f) => !f.bypass).flatMap((f) => [fxCodes[f.kind], f.freq, f.gainDb, f.q]);
     for (const clip of track.clips) {
       const media = doc.media[clip.mediaId];
       const source = sources.get(clip.mediaId);
@@ -57,6 +60,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         pan: panPoints ? 0 : track.pan ?? 0,
         gainPoints: volumePoints,
         panPoints,
+        fx: fxFlat.length ? fxFlat : undefined,
         fadeIn: clip.fadeIn ?? 0,
         fadeOut: clip.fadeOut ?? 0,
         fadeShape: FADE_SHAPES[clip.fadeShape ?? "linear"] ?? 0,

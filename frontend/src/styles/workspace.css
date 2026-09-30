@@ -164,6 +164,12 @@
 .fw-chain-step > span { margin-inline-end: 6px; }
 .fw-chain-step .fw-ibtn { padding: 1px 6px; font-size: 11px; }
 .fw-clip[data-group] { outline: 1px dashed var(--accent-color); outline-offset: -3px; }
+.fw-rtfx-list { display: grid; gap: 6px; }
+.fw-rtfx-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-tertiary); }
+.fw-rtfx-name { flex-basis: 100%; font-weight: 600; }
+.fw-rtfx-row label { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); }
+.fw-rtfx-row input[type="number"] { inline-size: 64px; padding: 2px 4px; font: inherit; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; }
+.fw-rtfx-row .fw-ibtn { padding: 1px 6px; font-size: 11px; }
 
 .fw-export-dialog { inline-size: min(360px, calc(100vw - 32px)); padding: 16px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; }
 .fw-export-dialog::backdrop { background: rgb(0 0 0 / 0.45); }

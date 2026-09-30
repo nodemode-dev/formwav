@@ -1,5 +1,5 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
-import type { FadeShape } from "../engine/document";
+import type { FadeShape, TrackFx } from "../engine/document";
 import { setText } from "../vendor/nodemode/dom-stable";
 
 const BODY = `
@@ -38,6 +38,9 @@ const BODY = `
   <label class="fw-field"><span>Duck under</span><select data-duck="control"></select><span></span></label>
   <label class="fw-field"><span>By</span><input type="range" min="3" max="30" step="1" value="12" data-duck="amount"><output data-duck-out>12 dB</output></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
+  <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
+  <div class="fw-rtfx-list"></div>
+  <div class="fw-analyze-buttons"><select data-rtfx="kind" aria-label="Realtime effect to add"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>`;
 
 const db = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
@@ -522,6 +525,69 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, merged.length ? `Ducked ${hit.track.name} by ${amount} dB in ${merged.length} place${merged.length === 1 ? "" : "s"} under ${controlName}` : `${controlName} is silent; nothing to duck`);
     } catch (err) {
       setText(notice, `Could not duck: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // Realtime track effects (Audacity's realtime stacks): filters the core runs live, in playback and export alike.
+  const rtfxList = body.querySelector<HTMLElement>(".fw-rtfx-list");
+  const RTFX_LABEL: Record<TrackFx["kind"], string> = { highpass: "High-pass", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf" };
+  const RTFX_DEFAULT: Record<TrackFx["kind"], TrackFx> = {
+    highpass: { kind: "highpass", freq: 100, gainDb: 0, q: 0.707 },
+    lowpass: { kind: "lowpass", freq: 8000, gainDb: 0, q: 0.707 },
+    peak: { kind: "peak", freq: 1000, gainDb: 0, q: 1 },
+    lowshelf: { kind: "lowshelf", freq: 200, gainDb: 0, q: 0.707 },
+    highshelf: { kind: "highshelf", freq: 6000, gainDb: 0, q: 0.707 },
+  };
+  let rtfxSig = "";
+  const renderRtfx = (force = false) => {
+    if (!rtfxList) return;
+    const fx = find(engine.get("document"))?.track.fx ?? [];
+    const sig = JSON.stringify(fx);
+    if (!force && (sig === rtfxSig || rtfxList.contains(document.activeElement))) return;
+    rtfxSig = sig;
+    rtfxList.replaceChildren(
+      ...fx.map((f, i) => {
+        const row = document.createElement("div");
+        row.className = "fw-rtfx-row";
+        row.dataset.index = String(i);
+        const shaped = f.kind === "peak" || f.kind === "lowshelf" || f.kind === "highshelf";
+        row.innerHTML = `<span class="fw-rtfx-name"></span><label>Hz <input type="number" min="20" max="20000" step="1" data-p="freq"></label>${shaped ? '<label>dB <input type="number" min="-24" max="24" step="0.5" data-p="gainDb"></label>' : ""}<label>Q <input type="number" min="0.1" max="18" step="0.1" data-p="q"></label><label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button>`;
+        const name = row.querySelector<HTMLElement>(".fw-rtfx-name");
+        if (name) name.textContent = RTFX_LABEL[f.kind];
+        for (const input of row.querySelectorAll<HTMLInputElement>("input[data-p]")) {
+          const p = input.dataset.p;
+          if (p === "on") input.checked = !f.bypass;
+          else if (p === "freq" || p === "gainDb" || p === "q") input.value = String(f[p]);
+        }
+        return row;
+      }),
+    );
+  };
+  engine.subscribe("document", () => renderRtfx());
+  host.addEventListener("fw-selection", () => queueMicrotask(() => renderRtfx(true)));
+  const commitRtfx = (mutate: (fx: TrackFx[]) => TrackFx[]) => {
+    const hit = find(engine.get("document"));
+    if (hit) engine.dispatch({ type: "set-track-fx", trackId: hit.track.id, fx: mutate([...(hit.track.fx ?? [])]) });
+  };
+  rtfxList?.addEventListener("change", (e) => {
+    const input = e.target as HTMLInputElement;
+    const index = Number(input.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
+    const p = input.dataset.p;
+    if (!Number.isInteger(index) || !p) return;
+    commitRtfx((fx) => fx.map((f, k) => (k !== index ? f : p === "on" ? { ...f, bypass: !input.checked } : { ...f, [p]: Number(input.value) })));
+  });
+  body.addEventListener("click", (e) => {
+    const button = (e.target as HTMLElement).closest<HTMLElement>("[data-rtfx]");
+    const action = button?.dataset.rtfx;
+    if (action === "add") {
+      const kind = body.querySelector<HTMLSelectElement>('[data-rtfx="kind"]')?.value as TrackFx["kind"] | undefined;
+      if (kind && RTFX_DEFAULT[kind]) commitRtfx((fx) => [...fx, { ...RTFX_DEFAULT[kind] }]);
+      renderRtfx(true);
+    } else if (action === "remove" && button) {
+      const index = Number(button.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
+      button.blur();
+      commitRtfx((fx) => fx.filter((_, k) => k !== index));
+      renderRtfx(true);
     }
   });
 
