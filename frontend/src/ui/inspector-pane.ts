@@ -51,7 +51,7 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
-  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button></div>
 </div>`;
 
 /** Tempo from onset times (seconds): for each candidate from 60 to 180 BPM in 0.1 steps, how tightly the onsets share
@@ -706,6 +706,20 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
+  // The session tempo (the bars ruler, beat snapping and Quantize share it): BPM and Beats edit it, and follow it.
+  const bpmField = body.querySelector<HTMLInputElement>('[data-q="bpm"]');
+  const bpbField = body.querySelector<HTMLInputElement>('[data-q="bpb"]');
+  const syncTempo = () => {
+    const tempo = engine.get("document").tempo;
+    if (!tempo) return;
+    if (bpmField && document.activeElement !== bpmField && bpmField.value !== tempo.bpm.toFixed(1)) bpmField.value = tempo.bpm.toFixed(1);
+    if (bpbField && document.activeElement !== bpbField && bpbField.value !== String(tempo.beatsPerBar)) bpbField.value = String(tempo.beatsPerBar);
+  };
+  engine.subscribe("document", syncTempo);
+  const commitTempo = () => engine.dispatch({ type: "set-tempo", bpm: Number(bpmField?.value), beatsPerBar: Number(bpbField?.value) });
+  bpmField?.addEventListener("change", commitTempo);
+  bpbField?.addEventListener("change", commitTempo);
+
   // Timing edits on transients (Pro Tools' groove edits, as a reference): cut a clip at its transients, then quantize
   // clip starts to a musical grid; each one undo step. After a split each piece starts on its transient.
   let selectedIds: string[] = [];
@@ -761,6 +775,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         }
         const field = body.querySelector<HTMLInputElement>('[data-q="bpm"]');
         if (field) field.value = bpm.toFixed(1);
+        commitTempo();
         setText(notice, `Detected ${bpm.toFixed(1)} BPM from ${found.at.length} transients`);
       } catch (err) {
         setText(notice, `Could not detect the tempo: ${err instanceof Error ? err.message : String(err)}`);

@@ -134,6 +134,8 @@ export interface SessionDoc {
   masterGainDb?: number;
   /** Realtime effects on the summed mix, before the master fader (Audacity's master stack). */
   masterFx?: TrackFx[];
+  /** The session tempo, for the bars ruler, beat snapping and Quantize (set by hand or detected). */
+  tempo?: { bpm: number; beatsPerBar: number };
   tracks: readonly Track[];
   media: Readonly<Record<string, MediaRef>>;
   markers: readonly Marker[];
@@ -170,6 +172,7 @@ export type Command =
   | { type: "set-clip-group"; clipIds: string[]; groupId: string | null }
   | { type: "set-track-fx"; trackId: string; fx: TrackFx[] }
   | { type: "set-master-fx"; fx: TrackFx[] }
+  | { type: "set-tempo"; bpm: number; beatsPerBar: number }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
@@ -385,6 +388,13 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         const { fx: _old, ...rest } = t;
         return fx.length ? { ...rest, fx } : rest;
       });
+    case "set-tempo": {
+      if (!Number.isFinite(cmd.bpm) || !Number.isFinite(cmd.beatsPerBar)) return doc;
+      const bpm = Math.round(Math.min(300, Math.max(30, cmd.bpm)) * 10) / 10;
+      const beatsPerBar = Math.round(Math.min(16, Math.max(1, cmd.beatsPerBar)));
+      if (doc.tempo && doc.tempo.bpm === bpm && doc.tempo.beatsPerBar === beatsPerBar) return doc;
+      return { ...doc, tempo: { bpm, beatsPerBar } };
+    }
     case "set-master-fx": {
       const fx = cleanFx(cmd.fx);
       if (JSON.stringify(fx) === JSON.stringify(doc.masterFx ?? [])) return doc;

@@ -1,7 +1,7 @@
 import type { Engine } from "../engine";
 import type { Player } from "../audio/player";
 import { documentLength } from "../engine/document";
-import { labelStep, snapSamples } from "./grid";
+import { barsEnabled, labelStep, setBeatGrid, snapSamples } from "./grid";
 import { onZoom, samplesPerPixel } from "./lanes";
 
 const MIN_MINOR_PX = 6;
@@ -50,16 +50,39 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     ctx.textBaseline = "top";
 
     const pxPerSecond = doc.sampleRate / spp;
-    const step = labelStep(pxPerSecond);
-    const minor = step / 5;
-    const drawMinor = minor * pxPerSecond >= MIN_MINOR_PX;
+    const tempo = barsEnabled() && doc.tempo ? doc.tempo : null;
+    setBeatGrid(tempo ? 60 / tempo.bpm : null);
     ctx.fillStyle = style.color;
-    for (let i = 0; i * minor * pxPerSecond <= width; i++) {
-      const major = i % 5 === 0;
-      if (!major && !drawMinor) continue;
-      const x = Math.round(i * minor * pxPerSecond);
-      ctx.fillRect(x, major ? height * 0.5 : height * 0.75, 1, height);
-      if (major) ctx.fillText(label(i * minor, step), x + 4, 3);
+    if (tempo) {
+      // Bars and beats (Audacity's beats and measures ruler): a line at each bar, numbered every 1, 2, 4... bars as
+      // zoom allows; beat ticks from 6 px apart, labelled bar.beat from 48 px.
+      const beatPx = (60 / tempo.bpm) * pxPerSecond;
+      const barPx = beatPx * tempo.beatsPerBar;
+      let every = 1;
+      while (every * barPx < 48) every *= 2;
+      for (let b = 0; b * beatPx <= width; b++) {
+        const x = Math.round(b * beatPx);
+        const inBar = b % tempo.beatsPerBar;
+        const barIndex = Math.floor(b / tempo.beatsPerBar);
+        if (inBar === 0) {
+          ctx.fillRect(x, height * 0.5, 1, height);
+          if (barIndex % every === 0) ctx.fillText(String(barIndex + 1), x + 4, 3);
+        } else if (beatPx >= 6) {
+          ctx.fillRect(x, height * 0.75, 1, height);
+          if (beatPx >= 48) ctx.fillText(`${barIndex + 1}.${inBar + 1}`, x + 4, 3);
+        }
+      }
+    } else {
+      const step = labelStep(pxPerSecond);
+      const minor = step / 5;
+      const drawMinor = minor * pxPerSecond >= MIN_MINOR_PX;
+      for (let i = 0; i * minor * pxPerSecond <= width; i++) {
+        const major = i % 5 === 0;
+        if (!major && !drawMinor) continue;
+        const x = Math.round(i * minor * pxPerSecond);
+        ctx.fillRect(x, major ? height * 0.5 : height * 0.75, 1, height);
+        if (major) ctx.fillText(label(i * minor, step), x + 4, 3);
+      }
     }
 
     ctx.fillStyle = style.outlineColor;
@@ -168,6 +191,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
   engine.subscribe("document", draw);
   onZoom(draw);
   document.addEventListener("nm:ui-settings-changed", draw);
+  document.addEventListener("fw-bars-changed", draw);
   window.addEventListener("resize", draw);
   draw();
 }

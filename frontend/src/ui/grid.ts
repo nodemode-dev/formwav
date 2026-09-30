@@ -28,8 +28,29 @@ export function gridEnabled(): boolean {
   return enabled;
 }
 
+let bars = false;
+let beatSeconds: number | null = null;
+
+/** Whether the ruler shows bars and beats (and the grid snaps to beats) rather than seconds. */
+export function barsEnabled(): boolean {
+  return bars;
+}
+
+/** The session's beat length in seconds while Bars is on and a tempo is set (the ruler keeps it current), else null. */
+export function setBeatGrid(seconds: number | null): void {
+  beatSeconds = seconds && seconds > 0 ? seconds : null;
+}
+
 export function snapSamples(position: number, sampleRate: number, pxPerSecond: number): number {
   if (!enabled) return position;
+  if (bars && beatSeconds) {
+    // Beats halved or doubled by powers of two until a step is at least 12 px wide, down to a sixteenth of a beat.
+    let step = beatSeconds;
+    while (step * pxPerSecond < 12) step *= 2;
+    while (step / 2 >= beatSeconds / 16 && (step / 2) * pxPerSecond >= 12) step /= 2;
+    const samples = step * sampleRate;
+    return Math.max(0, Math.round(Math.round(position / samples) * samples));
+  }
   const step = (labelStep(pxPerSecond) / 5) * sampleRate;
   return Math.max(0, Math.round(Math.round(position / step) * step));
 }
@@ -50,6 +71,12 @@ export function mountGrid(host: HTMLElement): void {
   const shuffleButton = makeButton("Shuffle", "Deleting and trimming clips moves the later clips on the track to close the gap (H)", "shuffle");
   const spotButton = makeButton("Spot", "Click a clip to type its exact start time (T)", "crosshair");
   const punchButton = makeButton("Punch", "Recording on the armed track replaces only the loop range, then stops (P)", "punch");
+  const barsButton = makeButton("Bars", "Show bars and beats at the session tempo on the ruler; with Grid on, snap to beats", "activity");
+  barsButton.addEventListener("click", () => {
+    bars = !bars;
+    barsButton.setAttribute("aria-pressed", String(bars));
+    document.dispatchEvent(new CustomEvent("fw-bars-changed"));
+  });
 
   const toggleGrid = () => {
     enabled = !enabled;
