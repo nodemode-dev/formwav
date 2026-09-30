@@ -22,6 +22,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
   <ol class="fw-chain" hidden></ol>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button></div>
 </div>
 <div class="fw-insp-section fw-insp-analyze" hidden>
   <div class="fw-insp-head">Analyze</div>
@@ -425,6 +426,36 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, `Applied a chain of ${chain.length} effect${chain.length === 1 ? "" : "s"}${inRange ? " to the range" : " to the clip"}`);
     } catch (err) {
       setText(notice, `Could not apply the chain: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      for (const b of buttons) b.disabled = false;
+    }
+  });
+
+  // Music separation (Audacity's AI separation, RX's Music Rebalance): the clip's trimmed range split into four stems on
+  // new tracks at the clip's start, the original track muted, all one undo step.
+  body.addEventListener("click", async (e) => {
+    if ((e.target as HTMLElement).closest<HTMLElement>("[data-fx]")?.dataset.fx !== "separate") return;
+    const doc = engine.get("document");
+    const hit = find(doc);
+    const source = hit ? doc.media[hit.clip.mediaId] : undefined;
+    if (!hit || !source) return;
+    const start = hit.clip.sourceIn / source.sampleRate;
+    const end = start + hit.clip.length / doc.sampleRate;
+    const buttons = [...body.querySelectorAll<HTMLButtonElement>("button[data-fx]")];
+    for (const b of buttons) b.disabled = true;
+    setText(notice, "Separating into stems (about three times the clip's length on a CPU)...");
+    try {
+      const res = await fetch(`/api/media/${source.id}/separate?start=${start}&end=${end}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown } | { source: string; media: MediaRef }[];
+      if (!res.ok || !Array.isArray(out)) throw new Error(!Array.isArray(out) && typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      const commands = [
+        ...out.map((s) => ({ type: "import-media" as const, media: s.media, at: hit.clip.start })),
+        { type: "set-track-mute" as const, trackId: hit.track.id, mute: true },
+      ];
+      engine.dispatch({ type: "batch", commands } as Parameters<Engine["dispatch"]>[0]);
+      setText(notice, `Separated into ${out.map((s) => s.source).join(", ")} on new tracks; the original track is muted`);
+    } catch (err) {
+      setText(notice, `Could not separate: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       for (const b of buttons) b.disabled = false;
     }

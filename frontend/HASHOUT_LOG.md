@@ -1276,3 +1276,10 @@ Analyze gains Mic check: the engine's findings for the inspected clip, marked OK
 - logged: v0.55.0 (in progress) · 2026-09-30
 
 iZotope RX's module chains: Add to chain keeps the chosen effect with its current controls (labelled with their values), steps can be removed, and Apply chain runs them in order, each on the previous step's file, then changes the document once (the clip, or the range when one exists, as Apply does), so the whole chain is one undo step; a chain with a timing-changing step is refused inside a range. Verified in Chromium (verify_chain.py) on the 440 Hz clip: Amplify -6 dB, Invert and Amplify +12 dB listed, a removed and re-added step reordered; applying gave -1.9953 of every sample (+6 dB inverted, largest deviation 0.000019 across three renders) in one undo step; undo restored the original; with Change tempo added and a range dragged the chain was refused and the document unchanged; Clear hid the chain; containment with vertical overflow clean; screenshot inspected; no page errors.
+
+### src/ui/inspector-pane.ts · Separate into stems
+- refers-to: src/ui/inspector-pane.ts :: the `separate` action
+- kind: explainer
+- logged: v0.56.0 · 2026-09-30
+
+Separate into stems sends the clip's trimmed range to the engine and, in one batch command, puts the four stems on new tracks starting where the clip starts and mutes the original track, so one undo reverses it all; the notice warns that separation takes about three times the clip's length on a CPU. Verified in Chromium (verify_separate.py) on a clip trimmed by 2 s: four tracks named for their stems, each starting at 2.0 s and 9.0 s long, the original muted, one undo step, undo restoring the original track unmuted and alone; no page errors. The separation's quality is in the backend log.
