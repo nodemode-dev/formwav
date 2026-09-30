@@ -1346,3 +1346,10 @@ The effects list is one component in two scopes: the selected track, and a Maste
 - logged: v0.63.0 (in progress) · 2026-09-30
 
 TrackFx becomes a union of filters and the compressor (threshold, ratio, attack, release, makeup), each clamped to the core's ranges. The playback plan mirrors the export's: a track holding an enabled compressor and routed to the master gets its own bus carrying its whole chain as six-wide stages, filters elsewhere still run per clip, and the master chain travels as stages. The Inspector offers Compressor on tracks and the master with its five fields; values fill from the field each input names. Found: the first live reading (0.4898) took the peak over the whole playback, including the onset the compressor lets through during its 10 ms attack; measured after 400 ms of settling, as the export was measured from 1 s. Verified in Chromium through the worklet (verify_comp.py) on a 1 kHz sine at 0.5: output peak 0.5 without effects, 0.1659 (-15.6 dBFS) settled with a -20 dB 4:1 compressor, the export of the same session -15.6 dBFS, 0.5 again at ratio 1, playing in all runs; the track and master filter regressions unchanged; screenshot inspected; no page errors.
+
+### src/ui/inspector-pane.ts · Transients in Analyze (coverage wave 10)
+- refers-to: src/ui/inspector-pane.ts :: the `transients` action, `[data-an-sens]`
+- kind: explainer
+- logged: v0.64.0 (in progress) · 2026-09-30
+
+Transients, with a Sensitivity from 0 to 1, puts a marker at each onset the engine finds inside the selected clip's visible span: file time is mapped through the clip's start, trim and the rate ratio, onsets outside the span are left out, and the markers go in one batch, one undo step. Verified in Chromium (verify_transients.py) on the drum-like clip moved to 1 s with its first 0.5 s cut: "Marked 4 transients" at 1.8018, 2.5509, 3.1005 and 3.7024 s (expected 1.80, 2.55, 3.10, 3.70; 0.5 to 2.4 ms), the cut burst left out, one undo step, undo removing all four; containment clean; screenshot inspected; no page errors.

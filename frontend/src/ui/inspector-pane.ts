@@ -26,7 +26,8 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-analyze" hidden>
   <div class="fw-insp-head">Analyze</div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="stats">Statistics</button><button type="button" class="fw-ibtn" data-an="spectrogram">Spectrogram</button><button type="button" class="fw-ibtn" data-an="mic">Mic check</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="stats">Statistics</button><button type="button" class="fw-ibtn" data-an="spectrogram">Spectrogram</button><button type="button" class="fw-ibtn" data-an="mic">Mic check</button><button type="button" class="fw-ibtn" data-an="transients" title="Put a marker at each transient in this clip">Transients</button></div>
+  <label class="fw-field"><span>Sensitivity</span><input type="number" min="0" max="1" step="0.05" value="0.5" data-an-sens aria-label="Transient sensitivity, 0 strong attacks only to 1 subtle ones"><span></span></label>
   <ul class="fw-mic-findings" hidden></ul>
   <dl class="fw-stats"></dl>
   <img class="fw-spectrogram" alt="Spectrogram of the selected clip" hidden>
@@ -641,6 +642,35 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       });
     }
     renderRtfx(true);
+  });
+
+  // Transient detection (Pro Tools' groove and timing edits start from it): a marker at each onset inside the
+  // selected clip's visible span, file time mapped through the clip's start, trim and rates; one undo step.
+  body.addEventListener("click", async (e) => {
+    if ((e.target as HTMLElement).closest<HTMLElement>("[data-an]")?.dataset.an !== "transients") return;
+    const doc = engine.get("document");
+    const hit = find(doc);
+    const source = hit ? doc.media[hit.clip.mediaId] : undefined;
+    if (!hit || !source) return;
+    const sens = Number(body.querySelector<HTMLInputElement>("[data-an-sens]")?.value ?? 0.5);
+    setText(notice, "Finding transients...");
+    try {
+      const res = await fetch(`/api/media/${source.id}/transients?sensitivity=${Number.isFinite(sens) ? sens : 0.5}`);
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; seconds?: number[] };
+      if (!res.ok || !out.seconds) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      const toSession = doc.sampleRate / source.sampleRate;
+      const { start, length, sourceIn } = hit.clip;
+      const at = out.seconds.map((s) => start + Math.round((s * source.sampleRate - sourceIn) * toSession)).filter((t) => t >= start && t < start + length);
+      if (!at.length) {
+        setText(notice, "No transients in this clip at this sensitivity");
+        return;
+      }
+      const commands = at.map((t, i) => ({ type: "add-marker" as const, at: t, label: `Transient ${i + 1}` }));
+      engine.dispatch({ type: "batch", commands } as Parameters<Engine["dispatch"]>[0]);
+      setText(notice, `Marked ${at.length} transient${at.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      setText(notice, `Could not find transients: ${err instanceof Error ? err.message : String(err)}`);
+    }
   });
 
   // Mic check (Adobe Podcast's mic analysis, RX's Repair Assistant): findings with the effect that addresses each.
