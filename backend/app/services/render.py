@@ -91,7 +91,9 @@ def render(doc: object) -> dict:
         if not path.exists():
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx)
+    master_fx = [(FX_KINDS[f["kind"]], float(f.get("freq") or 1000), float(f.get("gainDb") or 0), float(f.get("q") or 0.707))
+                 for f in (doc.get("masterFx") or []) if isinstance(f, dict) and f.get("kind") in FX_KINDS and not f.get("bypass")]
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, master_fx)
     loudness = native.loudness(interleaved, 2, rate)
     return {
         "wav": wav_float32_stereo(interleaved, rate),

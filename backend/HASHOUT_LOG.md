@@ -439,3 +439,10 @@ Proving Audition's matched clip volume (Loudness to a target with Apply to all c
 - logged: v0.61.0 (in progress) · 2026-09-30
 
 A track's `fx` list (kind, freq, gainDb, q, bypass) becomes filter stages on each of its clips in the core's render, with the session's rate; bypassed and unknown stages are left out, so exports carry exactly what playback will. Verified with the export render and an FFT against renders without effects: a 1 kHz high-pass took 100 Hz down 40.03 dB and left 5 kHz within 0.01 dB; a bypassed stage rendered byte for byte as none; a +6 dB peak at 1 kHz gave +6.00 dB.
+
+### app/services/render.py · master effects in the export render
+- refers-to: app/services/render.py :: `render` (`master_fx`)
+- kind: explainer
+- logged: v0.62.0 (in progress) · 2026-09-30
+
+The document's `masterFx` (the same kinds and bypass rule as tracks) becomes the core's master chain in exports. Verified by FFT: a 2 kHz master high-pass -52.14 dB at 100 Hz, -12.38 dB at 1 kHz, -0.10 dB at 5 kHz; bypassed, byte for byte as none.
