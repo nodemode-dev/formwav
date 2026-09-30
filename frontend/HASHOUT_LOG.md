@@ -1290,3 +1290,10 @@ Separate into stems sends the clip's trimmed range to the engine and, in one bat
 - logged: v0.56.0 · 2026-09-30
 
 A screenshot showed Apply chain and Clear chain with an empty chain: the buttons carried the hidden attribute, but the button class's display rule overrode it, and the chain harness had read the hidden property, which was true, rather than whether the buttons showed. Hidden action buttons are now never displayed, and the check reads computed display: none with an empty chain, flex with a step, none after Clear; the chain regression unchanged.
+
+### src/ui/export.ts · streaming preview in the export dialog
+- refers-to: src/ui/export.ts :: the `preview` choice in the dialog and in `run`
+- kind: explainer
+- logged: v0.57.0 (in progress) · 2026-09-30
+
+The export dialog's What gains Streaming preview: rather than downloading, the engine's decoded preview lands on a new track at 0 s, to solo against the mix. Verified in Chromium (verify_preview.py): MP3 192 kbps added "Streaming preview (MP3, 192 kbps)" at 0 s, 11.0 s long; FLAC was refused with the engine's message; no page errors.

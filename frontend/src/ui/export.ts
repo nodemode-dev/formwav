@@ -1,4 +1,4 @@
-import type { Engine } from "../engine";
+import type { Engine, MediaRef } from "../engine";
 import { renderMix } from "../io/render-client";
 import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
 
@@ -11,7 +11,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
   const nameField = host.querySelector<HTMLInputElement>("input.fw-session-name");
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   let busy = false;
-  let choice: { format: string; what: "mix" | "stems" | "multichannel" } = { format: "wav", what: "mix" };
+  let choice: { format: string; what: "mix" | "stems" | "multichannel" | "preview" } = { format: "wav", what: "mix" };
   const dialog = document.createElement("dialog");
   dialog.className = "fw-export-dialog";
   dialog.innerHTML = `<form method="dialog">
@@ -21,7 +21,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     <option value="flac">FLAC, 24-bit lossless</option><option value="mp3">MP3, 320 kbps</option><option value="mp3-192">MP3, 192 kbps</option>
     <option value="ogg">OGG Vorbis</option><option value="m4a">M4A, AAC 256 kbps</option></select></label>
   <label class="fw-field fw-field-stack"><span>What</span><select data-x="what">
-    <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option></select></label>
+    <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option><option value="preview">Streaming preview: add a track that sounds like the encoded file (MP3, OGG or M4A)</option></select></label>
   <div class="fw-dialog-actions"><button type="submit" class="fw-ibtn" value="cancel">Cancel</button><button type="submit" class="fw-ibtn fw-btn-export" value="export">Export</button></div>
 </form>`;
   host.append(dialog);
@@ -47,7 +47,20 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
       () => setText(notice, final),
     );
     try {
-      const mix = await renderMix(doc, choice);
+      if (choice.what === "preview") {
+        const res = await fetch(`/api/render?format=${encodeURIComponent(choice.format)}&what=preview`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(doc),
+        });
+        const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `the engine answered ${res.status}`);
+        const media = body as unknown as MediaRef;
+        engine.dispatch({ type: "import-media", media, at: 0 });
+        final = `Added ${media.name}: solo it against the mix to hear the codec`;
+        return;
+      }
+      const mix = await renderMix(doc, { format: choice.format, what: choice.what });
       name = choice.what === "mix" ? `${base}.${mix.ext}` : `${base} ${choice.what}.${mix.ext}`;
       const url = URL.createObjectURL(mix.blob);
       const link = document.createElement("a");
@@ -84,7 +97,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
   dialog.addEventListener("close", () => {
     if (dialog.returnValue !== "export") return;
     const format = dialog.querySelector<HTMLSelectElement>('[data-x="format"]')?.value ?? "wav";
-    const what = (dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value ?? "mix") as "mix" | "stems" | "multichannel";
+    const what = (dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value ?? "mix") as "mix" | "stems" | "multichannel" | "preview";
     choice = { format, what };
     void run();
   });
