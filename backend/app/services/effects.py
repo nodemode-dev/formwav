@@ -79,6 +79,7 @@ FORMWAV_CHAINS = {
     "graphic-eq-voice": "superequalizer=1b=0.7:2b=0.8:3b=0.9:4b=1:5b=1:6b=1.1:7b=1.2:8b=1.3:9b=1.3:10b=1.2:11b=1.1:12b=1:13b=1:14b=1:15b=0.9:16b=0.9:17b=0.8:18b=0.8",
     "filter-curve-lowcut": "firequalizer=gain_entry='entry(0,-30);entry(80,-30);entry(120,0);entry(20000,0)'",
     "tempo-faster": "rubberband=tempo=1.1",
+    "stretch-rhythmic": "rubberband=tempo=1.1:window=short",
     "tempo-slower": "rubberband=tempo=0.9",
     "pitch-up-semitone": "rubberband=pitch=1.0594631",
     "pitch-down-semitone": "rubberband=pitch=0.9438743",
@@ -121,7 +122,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
-    ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch...")]),
+    ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch...")]),
     ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
@@ -169,6 +170,9 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "compress": ({"threshold": ("Threshold", -60, 0, -18, "dB"), "ratio": ("Ratio", 1, 20, 4, ":1")}, lambda v: f"acompressor=threshold={_lin(v['threshold']):.5f}:ratio={v['ratio']:.2f}:attack=10:release=150"),
     "noise-gate": ({"threshold": ("Threshold", -80, 0, -20, "dB")}, lambda v: f"agate=threshold={_lin(v['threshold']):.5f}:ratio=6:attack=5:release=120:range=0.05"),
     "tempo-faster": ({"percent": ("Tempo", -50, 100, 10, "%")}, lambda v: f"rubberband=tempo={1 + v['percent'] / 100:.5f}"),
+    # A short window keeps percussive attacks where they belong: at Rubber Band's defaults a stretched beat pattern
+    # kept 6 of its 12 attacks at the wrong spacing; with window=short the spacing held (0.5435 s against 0.5449).
+    "stretch-rhythmic": ({"percent": ("Tempo", -50, 100, 10, "%")}, lambda v: f"rubberband=tempo={1 + v['percent'] / 100:.5f}:window=short"),
     "pitch-up-semitone": ({"semitones": ("Pitch", -12, 12, 1, "st")}, lambda v: f"rubberband=pitch={2 ** (v['semitones'] / 12):.6f}"),
     "speed-faster": ({"percent": ("Speed", -50, 100, 10, "%")}, lambda v: f"aresample=48000,asetrate={round(48000 * (1 + v['percent'] / 100))},aresample=48000"),
     "extreme-stretch": ({"factor": ("Stretch", 1.5, 10, 4, "x")}, lambda v: f"rubberband=tempo={1 / v['factor']:.5f}"),
@@ -217,7 +221,7 @@ def _controls(key: str) -> list[dict]:
 
 #: Effects whose output does not line up sample for sample with the source (length or order changes), so they apply to a
 #: whole clip only, never to a range inside one.
-RETIMING = {"tempo-faster", "tempo-slower", "speed-faster", "extreme-stretch", "truncate-silence", "reverse"}
+RETIMING = {"tempo-faster", "tempo-slower", "stretch-rhythmic", "speed-faster", "extreme-stretch", "truncate-silence", "reverse"}
 
 
 def catalogue() -> list[dict]:

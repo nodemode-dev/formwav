@@ -460,3 +460,10 @@ One `_stage` rule turns an effect entry into a core stage (filters: frequency, g
 - logged: v0.64.0 (in progress) · 2026-09-30
 
 GET /api/media/{id}/transients?sensitivity= returns onset times in the file's own seconds from the core's detector (503 without the core). Verified: the drum-like bursts at 0.30, 0.80, 1.55, 2.10 and 2.70 s came back at 0.301, 0.8018, 1.5509, 2.1005 and 2.7024 s; JFK's speech gave 3, 7 and 14 onsets at sensitivities 0.2, 0.5 and 0.8.
+
+### app/services/effects.py · Change tempo, rhythmic
+- refers-to: app/services/effects.py :: `stretch-rhythmic` (chain, control, menu entry, `RETIMING`)
+- kind: rationale
+- logged: v0.68.0 (in progress) · 2026-09-30
+
+A pitch-keeping tempo change for rhythmic material: Rubber Band with a short window, beside Change tempo and with the same Tempo control, marked as timing-changing. Measured with the core's onset detector on a 12-hit pattern stretched from 99.9 to 110 BPM: Rubber Band's defaults kept 6 attacks at a 0.5601 s spacing (0.5449 expected), the percussive detector alone changed nothing, and a short window kept the spacing at 0.5435 s with 16 onsets, a few attacks still splitting. The catalogue is now 90 effects.
