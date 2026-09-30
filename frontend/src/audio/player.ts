@@ -267,7 +267,15 @@ export class Player {
     const doc = this.engine.get("document");
     await Promise.all(Object.keys(doc.media).map((id) => this.load(node, id)));
     this.sendPlan(node, this.engine.get("document"));
-    send(node, { type: "seek", position: this.engine.get("transport").positionSamples });
+    // Audacity's loop rule: with looping on, playback that starts outside the loop starts at its beginning (it had
+    // played straight past the loop from a playhead after its end). Recording's open playback keeps its pre-roll.
+    let at = this.engine.get("transport").positionSamples;
+    const loop = doc.loop;
+    if (!open && loop?.enabled && loop.end > loop.start && (at < loop.start || at >= loop.end)) {
+      at = loop.start;
+      this.engine.setTransport({ positionSamples: at });
+    }
+    send(node, { type: "seek", position: at });
     send(node, { type: "play" });
     this.engine.setTransport({ playing: true });
   }
