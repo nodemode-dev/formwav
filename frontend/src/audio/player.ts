@@ -48,7 +48,8 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     }
     const id = buses.length + 1;
     busIndex.set(bus.id, id);
-    buses.push({ id, gain: dbToGain(bus.gainDb), pan: bus.pan ?? 0 });
+    const busStages = flatStages(bus.fx);
+    buses.push({ id, gain: dbToGain(bus.gainDb), pan: bus.pan ?? 0, ...(busStages.length ? { stages: busStages } : {}) });
   }
   const clips: WorkletClip[] = [];
   let end = 0;

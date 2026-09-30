@@ -154,6 +154,8 @@ export interface Bus {
   gainDb: number;
   pan?: number;
   mute?: boolean;
+  /** Effects on the bus's sum (Pro Tools' routing folders process the grouped stem), filters and compressors in order. */
+  fx?: TrackFx[];
 }
 
 export interface FrequencyBand {
@@ -176,6 +178,7 @@ export type Command =
   | { type: "set-clip-group"; clipIds: string[]; groupId: string | null }
   | { type: "set-track-fx"; trackId: string; fx: TrackFx[] }
   | { type: "set-master-fx"; fx: TrackFx[] }
+  | { type: "set-bus-fx"; busId: string; fx: TrackFx[] }
   | { type: "set-tempo"; bpm: number; beatsPerBar: number }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
@@ -438,6 +441,17 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const beatsPerBar = Math.round(Math.min(16, Math.max(1, cmd.beatsPerBar)));
       if (doc.tempo && doc.tempo.bpm === bpm && doc.tempo.beatsPerBar === beatsPerBar) return doc;
       return { ...doc, tempo: { bpm, beatsPerBar } };
+    }
+    case "set-bus-fx": {
+      const fx = cleanFx(cmd.fx);
+      let changed = false;
+      const buses = (doc.buses ?? []).map((b) => {
+        if (b.id !== cmd.busId || JSON.stringify(fx) === JSON.stringify(b.fx ?? [])) return b;
+        changed = true;
+        const { fx: _old, ...rest } = b;
+        return fx.length ? { ...rest, fx } : rest;
+      });
+      return changed ? { ...doc, buses } : doc;
     }
     case "set-master-fx": {
       const fx = cleanFx(cmd.fx);
