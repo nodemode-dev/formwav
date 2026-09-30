@@ -344,6 +344,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     ["crestFactor", "Crest factor", (v) => v.toFixed(2)],
     ["dynamicRangeDb", "Dynamic range", (v) => `${v.toFixed(1)} dB`],
     ["flatFactor", "Clipped runs", (v) => v.toFixed(1)],
+    ["phaseCorrelation", "Phase correlation", (v) => v.toFixed(2)],
   ];
   const clearAnalysis = () => {
     statsList?.replaceChildren();

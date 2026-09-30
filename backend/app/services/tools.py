@@ -76,7 +76,7 @@ _STAT_KEYS = {
 
 def stats(media_id: str) -> dict:
     """Waveform statistics over the whole file (ffmpeg astats, overall block)."""
-    media.media_info(media_id)
+    info = media.media_info(media_id)
     done = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-i", str(media_dir() / f"{media_id}.wav"), "-af", "astats", "-f", "null", "-"],
                           capture_output=True, text=True, timeout=600)
     overall = done.stderr.split("Overall", 1)[-1] if "Overall" in done.stderr else ""
@@ -90,7 +90,30 @@ def stats(media_id: str) -> dict:
         raise media.MediaError("could not read the file's statistics")
     peak = result.get("peakDb")
     result["clipped"] = peak is not None and peak >= -0.01
+    if int(info.get("channels") or 0) == 2:
+        result["phaseCorrelation"] = _phase_correlation(media_id)
     return result
+
+
+def _phase_correlation(media_id: str) -> float | None:
+    """Pearson correlation of the left and right channels over the whole file, -1 (opposed) to 1 (mono), read in chunks."""
+    import numpy as np
+
+    proc = subprocess.Popen([media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-i", str(media_dir() / f"{media_id}.wav"), "-f", "f32le", "-"], stdout=subprocess.PIPE)
+    ll = rr = lr = 0.0
+    assert proc.stdout is not None
+    while True:
+        chunk = proc.stdout.read(1 << 22)
+        if not chunk:
+            break
+        frames = np.frombuffer(chunk[: len(chunk) - len(chunk) % 8], dtype="<f4").reshape(-1, 2).astype(np.float64)
+        ll += float(np.dot(frames[:, 0], frames[:, 0]))
+        rr += float(np.dot(frames[:, 1], frames[:, 1]))
+        lr += float(np.dot(frames[:, 0], frames[:, 1]))
+    proc.wait(timeout=600)
+    if ll <= 0 or rr <= 0:
+        return None
+    return round(lr / (ll * rr) ** 0.5, 4)
 
 
 def _run_text(args: list[str]) -> str:
