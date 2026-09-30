@@ -246,6 +246,24 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
         if peak_db is None or peak_db <= -90:
             raise media.MediaError("the clip is silent; there is nothing to normalize")
         chain = f"volume={values['target'] - peak_db:.6f}dB"
+    if chain.startswith("loudnorm="):
+        # Measured, then an exact linear gain (Audition's Match Loudness, as a reference). Single-pass loudnorm runs
+        # dynamically and missed a -20 LUFS target by 0.9 LU on short clips; two-pass loudnorm still missed by 0.5 LU
+        # against the ebur128 meter the app measures with. The gain is target minus ebur128's integrated loudness; a
+        # limiter at -1 dBFS is added only when the gain would push the sample peak past it.
+        import re as _re
+
+        from .tools import _num, _run_text, stats
+
+        target = float(_re.match(r"loudnorm=I=(-?[0-9.]+)", chain).group(1))
+        measured = _num(r"I:\s+(-?[0-9.]+) LUFS", _run_text(["-i", str(media_dir() / f"{media_id}.wav"), "-af", "ebur128"]))
+        peak_db = stats(media_id).get("peakDb")
+        if measured is None or measured <= -70 or peak_db is None:
+            raise media.MediaError("the clip is silent; there is nothing to bring to a loudness")
+        gain = target - measured
+        chain = f"volume={gain:.4f}dB"
+        if peak_db + gain > -1:
+            chain += f",alimiter=limit={10 ** (-1 / 20):.5f}:level=false"
     stereo = name in STEREO
     af = ("aformat=channel_layouts=stereo," if stereo else "") + chain + f",aresample={rate}"
     with tempfile.TemporaryDirectory() as tmp:

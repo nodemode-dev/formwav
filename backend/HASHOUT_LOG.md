@@ -425,3 +425,10 @@ iZotope RX's Deconstruct, as a reference: harmonic-percussive separation with Py
 - logged: v0.58.0 (in progress) · 2026-09-30
 
 POST /api/render/activity renders one track alone (others muted, solos cleared) and returns where it is active: silences over 0.3 s found by silencedetect, inverted. Two faults found on the JFK recording: a fixed -40 dBFS threshold never saw its pause (the background sits at -41 to -39 dB), so the threshold now defaults to the track's loud level (the 90th percentile of 50 ms RMS windows, measured natively by astats) minus 20 dB within -60 to -20 dBFS, -31.3 dB there; and a 2.6 ms noise spike inside the pause came back as activity and chained the ducking across it, so active regions under 0.1 s are dropped. Verified: the pause found (regions 0.33 to 2.5 s and 3.22 to 11 s), and through the app the ducking measured below.
+
+### app/services/effects.py · loudness effects land on their target; matched clip loudness (coverage wave 10)
+- refers-to: app/services/effects.py :: `apply` (the `loudnorm=` branch)
+- kind: warning-context
+- logged: v0.59.0 (in progress) · 2026-09-30
+
+Proving Audition's matched clip volume (Loudness to a target with Apply to all clips) found the loudness effects off target: single-pass loudnorm left two clips at -20.9 LUFS for a -20 target, and two-pass loudnorm (measured, then linear) still left -19.5, and -22.5 for the -23 broadcast preset, against the ebur128 meter the app measures with. They now measure integrated loudness with ebur128 and apply the exact linear gain, with a limiter at -1 dBFS only when the gain would push the sample peak past it. Verified: clips at -15.5 and -45.4 LUFS matched to -20.0 and -20.1 in one undo step (verify_match_loudness.py); the broadcast preset gave -23.0 and a -14 target -14.0 with peaks held at -1.0 dBFS. Not reached: a -8 LUFS target gave -11.1, the limiter holding peaks at -1 dBFS instead of limiting harder; very loud targets fall short rather than distort.
