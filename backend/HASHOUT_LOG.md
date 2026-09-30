@@ -432,3 +432,10 @@ POST /api/render/activity renders one track alone (others muted, solos cleared) 
 - logged: v0.59.0 (in progress) · 2026-09-30
 
 Proving Audition's matched clip volume (Loudness to a target with Apply to all clips) found the loudness effects off target: single-pass loudnorm left two clips at -20.9 LUFS for a -20 target, and two-pass loudnorm (measured, then linear) still left -19.5, and -22.5 for the -23 broadcast preset, against the ebur128 meter the app measures with. They now measure integrated loudness with ebur128 and apply the exact linear gain, with a limiter at -1 dBFS only when the gain would push the sample peak past it. Verified: clips at -15.5 and -45.4 LUFS matched to -20.0 and -20.1 in one undo step (verify_match_loudness.py); the broadcast preset gave -23.0 and a -14 target -14.0 with peaks held at -1.0 dBFS. Not reached: a -8 LUFS target gave -11.1, the limiter holding peaks at -1 dBFS instead of limiting harder; very loud targets fall short rather than distort.
+
+### app/services/render.py · track effects in the export render
+- refers-to: app/services/render.py :: `FX_KINDS`, `plan` (`fx`), `render`
+- kind: explainer
+- logged: v0.61.0 (in progress) · 2026-09-30
+
+A track's `fx` list (kind, freq, gainDb, q, bypass) becomes filter stages on each of its clips in the core's render, with the session's rate; bypassed and unknown stages are left out, so exports carry exactly what playback will. Verified with the export render and an FFT against renders without effects: a 1 kHz high-pass took 100 Hz down 40.03 dB and left 5 kHz within 0.01 dB; a bypassed stage rendered byte for byte as none; a +6 dB peak at 1 kHz gave +6.00 dB.
