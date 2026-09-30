@@ -66,7 +66,7 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
-  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button><label class="fw-q-field">Length <input type="number" min="0.1" step="0.1" data-q="target" placeholder="s" aria-label="Target length in seconds"></label><button type="button" class="fw-ibtn" data-an="fit-length" title="Re-time this clip to the length typed, keeping pitch (half to double its length)">Fit to length</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="detect-key" title="Find this clip's musical key and its Camelot code">Detect key</button><span class="fw-key-readout" data-key-out>Key not set</span></div>
 </div>`;
 
@@ -1164,6 +1164,35 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         setText(notice, `Stretched from ${own.toFixed(1)} to ${doc.tempo.bpm.toFixed(1)} BPM`);
       } catch (err) {
         setText(notice, `Could not stretch: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (action === "fit-length") {
+      const doc = engine.get("document");
+      const hit = find(doc);
+      const target = Number(body.querySelector<HTMLInputElement>('[data-q="target"]')?.value);
+      if (!hit || !(target > 0)) {
+        setText(notice, hit ? "Type the length in seconds to fit the clip to" : "Select one clip to fit");
+        return;
+      }
+      const current = hit.clip.length / doc.sampleRate;
+      const factor = current / target;
+      if (factor < 0.5 || factor > 2) {
+        setText(notice, `From ${current.toFixed(2)} to ${target.toFixed(2)} s is beyond the half to double the stretch allows`);
+        return;
+      }
+      if (Math.abs(factor - 1) < 0.001) {
+        setText(notice, `This clip is already ${current.toFixed(2)} s long`);
+        return;
+      }
+      setText(notice, `Fitting ${current.toFixed(2)} s to ${target.toFixed(2)} s...`);
+      try {
+        const params = encodeURIComponent(JSON.stringify({ percent: (factor - 1) * 100 }));
+        const res = await fetch(`/api/media/${hit.clip.mediaId}/effect?name=stretch-rhythmic&params=${params}`, { method: "POST" });
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
+        setText(notice, `Fitted the clip to ${target.toFixed(2)} s`);
+      } catch (err) {
+        setText(notice, `Could not fit: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else if (action === "quantize") {
       const doc = engine.get("document");

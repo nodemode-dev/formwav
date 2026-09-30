@@ -1521,3 +1521,10 @@ A take's samples reach the recorder late by the round trip from playback to the 
 - logged: v0.90.0 (in progress) · 2026-09-30
 
 Field recorders and broadcast systems deliver MXF; the engine's import decodes any container ffmpeg reads, so the only gate was the picker's accept list, which now includes `.mxf` (drops and pastes never filtered). Verified on the engine: an MXF made from a 4 s tone with a black video stream and 24-bit PCM imported at 48 kHz, mono, 192000 frames, within 1.2e-7 of its WAV source (24-bit quantisation); production build passes. OMF and AAF stay open: they are edit-decision containers, not media, and need their own readers.
+
+### src/ui/inspector-pane.ts · Fit to length (AA-09, partial)
+- refers-to: src/ui/inspector-pane.ts :: the Quantize row's `[data-q="target"]` field and `[data-an="fit-length"]`, the `fit-length` branch of the analyze handler
+- kind: explainer
+- logged: v0.91.0 (in progress) · 2026-09-30
+
+Audition's Remix re-arranges a music clip to a target duration; the honest piece formwav can do today is to re-time the clip to that duration keeping pitch, through the same rubberband stretch Stretch to tempo uses: the factor is the clip's length over the typed length, refused outside half to double, and set-clip-media scales the clip with its new media. Verified in Chromium: a 4.00 s tone fitted to 3 s became exactly 144000 frames and a 3.000 s clip in one undo step ("tone (Change tempo, rhythmic 33.3333%).wav"), undo restored 192000, 1 s was refused with "beyond the half to double the stretch allows", the row has no overflow at 1024 px (screenshot), no page errors. Stated: a stretch, not a remix; Audition's beat-aware re-arrangement stays missing.
