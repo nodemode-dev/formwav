@@ -1234,3 +1234,10 @@ Export opens a native dialog (the browser's top layer, so no stacking rules): th
 - logged: v0.52.0 (in progress) · 2026-09-29
 
 Audacity takes audio files from the OS clipboard: a paste carrying files now imports each (converted to the session rate, one after another) onto a new track at the playhead; a paste into a text field is left to the field. Dropping files onto the timeline already existed here and keeps its place at 0; the import path gained a position so both share it. Verified in Chromium (verify_paste_files.py) with real File objects in genuine events: a paste with the playhead at 2 s made a "pasted" track starting at 2 s; the same paste on the session-name field did nothing; a drop still made a track at 0; no page errors.
+
+### src/ui/export.ts · clipping warning on export
+- refers-to: src/ui/export.ts :: the `clips` note in `run`
+- kind: explainer
+- logged: v0.52.0 · 2026-09-29
+
+A mix peaking above full scale clips in every export format except 32-bit float WAV, silently until now. The export notice now says so when it happens and points to the Master fader, Loudness or float WAV. Verified in Chromium (verify_clip_warning.py): a session peaking at -6.0 dBFS exported as FLAC without the warning; one peaking at +1.0 dBFS warned for FLAC and MP3 and not for float WAV.

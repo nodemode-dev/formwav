@@ -60,7 +60,9 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
       } else {
         const peak = Math.max(mix.peakLeft, mix.peakRight);
         const skipped = mix.skipped ? ` · ${mix.skipped} clip(s) at another sample rate left out` : "";
-        final = `Exported ${name} · peak ${level(peak, "dBFS")} · ${level(mix.loudness, "LUFS")}${skipped}`;
+        // Only 32-bit float WAV keeps samples above full scale; every other format clips them.
+        const clips = peak > 0 && choice.format !== "wav" ? " · the mix peaks above 0 dBFS, so this file clips: lower the Master fader or use Loudness, or export 32-bit float WAV" : "";
+        final = `Exported ${name} · peak ${level(peak, "dBFS")} · ${level(mix.loudness, "LUFS")}${skipped}${clips}`;
       }
     } catch (err) {
       final = `Could not export: ${err instanceof Error ? err.message : String(err)}`;
