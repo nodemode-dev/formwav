@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v0.38.0
-Last updated: 2026-09-28 · .fmw revision checks: revision in the manifest, base on save, 409 on conflict, save lock
+Current build version: v0.85.0
+Last updated: 2026-09-30 · the Space group's four echoes named as echoes (the last entry below); the header had read v0.38.0 while entries ran to v0.84.0's SAM-Audio service
 
 ---
 
@@ -530,3 +530,10 @@ GET /api/media/{id}/key?start=&end= returns the key, tonic, mode, Camelot code a
 - logged: v0.84.0 (in progress) · 2026-09-30
 
 GET /api/sam-audio/status names each precondition (installed, Hugging Face login or a cached checkpoint, device) and the first one missing; POST /api/media/{id}/isolate?description=&start=&end=&spans= returns the described sound and everything else as two media at the region's rate and exact frame count, spans being SAM-Audio's positive anchors in seconds from the region's start. A missing precondition answers 503 with the step to take, bad input 422. The component is optional (requirements_sam_audio.txt, pinned to the source commit bb4c6999 it was written against) and cannot run in the build container: the checkpoints are manually gated (an unauthenticated download answered 401) and 5.10 to 14.86 GB against about 4 GB free, and Meta recommends a GPU. Written from the source, not only the README: result.target and result.residual are lists of mono tensors (the README's result.target.cpu() would fail), the processor takes a tensor as given, so the region is decoded to 48 kHz mono here. Verified to the model boundary, not on real weights: as installed here, status and isolate say SAM-Audio is not installed with the install command; with a stand-in of the package (verification/stand_ins, not in the repository) that records its calls, a gated load answered "Hugging Face refused facebook/sam-audio-small (GatedRepoError): request access on its page, then run: hf auth login", bad spans and an empty description 422, and the interface path (frontend log) passed the lowercased description and the exact anchor, with outputs aligned to the frame and reconstructing the original to -183 dB. How well SAM-Audio isolates sounds is measured only once it runs on the owner's machine.
+
+### app/services/effects.py · the Space group's four echoes named as echoes
+- refers-to: app/services/effects.py :: `AUDIO_CHAINS` (`room`, `hall`, `cathedral`, `plate`), the Space entry of the catalogue groups
+- kind: rationale
+- logged: v0.85.0 (in progress) · 2026-09-30
+
+Room, Hall, Cathedral and Plate are ffmpeg `aecho` chains, three or four discrete taps with decays, which is a multi-tap echo and not a reverb (no diffuse tail, no density growth). The v6 comparison page read the chains and asked that they be named for what they are or replaced by a reverb. The labels now read Room echo, Hall echo, Cathedral echo and Plate echo; the ids, chains, presets and saved chains are unchanged, so nothing that referenced them by id moves. A real reverb (a convolution against a decaying-noise impulse through `afir`, or a stage in the Rust core) stays open in BUILD_NOTES. Verified: the running engine's `GET /api/effects` lists the four new labels under Space with the same ids, still 90 effects in eleven groups.
