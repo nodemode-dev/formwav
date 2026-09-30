@@ -20,6 +20,8 @@ const BODY = `
   <label class="fw-field fw-field-stack"><span>Effect</span><select data-fx="pick"></select></label>
   <div class="fw-fx-params"></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
+  <ol class="fw-chain" hidden></ol>
 </div>
 <div class="fw-insp-section fw-insp-analyze" hidden>
   <div class="fw-insp-head">Analyze</div>
@@ -339,6 +341,92 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       }
     } catch (err) {
       setText(notice, `Could not analyze the clip: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // Module chains (iZotope RX): effects with their controls run in order, each on the last one's output; the document
+  // changes once, so the whole chain is one undo step.
+  type ChainStep = { name: string; label: string; params: Record<string, number> };
+  let chain: ChainStep[] = [];
+  const chainList = body.querySelector<HTMLElement>(".fw-chain");
+  const renderChain = () => {
+    if (!chainList) return;
+    chainList.replaceChildren(
+      ...chain.map((s, i) => {
+        const item = document.createElement("li");
+        item.className = "fw-chain-step";
+        const text = document.createElement("span");
+        text.textContent = s.label;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "fw-ibtn";
+        remove.dataset.chainRemove = String(i);
+        remove.textContent = "Remove";
+        item.append(text, remove);
+        return item;
+      }),
+    );
+    const has = chain.length > 0;
+    if (chainList.hidden === has) chainList.hidden = !has;
+    for (const key of ["chain-apply", "chain-clear"]) {
+      const b = body.querySelector<HTMLElement>(`[data-fx="${key}"]`);
+      if (b && b.hidden === has) b.hidden = !has;
+    }
+  };
+  body.addEventListener("click", async (e) => {
+    const t = e.target as HTMLElement;
+    const remove = t.closest<HTMLElement>("[data-chain-remove]")?.dataset.chainRemove;
+    if (remove !== undefined) {
+      chain = chain.filter((_, i) => i !== Number(remove));
+      renderChain();
+      return;
+    }
+    const action = t.closest<HTMLElement>("[data-fx]")?.dataset.fx;
+    if (action === "chain-add" && pick?.value) {
+      const params = currentParams() as Record<string, number>;
+      const base = (pick.selectedOptions[0]?.textContent ?? pick.value).replace(/\.+$/, "");
+      const detail = (controls.get(pick.value) ?? []).map((c) => `${params[c.id] ?? c.default}${c.unit}`).join(" ");
+      chain = [...chain, { name: pick.value, label: detail ? `${base} ${detail}` : base, params }];
+      renderChain();
+      return;
+    }
+    if (action === "chain-clear") {
+      chain = [];
+      renderChain();
+      return;
+    }
+    if (action !== "chain-apply" || !chain.length) return;
+    const hit = find(engine.get("document"));
+    if (!hit) return;
+    const r = range;
+    const rangeTrack = r ? engine.get("document").tracks.find((tr) => tr.id === r.trackId) : undefined;
+    const rangeClip = r && rangeTrack ? rangeTrack.clips.find((c) => c.start < r.end && r.start < c.start + c.length) : undefined;
+    const target = rangeTrack && rangeClip ? { track: rangeTrack, clip: rangeClip } : hit;
+    const inRange = rangeClip && r ? r : null;
+    if (inRange && chain.some((s) => retiming.has(s.name))) {
+      setText(notice, "This chain changes timing, so it applies to whole clips: clear the range first");
+      return;
+    }
+    const buttons = [...body.querySelectorAll<HTMLButtonElement>("button[data-fx]")];
+    for (const b of buttons) b.disabled = true;
+    let mediaId = target.clip.mediaId;
+    let last: MediaRef | null = null;
+    try {
+      for (const [i, s] of chain.entries()) {
+        setText(notice, `Chain ${i + 1} of ${chain.length}: ${s.label}...`);
+        const res = await fetch(`/api/media/${mediaId}/effect?name=${encodeURIComponent(s.name)}&params=${encodeURIComponent(JSON.stringify(s.params))}`, { method: "POST" });
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        if (!res.ok) throw new Error(`${s.label}: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+        last = out as unknown as MediaRef;
+        mediaId = last.id;
+      }
+      if (last && inRange) engine.dispatch({ type: "set-range-media", trackId: target.track.id, clipId: target.clip.id, start: inRange.start, end: inRange.end, media: last });
+      else if (last) engine.dispatch({ type: "set-clip-media", trackId: target.track.id, clipId: target.clip.id, media: last });
+      setText(notice, `Applied a chain of ${chain.length} effect${chain.length === 1 ? "" : "s"}${inRange ? " to the range" : " to the clip"}`);
+    } catch (err) {
+      setText(notice, `Could not apply the chain: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      for (const b of buttons) b.disabled = false;
     }
   });
 

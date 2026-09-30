@@ -1269,3 +1269,10 @@ iZotope RX's module search: a search box filters the Effects menu by effect or g
 - logged: v0.54.0 (in progress) · 2026-09-30
 
 Analyze gains Mic check: the engine's findings for the inspected clip, marked OK, warning or problem, each with a Use button that selects its suggested effect (clearing any effect search) and shows its controls, ready to apply; findings clear when the selection changes. The screenshot showed the third Analyze button's label wrapping inside the button, which the overflow measures could not see: labels in these rows now never wrap and the row wraps whole buttons. Verified in Chromium (verify_mic_check.py) on the hum recording: two OK findings and one warning with Use Hum remover, which selected it, and Apply produced "hum (Hum remover).wav"; every Analyze and Apply button one line (28 px); no overflow; containment with vertical overflow clean at three sizes; no page errors.
+
+### src/ui/inspector-pane.ts, styles/workspace.css · effect chains (coverage wave 6)
+- refers-to: src/ui/inspector-pane.ts :: `chain`, `renderChain`, the `chain-add`, `chain-apply`, `chain-clear` and `data-chain-remove` actions; src/styles/workspace.css :: `.fw-chain`
+- kind: explainer
+- logged: v0.55.0 (in progress) · 2026-09-30
+
+iZotope RX's module chains: Add to chain keeps the chosen effect with its current controls (labelled with their values), steps can be removed, and Apply chain runs them in order, each on the previous step's file, then changes the document once (the clip, or the range when one exists, as Apply does), so the whole chain is one undo step; a chain with a timing-changing step is refused inside a range. Verified in Chromium (verify_chain.py) on the 440 Hz clip: Amplify -6 dB, Invert and Amplify +12 dB listed, a removed and re-added step reordered; applying gave -1.9953 of every sample (+6 dB inverted, largest deviation 0.000019 across three renders) in one undo step; undo restored the original; with Change tempo added and a range dragged the chain was refused and the document unchanged; Clear hid the chain; containment with vertical overflow clean; screenshot inspected; no page errors.

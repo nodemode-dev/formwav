@@ -158,6 +158,11 @@
 .fw-finding.is-warn { border-inline-start-color: var(--accent-color); }
 .fw-finding.is-bad { border-inline-start-color: var(--error-color, #f85149); }
 .fw-finding .fw-ibtn { justify-self: start; }
+.fw-chain { display: grid; gap: 4px; margin: 0; padding-inline-start: 18px; font-size: 12px; }
+.fw-chain[hidden] { display: none; }
+.fw-chain-step { padding-inline-start: 2px; }
+.fw-chain-step > span { margin-inline-end: 6px; }
+.fw-chain-step .fw-ibtn { padding: 1px 6px; font-size: 11px; }
 
 .fw-export-dialog { inline-size: min(360px, calc(100vw - 32px)); padding: 16px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; }
 .fw-export-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
