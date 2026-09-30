@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new()))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new()))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -24,6 +24,7 @@ fn render<'py>(
     rate: f32,
     fx: Vec<(usize, u8, f32, f32, f32)>,
     master_fx: Vec<(u8, f32, f32, f32)>,
+    chains: Vec<(u8, usize, u8, f32, f32, f32, f32, f32)>,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let mut player = Player::new();
     player.set_master_db(master_db);
@@ -44,8 +45,14 @@ fn render<'py>(
             player.add_clip_fx(kind, freq, gain_db, q);
         }
     }
-    for (id, gain, pan) in buses {
+    for (index, (id, gain, pan)) in buses.into_iter().enumerate() {
         player.add_bus(crate::render::Bus { id, gain, pan });
+        for &(_, _, kind, a, b, c, d, e) in chains.iter().filter(|s| s.0 == 1 && s.1 == index) {
+            player.add_bus_stage(kind, a, b, c, d, e);
+        }
+    }
+    for &(_, _, kind, a, b, c, d, e) in chains.iter().filter(|s| s.0 == 2) {
+        player.add_master_stage(kind, a, b, c, d, e);
     }
     let mut left = vec![0.0f32; frames];
     let mut right = vec![0.0f32; frames];

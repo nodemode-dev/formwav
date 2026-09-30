@@ -107,7 +107,10 @@ pub struct Player {
     clip_fx: Vec<Vec<crate::fx::Biquad>>,
     meter_fx: Vec<Vec<crate::fx::Biquad>>,
     /// The master chain, run on the summed mix before the master gain, meters and loudness.
-    master_fx: Vec<crate::fx::Biquad>,
+    master_fx: Vec<crate::fx::Stage>,
+    /// Each bus's chain, parallel to `buses`, run on the bus's sum before its gain and pan: a track holding a
+    /// nonlinear stage (a compressor) plays through a bus of its own so its whole chain sees the track's sum.
+    bus_fx: Vec<Vec<crate::fx::Stage>>,
 }
 
 impl Player {
@@ -153,19 +156,37 @@ impl Player {
 
     /// Appends a filter stage to the master chain; false when the filter is refused (an unknown kind).
     pub fn add_master_fx(&mut self, kind: u8, freq: f32, gain_db: f32, q: f32) -> bool {
+        self.add_master_stage(kind, freq, gain_db, q, 0.0, 0.0)
+    }
+
+    /// Appends a stage of any kind (fx.rs Stage::design) to the master chain.
+    pub fn add_master_stage(&mut self, kind: u8, a: f32, b: f32, c: f32, d: f32, e: f32) -> bool {
         let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
-        match crate::fx::Biquad::design(kind, freq, gain_db, q, rate) {
-            Some(f) => {
-                self.master_fx.push(f);
+        match crate::fx::Stage::design(kind, a, b, c, d, e, rate) {
+            Some(s) => {
+                self.master_fx.push(s);
                 true
             }
             None => false,
         }
     }
 
+    /// Appends a stage of any kind to the most recently added bus's chain; false with no bus or a refused stage.
+    pub fn add_bus_stage(&mut self, kind: u8, a: f32, b: f32, c: f32, d: f32, e: f32) -> bool {
+        let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
+        let (Some(chain), Some(s)) = (self.bus_fx.last_mut(), crate::fx::Stage::design(kind, a, b, c, d, e, rate)) else {
+            return false;
+        };
+        chain.push(s);
+        true
+    }
+
     fn reset_fx(&mut self) {
-        for f in self.clip_fx.iter_mut().chain(self.meter_fx.iter_mut()).flatten().chain(self.master_fx.iter_mut()) {
+        for f in self.clip_fx.iter_mut().chain(self.meter_fx.iter_mut()).flatten() {
             f.reset();
+        }
+        for s in self.master_fx.iter_mut().chain(self.bus_fx.iter_mut().flatten()) {
+            s.reset();
         }
     }
 
@@ -229,9 +250,8 @@ impl Player {
             if !self.master_fx.is_empty() {
                 for i in done..done + len {
                     let (mut l, mut r) = (left[i], right[i]);
-                    for f in self.master_fx.iter_mut() {
-                        l = f.process(0, l);
-                        r = f.process(1, r);
+                    for s in self.master_fx.iter_mut() {
+                        (l, r) = s.process(l, r);
                     }
                     left[i] = l;
                     right[i] = r;
@@ -268,10 +288,12 @@ impl Player {
 
     pub fn clear_buses(&mut self) {
         self.buses.clear();
+        self.bus_fx.clear();
     }
 
     pub fn add_bus(&mut self, bus: Bus) {
         self.buses.push(bus);
+        self.bus_fx.push(Vec::new());
     }
 
     fn mix_buses(&mut self, fx: &mut [Vec<crate::fx::Biquad>], left: &mut [f32], right: &mut [f32], from: u64) {
@@ -289,11 +311,22 @@ impl Player {
         if bus_peaks.len() != self.buses.len() {
             bus_peaks.resize(self.buses.len(), (0.0, 0.0));
         }
+        let mut bus_fx = std::mem::take(&mut self.bus_fx);
         for (k, bus) in self.buses.iter().enumerate() {
             scratch_left[..n].fill(0.0);
             scratch_right[..n].fill(0.0);
             let id = bus.id;
             self.mix(fx, &mut scratch_left[..n], &mut scratch_right[..n], from, |c| c.bus == id);
+            if let Some(chain) = bus_fx.get_mut(k).filter(|c| !c.is_empty()) {
+                for i in 0..n {
+                    let (mut l, mut r) = (scratch_left[i], scratch_right[i]);
+                    for s in chain.iter_mut() {
+                        (l, r) = s.process(l, r);
+                    }
+                    scratch_left[i] = l;
+                    scratch_right[i] = r;
+                }
+            }
             let (pan_left, pan_right) = pan_gains(bus.pan);
             let gain_left = bus.gain * pan_left;
             let gain_right = bus.gain * pan_right;
@@ -307,6 +340,7 @@ impl Player {
                 peak.1 = peak.1.max(r.abs());
             }
         }
+        self.bus_fx = bus_fx;
         self.bus_peaks = bus_peaks;
         self.scratch_left = scratch_left;
         self.scratch_right = scratch_right;

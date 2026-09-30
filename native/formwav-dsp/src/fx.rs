@@ -89,6 +89,87 @@ impl Biquad {
     }
 }
 
+pub const COMPRESSOR: u8 = 6;
+
+/// A feed-forward compressor, stereo-linked: the louder channel's absolute level drives one gain for both. Hard knee;
+/// the gain reduction in dB follows its target with an attack coefficient when rising and a release one when falling.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Compressor {
+    threshold_db: f32,
+    slope: f32,
+    attack: f32,
+    release: f32,
+    makeup_db: f32,
+    reduction_db: f32,
+}
+
+impl Compressor {
+    /// `ratio` at least 1; attack and release in milliseconds (at least 0.1); None for a non-positive rate.
+    pub fn design(threshold_db: f32, ratio: f32, attack_ms: f32, release_ms: f32, makeup_db: f32, rate: f32) -> Option<Compressor> {
+        if !(rate > 0.0) {
+            return None;
+        }
+        let coef = |ms: f32| (-1.0 / (ms.max(0.1) * 0.001 * rate)).exp();
+        Some(Compressor {
+            threshold_db: threshold_db.clamp(-60.0, 0.0),
+            slope: 1.0 - 1.0 / ratio.clamp(1.0, 20.0),
+            attack: coef(attack_ms),
+            release: coef(release_ms),
+            makeup_db: makeup_db.clamp(0.0, 24.0),
+            reduction_db: 0.0,
+        })
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let level = l.abs().max(r.abs());
+        let level_db = if level > 1e-9 { 20.0 * level.log10() } else { -180.0 };
+        let target = (level_db - self.threshold_db).max(0.0) * self.slope;
+        let coef = if target > self.reduction_db { self.attack } else { self.release };
+        self.reduction_db = target + coef * (self.reduction_db - target);
+        let gain = 10f32.powf((self.makeup_db - self.reduction_db) / 20.0);
+        (l * gain, r * gain)
+    }
+
+    pub fn reset(&mut self) {
+        self.reduction_db = 0.0;
+    }
+}
+
+/// One stage of a bus or master chain: a filter or a compressor, run a stereo frame at a time.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Stage {
+    Filter(Biquad),
+    Comp(Compressor),
+}
+
+impl Stage {
+    /// Kinds 1 to 5 are filters (a = freq, b = gain dB, c = Q); kind 6 is a compressor (a = threshold dB, b = ratio,
+    /// c = attack ms, d = release ms, e = makeup dB). None for an unknown kind.
+    pub fn design(kind: u8, a: f32, b: f32, c: f32, d: f32, e: f32, rate: f32) -> Option<Stage> {
+        if kind == COMPRESSOR {
+            Compressor::design(a, b, c, d, e, rate).map(Stage::Comp)
+        } else {
+            Biquad::design(kind, a, b, c, rate).map(Stage::Filter)
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        match self {
+            Stage::Filter(f) => (f.process(0, l), f.process(1, r)),
+            Stage::Comp(c) => c.process(l, r),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        match self {
+            Stage::Filter(f) => f.reset(),
+            Stage::Comp(c) => c.reset(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,5 +208,33 @@ mod tests {
     fn unknown_kind_or_rate_is_refused() {
         assert!(Biquad::design(99, 1000.0, 0.0, 0.7, 48000.0).is_none());
         assert!(Biquad::design(LOWPASS, 1000.0, 0.0, 0.7, 0.0).is_none());
+    }
+
+    /// Output peak in dBFS over the settled second half of a 1 kHz sine of `amp` through a compressor.
+    fn comp_peak(amp: f32, threshold: f32, ratio: f32) -> f32 {
+        let rate = 48000.0;
+        let mut c = Compressor::design(threshold, ratio, 5.0, 200.0, 0.0, rate).unwrap();
+        let mut peak = 0.0f32;
+        for i in 0..48000 {
+            let x = amp * (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / rate).sin();
+            let (y, _) = c.process(x, x);
+            if i >= 24000 {
+                peak = peak.max(y.abs());
+            }
+        }
+        20.0 * peak.log10()
+    }
+
+    #[test]
+    fn compressor_follows_its_static_curve() {
+        // -6 dBFS is 14 dB over a -20 dB threshold; 4:1 keeps a quarter, so about 10.5 dB of reduction.
+        let out = comp_peak(0.5, -20.0, 4.0);
+        assert!((out - (-16.5)).abs() < 1.0, "{out}");
+    }
+
+    #[test]
+    fn compressor_leaves_quiet_signals_alone() {
+        let out = comp_peak(0.05, -20.0, 4.0);
+        assert!((out - 20.0 * 0.05f32.log10()).abs() < 0.05, "{out}");
     }
 }

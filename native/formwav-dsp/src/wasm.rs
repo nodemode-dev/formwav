@@ -132,6 +132,22 @@ pub unsafe extern "C" fn fw_add_master_fx(player: *mut Player, kind: u32, freq: 
     (*player).add_master_fx(kind as u8, freq, gain_db, q) as u32
 }
 
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn fw_add_master_stage(player: *mut Player, kind: u32, a: f32, b: f32, c: f32, d: f32, e: f32) -> u32 {
+    (*player).add_master_stage(kind as u8, a, b, c, d, e) as u32
+}
+
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn fw_add_bus_stage(player: *mut Player, kind: u32, a: f32, b: f32, c: f32, d: f32, e: f32) -> u32 {
+    (*player).add_bus_stage(kind as u8, a, b, c, d, e) as u32
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_take_peaks(player: *mut Player, out: *mut f32) {
     let (left, right) = (*player).take_peaks();
