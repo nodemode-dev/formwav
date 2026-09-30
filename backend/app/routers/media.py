@@ -47,6 +47,18 @@ def generate_signal(kind: str, seconds: float = 5.0, rate: int = 48000, freq: fl
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/excerpt", status_code=201)
+def media_excerpt(media_id: str, start: float, end: float) -> dict:
+    from ..services import tools
+
+    try:
+        return tools.excerpt(media_id, start, end)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/stats")
 def media_stats(media_id: str) -> dict:
     from ..services import tools

@@ -105,6 +105,8 @@ FORMWAV_CHAINS = {
     "loudness-streaming": "loudnorm=I=-14:TP=-1:LRA=11",
     "loudness-broadcast": "loudnorm=I=-23:TP=-2:LRA=15",
     "exciter": "aexciter=amount=2",
+    "eq-3band": "lowshelf=g=0:f=120,equalizer=f=1000:t=q:w=1:g=0,highshelf=g=0:f=8000",
+    "graphic-eq-5": "firequalizer=gain_entry='entry(60,0);entry(250,0);entry(1000,0);entry(4000,0);entry(12000,0)'",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
@@ -112,7 +114,7 @@ ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Clean up", [("voice-clean", "Enhance speech"), ("denoise", "Denoise"), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess")]),
     ("Dynamics", [("compress", "Compress"), ("normalize", "Normalize to -16 LUFS"), ("level-rider", "Level rider"), ("peak-limiter", "Peak limiter")]),
-    ("Tone", [("bass", "Bass boost"), ("treble", "Treble boost"), ("warm-lows", "Warm lows"), ("presence-lift", "Presence lift"), ("mid-scoop", "Mid scoop"), ("crisp-detail", "Crisp detail")]),
+    ("Tone", [("bass", "Bass boost"), ("treble", "Treble boost"), ("warm-lows", "Warm lows"), ("presence-lift", "Presence lift"), ("mid-scoop", "Mid scoop"), ("crisp-detail", "Crisp detail"), ("eq-3band", "Parametric EQ, 3 bands..."), ("graphic-eq-5", "Graphic EQ, 5 bands...")]),
     ("Space", [("room", "Room"), ("hall", "Hall"), ("cathedral", "Cathedral"), ("plate", "Plate"), ("echo", "Echo"), ("slapback", "Slapback"), ("long-tail", "Long tail"), ("tunnel", "Tunnel"), ("small-booth", "Small booth"), ("far-away", "Far away"), ("wide-stage", "Wide stage"), ("stereo-bloom", "Stereo bloom")]),
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
@@ -153,6 +155,15 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "treble": ({"gain": ("Gain", -20, 20, 6, "dB")}, lambda v: f"treble=g={v['gain']:.1f}:f=3500"),
     "presence-lift": ({"freq": ("Frequency", 200, 12000, 3000, "Hz"), "gain": ("Gain", -15, 15, 5, "dB")}, lambda v: f"equalizer=f={v['freq']:.0f}:t=q:w=1.2:g={v['gain']:.1f}"),
     "echo": ({"delay": ("Delay", 20, 2000, 100, "ms"), "decay": ("Decay", 5, 90, 40, "%")}, lambda v: f"aecho=0.8:0.7:{v['delay']:.0f}:{v['decay'] / 100:.2f}"),
+    "click-removal": ({"threshold": ("Threshold", 1, 20, 2, ""), "window": ("Window", 10, 100, 55, "ms")}, lambda v: f"adeclick=w={v['window']:.0f}:t={v['threshold']:.1f}"),
+    "eq-3band": (
+        {"low": ("Low shelf 120 Hz", -15, 15, 0, "dB"), "freq": ("Mid frequency", 200, 8000, 1000, "Hz"), "mid": ("Mid gain", -15, 15, 0, "dB"), "high": ("High shelf 8 kHz", -15, 15, 0, "dB")},
+        lambda v: f"lowshelf=g={v['low']:.1f}:f=120,equalizer=f={v['freq']:.0f}:t=q:w=1:g={v['mid']:.1f},highshelf=g={v['high']:.1f}:f=8000",
+    ),
+    "graphic-eq-5": (
+        {"b60": ("60 Hz", -15, 15, 0, "dB"), "b250": ("250 Hz", -15, 15, 0, "dB"), "b1k": ("1 kHz", -15, 15, 0, "dB"), "b4k": ("4 kHz", -15, 15, 0, "dB"), "b12k": ("12 kHz", -15, 15, 0, "dB")},
+        lambda v: f"firequalizer=gain_entry='entry(60,{v['b60']:.1f});entry(250,{v['b250']:.1f});entry(1000,{v['b1k']:.1f});entry(4000,{v['b4k']:.1f});entry(12000,{v['b12k']:.1f})'",
+    ),
 }
 
 

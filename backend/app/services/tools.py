@@ -100,3 +100,20 @@ def spectrogram_png(media_id: str, width: int = 640, height: int = 240) -> bytes
         out = Path(tmp) / "spectrogram.png"
         return _run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(media_dir() / f"{media_id}.wav"),
                      "-lavfi", f"showspectrumpic=s={width}x{height}:legend=1:color=intensity:scale=log", "-frames:v", "1", str(out)], out)
+
+
+def excerpt(media_id: str, start: float, end: float) -> dict:
+    """The part of a media file between `start` and `end` (its own seconds) as new media, sample-exact via atrim."""
+    info = media.media_info(media_id)
+    rate = int(info["sampleRate"])
+    length = int(info["frames"]) / rate
+    start, end = max(0.0, float(start)), min(length, float(end))
+    if end - start < 0.01:
+        raise media.MediaError("the excerpt is empty; choose a range inside the file")
+    a, b = round(start * rate), round(end * rate)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "excerpt.wav"
+        data = _run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(media_dir() / f"{media_id}.wav"),
+                     "-af", f"atrim=start_sample={a}:end_sample={b}", "-c:a", "pcm_f32le", str(out)], out)
+    stem = str(info["name"]).rsplit(".", 1)[0]
+    return media.import_wav(f"{stem} (clip {start:.2f} to {end:.2f} s).wav", data)
