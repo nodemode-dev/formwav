@@ -13,9 +13,9 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
   node.innerHTML =
     `<div class="fw-strip-name"></div>` +
     `<div class="fw-strip-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div>` +
-    `<input class="fw-strip-fader" type="range" min="-60" max="12" step="0.1" aria-label="Volume">` +
+    `<input class="fw-strip-fader" type="range" min="-60" max="12" step="0.1" data-default="0" aria-label="Volume">` +
     `<output class="fw-strip-db"></output>` +
-    `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" aria-label="Pan"${kind === "master" ? " hidden" : ""}>` +
+    `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" data-default="0" aria-label="Pan"${kind === "master" ? " hidden" : ""}>` +
     `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute"><span class="fw-glyph-off">${fcIcon("speaker")}</span><span class="fw-glyph-on">${fcIcon("mute")}</span></button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo"${kind !== "track" ? " hidden" : ""}>${fcIcon("headphones")}</button></div>` +
     `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>`;
   return node;

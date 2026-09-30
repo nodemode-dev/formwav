@@ -40,6 +40,32 @@ if (host) {
   mountShell(host, engine);
   mountSession(host, engine);
   mountTransport(host, engine, player);
+  // Double-click a slider to reset it to its default (Audacity's controls, as a reference): the same input and change
+  // events a drag fires, so each slider's own handler records the change and undo works as usual. The double-click's
+  // first press moves the thumb and can record a step of its own (volume went to its midpoint, -24 dB, and one undo
+  // landed there); that step is undone before the reset, so one undo returns to the value before the double-click.
+  let press: { el: HTMLInputElement; depth: number; at: number } | null = null;
+  host.addEventListener(
+    "pointerdown",
+    (e) => {
+      const el = e.target;
+      if (!(el instanceof HTMLInputElement) || el.type !== "range") return;
+      if (press && press.el === el && e.timeStamp - press.at < 600) return;
+      press = { el, depth: engine.get("history").undoDepth, at: e.timeStamp };
+    },
+    true,
+  );
+  host.addEventListener("dblclick", (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.type !== "range" || el.disabled || el.dataset.default === undefined) return;
+    if (press && press.el === el && engine.get("history").undoDepth === press.depth + 1) engine.undo();
+    press = null;
+    // Always applied: after that undo the focused slider can still read the default while the document does not
+    // (pan's midpoint is its default), and the reducers ignore a change to the value already held.
+    el.value = el.dataset.default;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
   mountLoop(host, engine);
   mountExport(host, engine);
   mountNormalize(host, engine);

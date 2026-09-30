@@ -8,7 +8,7 @@ const BODY = `
   <div class="fw-insp-head">Clip</div>
   <label class="fw-field"><span>Start</span><input type="number" step="0.001" min="0" data-f="start"><output>s</output></label>
   <div class="fw-field"><span>Length</span><output data-o="length"></output><span></span></div>
-  <label class="fw-field"><span>Clip gain</span><input type="range" min="-24" max="24" step="0.1" data-f="gain"><output data-o="gain"></output></label>
+  <label class="fw-field"><span>Clip gain</span><input type="range" min="-24" max="24" step="0.1" data-f="gain" data-default="0"><output data-o="gain"></output></label>
   <label class="fw-field"><span>Fade in</span><input type="number" step="0.01" min="0" data-f="fadeIn"><output>s</output></label>
   <label class="fw-field"><span>Fade out</span><input type="number" step="0.01" min="0" data-f="fadeOut"><output>s</output></label>
   <label class="fw-field"><span>Fade curve</span><select data-f="shape"><option value="linear">Linear</option><option value="equal-power">Equal power</option><option value="s-curve">S-curve</option><option value="exponential">Exponential</option></select><span></span></label>
@@ -35,10 +35,10 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
-  <label class="fw-field"><span>Volume</span><input type="range" min="-60" max="12" step="0.1" data-f="volume"><output data-o="volume"></output></label>
-  <label class="fw-field"><span>Pan</span><input type="range" min="-1" max="1" step="0.01" data-f="pan"><output data-o="pan"></output></label>
+  <label class="fw-field"><span>Volume</span><input type="range" min="-60" max="12" step="0.1" data-f="volume" data-default="0"><output data-o="volume"></output></label>
+  <label class="fw-field"><span>Pan</span><input type="range" min="-1" max="1" step="0.01" data-f="pan" data-default="0"><output data-o="pan"></output></label>
   <label class="fw-field"><span>Duck under</span><select data-duck="control"></select><span></span></label>
-  <label class="fw-field"><span>By</span><input type="range" min="3" max="30" step="1" value="12" data-duck="amount"><output data-duck-out>12 dB</output></label>
+  <label class="fw-field"><span>By</span><input type="range" min="3" max="30" step="1" value="12" data-duck="amount" data-default="12"><output data-duck-out>12 dB</output></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
   <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
   <div class="fw-rtfx-list" data-scope="track"></div>
@@ -221,6 +221,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         input.max = String(c.max);
         input.step = c.max - c.min > 20 ? "1" : "0.1";
         input.value = String(c.default);
+        input.dataset.default = String(c.default);
         input.dataset.param = c.id;
         const out = document.createElement("output");
         out.textContent = `${c.default} ${c.unit}`;
