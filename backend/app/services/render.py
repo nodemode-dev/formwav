@@ -51,8 +51,11 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     chains: list[tuple] = list(bus_chains)
     end = 0
     skipped = 0
+    vcas = {v["id"]: v for v in (doc.get("vcas") or []) if isinstance(v, dict) and isinstance(v.get("id"), str)}
     for track in tracks:
-        if track.get("mute") or (soloed and not track.get("solo")) or track.get("busId") in muted_buses:
+        # A VCA (Pro Tools' VCA masters) scales and mutes its members without carrying their audio.
+        vca = vcas.get(track.get("vcaId"))
+        if track.get("mute") or (vca and vca.get("mute")) or (soloed and not track.get("solo")) or track.get("busId") in muted_buses:
             continue
         bus_index = buses[track["busId"]][0] if track.get("busId") in buses else 0
         automation = track.get("automation") or {}
@@ -63,7 +66,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         if automation.get("pan"):
             envelopes.append(([(int(p["time"]), float(p["value"])) for p in automation["pan"]], False))
             pan_env = len(envelopes)
-        track_db = 0.0 if gain_env else float(track.get("gainDb", 0))
+        track_db = (0.0 if gain_env else float(track.get("gainDb", 0))) + (float(vca.get("gainDb", 0)) if vca else 0.0)
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
         if bus_index == 0 and any(s[0] == 6 for s in stages):

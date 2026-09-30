@@ -502,3 +502,10 @@ iZotope RX's EQ Match: POST /api/media/{id}/eq-match?reference=&start=&end= give
 - logged: v0.79.0 (in progress) · 2026-09-30
 
 The target can be measured over a region (tstart, tend in its media's seconds) so a range edit compares like with like; the whole file is still rendered, at its exact length, and the app keeps only the range. Verified through the app (the frontend log's verify_eqmatch_range.py): a dark range inside a clip that is bright elsewhere matched to within 0.58 dB of the learned bright range.
+
+### app/services/render.py · VCAs in the export plan
+- refers-to: app/services/render.py :: `plan` (`vcas`, the member skip and `track_db`)
+- kind: explainer
+- logged: v0.80.0 (in progress) · 2026-09-30
+
+A track assigned to a VCA plays at its fader (or its volume automation) plus the VCA's gain, and a muted VCA silences it; no audio passes through the VCA. Verified by FFT of exports with two of three tracks on a VCA: at -6 dB the members fell 6.00 dB and the unassigned track 0.00 dB; muted, the members fell over 169 dB and the unassigned track did not move.
