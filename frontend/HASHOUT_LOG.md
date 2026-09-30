@@ -1297,3 +1297,10 @@ A screenshot showed Apply chain and Clear chain with an empty chain: the buttons
 - logged: v0.57.0 (in progress) · 2026-09-30
 
 The export dialog's What gains Streaming preview: rather than downloading, the engine's decoded preview lands on a new track at 0 s, to solo against the mix. Verified in Chromium (verify_preview.py): MP3 192 kbps added "Streaming preview (MP3, 192 kbps)" at 0 s, 11.0 s long; FLAC was refused with the engine's message; no page errors.
+
+### src/ui/inspector-pane.ts · Deconstruct
+- refers-to: src/ui/inspector-pane.ts :: the `deconstruct` action (sharing the separation handler)
+- kind: explainer
+- logged: v0.57.0 (in progress) · 2026-09-30
+
+Deconstruct beside Separate into stems, through the same handler with its own route and wait note: the clip's trimmed range becomes tonal, noisy and transient tracks at the clip's start, the original muted, one undo step. Verified in Chromium (verify_deconstruct_ui.py): three tracks at 0 s, 4.0 s long, the original muted, one step, undo restoring it; the Separate regression unchanged through the shared handler; buttons one line; containment clean; screenshot inspected; no page errors.
