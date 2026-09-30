@@ -128,6 +128,9 @@ export type Command =
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
   | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean }
   | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef }
+  | { type: "remove-marker"; markerId: string }
+  | { type: "set-marker"; markerId: string; at?: number; label?: string }
+  | { type: "set-region"; regionId: string; start?: number; end?: number; label?: string }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
@@ -610,6 +613,32 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         });
         return moved ? { ...t, clips } : t;
       });
+    }
+    case "remove-marker": {
+      const markers = doc.markers.filter((m) => m.id !== cmd.markerId);
+      return markers.length === doc.markers.length ? doc : { ...doc, markers };
+    }
+    case "set-marker": {
+      let changed = false;
+      const markers = doc.markers.map((m) => {
+        if (m.id !== cmd.markerId) return m;
+        const next = { ...m, at: cmd.at === undefined ? m.at : Math.max(0, Math.round(cmd.at)), label: cmd.label === undefined ? m.label : cmd.label };
+        changed = next.at !== m.at || next.label !== m.label;
+        return next;
+      });
+      return changed ? { ...doc, markers: [...markers].sort((a, b) => a.at - b.at) } : doc;
+    }
+    case "set-region": {
+      let changed = false;
+      const regions = (doc.regions ?? []).map((r) => {
+        if (r.id !== cmd.regionId) return r;
+        const start = Math.max(0, Math.round(cmd.start ?? r.start));
+        const end = Math.max(start + 1, Math.round(cmd.end ?? r.end));
+        const next = { ...r, start, end, label: cmd.label === undefined ? r.label : cmd.label };
+        changed = next.start !== r.start || next.end !== r.end || next.label !== r.label;
+        return next;
+      });
+      return changed ? { ...doc, regions: [...regions].sort((a, b) => a.start - b.start) } : doc;
     }
     case "add-marker": {
       const marker: Marker = { id: newId(), at: Math.max(0, Math.round(cmd.at)), label: cmd.label };

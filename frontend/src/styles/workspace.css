@@ -109,8 +109,23 @@
 .fw-pane-tab.is-active { color: var(--text-on-accent); background: var(--accent-color); }
 .fw-pane-body[hidden],
 .fw-field[hidden] { display: none; }
-.fw-pane-media:is([data-tab="voice"], [data-tab="transcript"]) .fw-media-empty { display: none; }
-.fw-pane-media:is([data-tab="voice"], [data-tab="transcript"]) :is(.fw-pane-meta, .fw-pane-end) { visibility: hidden; }
+.fw-pane-media:is([data-tab="voice"], [data-tab="transcript"], [data-tab="labels"]) .fw-media-empty { display: none; }
+.fw-pane-media:is([data-tab="voice"], [data-tab="transcript"], [data-tab="labels"]) :is(.fw-pane-meta, .fw-pane-end) { display: none; }
+.fw-pane-media .fw-pane-header { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+.fw-pane-media .fw-pane-tabs { grid-column: 1 / -1; flex-wrap: nowrap; gap: 1px; overflow-x: auto; scrollbar-width: none; }
+.fw-pane-media .fw-pane-tab { flex: none; padding: 3px 6px; }
+
+.fw-labels-body { display: grid; align-content: start; gap: 8px; padding: 0 8px 8px; }
+.fw-labels-list { display: grid; gap: 6px; }
+.fw-label-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "time remove" "text text"; align-items: center; gap: 4px 6px; }
+.fw-label-row .fw-label-time { grid-area: time; justify-self: start; }
+.fw-label-row .fw-label-remove { grid-area: remove; }
+.fw-label-row .fw-label-text { grid-area: text; }
+.fw-label-row[data-kind="region"] .fw-label-time { color: var(--accent-color); }
+.fw-label-time { padding: 2px 4px; font: inherit; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); background: transparent; border: 0; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.fw-label-time:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.fw-label-text { min-inline-size: 0; padding: 3px 6px; font: inherit; font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
+.fw-file-button { cursor: pointer; }
 
 .fw-transcript-body { display: grid; align-content: start; gap: 8px; padding: 0 8px 8px; }
 .fw-transcript-actions { display: flex; flex-wrap: wrap; gap: 6px; }

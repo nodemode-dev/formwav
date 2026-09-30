@@ -23,6 +23,7 @@ import { mountMediaPane } from "./ui/media-pane";
 import { mountInspector } from "./ui/inspector-pane";
 import { mountVoicePane } from "./ui/voice-pane";
 import { mountTranscriptPane } from "./ui/transcript-pane";
+import { mountLabelsPane } from "./ui/labels-pane";
 import { mountWorkspaceLayout } from "./ui/workspace-layout";
 import { mountRecord } from "./ui/record";
 import { mountProjects } from "./ui/projects";
@@ -50,6 +51,7 @@ if (host) {
   mountInspector(host, engine);
   mountVoicePane(host, engine);
   mountTranscriptPane(host, engine, player);
+  mountLabelsPane(host, engine, player);
   mountWorkspaceLayout(host);
   mountRecord(host, engine, player);
   mountProjects(host, engine, player);

@@ -68,6 +68,12 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
       ctx.fillRect(x0, height - 4, Math.max(1, (region.end - region.start) / spp), 4);
       ctx.fillText(region.label, x0 + 4, height - 16);
     }
+    for (const marker of doc.markers) {
+      const x = Math.round(marker.at / spp);
+      ctx.fillRect(x, 0, 1, height);
+      ctx.fillRect(x, height - 8, 6, 8);
+      ctx.fillText(marker.label, x + 8, height - 16);
+    }
 
     const range = pending ?? doc.loop;
     if (range) {
