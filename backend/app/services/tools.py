@@ -93,6 +93,76 @@ def stats(media_id: str) -> dict:
     return result
 
 
+def _run_text(args: list[str]) -> str:
+    done = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-nostdin", *args, "-f", "null", "-"], capture_output=True, text=True, timeout=900)
+    return done.stderr
+
+
+def _num(pattern: str, text: str) -> float | None:
+    found = re.findall(pattern, text)
+    return float(found[-1]) if found else None
+
+
+def mic_check(media_id: str) -> dict:
+    """Adobe Podcast's mic analysis and RX's Repair Assistant, as references: measurements of a recording and findings
+    with the effect that addresses each. Loudness from ebur128, clipping from volumedetect's 0 dB bin, noise floor and
+    DC offset from astats, mains hum from narrow 50 and 60 Hz bands against the whole signal."""
+    info = media.media_info(media_id)
+    src = str(media_dir() / f"{media_id}.wav")
+    loud = _run_text(["-i", src, "-af", "ebur128"])
+    lufs = _num(r"I:\s+(-?[0-9.]+|-inf) LUFS", loud)
+    vol = _run_text(["-i", src, "-af", "volumedetect"])
+    peak = _num(r"max_volume:\s+(-?[0-9.]+) dB", vol)
+    clipped = int(_num(r"histogram_0db:\s+([0-9]+)", vol) or 0)
+    st = stats(media_id)
+    # The mains notches keep a steady hum from reading as the noise floor (it is reported as hum instead); one pass
+    # left a -14 dB hum reading as -44 dB of noise, so each frequency is notched twice.
+    one = "bandreject=f=50:width_type=q:w=4,bandreject=f=60:width_type=q:w=4,bandreject=f=100:width_type=q:w=4,bandreject=f=120:width_type=q:w=4"
+    notch = f"{one},{one}"
+    noise = _num(r"Noise floor dB:\s+(-?[0-9.]+|-inf)", _run_text(["-i", src, "-af", f"{notch},astats=measure_overall=Noise_floor:measure_perchannel=none"]))
+    rms_all = st.get("rmsDb")
+    hum = {}
+    for f in (50, 60):
+        band = stats_filtered(src, f"bandpass=f={f}:width_type=h:w=4")
+        hum[f] = None if band is None or rms_all is None or rms_all == float("-inf") else round(band - rms_all, 1)
+    dc = st.get("dcOffset") or 0.0
+    findings: list[dict] = []
+    if lufs is None or lufs == float("-inf"):
+        findings.append({"level": "bad", "text": "The clip is silent.", "suggest": None})
+    elif lufs < -30:
+        findings.append({"level": "warn", "text": f"Quiet: {lufs:.1f} LUFS. Speech usually sits around -16 to -20 LUFS.", "suggest": "loudness-streaming"})
+    elif lufs > -12:
+        findings.append({"level": "warn", "text": f"Very loud: {lufs:.1f} LUFS.", "suggest": "loudness-streaming"})
+    else:
+        findings.append({"level": "ok", "text": f"Level: {lufs:.1f} LUFS.", "suggest": None})
+    if clipped > 0:
+        findings.append({"level": "bad", "text": f"Clipping: {clipped} samples at full scale.", "suggest": "de-clip"})
+    elif peak is not None and peak > -1:
+        findings.append({"level": "warn", "text": f"Peaks reach {peak:.1f} dBFS, close to clipping.", "suggest": "peak-limiter"})
+    worst = max((v for v in hum.values() if v is not None), default=None)
+    hum_found = worst is not None and worst > -30
+    # Heuristic, stated: a strong hum leaves about -45 dB of residue in the noise-floor reading even after notching,
+    # so with hum present background noise is reported only above -40 dB (without hum, above -50 dB).
+    noise_limit = -40 if hum_found else -50
+    if noise is not None and noise != float("-inf"):
+        if noise > noise_limit:
+            findings.append({"level": "warn", "text": f"Noisy background: noise floor {noise:.1f} dB.", "suggest": "voice-denoise"})
+        else:
+            findings.append({"level": "ok", "text": f"Quiet background: noise floor {noise:.1f} dB.", "suggest": None})
+    if hum_found:
+        mains = 50 if (hum[50] or -999) >= (hum[60] or -999) else 60
+        findings.append({"level": "warn", "text": f"Mains hum at {mains} Hz: {worst:.1f} dB against the whole signal.", "suggest": "hum-remover"})
+    if abs(dc) > 0.001:
+        findings.append({"level": "warn", "text": f"DC offset {dc:.4f}.", "suggest": "dc-offset"})
+    return {"name": info["name"], "lufs": lufs, "peakDb": peak, "clippedSamples": clipped, "noiseFloorDb": noise, "humDb": hum, "dcOffset": dc, "findings": findings}
+
+
+def stats_filtered(src: str, chain: str) -> float | None:
+    """RMS level in dB of the file through a filter chain (astats overall)."""
+    text = _run_text(["-i", src, "-af", f"{chain},astats=measure_perchannel=none"])
+    return _num(r"RMS level dB:\s+(-?[0-9.]+)", text)
+
+
 def spectrogram_png(media_id: str, width: int = 640, height: int = 240, legend: bool = True) -> bytes:
     """A spectrogram of the whole file, time left to right and frequency upwards (ffmpeg showspectrumpic); without the
     legend the image is the bare plot, so its width maps to the file's length exactly."""

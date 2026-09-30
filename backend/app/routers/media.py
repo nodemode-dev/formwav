@@ -59,6 +59,18 @@ def media_excerpt(media_id: str, start: float, end: float) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.get("/media/{media_id}/mic-check")
+def media_mic_check(media_id: str) -> dict:
+    from ..services import tools
+
+    try:
+        return tools.mic_check(media_id)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/stats")
 def media_stats(media_id: str) -> dict:
     from ..services import tools
