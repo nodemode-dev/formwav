@@ -200,6 +200,7 @@
 .fw-field input[type="text"] { inline-size: 100%; padding: 3px 6px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 .fw-analyze-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
 .fw-analyze-buttons .fw-ibtn { white-space: nowrap; }
+.fw-ibtn[hidden] { display: none; }
 .fw-stats { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 0; font-size: 12px; }
 .fw-stats:empty { display: none; }
 .fw-stats dt { color: var(--text-secondary); }

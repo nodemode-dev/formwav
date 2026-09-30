@@ -1283,3 +1283,10 @@ iZotope RX's module chains: Add to chain keeps the chosen effect with its curren
 - logged: v0.56.0 · 2026-09-30
 
 Separate into stems sends the clip's trimmed range to the engine and, in one batch command, puts the four stems on new tracks starting where the clip starts and mutes the original track, so one undo reverses it all; the notice warns that separation takes about three times the clip's length on a CPU. Verified in Chromium (verify_separate.py) on a clip trimmed by 2 s: four tracks named for their stems, each starting at 2.0 s and 9.0 s long, the original muted, one undo step, undo restoring the original track unmuted and alone; no page errors. The separation's quality is in the backend log.
+
+### src/styles/workspace.css · hidden action buttons were still shown
+- refers-to: src/styles/workspace.css :: `.fw-ibtn[hidden]`
+- kind: warning-context
+- logged: v0.56.0 · 2026-09-30
+
+A screenshot showed Apply chain and Clear chain with an empty chain: the buttons carried the hidden attribute, but the button class's display rule overrode it, and the chain harness had read the hidden property, which was true, rather than whether the buttons showed. Hidden action buttons are now never displayed, and the check reads computed display: none with an empty chain, flex with a step, none after Clear; the chain regression unchanged.
