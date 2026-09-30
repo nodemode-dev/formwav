@@ -93,13 +93,15 @@ def stats(media_id: str) -> dict:
     return result
 
 
-def spectrogram_png(media_id: str, width: int = 640, height: int = 240) -> bytes:
-    """A spectrogram of the whole file, time left to right and frequency upwards (ffmpeg showspectrumpic)."""
+def spectrogram_png(media_id: str, width: int = 640, height: int = 240, legend: bool = True) -> bytes:
+    """A spectrogram of the whole file, time left to right and frequency upwards (ffmpeg showspectrumpic); without the
+    legend the image is the bare plot, so its width maps to the file's length exactly."""
     media.media_info(media_id)
+    width, height = max(64, min(int(width), 8192)), max(32, min(int(height), 1024))
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "spectrogram.png"
         return _run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(media_dir() / f"{media_id}.wav"),
-                     "-lavfi", f"showspectrumpic=s={width}x{height}:legend=1:color=intensity:scale=log", "-frames:v", "1", str(out)], out)
+                     "-lavfi", f"showspectrumpic=s={width}x{height}:legend={1 if legend else 0}:color=intensity:scale=log", "-frames:v", "1", str(out)], out)
 
 
 def excerpt(media_id: str, start: float, end: float) -> dict:

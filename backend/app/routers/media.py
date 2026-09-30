@@ -72,11 +72,11 @@ def media_stats(media_id: str) -> dict:
 
 
 @router.get("/media/{media_id}/spectrogram.png")
-def media_spectrogram(media_id: str) -> Response:
+def media_spectrogram(media_id: str, w: int = 640, h: int = 240, legend: bool = True) -> Response:
     from ..services import tools
 
     try:
-        return Response(content=tools.spectrogram_png(media_id), media_type="image/png")
+        return Response(content=tools.spectrogram_png(media_id, w, h, legend), media_type="image/png")
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err
     except media.MediaError as err:
