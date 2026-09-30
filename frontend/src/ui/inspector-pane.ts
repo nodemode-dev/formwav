@@ -28,6 +28,7 @@ const BODY = `
   <div class="fw-insp-head">Analyze</div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="stats">Statistics</button><button type="button" class="fw-ibtn" data-an="spectrogram">Spectrogram</button><button type="button" class="fw-ibtn" data-an="mic">Mic check</button><button type="button" class="fw-ibtn" data-an="transients" title="Put a marker at each transient in this clip">Transients</button></div>
   <label class="fw-field"><span>Sensitivity</span><input type="number" min="0" max="1" step="0.05" value="0.5" data-an-sens aria-label="Transient sensitivity, 0 strong attacks only to 1 subtle ones"><span></span></label>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="split-transients" title="Cut this clip at each transient">Split at transients</button></div>
   <ul class="fw-mic-findings" hidden></ul>
   <dl class="fw-stats"></dl>
   <img class="fw-spectrogram" alt="Spectrogram of the selected clip" hidden>
@@ -47,6 +48,10 @@ const BODY = `
   <div class="fw-insp-head">Master effects</div>
   <div class="fw-rtfx-list" data-scope="master"></div>
   <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+</div>
+<div class="fw-insp-section fw-insp-quantize" hidden>
+  <div class="fw-insp-head">Quantize</div>
+  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="1" value="120" data-q="bpm"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button></div>
 </div>`;
 
 const db = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
@@ -93,6 +98,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     show(body.querySelector(".fw-insp-track"), !!hit);
     show(body.querySelector(".fw-insp-effects"), !!hit);
     show(body.querySelector(".fw-insp-analyze"), !!hit);
+    show(body.querySelector(".fw-insp-quantize"), !!hit || selected.length > 0);
     if (!hit) {
       const seconds = doc.tracks.reduce((end, t) => Math.max(end, ...t.clips.map((c) => (c.start + c.length) / doc.sampleRate)), 0);
       setText(body.querySelector(".fw-insp-empty"), selected.length > 1 ? `${selected.length} clips selected. Select one clip to edit its properties.` : doc.tracks.length ? `Session: ${doc.tracks.length} track${doc.tracks.length === 1 ? "" : "s"}, ${(doc.sampleRate / 1000).toFixed(1)} kHz, ${seconds.toFixed(1)} s. Select a clip to edit its properties.` : "Import audio to begin. Selecting a clip shows its properties here.");
@@ -670,6 +676,71 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, `Marked ${at.length} transient${at.length === 1 ? "" : "s"}`);
     } catch (err) {
       setText(notice, `Could not find transients: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // Timing edits on transients (Pro Tools' groove edits, as a reference): cut a clip at its transients, then quantize
+  // clip starts to a musical grid; each one undo step. After a split each piece starts on its transient.
+  let selectedIds: string[] = [];
+  host.addEventListener("fw-selection", (e) => {
+    selectedIds = [...((e as CustomEvent<string[]>).detail ?? [])];
+  });
+  const clipTransients = async (): Promise<{ hit: { track: Track; clip: Clip }; at: number[] } | null> => {
+    const doc = engine.get("document");
+    const hit = find(doc);
+    const source = hit ? doc.media[hit.clip.mediaId] : undefined;
+    if (!hit || !source) return null;
+    const sens = Number(body.querySelector<HTMLInputElement>("[data-an-sens]")?.value ?? 0.5);
+    const res = await fetch(`/api/media/${source.id}/transients?sensitivity=${Number.isFinite(sens) ? sens : 0.5}`);
+    const out = (await res.json().catch(() => ({}))) as { detail?: unknown; seconds?: number[] };
+    if (!res.ok || !out.seconds) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+    const toSession = doc.sampleRate / source.sampleRate;
+    const { start, length, sourceIn } = hit.clip;
+    const guard = Math.round(doc.sampleRate * 0.01);
+    const at = out.seconds.map((s) => start + Math.round((s * source.sampleRate - sourceIn) * toSession)).filter((t) => t > start + guard && t < start + length - guard);
+    return { hit, at };
+  };
+  body.addEventListener("click", async (e) => {
+    const action = (e.target as HTMLElement).closest<HTMLElement>("[data-an]")?.dataset.an;
+    if (action === "split-transients") {
+      setText(notice, "Finding transients...");
+      try {
+        const found = await clipTransients();
+        if (!found) return;
+        if (!found.at.length) {
+          setText(notice, "No transients inside this clip to split at");
+          return;
+        }
+        // Last to first, so each cut targets the original clip, which still holds every earlier transient.
+        const commands = [...found.at].reverse().map((t) => ({ type: "split-clip" as const, trackId: found.hit.track.id, clipId: found.hit.clip.id, at: t }));
+        engine.dispatch({ type: "batch", commands } as Parameters<Engine["dispatch"]>[0]);
+        setText(notice, `Split into ${found.at.length + 1} pieces at the transients`);
+      } catch (err) {
+        setText(notice, `Could not split at transients: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (action === "quantize") {
+      const doc = engine.get("document");
+      const bpm = Number(body.querySelector<HTMLInputElement>('[data-q="bpm"]')?.value);
+      const division = Number(body.querySelector<HTMLSelectElement>('[data-q="division"]')?.value);
+      if (!(bpm >= 30 && bpm <= 300) || ![4, 8, 16].includes(division)) {
+        setText(notice, "Set a tempo from 30 to 300 BPM");
+        return;
+      }
+      const step = (60 / bpm) * (4 / division) * doc.sampleRate;
+      const current = find(doc);
+      const ids = new Set(selectedIds.length ? selectedIds : current ? [current.clip.id] : []);
+      const commands = doc.tracks.flatMap((t) =>
+        t.clips
+          .filter((c) => ids.has(c.id))
+          .map((c) => ({ type: "move-clip" as const, trackId: t.id, clipId: c.id, start: Math.max(0, Math.round(Math.round(c.start / step) * step)) }))
+          .filter((m) => t.clips.find((c) => c.id === m.clipId)?.start !== m.start),
+      );
+      if (!commands.length) {
+        setText(notice, "The selected clips already sit on the grid");
+        return;
+      }
+      engine.dispatch({ type: "batch", commands } as Parameters<Engine["dispatch"]>[0]);
+      setText(notice, `Quantized ${commands.length} clip${commands.length === 1 ? "" : "s"} to 1/${division} at ${bpm} BPM`);
     }
   });
 

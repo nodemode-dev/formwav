@@ -1353,3 +1353,10 @@ TrackFx becomes a union of filters and the compressor (threshold, ratio, attack,
 - logged: v0.64.0 (in progress) · 2026-09-30
 
 Transients, with a Sensitivity from 0 to 1, puts a marker at each onset the engine finds inside the selected clip's visible span: file time is mapped through the clip's start, trim and the rate ratio, onsets outside the span are left out, and the markers go in one batch, one undo step. Verified in Chromium (verify_transients.py) on the drum-like clip moved to 1 s with its first 0.5 s cut: "Marked 4 transients" at 1.8018, 2.5509, 3.1005 and 3.7024 s (expected 1.80, 2.55, 3.10, 3.70; 0.5 to 2.4 ms), the cut burst left out, one undo step, undo removing all four; containment clean; screenshot inspected; no page errors.
+
+### src/ui/inspector-pane.ts, styles/workspace.css · Split at transients and Quantize (coverage wave 10)
+- refers-to: src/ui/inspector-pane.ts :: `clipTransients`, `selectedIds`, the `split-transients` and `quantize` actions, the Quantize section, `render` (its visibility); src/styles/workspace.css :: `.fw-q-field`
+- kind: warning-context
+- logged: v0.65.0 (in progress) · 2026-09-30
+
+Pro Tools' groove edits on transients: Split at transients (in Analyze) cuts the clip at each onset more than 10 ms inside its edges, last to first so every cut targets the original clip, one undo step; Quantize moves the selected clips' starts (or the inspected clip's) to the nearest line of a BPM grid at 1/4, 1/8 or 1/16, one undo step, so split pieces, each starting on its transient, land on the beat. Found in verification: Quantize first lived in Analyze, which the Inspector hides whenever more than one clip is selected, so it was unreachable exactly when it is needed; it now has its own section, shown whenever any clip is selected. Verified in Chromium (verify_groove.py) on the drum-like clip: 6 pieces at 0, 0.301, 0.8018, 1.5509, 2.1005 and 2.7024 s in one step; with all six selected, 120 BPM at 1/8 moved five to 0.25, 0.75, 1.5, 2.0 and 2.75 s in one step; undo reversed each; containment clean; screenshot inspected; no page errors.
