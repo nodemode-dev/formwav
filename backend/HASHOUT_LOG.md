@@ -453,3 +453,10 @@ The document's `masterFx` (the same kinds and bypass rule as tracks) becomes the
 - logged: v0.63.0 (in progress) · 2026-09-30
 
 One `_stage` rule turns an effect entry into a core stage (filters: frequency, gain, Q; the compressor: threshold, ratio, attack, release, makeup). A track holding a compressor and routed to the master plays through a bus of its own (unity gain, centre) whose chain is the track's whole chain in order; the master's effects travel as ordered master stages, so it takes a compressor too. Not placed yet: a compressor on a track routed to a user bus (its filters still run per clip). Verified: see the core log's export measurements (-16.00 dBFS against the curve's -16.51; transparent below threshold to four decimals; the master matching; the high-pass regression at -40.03 dB).
+
+### app/routers/media.py · the transients route
+- refers-to: app/routers/media.py :: `media_transients`
+- kind: explainer
+- logged: v0.64.0 (in progress) · 2026-09-30
+
+GET /api/media/{id}/transients?sensitivity= returns onset times in the file's own seconds from the core's detector (503 without the core). Verified: the drum-like bursts at 0.30, 0.80, 1.55, 2.10 and 2.70 s came back at 0.301, 0.8018, 1.5509, 2.1005 and 2.7024 s; JFK's speech gave 3, 7 and 14 onsets at sensitivities 0.2, 0.5 and 0.8.

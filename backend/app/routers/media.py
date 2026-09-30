@@ -59,6 +59,25 @@ def media_excerpt(media_id: str, start: float, end: float) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.get("/media/{media_id}/transients")
+def media_transients(media_id: str, sensitivity: float = 0.5) -> dict:
+    """Transients (Pro Tools' transient detection, as a reference) in the file's own seconds, from the core."""
+    try:
+        media._check_id(media_id)
+        path = media_dir() / f"{media_id}.wav"
+        if not path.exists():
+            raise KeyError(media_id)
+        native = media._require_core()
+        rate, found = native.onsets(path.read_bytes(), max(0.0, min(1.0, float(sensitivity))))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.CoreMissing as err:
+        raise HTTPException(503, str(err)) from err
+    except (media.MediaError, ValueError) as err:
+        raise HTTPException(422, str(err)) from err
+    return {"rate": rate, "seconds": [round(s / rate, 6) for s in found]}
+
+
 @router.post("/media/{media_id}/deconstruct", status_code=201)
 def media_deconstruct(media_id: str, start: float = 0.0, end: float | None = None) -> list[dict]:
     from ..services import separate
