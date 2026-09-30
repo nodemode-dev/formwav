@@ -411,3 +411,10 @@ Demucs htdemucs splits a time range of a file into vocals, drums, bass and other
 - logged: v0.57.0 (in progress) · 2026-09-30
 
 iZotope RX's streaming preview: the mix rendered, encoded with a lossy codec (MP3, OGG or M4A) and decoded back at the session's rate into new media, so the codec's effect can be heard against the mix; lossless formats are refused. Verified (verify_preview.py) on the JFK session: an MP3 192 kbps preview of 11.0 s, correlation 1.0 with the float mix at zero lag (the decoder trims the encoder's padding), differing by up to 0.024; FLAC refused.
+
+### app/services/separate.py, app/routers/media.py · Deconstruct: tonal, noisy and transient parts (coverage wave 7)
+- refers-to: app/services/separate.py :: `deconstruct`, `_median`; app/routers/media.py :: `media_deconstruct`
+- kind: rationale
+- logged: v0.57.0 (in progress) · 2026-09-30
+
+iZotope RX's Deconstruct, as a reference: harmonic-percussive separation with PyTorch (scipy is not in the runtime; torch is, for separation): a 2048-point STFT, a 17-wide median along time for the tonal envelope and along frequency for the transient one, a part claiming a bin when its envelope exceeds twice the other's and the noisy part taking the rest. The masks partition the spectrum, so the parts sum back to the range. Verified on a 440 Hz tone at 0.3 with a click every 0.5 s at 0.9 and white noise at 0.05: the parts summed to the input within 2.4e-7; tonal correlated 0.999 with the tone; transient held the clicks (0.569 at the click times) and not the tone (0.017); noisy's level was 0.0285 against the noise's 0.029, with part of the broadband clicks (0.31), which firm masks cannot keep out.
