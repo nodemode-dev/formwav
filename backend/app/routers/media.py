@@ -164,13 +164,15 @@ def list_effects() -> list[dict]:
 
 
 @router.post("/media/{media_id}/eq-match", status_code=201)
-def eq_match(media_id: str, reference: str, start: float | None = None, end: float | None = None) -> dict:
-    """iZotope RX's EQ Match: new media with the reference region's tonal balance (see services/eqmatch.py)."""
+def eq_match(media_id: str, reference: str, start: float | None = None, end: float | None = None,
+             tstart: float | None = None, tend: float | None = None) -> dict:
+    """iZotope RX's EQ Match: new media with the reference region's tonal balance, measured against the target region
+    when one is given (see services/eqmatch.py)."""
     from ..services import eqmatch
     from ..services.media import MediaError
 
     try:
-        return eqmatch.eq_match(media_id, reference, start, end)
+        return eqmatch.eq_match(media_id, reference, start, end, tstart, tend)
     except MediaError as err:
         raise HTTPException(422, str(err)) from err
 

@@ -495,3 +495,10 @@ A user bus's `fx` become stage chains on that bus (target 1, its index), collect
 - logged: v0.78.0 (in progress) · 2026-09-30
 
 iZotope RX's EQ Match: POST /api/media/{id}/eq-match?reference=&start=&end= gives the clip the tonal balance of a reference region. Both are averaged (Welch, 8192-sample Hann frames) into 30 third-octave bands from 25 Hz; the per-band difference, zero where either side is empty or past Nyquist, centred on its median and clamped to 18 dB, is rendered with firequalizer into new media. firequalizer delayed the content by 480 samples and lengthened the file by 960 frames at 48 kHz, which would have moved and stretched the clip (set-clip-media scales a clip whose media changes length); its delay is now fixed at 10 ms, trimmed off, and the original frame count restored, measured as identical length and 0-sample lag. Median-centring over all 30 bands does not hold loudness exactly: the median band from 100 Hz to 10 kHz rose 2.6 dB in the test. Verified with independent band levels: dark noise (300 Hz first-order low-pass) matched to white noise moved from 8.54 dB to 0.38 dB mean deviation from 100 Hz to 10 kHz (worst band 3.66 dB); a missing reference answered 422.
+
+### app/services/eqmatch.py, app/routers/media.py · EQ match measured over a target region
+- refers-to: app/services/eqmatch.py :: `eq_match` (`target_start`, `target_end`); app/routers/media.py :: `eq_match` (`tstart`, `tend`)
+- kind: explainer
+- logged: v0.79.0 (in progress) · 2026-09-30
+
+The target can be measured over a region (tstart, tend in its media's seconds) so a range edit compares like with like; the whole file is still rendered, at its exact length, and the app keeps only the range. Verified through the app (the frontend log's verify_eqmatch_range.py): a dark range inside a clip that is bright elsewhere matched to within 0.58 dB of the learned bright range.

@@ -65,8 +65,11 @@ def curve(target: np.ndarray, reference: np.ndarray, nyquist: float) -> np.ndarr
     return np.clip(gain, -18, 18)
 
 
-def eq_match(media_id: str, reference_id: str, ref_start: float | None = None, ref_end: float | None = None) -> dict:
-    target, rate = _mono(media_id)
+def eq_match(media_id: str, reference_id: str, ref_start: float | None = None, ref_end: float | None = None,
+             target_start: float | None = None, target_end: float | None = None) -> dict:
+    """The curve compares the reference region with the target region (the whole target when none is given); the whole
+    target file is rendered, and a range edit keeps only its range."""
+    target, rate = _mono(media_id, target_start, target_end)
     reference, ref_rate = _mono(reference_id, ref_start, ref_end)
     gain = curve(bands(target, rate), bands(reference, ref_rate), min(rate, ref_rate) / 2)
     entries = ";".join(f"entry({c:.2f},{g:.2f})" for c, g in zip(CENTERS, gain))
