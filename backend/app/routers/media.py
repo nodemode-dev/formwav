@@ -163,6 +163,18 @@ def list_effects() -> list[dict]:
     return effects.catalogue()
 
 
+@router.get("/media/{media_id}/key")
+def media_key(media_id: str, start: float | None = None, end: float | None = None) -> dict:
+    """Musical key, Camelot code and confidence of the media or a region in its own seconds (see services/key.py)."""
+    from ..services import key
+    from ..services.media import MediaError
+
+    try:
+        return key.detect(media_id, start, end)
+    except MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/tempo")
 def media_tempo(media_id: str, start: float | None = None, end: float | None = None) -> dict:
     """Tempo and confidence of the media, or of a region in its own seconds (see services/tempo.py)."""
