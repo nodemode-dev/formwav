@@ -142,6 +142,8 @@ export interface SessionDoc {
   masterFx?: TrackFx[];
   /** The session tempo, for the bars ruler, beat snapping and Quantize (set by hand or detected). */
   tempo?: { bpm: number; beatsPerBar: number };
+  /** The session's musical key and Camelot code, as detected (services/key.py). */
+  key?: { name: string; camelot: string };
   tracks: readonly Track[];
   media: Readonly<Record<string, MediaRef>>;
   markers: readonly Marker[];
@@ -193,6 +195,7 @@ export type Command =
   | { type: "set-master-fx"; fx: TrackFx[] }
   | { type: "set-bus-fx"; busId: string; fx: TrackFx[] }
   | { type: "set-tempo"; bpm: number; beatsPerBar: number }
+  | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
@@ -453,6 +456,12 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         const { fx: _old, ...rest } = t;
         return fx.length ? { ...rest, fx } : rest;
       });
+    case "set-key": {
+      const name = cmd.name.trim().slice(0, 20);
+      const camelotCode = cmd.camelot.trim().slice(0, 4);
+      if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
+      return { ...doc, key: { name, camelot: camelotCode } };
+    }
     case "set-tempo": {
       if (!Number.isFinite(cmd.bpm) || !Number.isFinite(cmd.beatsPerBar)) return doc;
       const bpm = Math.round(Math.min(300, Math.max(30, cmd.bpm)) * 10) / 10;

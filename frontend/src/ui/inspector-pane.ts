@@ -64,6 +64,7 @@ const BODY = `
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
   <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="detect-key" title="Find this clip's musical key and its Camelot code">Detect key</button><span class="fw-key-readout" data-key-out>Key not set</span></div>
 </div>`;
 
 const db = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
@@ -979,6 +980,11 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (bpbField && document.activeElement !== bpbField && bpbField.value !== String(tempo.beatsPerBar)) bpbField.value = String(tempo.beatsPerBar);
   };
   engine.subscribe("document", syncTempo);
+  const keyOut = body.querySelector<HTMLElement>("[data-key-out]");
+  engine.subscribe("document", () => {
+    const k = engine.get("document").key;
+    setText(keyOut, k ? `Key ${k.name} · ${k.camelot}` : "Key not set");
+  });
   const commitTempo = () => engine.dispatch({ type: "set-tempo", bpm: Number(bpmField?.value), beatsPerBar: Number(bpbField?.value) });
   bpmField?.addEventListener("change", commitTempo);
   bpbField?.addEventListener("change", commitTempo);
@@ -1021,6 +1027,30 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         setText(notice, `Split into ${found.at.length + 1} pieces at the transients`);
       } catch (err) {
         setText(notice, `Could not split at transients: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (action === "detect-key") {
+      const doc = engine.get("document");
+      const hit = find(doc);
+      if (!hit) {
+        setText(notice, "Select one clip to detect its key");
+        return;
+      }
+      setText(notice, "Detecting the key...");
+      try {
+        const media = doc.media[hit.clip.mediaId];
+        const start = hit.clip.sourceIn / media.sampleRate;
+        const res = await fetch(`/api/media/${hit.clip.mediaId}/key?start=${start.toFixed(6)}&end=${(start + hit.clip.length / doc.sampleRate).toFixed(6)}`);
+        const out = (await res.json().catch(() => ({}))) as { key?: string | null; camelot?: string | null; confidence?: number; detail?: unknown };
+        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        if (!out.key || !out.camelot) {
+          setText(notice, "No pitched material in this clip to find a key");
+          return;
+        }
+        engine.dispatch({ type: "set-key", name: out.key, camelot: out.camelot });
+        const low = (out.confidence ?? 0) < 0.05 ? "; low confidence, another key is nearly as likely" : "";
+        setText(notice, `Detected ${out.key} (Camelot ${out.camelot}), confidence ${(out.confidence ?? 0).toFixed(2)}${low}`);
+      } catch (err) {
+        setText(notice, `Could not detect the key: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else if (action === "detect-bpm") {
       const doc = engine.get("document");

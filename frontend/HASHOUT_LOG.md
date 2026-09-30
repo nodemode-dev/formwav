@@ -1486,3 +1486,10 @@ An audit of every command in the document's Command union against the frontend c
 - logged: v0.82.0 (in progress) · 2026-09-30
 
 Detect, Stretch to tempo and tempo on import now ask the engine's tempo route (backend log) for a clip's visible region or the whole file; Detect and Stretch need confidence 0.1, import 0.2 (twice, as it acts unasked). The onset-comb functions estimateBpm and tempoEstimate are removed. Verified in Chromium: the owner's song imported with "its tempo, 126.9 BPM, is now the session tempo" and Detect read 126.9 at confidence 0.47 (verify_song_tempo.py); Detect read 100.0, 60.0 and 137.0 on the synthetic beats (verify_tempo.py, where the old method gave 99.9); tempo on import still set nothing for speech and irregular hits, 100.0 and 60.0 for the beats, kept an existing tempo, and undid (verify_import_tempo.py); Stretch to tempo went from exactly 100.0 to 110.0, 7.455 s = 8.2 x 100 / 110, and re-detected at 110.0 (109.4 before) (verify_stretch.py, whose expectation is updated from 99.9); production build passes; no page errors. No markup changed.
+
+### src/engine/document.ts, src/ui/inspector-pane.ts, styles/workspace.css · Detect key and the session key (owner-requested)
+- refers-to: src/engine/document.ts :: `SessionDoc.key`, `set-key`; src/ui/inspector-pane.ts :: the `detect-key` action, `[data-key-out]`; src/styles/workspace.css :: `.fw-key-readout`
+- kind: explainer
+- logged: v0.83.0 (in progress) · 2026-09-30
+
+Detect key in the Quantize section asks the engine's key route (backend log) for the selected clip's visible region and sets the session key, name and Camelot code, as one undo step; the readout "Key F minor · 4A" follows the document; a confidence under 0.05 is called out as low. The reachability audit counts 52 commands, all with controls. Verified in Chromium (verify_key.py) on the owner's song: "Detected F minor (Camelot 4A), confidence 0.24", the readout and session key set in one undo step, undo clearing both; the Quantize section fits at 1024 px beside the imported tempo 126.9 (screenshot); production build passes; containment clean; no page errors.
