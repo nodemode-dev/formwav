@@ -150,6 +150,7 @@
 .fw-recent-row:hover { border-color: var(--accent-color); }
 .fw-recent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fw-recent-meta { flex: none; font-size: 12px; color: var(--text-secondary); }
+.fw-fx-search { inline-size: 100%; padding: 4px 8px; font: inherit; font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 
 .fw-export-dialog { inline-size: min(360px, calc(100vw - 32px)); padding: 16px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; }
 .fw-export-dialog::backdrop { background: rgb(0 0 0 / 0.45); }

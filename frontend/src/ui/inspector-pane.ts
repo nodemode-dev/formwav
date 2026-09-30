@@ -16,9 +16,10 @@ const BODY = `
 <div class="fw-insp-section fw-insp-effects" hidden>
   <div class="fw-insp-head">Effects</div>
   <button type="button" class="fw-ibtn fw-btn-export fw-voice-go" data-fx="enhance" title="formcut's voice-clean: rumble cut, denoise, gentle compression and a limiter">Enhance speech</button>
+  <input type="search" class="fw-fx-search" data-fx="search" placeholder="Search effects" aria-label="Search effects">
   <label class="fw-field fw-field-stack"><span>Effect</span><select data-fx="pick"></select></label>
   <div class="fw-fx-params"></div>
-  <button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button></div>
 </div>
 <div class="fw-insp-section fw-insp-analyze" hidden>
   <div class="fw-insp-head">Analyze</div>
@@ -183,6 +184,59 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     render();
   });
   pick?.addEventListener("change", showControls);
+  // iZotope RX's module search: filter the Effects menu by name or group.
+  const search = body.querySelector<HTMLInputElement>('[data-fx="search"]');
+  search?.addEventListener("input", () => {
+    if (!pick) return;
+    const q = search.value.trim().toLowerCase();
+    let first: HTMLOptionElement | null = null;
+    for (const group of pick.querySelectorAll("optgroup")) {
+      let any = false;
+      for (const option of group.querySelectorAll("option")) {
+        const hit = !q || (option.textContent ?? "").toLowerCase().includes(q) || group.label.toLowerCase().includes(q);
+        if (option.hidden === hit) option.hidden = !hit;
+        if (hit) {
+          any = true;
+          first ??= option;
+        }
+      }
+      if (group.hidden === any) group.hidden = !any;
+    }
+    const current = pick.selectedOptions[0];
+    if ((!current || current.hidden) && first) {
+      pick.value = first.value;
+      showControls();
+    }
+  });
+  // Batch processing (Adobe Podcast's queue, RX's batch processor): the chosen effect on every clip, one undo step.
+  body.addEventListener("click", async (e) => {
+    if ((e.target as HTMLElement).closest<HTMLElement>("[data-fx]")?.dataset.fx !== "apply-all") return;
+    const name = pick?.value;
+    const doc = engine.get("document");
+    const clips = doc.tracks.flatMap((t) => t.clips.map((c) => ({ track: t, clip: c })));
+    if (!name || !clips.length) return;
+    const label = pick?.selectedOptions[0]?.textContent ?? name;
+    const buttons = [...body.querySelectorAll<HTMLButtonElement>("button[data-fx]")];
+    for (const b of buttons) b.disabled = true;
+    const params = encodeURIComponent(JSON.stringify(currentParams()));
+    const made = new Map<string, MediaRef>();
+    setText(notice, `Applying ${label} to ${clips.length} clips...`);
+    try {
+      for (const id of new Set(clips.map((x) => x.clip.mediaId))) {
+        const res = await fetch(`/api/media/${id}/effect?name=${encodeURIComponent(name)}&params=${params}`, { method: "POST" });
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        made.set(id, out as unknown as MediaRef);
+      }
+      const commands = clips.map((x) => ({ type: "set-clip-media" as const, trackId: x.track.id, clipId: x.clip.id, media: made.get(x.clip.mediaId) as MediaRef }));
+      engine.dispatch({ type: "batch", commands } as Parameters<Engine["dispatch"]>[0]);
+      setText(notice, `Applied ${label} to ${clips.length} clip${clips.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      setText(notice, `Could not apply ${label} to all clips: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      for (const b of buttons) b.disabled = false;
+    }
+  });
   void fetch("/api/effects")
     .then((res) => (res.ok ? res.json() : []))
     .then((groups: { group: string; effects: { id: string; label: string; params?: Control[]; retimes?: boolean }[] }[]) => {
