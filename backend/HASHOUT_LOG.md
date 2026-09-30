@@ -467,3 +467,10 @@ GET /api/media/{id}/transients?sensitivity= returns onset times in the file's ow
 - logged: v0.68.0 (in progress) · 2026-09-30
 
 A pitch-keeping tempo change for rhythmic material: Rubber Band with a short window, beside Change tempo and with the same Tempo control, marked as timing-changing. Measured with the core's onset detector on a 12-hit pattern stretched from 99.9 to 110 BPM: Rubber Band's defaults kept 6 attacks at a 0.5601 s spacing (0.5449 expected), the percussive detector alone changed nothing, and a short window kept the spacing at 0.5435 s with 16 onsets, a few attacks still splitting. The catalogue is now 90 effects.
+
+### app/routers/presets.py, app/main.py · one store of effect presets (coverage wave 8)
+- refers-to: app/routers/presets.py :: `list_presets`, `save_presets`, `_clean`; app/main.py :: the router's mount
+- kind: explainer
+- logged: v0.73.0 (in progress) · 2026-09-30
+
+Audacity's one preset system across built-in, destructive and realtime effects: GET and PUT /api/presets over one JSON file in the data folder, so presets outlive a browser and a session. Each preset is a name, an effect key (rendered effects "fx:<id>", realtime ones "rt:<kind>") and its named numeric settings; the whole list is validated (at most 500 presets, 16 settings each, finite numbers) and written by atomic replacement. Verified through the app (the frontend log's verify_presets.py): saved presets appeared in the store with their settings, persisted across a reload, and a deleted one left it.
