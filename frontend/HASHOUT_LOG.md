@@ -1304,3 +1304,10 @@ The export dialog's What gains Streaming preview: rather than downloading, the e
 - logged: v0.57.0 (in progress) · 2026-09-30
 
 Deconstruct beside Separate into stems, through the same handler with its own route and wait note: the clip's trimmed range becomes tonal, noisy and transient tracks at the clip's start, the original muted, one undo step. Verified in Chromium (verify_deconstruct_ui.py): three tracks at 0 s, 4.0 s long, the original muted, one step, undo restoring it; the Separate regression unchanged through the shared handler; buttons one line; containment clean; screenshot inspected; no page errors.
+
+### src/ui/inspector-pane.ts · automatic ducking (coverage wave 10)
+- refers-to: src/ui/inspector-pane.ts :: the `data-duck` controls, `fillDuck`, the ducking handler
+- kind: warning-context
+- logged: v0.58.0 (in progress) · 2026-09-30
+
+Audacity's Auto Duck and Audition's content-based ducking: in the track section, Duck under (another track) and By (3 to 30 dB) write this track's volume automation from the other track's active regions (merged when closer than attack plus release; 0.15 s down, hold, 0.4 s back), one undo step, editable in the automation lane. Found in verification: the Duck under menu first offered the selected track itself, because it refreshed before the selection listener had updated; it now refreshes after it. Verified in Chromium (verify_duck.py) with the JFK speech over a steady tone: "Ducked bed by 12 dB in 2 places under jfk", the rendered tone at -45.12 dB during speech and -33.12 dB in the pause, 12.0 dB exactly; one undo step; undo removed the envelope; the menu offered only the other track; no overflow; screenshot inspected; containment clean; no page errors.

@@ -35,6 +35,9 @@ const BODY = `
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Volume</span><input type="range" min="-60" max="12" step="0.1" data-f="volume"><output data-o="volume"></output></label>
   <label class="fw-field"><span>Pan</span><input type="range" min="-1" max="1" step="0.01" data-f="pan"><output data-o="pan"></output></label>
+  <label class="fw-field"><span>Duck under</span><select data-duck="control"></select><span></span></label>
+  <label class="fw-field"><span>By</span><input type="range" min="3" max="30" step="1" value="12" data-duck="amount"><output data-duck-out>12 dB</output></label>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
 </div>`;
 
 const db = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
@@ -459,6 +462,66 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, `Could not separate: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       for (const b of buttons) b.disabled = false;
+    }
+  });
+
+  // Automatic ducking (Audacity's Auto Duck, Audition's content-based ducking): this track's volume envelope lowered
+  // while another track is active, written as editable automation in one undo step.
+  const duckControl = body.querySelector<HTMLSelectElement>('[data-duck="control"]');
+  const duckAmount = body.querySelector<HTMLInputElement>('[data-duck="amount"]');
+  const duckOut = body.querySelector<HTMLElement>("[data-duck-out]");
+  const DUCK_ATTACK = 0.15;
+  const DUCK_RELEASE = 0.4;
+  const fillDuck = () => {
+    if (!duckControl) return;
+    const doc = engine.get("document");
+    const own = find(doc)?.track.id;
+    const others = doc.tracks.filter((t) => t.id !== own);
+    const signature = others.map((t) => `${t.id}:${t.name}`).join("|");
+    if (duckControl.dataset.sig === signature) return;
+    duckControl.dataset.sig = signature;
+    const keep = duckControl.value;
+    duckControl.replaceChildren(...others.map((t) => new Option(t.name, t.id)));
+    if (others.some((t) => t.id === keep)) duckControl.value = keep;
+  };
+  engine.subscribe("document", fillDuck);
+  // After the selection listener below has updated `selected`, so the track being ducked is left out.
+  host.addEventListener("fw-selection", () => queueMicrotask(fillDuck));
+  duckAmount?.addEventListener("input", () => setText(duckOut, `${duckAmount.value} dB`));
+  body.addEventListener("click", async (e) => {
+    if ((e.target as HTMLElement).closest<HTMLElement>("[data-duck]")?.dataset.duck !== "go") return;
+    fillDuck();
+    const doc = engine.get("document");
+    const hit = find(doc);
+    const control = duckControl?.value;
+    const controlName = doc.tracks.find((t) => t.id === control)?.name ?? "the other track";
+    if (!hit || !control) {
+      setText(notice, "Add another track to duck this one under");
+      return;
+    }
+    const amount = Number(duckAmount?.value ?? 12);
+    setText(notice, `Finding where ${controlName} is active...`);
+    try {
+      const res = await fetch(`/api/render/activity?trackId=${encodeURIComponent(control)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; regions?: [number, number][] };
+      if (!res.ok || !out.regions) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      const merged: [number, number][] = [];
+      for (const [s, end] of out.regions) {
+        const last = merged[merged.length - 1];
+        if (last && s - last[1] < DUCK_ATTACK + DUCK_RELEASE) last[1] = end;
+        else merged.push([s, end]);
+      }
+      const rate = doc.sampleRate;
+      const points = merged.flatMap(([s, end]) => [
+        { time: Math.max(0, s - DUCK_ATTACK) * rate, value: 0 },
+        { time: s * rate, value: -amount },
+        { time: end * rate, value: -amount },
+        { time: (end + DUCK_RELEASE) * rate, value: 0 },
+      ]);
+      engine.dispatch({ type: "set-automation", trackId: hit.track.id, param: "volume", points });
+      setText(notice, merged.length ? `Ducked ${hit.track.name} by ${amount} dB in ${merged.length} place${merged.length === 1 ? "" : "s"} under ${controlName}` : `${controlName} is silent; nothing to duck`);
+    } catch (err) {
+      setText(notice, `Could not duck: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 
