@@ -71,7 +71,7 @@ function shellHtml(): string {
       </main>
       <footer class="fw-transport">
         <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>
-        <output class="fw-clock">00:00:00.000</output>
+        <output class="fw-clock" role="button" tabindex="0" data-mode="time" title="Click to switch the clock between time and timecode at 24, 25 or 30 frames per second">00:00:00.000</output>
         <label class="fw-speed" title="Play at speed: faster or slower, pitch following (playback only)">Speed <select data-speed aria-label="Playback speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
         <label class="fw-speed" title="Recording latency compensation: each take lands this many milliseconds earlier, undoing the round trip from playback to your microphone. Measure it once with a loopback cable (spikes/latency in the planning docs) and type it here; 0 leaves takes where they were recorded">Latency <input type="number" data-latency min="0" max="500" step="1" value="0" aria-label="Recording latency compensation in milliseconds"> ms</label>
       </footer>
@@ -85,13 +85,25 @@ function shellHtml(): string {
 </div>`;
 }
 
-export function formatClock(positionSamples: number, sampleRate: number): string {
+export type ClockMode = "time" | "tc24" | "tc25" | "tc30";
+export const CLOCK_MODES: ClockMode[] = ["time", "tc24", "tc25", "tc30"];
+
+export function formatClock(positionSamples: number, sampleRate: number, mode: ClockMode = "time"): string {
+  const two = (n: number) => String(n).padStart(2, "0");
+  if (mode !== "time") {
+    const fps = mode === "tc24" ? 24 : mode === "tc25" ? 25 : 30;
+    const totalFrames = Math.floor((positionSamples * fps) / sampleRate);
+    const f = totalFrames % fps;
+    const s = Math.floor(totalFrames / fps) % 60;
+    const m = Math.floor(totalFrames / (fps * 60)) % 60;
+    const h = Math.floor(totalFrames / (fps * 3600));
+    return `${two(h)}:${two(m)}:${two(s)}:${two(f)}`;
+  }
   const totalMs = Math.floor((positionSamples * 1000) / sampleRate);
   const ms = totalMs % 1000;
   const s = Math.floor(totalMs / 1000) % 60;
   const m = Math.floor(totalMs / 60000) % 60;
   const h = Math.floor(totalMs / 3600000);
-  const two = (n: number) => String(n).padStart(2, "0");
   return `${two(h)}:${two(m)}:${two(s)}.${String(ms).padStart(3, "0")}`;
 }
 
@@ -125,7 +137,33 @@ export function mountShell(host: HTMLElement, engine: Engine): void {
     if (!connectingShown) writeFinal();
   };
 
-  const renderClock = (t: TransportState) => setText(clock, formatClock(t.positionSamples, t.sampleRate));
+  const CLOCK_KEY = "formwav.clockMode";
+  let clockMode: ClockMode = "time";
+  try {
+    const saved = localStorage.getItem(CLOCK_KEY);
+    if (saved && CLOCK_MODES.includes(saved as ClockMode)) clockMode = saved as ClockMode;
+  } catch {
+    clock?.setAttribute("data-storage", "none");
+  }
+  const renderClock = (t: TransportState) => setText(clock, formatClock(t.positionSamples, t.sampleRate, clockMode));
+  const cycleClock = () => {
+    clockMode = CLOCK_MODES[(CLOCK_MODES.indexOf(clockMode) + 1) % CLOCK_MODES.length];
+    if (clock && clock.dataset.mode !== clockMode) clock.dataset.mode = clockMode;
+    try {
+      localStorage.setItem(CLOCK_KEY, clockMode);
+    } catch {
+      clock?.setAttribute("data-storage", "none");
+    }
+    renderClock(engine.get("transport"));
+  };
+  if (clock && clock.dataset.mode !== clockMode) clock.dataset.mode = clockMode;
+  clock?.addEventListener("click", cycleClock);
+  clock?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      cycleClock();
+    }
+  });
 
   engine.subscribe("link", renderLink);
   engine.subscribe("transport", renderClock);

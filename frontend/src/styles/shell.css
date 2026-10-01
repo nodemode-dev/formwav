@@ -114,7 +114,11 @@ html, body, #app { height: 100%; }
   font-size: var(--fs-14);
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 4px;
 }
+.fw-clock:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+.fw-clock:not([data-mode="time"]) { color: var(--accent-color); }
 
 .fw-topbar-mid {
   display: flex;
