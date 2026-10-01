@@ -25,7 +25,7 @@ const BODY = `
   <div class="fw-fx-params"></div>
   <div class="fw-analyze-buttons"><select data-preset="fx" aria-label="Preset for this effect"><option value="">Presets</option></select><button type="button" class="fw-ibtn" data-preset="fx-save">Save preset</button><button type="button" class="fw-ibtn" data-preset="fx-delete">Delete</button></div>
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
   <ol class="fw-chain" hidden></ol>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
@@ -222,6 +222,10 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   };
   const currentParams = () => Object.fromEntries([...(paramsBox?.querySelectorAll<HTMLInputElement>("input[data-param]") ?? [])].map((i) => [i.dataset.param, Number(i.value)]));
   const retiming = new Set<string>();
+  const learnsNoise = new Set<string>();
+  let learnedNoise: { mediaId: string; start: number; end: number } | null = null;
+  const noiseParams = (mediaId: string, name: string): Record<string, number> =>
+    learnedNoise && learnedNoise.mediaId === mediaId && learnsNoise.has(name) ? { noise_from: learnedNoise.start, noise_to: learnedNoise.end } : {};
   host.addEventListener("fw-range", (e) => {
     range = (e as CustomEvent<{ trackId: string; start: number; end: number } | null>).detail;
     render();
@@ -282,12 +286,13 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   });
   void fetch("/api/effects")
     .then((res) => (res.ok ? res.json() : []))
-    .then((groups: { group: string; effects: { id: string; label: string; params?: Control[]; retimes?: boolean }[] }[]) => {
+    .then((groups: { group: string; effects: { id: string; label: string; params?: Control[]; retimes?: boolean; learnsNoise?: boolean }[] }[]) => {
       if (!pick) return;
       for (const g of groups)
         for (const fx of g.effects) {
           if (fx.params?.length) controls.set(fx.id, fx.params);
           if (fx.retimes) retiming.add(fx.id);
+          if (fx.learnsNoise) learnsNoise.add(fx.id);
         }
       pick.replaceChildren(
         ...groups.map((g) => {
@@ -320,17 +325,19 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const target = rangeTrack && rangeClip ? { track: rangeTrack, clip: rangeClip } : hit;
       const inRange = rangeClip && r ? r : null;
       if (inRange && retiming.has(name)) throw new Error(`${label} changes timing, so it applies to whole clips: clear the range first`);
-      const params = action === "apply" ? currentParams() : {};
+      const noise = noiseParams(target.clip.mediaId, name);
+      const params = { ...(action === "apply" ? currentParams() : {}), ...noise };
+      const withNoise = Object.keys(noise).length ? " with the learned noise profile" : "";
       const res = await fetch(`/api/media/${target.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       if (inRange) {
         engine.dispatch({ type: "set-range-media", trackId: target.track.id, clipId: target.clip.id, start: inRange.start, end: inRange.end, media: out as unknown as MediaRef });
         const rate = engine.get("document").sampleRate;
-        setText(notice, `Applied ${label} to ${((Math.min(inRange.end, target.clip.start + target.clip.length) - Math.max(inRange.start, target.clip.start)) / rate).toFixed(2)} s of the clip`);
+        setText(notice, `Applied ${label} to ${((Math.min(inRange.end, target.clip.start + target.clip.length) - Math.max(inRange.start, target.clip.start)) / rate).toFixed(2)} s of the clip${withNoise}`);
       } else {
         engine.dispatch({ type: "set-clip-media", trackId: target.track.id, clipId: target.clip.id, media: out as unknown as MediaRef });
-        setText(notice, `Applied ${label} to the clip`);
+        setText(notice, `Applied ${label} to the clip${withNoise}`);
       }
     } catch (err) {
       setText(notice, `Could not apply ${label}: ${err instanceof Error ? err.message : String(err)}`);
@@ -773,6 +780,22 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   engine.subscribe("document", fillEqm);
   host.addEventListener("fw-selection", () => queueMicrotask(fillEqm));
   const eqmLearn = body.querySelector<HTMLButtonElement>('[data-eqm="learn"]');
+  body.querySelector<HTMLButtonElement>('[data-fx="learn-noise"]')?.addEventListener("click", () => {
+    const on = rangeOnClip();
+    if (!on) {
+      if (learnedNoise) {
+        learnedNoise = null;
+        setText(notice, "Forgot the learned noise profile");
+      } else setText(notice, "Select a range of noise on a clip to learn from (at least 0.1 s)");
+      return;
+    }
+    if (on.mediaEnd - on.mediaStart < 0.1) {
+      setText(notice, "The noise range must last at least 0.1 s");
+      return;
+    }
+    learnedNoise = { mediaId: on.clip.mediaId, start: on.mediaStart, end: on.mediaEnd };
+    setText(notice, `Learned noise from ${(on.from / on.rate).toFixed(2)} to ${(on.to / on.rate).toFixed(2)} s; the denoisers and Enhance speech use it on this clip until it is forgotten (Learn noise with no range)`);
+  });
   eqmLearn?.addEventListener("click", () => {
     const on = rangeOnClip();
     if (!on) {
