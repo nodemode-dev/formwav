@@ -62,6 +62,27 @@ def _model(name: str):
         return _models[name]
 
 
+def set_word(media_id: str, index: int, start: float, end: float, model: str = "") -> dict:
+    """Moves one cached word's start and end (the media file's seconds), never past its neighbours, and returns the
+    transcript; the clip must have been transcribed first."""
+    name = model or DEFAULT_MODEL
+    info = media.media_info(media_id)
+    cache = media_dir().parent / "transcripts" / f"{media_id}.{name}.json"
+    if not cache.exists():
+        raise media.MediaError("transcribe this clip before adjusting its words")
+    data = json.loads(cache.read_text())
+    words = data.get("words", [])
+    if not 0 <= index < len(words):
+        raise media.MediaError(f"there is no word {index} in this transcript")
+    lo = float(words[index - 1]["end"]) if index > 0 else 0.0
+    hi = float(words[index + 1]["start"]) if index + 1 < len(words) else int(info["frames"]) / int(info["sampleRate"])
+    if not (lo - 1e-6 <= start < end <= hi + 1e-6):
+        raise media.MediaError(f"the word must start before it ends and stay between {lo:.3f} and {hi:.3f} s")
+    words[index]["start"], words[index]["end"] = round(max(start, lo), 3), round(min(end, hi), 3)
+    cache.write_text(json.dumps(data))
+    return data
+
+
 def transcript(media_id: str, model: str = "") -> dict:
     """The media file's words with start and end in its own seconds, cached."""
     name = model or DEFAULT_MODEL

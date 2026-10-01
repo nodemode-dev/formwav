@@ -184,6 +184,23 @@ def media_spectrogram(media_id: str, w: int = 640, h: int = 240, legend: bool = 
         raise HTTPException(422, str(err)) from err
 
 
+@router.put("/media/{media_id}/transcript/word")
+async def media_transcript_word(media_id: str, request: Request) -> dict:
+    from ..services import transcript
+
+    try:
+        b = await request.json()
+        index, start, end = int(b["index"]), float(b["start"]), float(b["end"])
+    except (KeyError, TypeError, ValueError) as err:
+        raise HTTPException(422, "send index, start and end (the media file's seconds)") from err
+    try:
+        return transcript.set_word(media_id, index, start, end, str(b.get("model", "")))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/transcript")
 def media_transcript(media_id: str, model: str = "") -> dict:
     from ..services import transcript
