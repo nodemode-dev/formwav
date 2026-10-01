@@ -35,6 +35,35 @@ async def import_media(request: Request) -> dict:
         raise HTTPException(415, str(err)) from err
 
 
+@router.get("/library")
+def library_catalogue() -> list[dict]:
+    from ..services import library
+
+    return library.catalogue()
+
+
+@router.get("/library/{item}/preview.wav")
+def library_preview(item: str) -> Response:
+    from ..services import library
+
+    try:
+        return Response(library.wav(item), media_type="audio/wav", headers={"Cache-Control": "max-age=3600"})
+    except KeyError as err:
+        raise HTTPException(404, "no library item with that name") from err
+
+
+@router.post("/library/{item}", status_code=201)
+def library_add(item: str, rate: int = 48000) -> dict:
+    from ..services import library
+
+    try:
+        return library.add(item, rate)
+    except KeyError as err:
+        raise HTTPException(404, "no library item with that name") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/generate", status_code=201)
 def generate_signal(kind: str, seconds: float = 5.0, rate: int = 48000, freq: float = 440.0, digits: str = "") -> dict:
     from ..services import tools
