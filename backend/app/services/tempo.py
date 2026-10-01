@@ -41,11 +41,20 @@ def _decode(media_id: str, start: float | None, end: float | None) -> np.ndarray
 
 
 def envelope(x: np.ndarray) -> np.ndarray:
+    """Spectral flux at FPS, computed 4096 frames at a time so memory stays bounded for any length (the whole-signal
+    version held every windowed frame and its spectrum at once: gigabytes for ten minutes); the result is identical."""
     frames = np.lib.stride_tricks.sliding_window_view(np.pad(x, (FRAME // 2, FRAME)), FRAME)[::HOP][: len(x) // HOP]
     if len(frames) < 3:
         return np.zeros(0)
-    mag = np.log1p(100 * np.abs(np.fft.rfft(frames * np.hanning(FRAME), axis=1)))
-    flux = np.maximum(0, np.diff(mag, axis=0)).sum(axis=1)
+    window = np.hanning(FRAME)
+    flux = np.empty(len(frames) - 1)
+    prev = None
+    block = 4096
+    for b in range(0, len(frames), block):
+        mag = np.log1p(100 * np.abs(np.fft.rfft(frames[b : b + block] * window, axis=1)))
+        steps = np.diff(mag, axis=0) if prev is None else np.diff(np.vstack([prev[None, :], mag]), axis=0)
+        flux[max(0, b - 1) : max(0, b - 1) + len(steps)] = np.maximum(0, steps).sum(axis=1)
+        prev = mag[-1]
     k = max(1, round(FPS / 2))
     return np.maximum(0, flux - np.convolve(flux, np.ones(k) / k, mode="same"))
 

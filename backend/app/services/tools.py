@@ -136,8 +136,29 @@ def _wav_view(media_id: str):
         raise media.MediaError(f"the stored WAV is format {tag} at {bits} bits, which sample drawing does not read")
     frames = size // (channels * (bits // 8))
     raw = np.memmap(path, dtype=dtype, mode="r", offset=offset, shape=(frames, channels))
-    view = raw if dtype == "<f4" else (raw.astype(np.float32) / 32768.0)
+    view = raw if dtype == "<f4" else _Scaled(raw, 1.0 / 32768.0)
     return view, rate
+
+
+class _Scaled:
+    """A 16-bit WAV mapped from disk that reads as float32 slice by slice: indexing converts only what it returns, so a
+    window of a long file costs the window (converting the whole file per read cost hundreds of megabytes a request)."""
+
+    def __init__(self, raw, scale: float):
+        self.raw = raw
+        self.scale = scale
+        self.shape = raw.shape
+
+    def __getitem__(self, key):
+        import numpy as np
+
+        return np.asarray(self.raw[key], dtype=np.float32) * np.float32(self.scale)
+
+    def __array__(self, dtype=None, copy=None):
+        import numpy as np
+
+        whole = np.asarray(self.raw, dtype=np.float32) * np.float32(self.scale)
+        return whole if dtype is None else whole.astype(dtype, copy=False)
 
 
 def samples(media_id: str, start: int, count: int) -> dict:

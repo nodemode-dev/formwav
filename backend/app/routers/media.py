@@ -147,6 +147,28 @@ def media_mic_check(media_id: str) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.get("/media/{media_id}/pcm")
+def media_pcm(media_id: str, start: int = 0, frames: int = 480000) -> Response:
+    """Interleaved little-endian float32 frames from `start` (at most 100 s at 48 kHz per request), read from the stored
+    WAV mapped from disk, so a long file can be streamed into the player in pieces."""
+    import numpy as np
+
+    from ..services import tools
+
+    try:
+        view, rate = tools._wav_view(media_id)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+    total = int(view.shape[0])
+    start = max(0, min(int(start), total))
+    count = max(0, min(int(frames), 4_800_000, total - start))
+    data = np.ascontiguousarray(view[start : start + count], dtype="<f4").tobytes()
+    headers = {"X-Frames": str(count), "X-Start": str(start), "X-Total-Frames": str(total), "X-Channels": str(int(view.shape[1])), "X-Sample-Rate": str(rate)}
+    return Response(data, media_type="application/octet-stream", headers=headers)
+
+
 @router.get("/media/{media_id}/samples")
 def media_samples(media_id: str, start: int = 0, count: int = 256) -> dict:
     from ..services import tools
