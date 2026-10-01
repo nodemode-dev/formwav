@@ -38,6 +38,8 @@ export interface Clip {
   length: number;
   sourceIn: number;
   gainDb: number;
+  /** Audacity's clip volume envelope: dB points at the media's frames (so they stay with the audio through trims and splits), linear in gain between points and held outside them, multiplying the clip's gain. */
+  envelope?: readonly { at: number; db: number }[];
   fadeIn?: number;
   fadeOut?: number;
   fadeShape?: FadeShape;
@@ -203,6 +205,7 @@ export type Command =
   | { type: "set-bus-fx"; busId: string; fx: TrackFx[] }
   | { type: "set-tempo"; bpm: number; beatsPerBar: number }
   | { type: "set-time-track"; points: TimePoint[] }
+  | { type: "set-clip-envelope"; trackId: string; clipId: string; points: { at: number; db: number }[] }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
@@ -342,7 +345,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           const r = before && before.frames > 0 && cmd.media.frames > 0 ? cmd.media.frames / before.frames : 1;
           if (Math.abs(r - 1) < 1e-9) return { ...base, mediaId: cmd.media.id };
           const scale = (n: number | undefined) => (n === undefined ? undefined : Math.max(0, Math.round(n * r)));
-          return { ...base, mediaId: cmd.media.id, sourceIn: scale(c.sourceIn) ?? 0, length: Math.max(1, scale(c.length) ?? c.length), fadeIn: scale(c.fadeIn), fadeOut: scale(c.fadeOut) };
+          return { ...base, mediaId: cmd.media.id, sourceIn: scale(c.sourceIn) ?? 0, length: Math.max(1, scale(c.length) ?? c.length), fadeIn: scale(c.fadeIn), fadeOut: scale(c.fadeOut), ...(c.envelope ? { envelope: c.envelope.map((p) => ({ at: scale(p.at) ?? 0, db: p.db })) } : {}) };
         }),
       }));
       return changed ? { ...next, media: { ...doc.media, [cmd.media.id]: cmd.media } } : doc;
@@ -474,6 +477,29 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const camelotCode = cmd.camelot.trim().slice(0, 4);
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
+    }
+    case "set-clip-envelope": {
+      const byAt = new Map<number, number>();
+      for (const p of cmd.points) if (Number.isFinite(p.at) && p.at >= 0 && Number.isFinite(p.db)) byAt.set(Math.round(p.at), Math.round(Math.min(12, Math.max(-60, p.db)) * 10) / 10);
+      const points = [...byAt].sort((a, b) => a[0] - b[0]).map(([at, db]) => ({ at, db }));
+      let found = false;
+      const tracks = doc.tracks.map((t) =>
+        t.id !== cmd.trackId
+          ? t
+          : {
+              ...t,
+              clips: t.clips.map((c) => {
+                if (c.id !== cmd.clipId) return c;
+                found = true;
+                if (!points.length) {
+                  const { envelope: _cleared, ...rest } = c;
+                  return rest;
+                }
+                return { ...c, envelope: points };
+              }),
+            },
+      );
+      return found ? { ...doc, tracks } : doc;
     }
     case "set-time-track": {
       const points = cmd.points

@@ -164,12 +164,18 @@ function clipNode(): HTMLElement {
   fadeOut.title = "Drag to set the fade-out; click to change its curve";
   const gain = document.createElement("span");
   gain.className = "fw-gain-line";
+  const env = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  env.setAttribute("class", "fw-clip-env");
+  env.setAttribute("viewBox", "0 0 1000 100");
+  env.setAttribute("preserveAspectRatio", "none");
+  env.setAttribute("aria-hidden", "true");
+  env.append(document.createElementNS("http://www.w3.org/2000/svg", "polyline"));
   const takeBadge = document.createElement("button");
   takeBadge.type = "button";
   takeBadge.className = "fw-take";
   takeBadge.hidden = true;
   takeBadge.title = "Loop-recorded takes: click to play the next one";
-  node.append(canvas, fadeIn, fadeOut, gain, takeBadge);
+  node.append(canvas, env, fadeIn, fadeOut, gain, takeBadge);
   return node;
 }
 
@@ -199,6 +205,22 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
     if (badge.textContent !== label) badge.textContent = label;
   }
   const line = node.querySelector<HTMLElement>(".fw-gain-line");
+  const envSvg = node.querySelector<SVGSVGElement>(".fw-clip-env");
+  if (envSvg) {
+    const pts = clip.envelope ?? [];
+    const on = pts.length > 0;
+    const shown = envSvg.getAttribute("data-on") === "true";
+    if (shown !== on) envSvg.setAttribute("data-on", String(on));
+    const path = on
+      ? [
+          `0,${(gainFraction(clip.gainDb + pts[0].db) * 100).toFixed(2)}`,
+          ...pts.map((p) => `${(((p.at - clip.sourceIn) / Math.max(1, clip.length)) * 1000).toFixed(1)},${(gainFraction(clip.gainDb + p.db) * 100).toFixed(2)}`),
+          `1000,${(gainFraction(clip.gainDb + pts[pts.length - 1].db) * 100).toFixed(2)}`,
+        ].join(" ")
+      : "";
+    const poly = envSvg.firstElementChild;
+    if (poly && poly.getAttribute("points") !== path) poly.setAttribute("points", path);
+  }
   if (line) {
     const top = `${(gainFraction(clip.gainDb) * 100).toFixed(2)}%`;
     if (line.dataset.top !== top) {

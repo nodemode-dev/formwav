@@ -36,6 +36,44 @@ export function flatStages(fx: readonly TrackFx[] | undefined): number[] {
   });
 }
 
+/** A dB envelope's value at `t`, interpolated in linear gain between points and held outside them, as the core does. */
+function envGain(points: [number, number][], t: number): number {
+  if (t <= points[0][0]) return 10 ** (points[0][1] / 20);
+  for (let i = 1; i < points.length; i++) {
+    const [t1, d1] = points[i];
+    if (t <= t1) {
+      const [t0, d0] = points[i - 1];
+      const g0 = 10 ** (d0 / 20);
+      const g1 = 10 ** (d1 / 20);
+      return t1 === t0 ? g1 : g0 + ((g1 - g0) * (t - t0)) / (t1 - t0);
+    }
+  }
+  return 10 ** (points[points.length - 1][1] / 20);
+}
+
+/**
+ * A clip's envelope (session times, dB) as the flat gain points the core takes, multiplied with the track's volume
+ * automation when it has some: the product is sampled at every breakpoint of both and eight times inside each span,
+ * close to exact for the slopes an envelope has. Points before the session start fold into one at 0.
+ */
+function clipEnvelope(clipPoints: [number, number][], trackFlat: number[] | undefined): number[] {
+  const track: [number, number][] = [];
+  for (let i = 0; trackFlat && i + 1 < trackFlat.length; i += 2) track.push([trackFlat[i], trackFlat[i + 1]]);
+  const times = new Set<number>(clipPoints.map((p) => p[0]));
+  for (const p of track) times.add(p[0]);
+  const sorted = [...times].sort((a, b) => a - b);
+  if (track.length)
+    for (let i = 0; i + 1 < sorted.length; i++) for (let k = 1; k < 8; k++) times.add(Math.round(sorted[i] + ((sorted[i + 1] - sorted[i]) * k) / 8));
+  const at = [...times].filter((t) => t >= 0);
+  if (sorted[0] < 0) at.push(0);
+  const out: number[] = [];
+  for (const t of [...new Set(at)].sort((a, b) => a - b)) {
+    const g = envGain(clipPoints, t) * (track.length ? envGain(track, t) : 1);
+    out.push(t, 20 * Math.log10(Math.max(g, 1e-6)));
+  }
+  return out;
+}
+
 export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPlan {
   const soloed = doc.tracks.some((t) => t.solo);
   const busIndex = new Map<string, number>();
@@ -77,6 +115,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         skipped++;
         continue;
       }
+      const envPoints = clip.envelope?.length ? clipEnvelope(clip.envelope.map((p) => [clip.start + p.at - clip.sourceIn, p.db] as [number, number]), volumePoints) : volumePoints;
       clips.push({
         source,
         start: clip.start,
@@ -84,7 +123,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         length: clip.length,
         gain: dbToGain((volumePoints ? 0 : track.gainDb) + (vca?.gainDb ?? 0) + clip.gainDb),
         pan: panPoints ? 0 : track.pan ?? 0,
-        gainPoints: volumePoints,
+        gainPoints: envPoints,
         panPoints,
         fx: fxFlat.length ? fxFlat : undefined,
         fadeIn: clip.fadeIn ?? 0,

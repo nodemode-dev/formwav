@@ -16,6 +16,9 @@ const BODY = `
   <label class="fw-field"><span>Fade out</span><input type="number" step="0.01" min="0" data-f="fadeOut"><output>s</output></label>
   <label class="fw-field"><span>Fade curve</span><select data-f="shape"><option value="linear">Linear</option><option value="equal-power">Equal power</option><option value="s-curve">S-curve</option><option value="exponential">Exponential</option></select><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-clip-act="crossfade" title="Fade this clip and the one it overlaps on its track across each other, equal power" disabled>Crossfade overlap</button></div>
+  <div class="fw-insp-head">Gain envelope</div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Point</span><input type="number" data-env="db" min="-60" max="12" step="0.5" value="-12" aria-label="Level of the envelope point in dB"> dB</label><button type="button" class="fw-ibtn" data-clip-act="env-add" title="Add a gain point at the playhead inside this clip; its level follows straight lines between points">Add point at playhead</button><button type="button" class="fw-ibtn" data-clip-act="env-clear">Clear envelope</button></div>
+  <p class="fw-empty-note fw-env-readout" data-env-out>No gain envelope</p>
   <div class="fw-insp-head">Draw samples</div>
   <canvas class="fw-draw-canvas" data-draw width="512" height="128" aria-label="256 samples of the clip around the playhead, each a point; drag to redraw them"></canvas>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-draw-act="load" title="Show 256 samples of this clip around the playhead at single-sample zoom">Show samples at playhead</button><button type="button" class="fw-ibtn" data-draw-act="apply" disabled title="Write the drawn samples into the clip's audio as one undo step">Apply drawing</button><button type="button" class="fw-ibtn" data-draw-act="revert" disabled>Revert</button></div>
@@ -126,6 +129,12 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     show(body.querySelector(".fw-insp-effects"), !!hit);
     show(body.querySelector(".fw-insp-analyze"), !!hit);
     show(body.querySelector(".fw-insp-quantize"), !!hit || selected.length > 0);
+    const envOut = body.querySelector<HTMLElement>("[data-env-out]");
+    if (hit && envOut) {
+      const env = hit.clip.envelope ?? [];
+      const at = (p: { at: number }) => ((hit.clip.start + p.at - hit.clip.sourceIn) / doc.sampleRate).toFixed(2);
+      setText(envOut, env.length ? `${env.length} point${env.length === 1 ? "" : "s"}: ${env.map((p) => `${at(p)} s at ${p.db} dB`).join(", ")}` : "No gain envelope");
+    }
     if (!hit) {
       const seconds = doc.tracks.reduce((end, t) => Math.max(end, ...t.clips.map((c) => (c.start + c.length) / doc.sampleRate)), 0);
       setText(body.querySelector(".fw-insp-empty"), selected.length > 1 ? `${selected.length} clips selected. Select one clip to edit its properties.` : doc.tracks.length ? `Session: ${doc.tracks.length} track${doc.tracks.length === 1 ? "" : "s"}, ${(doc.sampleRate / 1000).toFixed(1)} kHz, ${seconds.toFixed(1)} s. Select a clip to edit its properties.` : "Import audio to begin. Selecting a clip shows its properties here.");
@@ -722,6 +731,25 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         fillInputs();
         setText(notice, list.length ? `${list.length} input${list.length === 1 ? "" : "s"} listed` : "No input device found; the system default is used");
       });
+    } else if (b.dataset.clipAct === "env-add" || b.dataset.clipAct === "env-clear") {
+      const hit = find(doc);
+      if (!hit) {
+        setText(notice, "Select one clip to shape its gain");
+        return;
+      }
+      if (b.dataset.clipAct === "env-clear") {
+        engine.dispatch({ type: "set-clip-envelope", trackId: hit.track.id, clipId: hit.clip.id, points: [] });
+        setText(notice, "Cleared the clip's gain envelope");
+        return;
+      }
+      const at = engine.get("transport").positionSamples;
+      const db = Number(body.querySelector<HTMLInputElement>('[data-env="db"]')?.value);
+      if (at < hit.clip.start || at > hit.clip.start + hit.clip.length || !Number.isFinite(db)) {
+        setText(notice, Number.isFinite(db) ? "Put the playhead inside the clip to add a point there" : "Type the point's level in dB");
+        return;
+      }
+      engine.dispatch({ type: "set-clip-envelope", trackId: hit.track.id, clipId: hit.clip.id, points: [...(hit.clip.envelope ?? []), { at: hit.clip.sourceIn + (at - hit.clip.start), db }] });
+      setText(notice, `Added a ${db} dB gain point at ${(at / doc.sampleRate).toFixed(2)} s`);
     } else if (b.dataset.clipAct === "crossfade") {
       const o = overlapOf(doc);
       if (!o) return;
