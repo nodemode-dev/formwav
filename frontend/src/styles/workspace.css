@@ -191,6 +191,9 @@
 .fw-sam-opt input[type="checkbox"] { margin: 0; accent-color: var(--accent-color); }
 .fw-sam-opt input[type="number"] { inline-size: 56px; padding: 2px 4px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 .fw-draw-canvas { display: block; inline-size: 100%; block-size: 128px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; cursor: crosshair; touch-action: none; }
+.fw-word-timing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.fw-word-timing[hidden] { display: none; }
+.fw-word-timing input[type="number"] { inline-size: 76px; }
 .fw-speed select { padding: 2px 4px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 .fw-speed input[type="number"] { inline-size: 56px; padding: 2px 4px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 

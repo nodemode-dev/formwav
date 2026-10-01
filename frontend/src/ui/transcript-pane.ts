@@ -116,6 +116,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
   <button type="button" class="fw-ibtn" data-t="gaps">Shorten gaps over ${GAP_OVER} s</button>
   <button type="button" class="fw-ibtn" data-t="retakes">Remove retakes</button>
   <button type="button" class="fw-ibtn" data-t="clip">Make a clip from selected words</button>
+  <div class="fw-word-timing" hidden><label class="fw-sam-opt"><span>Start</span><input type="number" data-wt="start" step="0.01" min="0" aria-label="The selected word's start in seconds"> s</label><label class="fw-sam-opt"><span>End</span><input type="number" data-wt="end" step="0.01" min="0" aria-label="The selected word's end in seconds"> s</label><button type="button" class="fw-ibtn" data-t="timing" title="Move the selected word's start and end; deleting the word then removes exactly that span">Set word timing</button><label class="fw-sam-opt"><span>Gap after</span><input type="number" data-wt="gap" step="0.05" min="0" aria-label="The gap after the selected word in seconds"> s</label><button type="button" class="fw-ibtn" data-t="gap" title="Shorten the gap to the next word to this length, closing up everything after it">Set gap</button></div>
 </div>
 <div class="fw-transcript-text" role="listbox" aria-multiselectable="true" aria-label="Transcript"></div>`;
   const notice = host.querySelector<HTMLElement>(".fw-notice");
@@ -129,11 +130,24 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
   let anchor: string | null = null;
   let current: HTMLElement | null = null;
 
+  const timing = body.querySelector<HTMLElement>(".fw-word-timing");
+  const field = (k: string) => body.querySelector<HTMLInputElement>(`[data-wt="${k}"]`);
   const paintSelection = () => {
     for (const span of text?.querySelectorAll<HTMLElement>(".fw-word") ?? []) {
       const on = selected.has(span.dataset.key ?? "");
       if (span.classList.contains("is-selected") !== on) span.classList.toggle("is-selected", on);
       if (span.getAttribute("aria-selected") !== String(on)) span.setAttribute("aria-selected", String(on));
+    }
+    const one = selected.size === 1 ? words.findIndex((w) => selected.has(w.key)) : -1;
+    if (timing && timing.hidden === one >= 0) timing.hidden = one < 0;
+    if (one < 0) return;
+    const rate = engine.get("document").sampleRate;
+    const w = words[one];
+    const next = words[one + 1];
+    const values: [string, string][] = [["start", (w.start / rate).toFixed(3)], ["end", (w.end / rate).toFixed(3)], ["gap", next ? ((next.start - w.end) / rate).toFixed(3) : ""]];
+    for (const [k, v] of values) {
+      const input = field(k);
+      if (input && document.activeElement !== input && input.value !== v) input.value = v;
     }
   };
 
@@ -226,6 +240,48 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
       return;
     }
     const action = target.closest<HTMLElement>("[data-t]")?.dataset.t;
+    if (action === "timing" || action === "gap") {
+      const one = selected.size === 1 ? words.findIndex((w) => selected.has(w.key)) : -1;
+      if (one < 0) {
+        setText(notice, "Select one word to adjust");
+        return;
+      }
+      const rate = engine.get("document").sampleRate;
+      const w = words[one];
+      if (action === "gap") {
+        const next = words[one + 1];
+        const want = Number(field("gap")?.value);
+        const gap = next ? next.start - w.end : 0;
+        if (!next || !(want >= 0) || want * rate >= gap) {
+          setText(notice, next ? `Type a gap shorter than the ${(gap / rate).toFixed(3)} s there now` : "The last word has no gap after it");
+          return;
+        }
+        const keep = Math.round(want * rate);
+        cut([{ start: w.end + Math.floor(keep / 2), end: next.start - Math.ceil(keep / 2) }], `part of the gap after "${w.text}", leaving ${want.toFixed(3)} s`);
+        return;
+      }
+      const start = Number(field("start")?.value);
+      const end = Number(field("end")?.value);
+      if (!(end > start)) {
+        setText(notice, "The word must end after it starts");
+        return;
+      }
+      const index = Number(w.key.split(":").pop());
+      const res = await fetch(`/api/media/${w.mediaId}/transcript/word`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index, start: w.mediaStart + (start - w.start / rate), end: w.mediaEnd + (end - w.end / rate) }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; words?: MediaWord[] };
+      if (!res.ok || !out.words) {
+        setText(notice, `Could not set the word's timing: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+        return;
+      }
+      transcripts.set(w.mediaId, out.words);
+      render();
+      setText(notice, `"${w.text}" now runs from ${start.toFixed(3)} to ${end.toFixed(3)} s`);
+      return;
+    }
     if (action === "delete") cut(rangesOf(words, (w) => selected.has(w.key)), "the selected words");
     else if (action === "fillers") cut(rangesOf(words, (w) => w.filler), "filler words");
     else if (action === "retakes") cut(retakeRanges(words), "earlier takes");
