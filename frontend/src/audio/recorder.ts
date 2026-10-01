@@ -58,15 +58,45 @@ export function encodeWav(channels: Float32Array[], sampleRate: number): ArrayBu
   return buffer;
 }
 
-export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = "", monitor = false, playAlong = true): Promise<Recording> {
+/**
+ * Inputs open for the current take, one stream and one source node per device, shared by every track recording from
+ * it: tracks on one device then hear the very same samples, and their capture start frames align them exactly
+ * (separate streams of one device each start with their own jitter, up to 2 ms apart). The last user closes it.
+ */
+const inputs = new Map<string, { stream: MediaStream; source: MediaStreamAudioSourceNode | null; users: number }>();
+
+async function openInput(deviceId: string): Promise<MediaStream> {
+  const shared = inputs.get(deviceId);
+  if (shared) {
+    shared.users++;
+    return shared.stream;
+  }
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
   });
+  inputs.set(deviceId, { stream, source: null, users: 1 });
+  return stream;
+}
+
+function closeInput(deviceId: string): void {
+  const shared = inputs.get(deviceId);
+  if (!shared) return;
+  shared.users--;
+  if (shared.users > 0) return;
+  shared.source?.disconnect();
+  for (const track of shared.stream.getTracks()) track.stop();
+  inputs.delete(deviceId);
+}
+
+export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = "", monitor = false, playAlong = true): Promise<Recording> {
+  const stream = await openInput(deviceId);
   try {
     const ctx = await player.context();
     await ctx.audioWorklet.addModule(recorderUrl);
     const channels = Math.min(2, Math.max(1, stream.getAudioTracks()[0]?.getSettings().channelCount ?? 1));
-    const source = ctx.createMediaStreamSource(stream);
+    const shared = inputs.get(deviceId);
+    const source = shared?.source ?? ctx.createMediaStreamSource(stream);
+    if (shared && !shared.source) shared.source = source;
     const node = new AudioWorkletNode(ctx, "formwav-recorder", {
       numberOfInputs: 1,
       numberOfOutputs: 1,
@@ -98,16 +128,16 @@ export async function startRecording(player: Player, startPosition: number, onLe
       stop: () =>
         new Promise<Take>((resolve) => {
           onStopped = () => {
-            source.disconnect();
+            source.disconnect(node);
             node.disconnect();
-            for (const track of stream.getTracks()) track.stop();
+            closeInput(deviceId);
             resolve({ ...assemble(chunks, channels, ctx.sampleRate), startFrame });
           };
           node.port.postMessage({ type: "stop" } satisfies RecorderMessage);
         }),
     };
   } catch (err) {
-    for (const track of stream.getTracks()) track.stop();
+    closeInput(deviceId);
     throw err;
   }
 }
