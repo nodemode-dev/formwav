@@ -44,6 +44,61 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-field" data-gfor="dtmf"><span>Digits</span><input type="text" data-g="digits" value="0123456789" maxlength="64"><span></span></label>
 <button type="button" class="fw-ibtn" data-g="go">Add on a new track</button>`;
   list.after(gen);
+  const lib = document.createElement("section");
+  lib.className = "fw-insp-section fw-library";
+  lib.dataset.panel = "media";
+  lib.innerHTML = `<div class="fw-insp-head">Library</div>
+<label class="fw-field fw-field-stack"><span>Sound</span><select data-l="item" aria-label="Library sound"></select></label>
+<div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-l="preview" disabled>Preview</button><button type="button" class="fw-ibtn" data-l="add" disabled>Add on a new track</button></div>
+<audio data-l="audio" preload="none" hidden></audio>
+<p class="fw-empty-note fw-library-note">Synthesised by the engine, so free to use anywhere.</p>`;
+  gen.after(lib);
+  const libPick = lib.querySelector<HTMLSelectElement>('[data-l="item"]') as HTMLSelectElement;
+  const libAudio = lib.querySelector<HTMLAudioElement>('[data-l="audio"]') as HTMLAudioElement;
+  void fetch("/api/library")
+    .then((r) => r.json())
+    .then((items: { id: string; name: string; category: string; seconds: number }[]) => {
+      const groups = new Map<string, HTMLOptGroupElement>();
+      for (const it of items) {
+        let group = groups.get(it.category);
+        if (!group) {
+          group = document.createElement("optgroup");
+          group.label = it.category;
+          groups.set(it.category, group);
+          libPick.append(group);
+        }
+        const option = document.createElement("option");
+        option.value = it.id;
+        option.textContent = `${it.name} · ${it.seconds} s`;
+        group.append(option);
+      }
+      for (const b of lib.querySelectorAll<HTMLButtonElement>("button")) b.disabled = items.length === 0;
+    })
+    .catch(() => setText(lib.querySelector(".fw-library-note"), "The library could not be listed; is the engine running?"));
+  lib.addEventListener("click", async (e) => {
+    const button = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-l]");
+    const id = libPick.value;
+    if (!button || !id) return;
+    const notice = host.querySelector<HTMLElement>(".fw-notice");
+    if (button.dataset.l === "preview") {
+      libAudio.src = `/api/library/${encodeURIComponent(id)}/preview.wav`;
+      libAudio.play().catch(() => setText(notice, "The browser would not play the preview"));
+      return;
+    }
+    button.disabled = true;
+    try {
+      const doc = engine.get("document");
+      const res = await fetch(`/api/library/${encodeURIComponent(id)}?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string };
+      if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "import-media", media: body as unknown as MediaRef, at: engine.get("transport").positionSamples });
+      setText(notice, `Added ${body.name} on a new track at the playhead`);
+    } catch (err) {
+      setText(notice, `Could not add the sound: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      button.disabled = false;
+    }
+  });
   const g = <T extends HTMLElement>(name: string) => gen.querySelector<T>(`[data-g="${name}"]`) as T;
   const showFields = () => {
     const kind = g<HTMLSelectElement>("kind").value;
