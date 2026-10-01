@@ -91,7 +91,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const field = <T extends HTMLElement>(name: string) => body.querySelector<T>(`[data-f="${name}"]`);
   const out = (name: string) => body.querySelector<HTMLElement>(`[data-o="${name}"]`);
   let selected: string[] = [];
-  let range: { trackId: string; start: number; end: number } | null = null;
+  let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number } } | null = null;
 
   const find = (doc: SessionDoc): { track: Track; clip: Clip } | null => {
     if (selected.length !== 1) {
@@ -232,11 +232,26 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   let learnedNoise: { mediaId: string; start: number; end: number } | null = null;
   const noiseParams = (mediaId: string, name: string): Record<string, number> =>
     learnedNoise && learnedNoise.mediaId === mediaId && learnsNoise.has(name) ? { noise_from: learnedNoise.start, noise_to: learnedNoise.end } : {};
+  const syncBand = () => {
+    const band = range?.band;
+    if (!band || pick?.value !== "band-gain") return;
+    for (const [param, hz] of [["low", band.lowHz], ["high", band.highHz]] as const) {
+      const input = body.querySelector<HTMLInputElement>(`.fw-fx-params input[data-param=${param}]`);
+      if (!input) continue;
+      const value = String(Math.round(Math.min(Number(input.max), Math.max(Number(input.min), hz))));
+      if (input.value !== value) {
+        input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+  };
   host.addEventListener("fw-range", (e) => {
-    range = (e as CustomEvent<{ trackId: string; start: number; end: number } | null>).detail;
+    range = (e as CustomEvent<{ trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number } } | null>).detail;
     render();
+    syncBand();
   });
   pick?.addEventListener("change", showControls);
+  pick?.addEventListener("change", syncBand);
   // iZotope RX's module search: filter the Effects menu by name or group.
   const search = body.querySelector<HTMLInputElement>('[data-fx="search"]');
   search?.addEventListener("input", () => {

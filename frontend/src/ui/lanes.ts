@@ -628,8 +628,9 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   lanes.addEventListener("pointercancel", () => endAuto(false));
 
   /** Smart Tool range (interface state): a time range on one track, made by dragging in a clip's upper half. */
-  let range: { trackId: string; start: number; end: number } | null = null;
-  let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean } | null = null;
+  let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number } } | null = null;
+  let rangeBand: { top: number; height: number } | null = null;
+  let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean; y0: number; clipTop: number; clipHeight: number; bodyTop: number; nyquist: number; spectral: boolean } | null = null;
   let hovered: HTMLElement | null = null;
   const rangeBox = document.createElement("div");
   rangeBox.className = "fw-range";
@@ -652,11 +653,18 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const width = `${((range.end - range.start) / spp).toFixed(1)}px`;
     if (rangeBox.style.transform !== transform) rangeBox.style.transform = transform;
     if (rangeBox.style.width !== width) rangeBox.style.width = width;
+    const top = rangeBand ? `${rangeBand.top.toFixed(1)}px` : "";
+    const height = rangeBand ? `${rangeBand.height.toFixed(1)}px` : "";
+    const bottom = rangeBand ? "auto" : "";
+    if (rangeBox.style.top !== top) rangeBox.style.top = top;
+    if (rangeBox.style.height !== height) rangeBox.style.height = height;
+    if (rangeBox.style.bottom !== bottom) rangeBox.style.bottom = bottom;
     if (rangeBox.hidden) rangeBox.hidden = false;
   };
   const clearRange = () => {
     if (!range) return;
     range = null;
+    rangeBand = null;
     lanes.dispatchEvent(new CustomEvent("fw-range", { bubbles: true, detail: null }));
     drawRange();
   };
@@ -665,7 +673,11 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   const startRange = (e: PointerEvent, trackId: string, node: HTMLElement) => {
     const body = node.closest<HTMLElement>(".fw-lane-body");
     if (!body) return;
-    rangeDrag = { trackId, body, x0: e.clientX, moved: false };
+    const doc = engine.get("document");
+    const clip = doc.tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === node.dataset.key);
+    const rate = (clip && doc.media[clip.mediaId]?.sampleRate) || doc.sampleRate;
+    const box = node.getBoundingClientRect();
+    rangeDrag = { trackId, body, x0: e.clientX, moved: false, y0: e.clientY, clipTop: box.top, clipHeight: box.height, bodyTop: body.getBoundingClientRect().top, nyquist: rate / 2, spectral: lanes.classList.contains("is-spectral") };
     body.setPointerCapture(e.pointerId);
     e.preventDefault();
   };
@@ -677,6 +689,15 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       const a = rangeAt(d.body, d.x0);
       const b = rangeAt(d.body, e.clientX);
       range = { trackId: d.trackId, start: Math.min(a, b), end: Math.max(a, b) };
+      rangeBand = null;
+      if (d.spectral && Math.abs(e.clientY - d.y0) >= 4) {
+        const clampY = (y: number) => Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, y));
+        const y1 = clampY(Math.min(d.y0, e.clientY));
+        const y2 = clampY(Math.max(d.y0, e.clientY));
+        const hz = (y: number) => Math.round(d.nyquist * (1 - (y - d.clipTop) / d.clipHeight));
+        range.band = { lowHz: hz(y2), highHz: hz(y1) };
+        rangeBand = { top: y1 - d.bodyTop, height: y2 - y1 };
+      }
       lanes.dispatchEvent(new CustomEvent("fw-range", { bubbles: true, detail: range }));
       drawRange();
       return;
@@ -691,7 +712,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const r = clip.getBoundingClientRect();
     const x = e.clientX - r.left;
     const onHandle = !!(e.target as HTMLElement).closest(".fw-gain-line, .fw-fade-handle, .fw-take");
-    const zone = onHandle || x < EDGE_PX || x > r.width - EDGE_PX ? "" : e.clientY - r.top < r.height / 2 ? "range" : "grab";
+    const zone = onHandle || x < EDGE_PX || x > r.width - EDGE_PX ? "" : lanes.classList.contains("is-spectral") || e.clientY - r.top < r.height / 2 ? "range" : "grab";
     if ((clip.dataset.zone ?? "") !== zone) {
       if (zone) clip.dataset.zone = zone;
       else delete clip.dataset.zone;
@@ -934,7 +955,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
             ? "trim-left"
             : x > rect.width - EDGE_PX
               ? "trim-right"
-              : e.clientY - rect.top < rect.height / 2
+              : lanes.classList.contains("is-spectral") || e.clientY - rect.top < rect.height / 2
                 ? "range"
                 : "move";
     if (spotEnabled() && (kind === "move" || kind === "range") && !e.shiftKey) {
