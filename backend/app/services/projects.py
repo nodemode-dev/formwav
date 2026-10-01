@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import tempfile
 import threading
 import time
@@ -78,7 +79,43 @@ def _summary(path: Path, manifest: dict, doc: dict) -> dict:
         "bytes": path.stat().st_size,
         "appVersion": manifest.get("appVersion"),
         "revision": int(manifest.get("revision", 1)),
+        "thumbnail": bool(manifest.get("thumbnail")),
     }
+
+
+THUMBNAIL_MAX_SECONDS = 300
+
+
+def _thumbnail(doc: object) -> bytes | None:
+    """A 320x64 PNG of the session's mix (ffmpeg's showwavespic over the engine's own render), or None when the session
+    is empty, longer than THUMBNAIL_MAX_SECONDS, or cannot be rendered; a save never fails for want of a picture."""
+    from . import render
+
+    try:
+        rate = int(doc.get("sampleRate") or 0) if isinstance(doc, dict) else 0
+        end = max((c.get("start", 0) + c.get("length", 0) for t in doc.get("tracks", []) for c in t.get("clips", [])), default=0) if isinstance(doc, dict) else 0
+        if rate <= 0 or end <= 0 or end > THUMBNAIL_MAX_SECONDS * rate:
+            return None
+        wav = render.render(doc)["wav"]
+        with tempfile.TemporaryDirectory() as tmp:
+            src, out = Path(tmp) / "mix.wav", Path(tmp) / "thumb.png"
+            src.write_bytes(wav)
+            done = subprocess.run(
+                [media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-i", str(src), "-filter_complex", "showwavespic=s=320x64:split_channels=0:scale=sqrt:colors=0xf97316", "-frames:v", "1", "-y", str(out)],
+                capture_output=True, timeout=120,
+            )
+            return out.read_bytes() if done.returncode == 0 and out.exists() else None
+    except Exception:  # noqa: BLE001 - a thumbnail is optional; the save goes ahead without one
+        return None
+
+
+def thumbnail(name: str) -> bytes:
+    """The PNG stored in a saved session, or KeyError when the session has none."""
+    path = file_path(name)
+    with zipfile.ZipFile(path) as z:
+        if "thumbnail.png" not in z.namelist():
+            raise KeyError(name)
+        return z.read("thumbnail.png")
 
 
 def save(name: str, doc: object, base: int | None = None) -> dict:
@@ -89,6 +126,7 @@ def save(name: str, doc: object, base: int | None = None) -> dict:
             media.media_info(mid)
         except KeyError as err:
             raise ProjectError("the session uses media the engine no longer has") from err
+    picture = _thumbnail(doc)
     with _SAVE_LOCK:
         current = _current_revision(path)
         if base is not None and base != current:
@@ -101,6 +139,7 @@ def save(name: str, doc: object, base: int | None = None) -> dict:
             "name": path.stem,
             "revision": current + 1,
             "savedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            **({"thumbnail": "thumbnail.png"} if picture else {}),
         }
         fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=".fmw")
         try:
@@ -108,6 +147,8 @@ def save(name: str, doc: object, base: int | None = None) -> dict:
                 with zipfile.ZipFile(fh, "w", compression=zipfile.ZIP_DEFLATED) as z:
                     z.writestr("manifest.json", json.dumps(manifest, indent=2))
                     z.writestr("session.json", json.dumps(doc))
+                    if picture:
+                        z.writestr("thumbnail.png", picture, compress_type=zipfile.ZIP_STORED)
                     for mid in sorted(ids):
                         z.write(media_dir() / f"{mid}.wav", f"media/{mid}.wav", compress_type=zipfile.ZIP_STORED)
                 fh.flush()

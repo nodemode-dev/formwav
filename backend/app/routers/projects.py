@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from ..services import audacity, media, projects
 
@@ -46,6 +46,16 @@ def open_project(name: str) -> dict:
     except media.CoreMissing as err:
         raise HTTPException(503, str(err)) from err
     except (projects.ProjectError, media.MediaError) as err:
+        raise HTTPException(400, str(err)) from err
+
+
+@router.get("/projects/{name}/thumbnail.png")
+def project_thumbnail(name: str) -> Response:
+    try:
+        return Response(projects.thumbnail(name), media_type="image/png", headers={"Cache-Control": "no-cache"})
+    except KeyError as err:
+        raise HTTPException(404, "that saved session has no thumbnail") from err
+    except projects.ProjectError as err:
         raise HTTPException(400, str(err)) from err
 
 
