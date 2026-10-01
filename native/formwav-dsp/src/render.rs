@@ -124,6 +124,28 @@ impl Player {
         self.sources.insert(id, buf);
     }
 
+    /// A source of `frames` silent frames, filled later by `write_source` while it can already play.
+    pub fn alloc_source(&mut self, id: u32, sample_rate: u32, channels: usize, frames: usize) {
+        self.sources.insert(id, AudioBuffer { sample_rate, channels: vec![vec![0.0; frames]; channels.max(1)] });
+    }
+
+    /// Interleaved frames written into a source from `offset`, clipped to its length; returns the frames written.
+    pub fn write_source(&mut self, id: u32, offset: usize, interleaved: &[f32]) -> usize {
+        let Some(buf) = self.sources.get_mut(&id) else { return 0 };
+        let channels = buf.channels.len();
+        let frames = buf.frames();
+        if channels == 0 || offset >= frames {
+            return 0;
+        }
+        let n = (interleaved.len() / channels).min(frames - offset);
+        for (c, channel) in buf.channels.iter_mut().enumerate() {
+            for i in 0..n {
+                channel[offset + i] = interleaved[i * channels + c];
+            }
+        }
+        n
+    }
+
     pub fn clear_clips(&mut self) {
         self.clips.clear();
         self.clip_fx.clear();
@@ -518,5 +540,26 @@ impl Player {
             Some(m) => (m.momentary(), m.short_term(), m.integrated()),
             None => (None, None, None),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_streamed_source_plays_what_was_written_and_silence_elsewhere() {
+        let mut p = Player::new();
+        p.alloc_source(1, 48000, 2, 1000);
+        // frames 100..300 written as left = 0.5, right = -0.25; a write past the end is clipped
+        let chunk: Vec<f32> = (0..200).flat_map(|_| [0.5f32, -0.25]).collect();
+        assert_eq!(p.write_source(1, 100, &chunk), 200);
+        assert_eq!(p.write_source(1, 950, &chunk), 50);
+        assert_eq!(p.write_source(1, 1000, &chunk), 0);
+        assert_eq!(p.write_source(9, 0, &chunk), 0);
+        let buf = &p.sources[&1];
+        assert_eq!(buf.frames(), 1000);
+        assert_eq!((buf.channels[0][99], buf.channels[0][100], buf.channels[0][299], buf.channels[0][300]), (0.0, 0.5, 0.5, 0.0));
+        assert_eq!((buf.channels[1][100], buf.channels[1][999]), (-0.25, -0.25));
     }
 }

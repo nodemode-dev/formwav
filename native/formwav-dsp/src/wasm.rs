@@ -35,6 +35,25 @@ pub unsafe extern "C" fn fw_load_wav(player: *mut Player, id: u32, ptr: *const u
     }
 }
 
+/// A silent source of known length, playable at once and filled by `fw_source_write` (a long file streamed in).
+#[no_mangle]
+pub unsafe extern "C" fn fw_source_alloc(player: *mut Player, id: u32, rate: u32, channels: u32, frames: f64) -> f64 {
+    if !(frames >= 0.0) || channels == 0 || channels > 32 {
+        return -1.0;
+    }
+    (*player).alloc_source(id, rate, channels as usize, frames as usize);
+    frames
+}
+
+/// Interleaved f32 frames written into a source from `offset`; returns the frames written.
+#[no_mangle]
+pub unsafe extern "C" fn fw_source_write(player: *mut Player, id: u32, offset: f64, ptr: *const f32, len: usize) -> f64 {
+    if !(offset >= 0.0) {
+        return 0.0;
+    }
+    (*player).write_source(id, offset as usize, slice::from_raw_parts(ptr, len)) as f64
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_clear_clips(player: *mut Player) {
     (*player).clear_clips();
