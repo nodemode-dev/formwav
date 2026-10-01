@@ -112,6 +112,7 @@ FORMWAV_CHAINS = {
     "dialogue-isolate": "",
     "reverb": "asplit=3[d][s][m];[s]atrim=0:1.5,aeval=(random(0)*2-1)*exp(-t/0.8):c=same[ir];[m][ir]afir=dry=1:wet=1:gtype=rms[w];[d][w]amix=inputs=2:weights=0.7 0.3:normalize=0",
     "ramp": "rubberband=tempo=1:pitch=1",
+    "dereverb": "anull",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
@@ -125,7 +126,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("ramp", "Ramp tempo and pitch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)...")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -204,6 +205,10 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
         {"tempo_from": ("Tempo at start", 50, 200, 100, "%"), "tempo_to": ("Tempo at end", 50, 200, 100, "%"), "pitch_from": ("Pitch at start", -12, 12, 0, "st"), "pitch_to": ("Pitch at end", -12, 12, 0, "st")},
         lambda v: "rubberband=tempo=1:pitch=1",
     ),
+    "dereverb": (
+        {"amount": ("Amount", 0, 100, 70, "%"), "rt60": ("Reverb time", 0.2, 3, 0.8, "s"), "floor": ("Floor", 6, 30, 18, "dB")},
+        lambda v: "anull",
+    ),
     "band-gain": (
         {"low": ("From", 20, 20000, 2000, "Hz"), "high": ("To", 40, 22000, 4000, "Hz"), "gain": ("Gain", -60, 24, -30, "dB")},
         lambda v: (lambda lo, hi, g: f"firequalizer=gain_entry='entry(0,0);entry({lo * 0.97:.1f},0);entry({lo:.1f},{g:.1f});entry({hi:.1f},{g:.1f});entry({hi * 1.03:.1f},0);entry(24000,0)'")(
@@ -281,6 +286,54 @@ def catalogue() -> list[dict]:
     return [{"group": group, "effects": [{"id": key, "label": label, "params": _controls(key), "retimes": key in RETIMING, "learnsNoise": key in LEARNS_NOISE} for key, label in items]} for group, items in GROUPS]
 
 
+def _dereverb(x, rate: int, v: dict):
+    """Late-reverberation suppression (Lebart and Boucher's model): in a short-time spectrum, the late reverberant power
+    at a frame is the power about 50 ms earlier, decayed at the rate a reverb time of `rt60` implies; a spectral
+    subtraction gain removes `amount` of it, floored at `floor` dB. Periodic Hann windows at a quarter-frame hop
+    overlap-add to exactly 1.5, so at amount 0 the output equals the input; frames are processed 1024 at a time."""
+    import math
+
+    import numpy as np
+
+    n = 2048 if rate > 32000 else 1024
+    hop = n // 4
+    win = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n)
+    ola = float((win**2).sum()) / hop
+    amount = v["amount"] / 100.0
+    floor2 = 10 ** (-v["floor"] / 10)
+    tail = max(1, round(0.05 * rate / hop))
+    decay = math.exp(-2 * (3 * math.log(10) / v["rt60"]) * tail * hop / rate)
+    y = np.zeros(x.shape, dtype=np.float32)
+    for c in range(x.shape[1]):
+        sig = np.concatenate([np.zeros(n), x[:, c].astype(np.float64), np.zeros(n)])
+        frames = np.lib.stride_tricks.sliding_window_view(sig, n)[::hop]
+        out = np.zeros(len(sig))
+        history = np.zeros((tail, n // 2 + 1))
+        smooth = np.zeros(n // 2 + 1)
+        for b in range(0, len(frames), 1024):
+            spec = np.fft.rfft(frames[b : b + 1024] * win, axis=1)
+            power = np.abs(spec) ** 2
+            # a reverberant tail's power in one bin and frame fluctuates widely, so the ratio is taken between powers
+            # smoothed over about 20 ms, and Amount 100% over-subtracts twice the estimate
+            ps = np.empty_like(power)
+            for k in range(len(power)):
+                smooth = 0.6 * smooth + 0.4 * power[k]
+                ps[k] = smooth
+            prev = np.vstack([history, ps])
+            late = decay * prev[: len(ps)]
+            gain = np.sqrt(np.maximum(1 - 2 * amount * late / (ps + 1e-20), floor2)) if amount > 0 else 1.0
+            back = np.fft.irfft(spec * gain, n, axis=1) * win
+            for k in range(len(back)):
+                at = (b + k) * hop
+                out[at : at + n] += back[k]
+            history = prev[-tail:]
+        y[:, c] = (out[n : n + len(x)] / ola).astype(np.float32)
+    return y
+
+
+NUMPY_EFFECTS = {"dereverb": _dereverb}
+
+
 def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     """Renders `name` (with `params` for an adjustable effect) over a stored media file into new media at the same rate;
     the source is kept."""
@@ -294,6 +347,18 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     info = media.media_info(media_id)
     rate, channels = int(info["sampleRate"]), int(info["channels"])
     source = media_dir() / f"{media_id}.wav"
+    if name in NUMPY_EFFECTS:
+        import numpy as np
+
+        from .audacity import _wav_bytes
+        from .tools import _wav_view
+
+        view, _ = _wav_view(media_id)
+        y = NUMPY_EFFECTS[name](np.array(view, dtype=np.float32), rate, values)
+        spec = PARAMS.get(name, ({}, None))[0]
+        detail = "".join(f" {values[k]:g}{spec[k][4]}" for k in spec)
+        stem = str(info["name"]).rsplit(".", 1)[0]
+        return media.import_wav(f"{stem} ({LABELS.get(name, name).rstrip('.')}{detail}).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
     if name in STEREO_ONLY and channels < 2:
         raise media.MediaError(f"{LABELS.get(name, name)} works between two channels and needs a stereo clip")
     if name == "peak-normalize":
