@@ -86,14 +86,31 @@ export function mountTrackMeters(host: HTMLElement, engine: Engine, player: Play
   const shown = new Map<string, number[]>();
   const written = new WeakMap<HTMLElement, string>();
   let lastTime = performance.now();
+  let barsByKey: Map<string, HTMLElement[]> | null = null;
+  const collect = () => {
+    const map = new Map<string, HTMLElement[]>();
+    for (const bar of host.querySelectorAll<HTMLElement>(".fw-lane-meter .fw-out-bar, .fw-strip-meter .fw-out-bar")) {
+      const key = bar.closest<HTMLElement>("[data-key]")?.dataset.key;
+      if (!key) continue;
+      const list = map.get(key);
+      if (list) list.push(bar);
+      else map.set(key, [bar]);
+    }
+    return map;
+  };
+  new MutationObserver(() => {
+    barsByKey = null;
+  }).observe(host, { childList: true, subtree: true });
   player.onOutputLevel((_left, _right, tracks) => {
     const now = performance.now();
     const fall = ((now - lastTime) / 1000) * FALL_DB_PER_SECOND;
     lastTime = now;
+    if (!barsByKey) barsByKey = collect();
+    const byKey = barsByKey;
     engine.get("document").tracks.forEach((track, i) => {
       if (track.id === recordingTrack()) return;
-      const bars = host.querySelectorAll<HTMLElement>(`.fw-lane[data-key="${track.id}"] .fw-lane-meter .fw-out-bar, .fw-strip[data-key="${track.id}"] .fw-strip-meter .fw-out-bar`);
-      if (bars.length < 2) return;
+      const bars = byKey.get(track.id);
+      if (!bars || bars.length < 2) return;
       const previous = shown.get(track.id) ?? [-Infinity, -Infinity];
       const next = [0, 1].map((c) => (tracks.length === 0 ? -Infinity : Math.max(toDb(tracks[2 * i + c] ?? 0), previous[c] - fall)));
       shown.set(track.id, next);
