@@ -229,6 +229,22 @@ def _values(name: str, given: dict | None) -> dict[str, float]:
     return out
 
 
+def _noise_range(params: dict | None, duration: float) -> tuple[float, float] | None:
+    """The learned noise range in seconds, (start, end), from `noise_from` and `noise_to`; None when absent. At least 0.1 s, inside the file."""
+    if not params or "noise_from" not in params or "noise_to" not in params:
+        return None
+    try:
+        start, end = float(params["noise_from"]), float(params["noise_to"])
+    except (TypeError, ValueError) as err:
+        raise media.MediaError("the noise range must be two numbers in seconds") from err
+    if not (0 <= start < end <= duration + 1e-6) or end - start < 0.1:
+        raise media.MediaError(f"the noise range must lie inside the clip and last at least 0.1 s (got {start:.2f} to {end:.2f} s of {duration:.2f})")
+    return start, min(end, duration)
+
+
+LEARNS_NOISE = frozenset(key for key, chain in ALL_CHAINS.items() if "afftdn" in chain) | frozenset(key for key, (_, builder) in PARAMS.items() if callable(builder) and "afftdn" in builder({k: v[3] for k, v in PARAMS[key][0].items()}))
+
+
 def _controls(key: str) -> list[dict]:
     spec = PARAMS.get(key, ({}, None))[0]
     return [{"id": p, "label": label, "min": lo, "max": hi, "default": default, "unit": unit} for p, (label, lo, hi, default, unit) in spec.items()]
@@ -240,7 +256,7 @@ RETIMING = {"tempo-faster", "tempo-slower", "stretch-rhythmic", "speed-faster", 
 
 
 def catalogue() -> list[dict]:
-    return [{"group": group, "effects": [{"id": key, "label": label, "params": _controls(key), "retimes": key in RETIMING} for key, label in items]} for group, items in GROUPS]
+    return [{"group": group, "effects": [{"id": key, "label": label, "params": _controls(key), "retimes": key in RETIMING, "learnsNoise": key in LEARNS_NOISE} for key, label in items]} for group, items in GROUPS]
 
 
 def apply(media_id: str, name: str, params: dict | None = None) -> dict:
@@ -283,6 +299,16 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
         chain = f"volume={gain:.4f}dB"
         if peak_db + gain > -1:
             chain += f",alimiter=limit={10 ** (-1 / 20):.5f}:level=false"
+    noise = _noise_range(params, int(info["frames"]) / rate)
+    if noise and "afftdn" in chain:
+        start, end = noise
+        span = end - start
+        chain = (
+            f"asplit[fw_a][fw_b];[fw_a]atrim={start:.4f}:{end:.4f},asetpts=PTS-STARTPTS[fw_n];[fw_n][fw_b]concat=n=2:v=0:a=1,"
+            f"asendcmd=c='0.0 afftdn sn start\\; {max(0.0, span - 0.05):.4f} afftdn sn stop',{chain},atrim=start={span:.4f},asetpts=PTS-STARTPTS"
+        )
+    elif noise:
+        raise media.MediaError(f"{LABELS.get(name, name)} does not take a learned noise profile; Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech do")
     delay = (int(rate / 40) if "afftdn" in chain else 0) + (int(rate * 0.008) if "anlmdn=s=7:p=0.002:r=0.006" in chain else 0) + (int(rate * 0.005) - 1 if "alimiter" in chain else 0)
     if delay:
         chain += f",atrim=start_sample={delay},apad=pad_len={delay}"
