@@ -24,6 +24,29 @@ def _stage(f: dict) -> tuple | None:
     return (kind, float(f.get("freq") or 1000), float(f.get("gainDb") or 0), float(f.get("q") or 0.707), 0.0, 0.0)
 
 
+def _env_gain(points: list[tuple[int, float]], t: float) -> float:
+    """A dB envelope's value at t, linear in gain between points and held outside them, as the core interpolates."""
+    if t <= points[0][0]:
+        return 10 ** (points[0][1] / 20)
+    for (t0, d0), (t1, d1) in zip(points, points[1:]):
+        if t <= t1:
+            g0, g1 = 10 ** (d0 / 20), 10 ** (d1 / 20)
+            return g1 if t1 == t0 else g0 + (g1 - g0) * (t - t0) / (t1 - t0)
+    return 10 ** (points[-1][1] / 20)
+
+
+def _clip_envelope(own: list[tuple[int, float]], track: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    """A clip's envelope multiplied with the track's volume automation, sampled at both sets of breakpoints and eight
+    times inside each span; points before the session start fold into one at 0 (the browser planner does the same)."""
+    times = {t for t, _ in own} | {t for t, _ in track}
+    ordered = sorted(times)
+    if track:
+        for a, b in zip(ordered, ordered[1:]):
+            times.update(round(a + (b - a) * k / 8) for k in range(1, 8))
+    at = sorted({t for t in times if t >= 0} | ({0} if ordered[0] < 0 else set()))
+    return [(t, 20 * math.log10(max(_env_gain(own, t) * (_env_gain(track, t) if track else 1.0), 1e-6))) for t in at]
+
+
 def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     if not isinstance(doc, dict) or not isinstance(doc.get("tracks"), list) or not isinstance(doc.get("media"), dict):
         raise RenderError("not a session document")
@@ -92,7 +115,13 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             gain = math.pow(10, (track_db + float(clip.get("gainDb", 0))) / 20)
             start, length = int(clip["start"]), int(clip["length"])
             fade_shape = {"linear": 0, "equal-power": 1, "s-curve": 2, "exponential": 3}.get(clip.get("fadeShape") or "linear", 0)
-            clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, track_pan, int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index, gain_env, pan_env))
+            clip_env = gain_env
+            if clip.get("envelope"):
+                own = [(start + int(p["at"]) - int(clip.get("sourceIn", 0)), float(p["db"])) for p in clip["envelope"]]
+                track_pts = [(int(p["time"]), float(p["value"])) for p in automation["volume"]] if automation.get("volume") else []
+                envelopes.append((_clip_envelope(own, track_pts), True))
+                clip_env = len(envelopes)
+            clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, track_pan, int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index, clip_env, pan_env))
             fx.extend((len(clips) - 1, *stage) for stage in stages)
             end = max(end, start + length)
     return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains
