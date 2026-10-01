@@ -206,7 +206,7 @@ export class Player {
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx) });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 

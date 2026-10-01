@@ -66,7 +66,7 @@ export interface WorkletBus {
 export type WorkletMessage =
   | { type: "init"; bytes: ArrayBuffer }
   | { type: "load"; id: number; bytes: ArrayBuffer }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[] }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[] }
   | { type: "play" }
   | { type: "speed"; value: number }
   | { type: "stop" }
@@ -97,6 +97,17 @@ class PlayerProcessor extends AudioWorkletProcessor {
   // Play-at-speed (Audacity's varispeed, pitch following speed): a read buffer the core refills 128 samples at a
   // time, read at `speed` samples per output sample with linear interpolation; unused at 1x.
   private speed = 1;
+  // Audacity's time track: [at, speed, at, speed, ...] in session samples, linear between points, held outside them.
+  private curve: number[] | null = null;
+  private curveAt(position: number): number {
+    const c = this.curve;
+    if (!c) return 1;
+    if (position <= c[0]) return c[1];
+    for (let i = 2; i < c.length; i += 2) {
+      if (position <= c[i]) return c[i - 1] + ((c[i + 1] - c[i - 1]) * (position - c[i - 2])) / Math.max(1, c[i] - c[i - 2]);
+    }
+    return c[c.length - 1];
+  }
   private readPos = 0;
   private bufLen = 0;
   private bufL = new Float32Array(1024);
@@ -168,6 +179,12 @@ class PlayerProcessor extends AudioWorkletProcessor {
         break;
       }
       case "clips": {
+        const next = msg.timeTrack && msg.timeTrack.length >= 2 ? msg.timeTrack : null;
+        if ((next === null) !== (this.curve === null)) {
+          this.readPos = 0;
+          this.bufLen = 0;
+        }
+        this.curve = next;
         core.fw_clear_clips(this.player);
         core.fw_clear_envelopes(this.player);
         const envelope = (flat: number[] | undefined, db: boolean): number => {
@@ -233,7 +250,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
 
   /** Varispeed: each output sample interpolated at the read position, which advances by `speed`; the buffer keeps
    * the sample before the read position across refills, so blocks join without a click. */
-  private renderAtSpeed(core: CoreExports, out: Float32Array[], frames: number): void {
+  private renderAtSpeed(core: CoreExports, out: Float32Array[], frames: number, step: number): void {
     const left = out[0];
     const right = out[1];
     for (let i = 0; i < frames; i++) {
@@ -242,7 +259,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       const a = this.readPos - k;
       left[i] = this.bufL[k] + (this.bufL[k + 1] - this.bufL[k]) * a;
       if (right) right[i] = this.bufR[k] + (this.bufR[k + 1] - this.bufR[k]) * a;
-      this.readPos += this.speed;
+      this.readPos += step;
     }
   }
 
@@ -272,8 +289,9 @@ class PlayerProcessor extends AudioWorkletProcessor {
     const out = outputs[0];
     if (!core || !this.playing || !out || out.length === 0) return true;
     const frames = Math.min(out[0].length, MAX_FRAMES);
-    if (this.speed !== 1) {
-      this.renderAtSpeed(core, out, frames);
+    if (this.speed !== 1 || this.curve) {
+      const step = this.curve ? Math.min(4, Math.max(0.25, this.speed * this.curveAt(core.fw_position(this.player)))) : this.speed;
+      this.renderAtSpeed(core, out, frames, step);
     } else {
       core.fw_render(this.player, this.left, this.right, frames);
       const buffer = core.memory.buffer;

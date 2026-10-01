@@ -66,6 +66,9 @@ const BODY = `
   <div class="fw-insp-head">Master effects</div>
   <div class="fw-rtfx-list" data-scope="master"></div>
   <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-insp-head">Time track</div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Playback speed at the session's start, in percent"><span>Start</span><input type="number" data-tt="from" min="25" max="400" step="1" value="100" aria-label="Time track speed at the start in percent"> %</label><label class="fw-sam-opt" title="Playback speed at the end of the session's audio, in percent"><span>End</span><input type="number" data-tt="to" min="25" max="400" step="1" value="100" aria-label="Time track speed at the end in percent"> %</label></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-tt="apply" title="Playback speed moves from Start to End across the session's audio, pitch following speed (Audacity's time track); playback only, exports are not affected">Set time track</button><button type="button" class="fw-ibtn" data-tt="clear" title="Play at the transport's speed again">Clear</button></div>
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
@@ -931,6 +934,28 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     { scope: "master", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="master"]'), sig: "" },
   ];
   const masterSection = body.querySelector<HTMLElement>(".fw-insp-master");
+  const ttFrom = body.querySelector<HTMLInputElement>('[data-tt="from"]');
+  const ttTo = body.querySelector<HTMLInputElement>('[data-tt="to"]');
+  body.querySelector<HTMLButtonElement>('[data-tt="apply"]')?.addEventListener("click", () => {
+    const doc = engine.get("document");
+    const end = doc.tracks.reduce((m, t) => t.clips.reduce((n, c) => Math.max(n, c.start + c.length), m), 0);
+    if (end <= 0) {
+      setText(notice, "Add audio before setting a time track");
+      return;
+    }
+    const from = Math.min(400, Math.max(25, Number(ttFrom?.value) || 100)) / 100;
+    const to = Math.min(400, Math.max(25, Number(ttTo?.value) || 100)) / 100;
+    engine.dispatch({ type: "set-time-track", points: [{ at: 0, speed: from }, { at: end, speed: to }] });
+    setText(notice, `Time track: playback from ${Math.round(from * 100)}% at the start to ${Math.round(to * 100)}% at ${(end / doc.sampleRate).toFixed(2)} s, pitch following; exports are not affected`);
+  });
+  body.querySelector<HTMLButtonElement>('[data-tt="clear"]')?.addEventListener("click", () => {
+    if (!engine.get("document").timeTrack) {
+      setText(notice, "There is no time track");
+      return;
+    }
+    engine.dispatch({ type: "set-time-track", points: [] });
+    setText(notice, "Cleared the time track");
+  });
   const busSection = body.querySelector<HTMLElement>(".fw-insp-bus");
   /** The bus the selected clip's track is routed to (Pro Tools' routing folder), if any. */
   const currentBus = () => {
@@ -990,6 +1015,13 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     for (const entry of fxLists) renderFxList(entry, force);
     const show = engine.get("document").tracks.length > 0;
     if (masterSection && masterSection.hidden === show) masterSection.hidden = !show;
+    const tt = engine.get("document").timeTrack;
+    if (tt?.length) {
+      const fromV = String(Math.round(tt[0].speed * 100));
+      const toV = String(Math.round(tt[tt.length - 1].speed * 100));
+      if (ttFrom && document.activeElement !== ttFrom && ttFrom.value !== fromV) ttFrom.value = fromV;
+      if (ttTo && document.activeElement !== ttTo && ttTo.value !== toV) ttTo.value = toV;
+    }
     const bus = currentBus();
     if (busSection && busSection.hidden === !!bus) busSection.hidden = !bus;
     setText(body.querySelector(".fw-bus-head"), bus ? `Bus effects · ${bus.name}` : "Bus effects");

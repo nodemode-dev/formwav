@@ -115,6 +115,11 @@ export interface Track {
   clips: readonly Clip[];
 }
 
+export interface TimePoint {
+  at: number;
+  speed: number;
+}
+
 export interface Marker {
   id: string;
   at: number;
@@ -144,6 +149,8 @@ export interface SessionDoc {
   tempo?: { bpm: number; beatsPerBar: number };
   /** The session's musical key and Camelot code, as detected (services/key.py). */
   key?: { name: string; camelot: string };
+  /** Audacity's time track: playback speed over session time, linear between points, held outside them (sample position, factor 0.25 to 4). */
+  timeTrack?: readonly TimePoint[];
   tracks: readonly Track[];
   media: Readonly<Record<string, MediaRef>>;
   markers: readonly Marker[];
@@ -195,6 +202,7 @@ export type Command =
   | { type: "set-master-fx"; fx: TrackFx[] }
   | { type: "set-bus-fx"; busId: string; fx: TrackFx[] }
   | { type: "set-tempo"; bpm: number; beatsPerBar: number }
+  | { type: "set-time-track"; points: TimePoint[] }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
@@ -466,6 +474,18 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const camelotCode = cmd.camelot.trim().slice(0, 4);
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
+    }
+    case "set-time-track": {
+      const points = cmd.points
+        .filter((p) => Number.isFinite(p.at) && p.at >= 0 && Number.isFinite(p.speed) && p.speed >= 0.25 && p.speed <= 4)
+        .map((p) => ({ at: Math.round(p.at), speed: Math.round(p.speed * 1000) / 1000 }))
+        .sort((a, b) => a.at - b.at);
+      if (!points.length) {
+        if (!doc.timeTrack) return doc;
+        const { timeTrack: _cleared, ...rest } = doc;
+        return rest;
+      }
+      return { ...doc, timeTrack: points };
     }
     case "set-tempo": {
       if (!Number.isFinite(cmd.bpm) || !Number.isFinite(cmd.beatsPerBar)) return doc;
