@@ -77,6 +77,7 @@ const BODY = `
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
   <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button><label class="fw-q-field">Length <input type="number" min="0.1" step="0.1" data-q="target" placeholder="s" aria-label="Target length in seconds"></label><button type="button" class="fw-ibtn" data-an="fit-length" title="Re-time this clip to the length typed, keeping pitch (half to double its length)">Fit to length</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-q-field">Stretch <input type="number" min="50" max="200" step="1" value="100" data-q="stretch" aria-label="New length of the selected clips as a percentage"> %</label><button type="button" class="fw-ibtn" data-an="stretch-group" title="Re-time every selected clip to this percentage of its length, keeping pitch, and scale their positions from the first one so the tracks stay in sync">Stretch selected clips</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="detect-key" title="Find this clip's musical key and its Camelot code">Detect key</button><span class="fw-key-readout" data-key-out>Key not set</span></div>
 </div>`;
 
@@ -1467,6 +1468,39 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         setText(notice, `Fitted the clip to ${target.toFixed(2)} s`);
       } catch (err) {
         setText(notice, `Could not fit: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (action === "stretch-group") {
+      const doc = engine.get("document");
+      const current = find(doc);
+      const ids = new Set(selectedIds.length ? selectedIds : current ? [current.clip.id] : []);
+      const pct = Number(body.querySelector<HTMLInputElement>('[data-q="stretch"]')?.value);
+      const picked = doc.tracks.flatMap((t) => t.clips.filter((c) => ids.has(c.id)).map((c) => ({ track: t, clip: c })));
+      if (!picked.length || !(pct >= 50 && pct <= 200) || pct === 100) {
+        setText(notice, picked.length ? "Type a new length from 50 to 200% (100 leaves the clips as they are)" : "Select the clips to stretch");
+        return;
+      }
+      const ratio = pct / 100;
+      const anchor = Math.min(...picked.map((p) => p.clip.start));
+      const count = `${picked.length} clip${picked.length === 1 ? "" : "s"}`;
+      setText(notice, `Stretching ${count} to ${pct}%...`);
+      try {
+        const rendered = new Map<string, MediaRef>();
+        for (const p of picked) {
+          if (rendered.has(p.clip.mediaId)) continue;
+          const params = encodeURIComponent(JSON.stringify({ percent: (1 / ratio - 1) * 100 }));
+          const res = await fetch(`/api/media/${p.clip.mediaId}/effect?name=stretch-rhythmic&params=${params}`, { method: "POST" });
+          const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+          if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          rendered.set(p.clip.mediaId, out as unknown as MediaRef);
+        }
+        const commands: Parameters<Engine["dispatch"]>[0][] = picked.flatMap((p) => [
+          { type: "set-clip-media" as const, trackId: p.track.id, clipId: p.clip.id, media: rendered.get(p.clip.mediaId) as MediaRef },
+          { type: "move-clip" as const, trackId: p.track.id, clipId: p.clip.id, start: Math.round(anchor + (p.clip.start - anchor) * ratio) },
+        ]);
+        engine.dispatch({ type: "batch", commands });
+        setText(notice, `Stretched ${count} to ${pct}% of their length, positions scaled from ${(anchor / doc.sampleRate).toFixed(2)} s`);
+      } catch (err) {
+        setText(notice, `Could not stretch: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else if (action === "quantize") {
       const doc = engine.get("document");
