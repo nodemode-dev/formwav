@@ -155,8 +155,121 @@ function request(node: AudioWorkletNode, message: WorkletMessage, match: (reply:
   });
 }
 
-async function loadInto(node: AudioWorkletNode, sources: Map<string, number>, mediaId: string, nextId: () => number): Promise<void> {
+/** What a streamed source needs: its size, and the frame to start from (the one under the playhead). */
+interface StreamInfo {
+  frames: number;
+  channels: number;
+  rate: number;
+  from: number;
+}
+
+/** Streamed sources' progress, frames filled of frames total, by media id. */
+export const streamProgress = new Map<string, [number, number]>();
+
+/** One streamed source's fill: pieces still to fetch (in order), pieces written, and plays waiting for pieces. */
+interface StreamCtl {
+  chunk: number;
+  total: number;
+  queue: number[];
+  filled: Set<number>;
+  waiters: { need: number[]; resolve: () => void }[];
+  running: boolean;
+}
+const streams = new WeakMap<AudioWorkletNode, Map<string, StreamCtl>>();
+
+/**
+ * Moves a streamed source's fill to `frame`: the piece holding it and the next go first, then the rest ahead of it,
+ * then the rest behind; resolves when those two pieces are written (at once when they are). Null when not streamed.
+ */
+function focusStream(node: AudioWorkletNode, mediaId: string, frame: number): Promise<void> | null {
+  const ctl = streams.get(node)?.get(mediaId);
+  if (!ctl) return null;
+  const first = Math.floor(Math.max(0, Math.min(frame, ctl.total - 1)) / ctl.chunk) * ctl.chunk;
+  const need = [first, first + ctl.chunk].filter((s) => s < ctl.total);
+  const rest = ctl.queue.filter((s) => !need.includes(s));
+  ctl.queue = [...need.filter((s) => !ctl.filled.has(s)), ...rest.filter((s) => s > first), ...rest.filter((s) => s < first)];
+  if (need.every((s) => ctl.filled.has(s))) return Promise.resolve();
+  return new Promise((resolve) => ctl.waiters.push({ need, resolve }));
+}
+
+/** Fetches a streamed source's queued pieces one at a time, releasing waiters as their pieces land (and all of them if it stops). */
+async function pump(ctl: StreamCtl, mediaId: string, fetchAt: (start: number) => Promise<void>): Promise<void> {
+  if (ctl.running) return;
+  ctl.running = true;
+  while (ctl.queue.length) {
+    const s = ctl.queue.shift() as number;
+    if (ctl.filled.has(s)) continue;
+    try {
+      await fetchAt(s);
+    } catch (err) {
+      console.warn(`formwav: streaming ${mediaId} stopped at frame ${s}:`, err);
+      break;
+    }
+    ctl.filled.add(s);
+    ctl.waiters = ctl.waiters.filter((w) => (w.need.every((n) => ctl.filled.has(n)) ? (w.resolve(), false) : true));
+  }
+  ctl.running = false;
+  for (const w of ctl.waiters) w.resolve();
+  ctl.waiters = [];
+}
+
+/**
+ * A long file played before it has all arrived: the core allocates it silent at full length and 2 s pieces are
+ * written into it (each a short copy on the audio thread), the two at `from` first; it counts as loaded once those
+ * two are in, and play and seek refocus the fill on the playhead. With `wait` every piece is written first.
+ */
+async function streamInto(node: AudioWorkletNode, sources: Map<string, number>, mediaId: string, nextId: () => number, info: StreamInfo, wait: boolean): Promise<void> {
+  const id = nextId();
+  const reply = await request(node, { type: "alloc", id, rate: info.rate, channels: info.channels, frames: info.frames }, (r) => r.type === "loaded" && r.id === id);
+  if (reply.type === "loaded" && reply.frames < 0) throw new Error("the audio core could not hold this file");
+  const chunk = info.rate * 2;
+  const ctl: StreamCtl = { chunk, total: info.frames, queue: [], filled: new Set(), waiters: [], running: false };
+  for (let s = 0; s < info.frames; s += chunk) ctl.queue.push(s);
+  let byMedia = streams.get(node);
+  if (!byMedia) streams.set(node, (byMedia = new Map()));
+  byMedia.set(mediaId, ctl);
+  streamProgress.set(mediaId, [0, info.frames]);
+  let filled = 0;
+  const fetchAt = async (start: number) => {
+    const res = await fetch(`/api/media/${mediaId}/pcm?start=${start}&frames=${chunk}`);
+    if (!res.ok) throw new Error(`audio request answered ${res.status}`);
+    const data = new Float32Array(await res.arrayBuffer());
+    send(node, { type: "write", id, offset: start, data }, [data.buffer]);
+    filled += data.length / Math.max(1, info.channels);
+    streamProgress.set(mediaId, [filled, info.frames]);
+  };
+  const ready = focusStream(node, mediaId, info.from);
+  const filling = pump(ctl, mediaId, fetchAt);
+  await (wait ? filling : ready);
+  sources.set(mediaId, id);
+}
+
+/** Refocuses every streamed source a clip plays at `position` on that frame; resolves when their pieces there are in. */
+function focusAll(node: AudioWorkletNode, doc: SessionDoc, position: number): Promise<unknown> {
+  const waits: Promise<void>[] = [];
+  for (const track of doc.tracks)
+    for (const clip of track.clips)
+      if (position >= clip.start && position < clip.start + clip.length) {
+        const ready = focusStream(node, clip.mediaId, clip.sourceIn + (position - clip.start));
+        if (ready) waits.push(ready);
+      }
+  return Promise.all(waits);
+}
+
+/** The stream description of a media from the session: its size, and the frame a clip of it plays at `position`, else 0. */
+function streamInfo(doc: SessionDoc, mediaId: string, position: number): StreamInfo | undefined {
+  const media = doc.media[mediaId];
+  if (!media || !media.frames || media.sampleRate !== doc.sampleRate) return undefined;
+  let from = 0;
+  for (const track of doc.tracks)
+    for (const clip of track.clips)
+      if (clip.mediaId === mediaId && position >= clip.start && position < clip.start + clip.length) from = clip.sourceIn + (position - clip.start);
+  return { frames: media.frames, channels: media.channels || 1, rate: media.sampleRate, from };
+}
+
+async function loadInto(node: AudioWorkletNode, sources: Map<string, number>, mediaId: string, nextId: () => number, info?: StreamInfo, wait = false): Promise<void> {
   if (sources.has(mediaId)) return;
+  if (info && info.frames > 60 * info.rate) return streamInto(node, sources, mediaId, nextId, info, wait);
   const res = await fetch(`/api/media/${mediaId}/audio`);
   if (!res.ok) throw new Error(`audio request answered ${res.status}`);
   const bytes = await res.arrayBuffer();
@@ -224,7 +337,7 @@ export class Player {
   private load(node: AudioWorkletNode, mediaId: string): Promise<void> {
     let loading = this.pending.get(mediaId);
     if (!loading) {
-      loading = loadInto(node, this.sources, mediaId, this.nextId);
+      loading = loadInto(node, this.sources, mediaId, this.nextId, streamInfo(this.engine.get("document"), mediaId, this.engine.get("transport").positionSamples));
       this.pending.set(mediaId, loading);
       loading.catch(() => this.pending.delete(mediaId));
     }
@@ -333,6 +446,7 @@ export class Player {
       at = loop.start;
       this.engine.setTransport({ positionSamples: at });
     }
+    await focusAll(node, doc, at);
     send(node, { type: "seek", position: at });
     send(node, { type: "play" });
     this.engine.setTransport({ playing: true });
@@ -360,6 +474,7 @@ export class Player {
   }
 
   seek(position: number): void {
+    if (this.node) void focusAll(this.node, this.engine.get("document"), position);
     const at = Math.max(0, Math.round(position));
     this.engine.setTransport({ positionSamples: at });
     if (this.node) send(this.node, { type: "seek", position: at });
@@ -372,7 +487,7 @@ export class Player {
     const length = Math.max(1, planClips(doc, new Map(Object.keys(doc.media).map((id) => [id, 0]))).end);
     const ctx = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate: doc.sampleRate });
     const node = await makeNode(ctx, await this.core());
-    await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter)));
+    await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter, streamInfo(doc, id, 0), true)));
     const plan = planClips(doc, sources);
     send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb });
     send(node, { type: "play" });

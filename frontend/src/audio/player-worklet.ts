@@ -10,6 +10,8 @@ interface CoreExports {
   fw_free(ptr: number, bytes: number): void;
   fw_player_new(): number;
   fw_load_wav(player: number, id: number, ptr: number, len: number): number;
+  fw_source_alloc(player: number, id: number, rate: number, channels: number, frames: number): number;
+  fw_source_write(player: number, id: number, offset: number, ptr: number, len: number): number;
   fw_clear_clips(player: number): void;
   fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number, bus: number, track: number, gainEnv: number, panEnv: number): void;
   fw_clear_envelopes(player: number): void;
@@ -66,6 +68,8 @@ export interface WorkletBus {
 export type WorkletMessage =
   | { type: "init"; bytes: ArrayBuffer }
   | { type: "load"; id: number; bytes: ArrayBuffer }
+  | { type: "alloc"; id: number; rate: number; channels: number; frames: number }
+  | { type: "write"; id: number; offset: number; data: Float32Array }
   | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[] }
   | { type: "play" }
   | { type: "speed"; value: number }
@@ -176,6 +180,19 @@ class PlayerProcessor extends AudioWorkletProcessor {
         const frames = core.fw_load_wav(this.player, msg.id, ptr, bytes.length);
         core.fw_free(ptr, bytes.length);
         this.reply({ type: "loaded", id: msg.id, frames });
+        break;
+      }
+      case "alloc": {
+        const frames = core.fw_source_alloc(this.player, msg.id, msg.rate, msg.channels, msg.frames);
+        this.reply({ type: "loaded", id: msg.id, frames });
+        break;
+      }
+      case "write": {
+        const bytes = msg.data.length * 4;
+        const ptr = core.fw_alloc(bytes);
+        new Float32Array(core.memory.buffer, ptr, msg.data.length).set(msg.data);
+        core.fw_source_write(this.player, msg.id, msg.offset, ptr, msg.data.length);
+        core.fw_free(ptr, bytes);
         break;
       }
       case "clips": {
