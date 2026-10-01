@@ -1591,3 +1591,10 @@ RX feathers the edges of a selection so a repair is not heard switching on and o
 - logged: v0.97.0 · 2026-10-01
 
 A 30-minute stereo 16-bit WAV (345 MB, 86400000 frames) imported through the engine in 1.6 s (WAV passes through; the level-0 peaks took 1.1 s) and through the interface to a drawn lane in 3.0 s with two frame gaps over 100 ms (121 and 131 ms); from 25 minutes in, playback held real time (1501.6 s after 1.5 s), but it started 5.4 s after Space because the player fetches and decodes the whole file into the core's memory before the first play, with three main-thread stalls of 569, 969 and 957 ms while the bytes crossed to the worklet. No code changed for this entry. Stated: files are held whole in the audio core, so the first play of a long file waits for all of it and a file larger than memory cannot play; streaming the core's sources from disk is the fix, and a two-hour file is unmeasured.
+
+### src/ui/import.ts, src/ui/shell.ts · an Audacity project zip opens as the session
+- refers-to: src/ui/import.ts :: the `.zip` and `.aup` branches of `importOne`; src/ui/shell.ts :: the picker's accept list
+- kind: explainer
+- logged: v0.99.0 (in progress) · 2026-10-01
+
+The picker takes .aup and .zip; a bare .aup is refused with what to zip, and a .zip goes to the engine's Audacity import, which replaces the session (after a confirm when one is open) and the notice names the tracks, clips and labels and that envelopes and effects were not carried over. Verified in Chromium: the hand-built project zip opened as two lanes and two clips at 44.1 kHz with the marker and region, and a WAV imported afterwards still landed; no page errors; production build passes.

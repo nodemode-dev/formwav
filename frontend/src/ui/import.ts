@@ -1,4 +1,4 @@
-import type { Engine, MediaRef } from "../engine";
+import type { Engine, MediaRef, SessionDoc } from "../engine";
 import { importFile } from "../io/media-client";
 import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
 
@@ -38,9 +38,23 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
     );
     try {
       const doc = engine.get("document");
-      const media = await importFile(file, doc.tracks.length ? doc.sampleRate : undefined);
-      engine.dispatch({ type: "import-media", media, at });
-      final = (await offerTempo(media, file.name)) ?? `Imported ${file.name}`;
+      const lower = file.name.toLowerCase();
+      if (lower.endsWith(".aup")) throw new Error("zip the .aup together with its _data folder and import the zip");
+      if (lower.endsWith(".zip")) {
+        if (doc.tracks.length && !window.confirm(`Open the Audacity project ${file.name}? Unsaved changes to the current session will be lost.`)) {
+          final = "Kept the current session";
+        } else {
+          const res = await fetch("/api/projects/import-audacity", { method: "POST", body: file });
+          const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string; document?: SessionDoc; tracks?: number; clips?: number; labels?: number };
+          if (!res.ok || !out.document) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          engine.loadDocument(out.document);
+          final = `Opened the Audacity project ${out.name}: ${out.tracks} track${out.tracks === 1 ? "" : "s"}, ${out.clips} clip${out.clips === 1 ? "" : "s"}, ${out.labels} label${out.labels === 1 ? "" : "s"}; envelopes and effects were not carried over`;
+        }
+      } else {
+        const media = await importFile(file, doc.tracks.length ? doc.sampleRate : undefined);
+        engine.dispatch({ type: "import-media", media, at });
+        final = (await offerTempo(media, file.name)) ?? `Imported ${file.name}`;
+      }
     } catch (err) {
       final = `Could not import ${file.name}: ${err instanceof Error ? err.message : String(err)}`;
     }
