@@ -6,6 +6,8 @@ export interface Take {
   sampleRate: number;
   channels: Float32Array[];
   frames: number;
+  /** The audio context frame of the first captured sample, for aligning takes recorded together; -1 when nothing was captured. */
+  startFrame?: number;
 }
 
 export interface Recording {
@@ -56,7 +58,7 @@ export function encodeWav(channels: Float32Array[], sampleRate: number): ArrayBu
   return buffer;
 }
 
-export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = "", monitor = false): Promise<Recording> {
+export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = "", monitor = false, playAlong = true): Promise<Recording> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
   });
@@ -76,14 +78,18 @@ export async function startRecording(player: Player, startPosition: number, onLe
     source.connect(node);
     node.connect(ctx.destination);
     const chunks: Float32Array[][] = [];
+    let startFrame = -1;
     let onStopped: (() => void) | null = null;
     node.port.onmessage = (e: MessageEvent<RecorderReply>) => {
       const reply = e.data;
       if (reply.type === "chunk") chunks.push(reply.channels);
       else if (reply.type === "level") onLevel(reply.peak);
-      else onStopped?.();
+      else {
+        startFrame = reply.startFrame;
+        onStopped?.();
+      }
     };
-    await player.play(true);
+    if (playAlong) await player.play(true);
     node.port.postMessage({ type: "monitor", on: monitor } satisfies RecorderMessage);
     node.port.postMessage({ type: "start" } satisfies RecorderMessage);
     return {
@@ -95,7 +101,7 @@ export async function startRecording(player: Player, startPosition: number, onLe
             source.disconnect();
             node.disconnect();
             for (const track of stream.getTracks()) track.stop();
-            resolve(assemble(chunks, channels, ctx.sampleRate));
+            resolve({ ...assemble(chunks, channels, ctx.sampleRate), startFrame });
           };
           node.port.postMessage({ type: "stop" } satisfies RecorderMessage);
         }),

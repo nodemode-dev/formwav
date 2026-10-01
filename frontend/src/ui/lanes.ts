@@ -3,7 +3,7 @@ import { documentLength, fadeCurve, nextFadeShape, sessionLength, type AutoPoint
 import { icon as fcIcon } from "../vendor/formcut/icons";
 import { fetchPeaks, type PeakData } from "../io/media-client";
 import { gridEnabled, shuffleEnabled, snapSamples, spotEnabled } from "./grid";
-import { armedTrack, onArm, setArmedTrack } from "./arm";
+import { armedTracks, isArmed, onArm, setArmedTrack, toggleArmed } from "./arm";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
 const PEAK_SPP = 256;
@@ -254,7 +254,7 @@ function laneNode(): HTMLElement {
 function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: number): void {
   setText(node.querySelector(".fw-lane-name"), track.name);
   const arm = node.querySelector<HTMLElement>(".fw-arm");
-  const armed = String(armedTrack() === track.id);
+  const armed = String(isArmed(track.id));
   if (arm && arm.getAttribute("aria-pressed") !== armed) arm.setAttribute("aria-pressed", armed);
   const first = track.clips[0];
   const media = first ? doc.media[first.mediaId] : undefined;
@@ -484,7 +484,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const arm = (e.target as HTMLElement).closest<HTMLElement>(".fw-arm");
     const id = arm?.closest<HTMLElement>(".fw-lane")?.dataset.key;
     if (!arm || !id) return;
-    setArmedTrack(armedTrack() === id ? null : id);
+    if ((e as MouseEvent).shiftKey) toggleArmed(id);
+    else setArmedTrack(isArmed(id) && armedTracks().length === 1 ? null : id);
   });
   onArm(() => render(engine.get("document")));
   lanes.addEventListener("click", (e) => {

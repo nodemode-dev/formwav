@@ -1,10 +1,10 @@
 import type { Engine, TransportState } from "../engine";
 import type { Player } from "../audio/player";
-import { encodeWav, startRecording, type Recording } from "../audio/recorder";
+import { encodeWav, startRecording, type Recording, type Take } from "../audio/recorder";
 import { onMonitorChanged, trackInput, trackMonitor } from "./inputs";
 import { importFile } from "../io/media-client";
 import { setText } from "../vendor/nodemode/dom-stable";
-import { armedTrack, recordingTrack, setRecordingTrack } from "./arm";
+import { addRecordingTrack, armedTrack, armedTracks, recordingTrack, setRecordingTrack } from "./arm";
 import { punchEnabled } from "./grid";
 
 function reason(err: unknown): string {
@@ -79,9 +79,19 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
     else record.title = "Recording needs microphone access, which this browser does not offer";
   }
 
+  /** An extra armed track's input level, drawn on its own lane meter. */
+  const laneLevel = (trackId: string) => (peak: number) => {
+    const db = peak > 0 ? 20 * Math.log10(peak) : -Infinity;
+    const scale = `scaleX(${Math.max(0, Math.min(1, (db + 60) / 60)).toFixed(3)})`;
+    for (const laneBar of host.querySelectorAll<HTMLElement>(`.fw-lane[data-key="${trackId}"] .fw-lane-meter .fw-out-bar`)) {
+      if (laneBar.style.transform !== scale) laneBar.style.transform = scale;
+    }
+  };
   let active: Recording | null = null;
+  let extras: { trackId: string; rec: Recording }[] = [];
   onMonitorChanged((trackId, on) => {
     if (active && trackId === armedTrack()) active.setMonitor(on);
+    for (const x of extras) if (x.trackId === trackId) x.rec.setMonitor(on);
   });
   let punchRange: { start: number; end: number } | null = null;
   let loopRange: { start: number; end: number } | null = null;
@@ -122,22 +132,37 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       loopRange = !punchRange && doc.loop?.enabled && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
       lastPosition = position;
       active = await startRecording(player, position, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false);
+      const missed: string[] = [];
+      for (const id of armedTracks().slice(1)) {
+        const track = doc.tracks.find((t) => t.id === id);
+        if (!track) continue;
+        try {
+          extras.push({ trackId: id, rec: await startRecording(player, position, laneLevel(id), trackInput(id), trackMonitor(id), false) });
+          addRecordingTrack(id);
+        } catch {
+          missed.push(track.name);
+        }
+      }
       engine.setTransport({ recording: true });
       const seconds = (s: number) => (s / doc.sampleRate).toFixed(3);
+      const more = extras.length ? ` and ${extras.length} more track${extras.length === 1 ? "" : "s"}` : "";
+      const skipped = missed.length ? `; ${missed.join(", ")} could not open ${missed.length === 1 ? "its" : "their"} input` : "";
       setText(
         notice,
-        punchRange && armed
-          ? `Punching in ${seconds(punchRange.start)} to ${seconds(punchRange.end)} s on ${armed.name}`
+        (punchRange && armed
+          ? `Punching in ${seconds(punchRange.start)} to ${seconds(punchRange.end)} s on ${armed.name}${more}`
           : loopRange
-            ? `Loop recording ${seconds(loopRange.start)} to ${seconds(loopRange.end)} s${armed ? ` on ${armed.name}` : ""}: each pass is a take`
+            ? `Loop recording ${seconds(loopRange.start)} to ${seconds(loopRange.end)} s${armed ? ` on ${armed.name}${more}` : ""}: each pass is a take`
             : armed
-              ? `Recording into ${armed.name}`
+              ? `Recording into ${armed.name}${more}`
               : punchEnabled()
                 ? "Recording (arm a track to punch in)"
-                : "Recording",
+                : "Recording") + skipped,
       );
     } catch (err) {
       active = null;
+      for (const x of extras) void x.rec.stop();
+      extras = [];
       punchRange = null;
       setRecordingTrack(null);
       const refused = err instanceof DOMException && err.name === "NotAllowedError";
@@ -151,67 +176,85 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
     const current = active;
     if (!current) return;
     active = null;
+    const others = extras;
+    extras = [];
     busy = true;
     engine.setTransport({ recording: false });
     player.stop();
     try {
-      setText(notice, "Saving take");
+      setText(notice, others.length ? `Saving ${others.length + 1} takes` : "Saving take");
       const take = await current.stop();
+      const otherTakes = await Promise.all(others.map((x) => x.rec.stop()));
       showLevel(0);
+      for (const x of others) laneLevel(x.trackId)(0);
       if (!take.frames) {
         setText(notice, "Nothing was recorded");
         return;
       }
       const punch = punchRange;
       punchRange = null;
-      const target = recordingTrack();
-      const lag = Math.round((latencyMs() / 1000) * take.sampleRate);
-      const drop = Math.max(0, lag - current.startPosition);
-      const origin = current.startPosition - lag + drop;
-      const frames = take.frames - drop;
-      if (frames <= 0) {
-        setText(notice, "The take is shorter than the latency compensation; nothing was recorded");
-        return;
-      }
-      let channels = drop ? take.channels.map((c) => c.subarray(drop)) : take.channels;
-      let at = origin;
-      if (punch && target) {
-        const from = Math.max(0, punch.start - origin);
-        const to = Math.min(frames, punch.end - origin);
-        if (to <= from) {
-          setText(notice, "Stopped before the punch range; nothing was recorded");
-          return;
-        }
-        channels = channels.map((c) => c.slice(from, to));
-        at = origin + from;
-      }
-      takes++;
-      const file = new File([encodeWav(channels, take.sampleRate)], `Take ${takes}.wav`, { type: "audio/wav" });
-      const session = engine.get("document");
-      const media = await importFile(file, session.tracks.length ? session.sampleRate : undefined);
       const loop = loopRange;
       loopRange = null;
-      let shape: { sourceIn: number; length: number; takes: number[]; take: number } | undefined;
-      if (!punch && loop) {
-        const length = loop.end - loop.start;
-        const first = origin <= loop.start ? loop.start - origin : loop.end - origin;
-        const offsets: number[] = [];
-        for (let o = first; o + length <= frames; o += length) offsets.push(o);
-        if (offsets.length) {
-          shape = { sourceIn: offsets[offsets.length - 1], length, takes: offsets, take: offsets.length - 1 };
-          at = loop.start;
+      const lag = Math.round((latencyMs() / 1000) * take.sampleRate);
+      const commands: Parameters<Engine["dispatch"]>[0][] = [];
+      /** One take onto one track, `offset` frames after the primary's first sample; a string says why nothing was placed. */
+      const place = async (t: Take, target: string | null, offset: number): Promise<string | { name: string; shape?: { takes: number[] } }> => {
+        const start = current.startPosition + offset;
+        const drop = Math.max(0, lag - start);
+        const origin = start - lag + drop;
+        const frames = t.frames - drop;
+        if (frames <= 0) return "The take is shorter than the latency compensation; nothing was recorded";
+        let channels = drop ? t.channels.map((c) => c.subarray(drop)) : t.channels;
+        let at = origin;
+        if (punch && target) {
+          const from = Math.max(0, punch.start - origin);
+          const to = Math.min(frames, punch.end - origin);
+          if (to <= from) return "Stopped before the punch range; nothing was recorded";
+          channels = channels.map((c) => c.slice(from, to));
+          at = origin + from;
         }
+        takes++;
+        const file = new File([encodeWav(channels, t.sampleRate)], `Take ${takes}.wav`, { type: "audio/wav" });
+        const session = engine.get("document");
+        const media = await importFile(file, session.tracks.length ? session.sampleRate : undefined);
+        let shape: { sourceIn: number; length: number; takes: number[]; take: number } | undefined;
+        if (!punch && loop) {
+          const length = loop.end - loop.start;
+          const first = origin <= loop.start ? loop.start - origin : loop.end - origin;
+          const offsets: number[] = [];
+          for (let o = first; o + length <= frames; o += length) offsets.push(o);
+          if (offsets.length) {
+            shape = { sourceIn: offsets[offsets.length - 1], length, takes: offsets, take: offsets.length - 1 };
+            at = loop.start;
+          }
+        }
+        const cuts = (punch || shape) && target ? punchCommands(target, at, at + (shape ? shape.length : channels[0].length)) : [];
+        commands.push(...cuts, { type: "import-media", media, at, trackId: target ?? undefined, clip: shape });
+        return { name: file.name, shape };
+      };
+      const target = recordingTrack();
+      const main = await place(take, target, 0);
+      if (typeof main === "string") {
+        setText(notice, main);
+        return;
       }
-      const cuts = (punch || shape) && target ? punchCommands(target, at, at + (shape ? shape.length : channels[0].length)) : [];
-      engine.dispatch({ type: "batch", commands: [...cuts, { type: "import-media", media, at, trackId: target ?? undefined, clip: shape }] });
+      let placed = 0;
+      for (let i = 0; i < others.length; i++) {
+        const t = otherTakes[i];
+        if (!t.frames) continue;
+        const aligned = (t.startFrame ?? -1) >= 0 && (take.startFrame ?? -1) >= 0;
+        if (typeof (await place(t, others[i].trackId, aligned ? (t.startFrame as number) - (take.startFrame as number) : 0)) !== "string") placed++;
+      }
+      engine.dispatch({ type: "batch", commands });
       const shifted = lag ? ` (shifted ${latencyMs()} ms earlier for latency)` : "";
+      const more = placed ? ` and ${placed} more take${placed === 1 ? "" : "s"} on their tracks` : "";
       setText(
         notice,
         punch && target
-          ? `Punched in ${file.name}${shifted}`
-          : shape
-            ? `Recorded ${shape.takes.length} take${shape.takes.length === 1 ? "" : "s"} in ${file.name}; the last one plays${shifted}`
-            : `Recorded ${file.name}${shifted}`,
+          ? `Punched in ${main.name}${more}${shifted}`
+          : main.shape
+            ? `Recorded ${main.shape.takes.length} take${main.shape.takes.length === 1 ? "" : "s"} in ${main.name}${more}; the last one plays${shifted}`
+            : `Recorded ${main.name}${more}${shifted}`,
       );
     } catch (err) {
       setText(notice, `Could not save the take: ${reason(err)}`);

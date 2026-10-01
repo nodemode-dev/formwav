@@ -9,7 +9,10 @@ export type RecorderMessage = { type: "start" } | { type: "stop" } | { type: "mo
 export type RecorderReply =
   | { type: "chunk"; channels: Float32Array[] }
   | { type: "level"; peak: number }
-  | { type: "stopped" };
+  | { type: "stopped"; startFrame: number };
+
+/** The AudioWorkletGlobalScope's frame counter, shared by every node in the context. */
+declare const currentFrame: number;
 
 const CHUNK_FRAMES = 8192;
 const LEVEL_EVERY = 8;
@@ -17,6 +20,7 @@ const LEVEL_EVERY = 8;
 class RecorderProcessor extends AudioWorkletProcessor {
   private recording = false;
   private monitor = false;
+  private firstFrame = -1;
   private buffers: Float32Array[] = [];
   private filled = 0;
   private peak = 0;
@@ -31,11 +35,12 @@ class RecorderProcessor extends AudioWorkletProcessor {
       }
       if (e.data.type === "start") {
         this.recording = true;
+        this.firstFrame = -1;
         return;
       }
       this.flush();
       this.recording = false;
-      this.reply({ type: "stopped" });
+      this.reply({ type: "stopped", startFrame: this.firstFrame });
     };
   }
 
@@ -59,6 +64,7 @@ class RecorderProcessor extends AudioWorkletProcessor {
       if (input.length > 1) for (let i = 0; i < out.length; i++) out[i] = (out[i] + (input[1]?.[i] ?? 0)) * 0.5;
     }
     if (!this.recording || !input || input.length === 0) return true;
+    if (this.firstFrame < 0) this.firstFrame = currentFrame;
     const frames = input[0].length;
     if (this.filled + frames > CHUNK_FRAMES) this.flush();
     if (!this.buffers.length) this.buffers = input.map(() => new Float32Array(CHUNK_FRAMES));

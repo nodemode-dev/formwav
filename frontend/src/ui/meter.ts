@@ -1,6 +1,6 @@
 import type { Player } from "../audio/player";
 import type { Engine } from "../engine";
-import { recordingTrack } from "./arm";
+import { isRecording } from "./arm";
 
 const FLOOR_DB = -60;
 const FALL_DB_PER_SECOND = 20;
@@ -108,7 +108,7 @@ export function mountTrackMeters(host: HTMLElement, engine: Engine, player: Play
     if (!barsByKey) barsByKey = collect();
     const byKey = barsByKey;
     engine.get("document").tracks.forEach((track, i) => {
-      if (track.id === recordingTrack()) return;
+      if (isRecording(track.id)) return;
       const bars = byKey.get(track.id);
       if (!bars || bars.length < 2) return;
       const previous = shown.get(track.id) ?? [-Infinity, -Infinity];
