@@ -95,6 +95,83 @@ def stats(media_id: str) -> dict:
     return result
 
 
+def _wav_view(media_id: str):
+    """A stored WAV's samples as a read-only (frames, channels) array mapped from disk, and its rate; float32 or 16-bit PCM."""
+    import struct
+
+    import numpy as np
+
+    media.media_info(media_id)
+    path = media_dir() / f"{media_id}.wav"
+    fmt = None
+    with open(path, "rb") as f:
+        head = f.read(12)
+        if head[:4] != b"RIFF" or head[8:12] != b"WAVE":
+            raise media.MediaError("the stored media is not a WAV file")
+        while True:
+            chunk = f.read(8)
+            if len(chunk) < 8:
+                raise media.MediaError("the stored WAV has no data chunk")
+            cid, size = chunk[:4], struct.unpack("<I", chunk[4:])[0]
+            if cid == b"fmt ":
+                body = f.read(size + (size % 2))
+                tag, channels, rate = struct.unpack("<HHI", body[:8])
+                bits = struct.unpack("<H", body[14:16])[0]
+                if tag == 0xFFFE and size >= 26:
+                    tag = struct.unpack("<H", body[24:26])[0]
+                fmt = (tag, channels, rate, bits)
+            elif cid == b"data":
+                offset = f.tell()
+                break
+            else:
+                f.seek(size + (size % 2), 1)
+    if fmt is None:
+        raise media.MediaError("the stored WAV has no format chunk")
+    tag, channels, rate, bits = fmt
+    if tag == 3 and bits == 32:
+        dtype = "<f4"
+    elif tag == 1 and bits == 16:
+        dtype = "<i2"
+    else:
+        raise media.MediaError(f"the stored WAV is format {tag} at {bits} bits, which sample drawing does not read")
+    frames = size // (channels * (bits // 8))
+    raw = np.memmap(path, dtype=dtype, mode="r", offset=offset, shape=(frames, channels))
+    view = raw if dtype == "<f4" else (raw.astype(np.float32) / 32768.0)
+    return view, rate
+
+
+def samples(media_id: str, start: int, count: int) -> dict:
+    """Up to 20000 samples of a stored media from `start`, per channel, for drawing at single-sample zoom."""
+    view, rate = _wav_view(media_id)
+    frames = int(view.shape[0])
+    start = max(0, min(int(start), max(0, frames - 1)))
+    count = max(1, min(int(count), 20000, frames - start))
+    seg = view[start : start + count]
+    return {"start": start, "count": int(seg.shape[0]), "rate": rate, "frames": frames, "channels": [[float(v) for v in seg[:, c]] for c in range(seg.shape[1])]}
+
+
+def draw(media_id: str, start: int, values: list) -> dict:
+    """A new media equal to `media_id` with `values` written into every channel from sample `start`; the rest byte-identical."""
+    import numpy as np
+
+    from .audacity import _wav_bytes
+
+    view, rate = _wav_view(media_id)
+    frames, channels = int(view.shape[0]), int(view.shape[1])
+    if not values or len(values) > 100000:
+        raise media.MediaError("draw between 1 and 100000 samples at a time")
+    arr = np.asarray(values, dtype=np.float32)
+    if not np.all(np.isfinite(arr)):
+        raise media.MediaError("drawn samples must be numbers")
+    if start < 0 or start + len(arr) > frames:
+        raise media.MediaError(f"the drawn samples must lie inside the audio (samples 0 to {frames - 1})")
+    out = np.array(view, dtype=np.float32)
+    out[start : start + len(arr), :] = np.clip(arr, -1.0, 1.0)[:, None]
+    stem = str(media.media_info(media_id)["name"]).rsplit(".", 1)[0]
+    name = stem if stem.endswith(" (drawn)") else f"{stem} (drawn)"
+    return media.import_wav(f"{name}.wav", _wav_bytes([out[:, c] for c in range(channels)], rate))
+
+
 def _phase_correlation(media_id: str) -> float | None:
     """Pearson correlation of the left and right channels over the whole file, -1 (opposed) to 1 (mono), read in chunks."""
     import numpy as np

@@ -118,6 +118,31 @@ def media_mic_check(media_id: str) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.get("/media/{media_id}/samples")
+def media_samples(media_id: str, start: int = 0, count: int = 256) -> dict:
+    from ..services import tools
+
+    try:
+        return tools.samples(media_id, start, count)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
+@router.post("/media/{media_id}/draw", status_code=201)
+async def media_draw(media_id: str, request: Request) -> dict:
+    from ..services import tools
+
+    try:
+        body = await request.json()
+        return tools.draw(media_id, int(body.get("start", 0)), list(body.get("values", [])))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, TypeError, ValueError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/stats")
 def media_stats(media_id: str) -> dict:
     from ..services import tools
