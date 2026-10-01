@@ -29,6 +29,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><select data-preset="fx" aria-label="Preset for this effect"><option value="">Presets</option></select><button type="button" class="fw-ibtn" data-preset="fx-save">Save preset</button><button type="button" class="fw-ibtn" data-preset="fx-delete">Delete</button></div>
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges (RX's ambience match)">Fill with room tone</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
   <ol class="fw-chain" hidden></ol>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
@@ -802,6 +803,41 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   };
   engine.subscribe("document", fillEqm);
   host.addEventListener("fw-selection", () => queueMicrotask(fillEqm));
+  let roomTone: { mediaId: string; start: number; end: number } | null = null;
+  body.querySelector<HTMLButtonElement>('[data-rt="learn"]')?.addEventListener("click", () => {
+    const on = rangeOnClip();
+    if (!on || on.mediaEnd - on.mediaStart < 0.1) {
+      setText(notice, "Select at least 0.1 s of quiet background on a clip to learn the room tone from");
+      return;
+    }
+    roomTone = { mediaId: on.clip.mediaId, start: on.mediaStart, end: on.mediaEnd };
+    setText(notice, `Learned room tone from ${(on.from / on.rate).toFixed(2)} to ${(on.to / on.rate).toFixed(2)} s; select a gap and press Fill with room tone`);
+  });
+  body.querySelector<HTMLButtonElement>('[data-rt="fill"]')?.addEventListener("click", async () => {
+    const on = rangeOnClip();
+    if (!roomTone) {
+      setText(notice, "Learn a room tone first: select some quiet background and press Learn room tone");
+      return;
+    }
+    if (!on) {
+      setText(notice, "Select the range inside a clip to fill with room tone");
+      return;
+    }
+    const tone = roomTone;
+    try {
+      const res = await fetch(`/api/media/${on.clip.mediaId}/room-tone`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ learnMedia: tone.mediaId, learnFrom: tone.start, learnTo: tone.end, fillFrom: on.mediaStart, fillTo: on.mediaEnd }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; id?: string };
+      if (!res.ok || !out.id) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "set-clip-media", trackId: on.track.id, clipId: on.clip.id, media: out as unknown as MediaRef });
+      setText(notice, `Filled ${((on.to - on.from) / on.rate).toFixed(2)} s with room tone matched to the learned background; undo restores it`);
+    } catch (err) {
+      setText(notice, `Could not fill with room tone: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
   const eqmLearn = body.querySelector<HTMLButtonElement>('[data-eqm="learn"]');
   body.querySelector<HTMLButtonElement>('[data-fx="learn-noise"]')?.addEventListener("click", () => {
     const on = rangeOnClip();
