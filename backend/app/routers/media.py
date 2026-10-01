@@ -143,6 +143,23 @@ async def media_draw(media_id: str, request: Request) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/room-tone", status_code=201)
+async def media_room_tone(media_id: str, request: Request) -> dict:
+    from ..services import tools
+
+    try:
+        b = await request.json()
+        times = [float(b[k]) for k in ("learnFrom", "learnTo", "fillFrom", "fillTo")]
+    except (KeyError, TypeError, ValueError) as err:
+        raise HTTPException(422, "send learnFrom, learnTo, fillFrom and fillTo in seconds") from err
+    try:
+        return tools.room_tone(media_id, str(b.get("learnMedia", media_id)), *times)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/stats")
 def media_stats(media_id: str) -> dict:
     from ..services import tools

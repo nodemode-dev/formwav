@@ -172,6 +172,51 @@ def draw(media_id: str, start: int, values: list) -> dict:
     return media.import_wav(f"{name}.wav", _wav_bytes([out[:, c] for c in range(channels)], rate))
 
 
+def room_tone(media_id: str, learn_media: str, learn_from: float, learn_to: float, fill_from: float, fill_to: float) -> dict:
+    """A new media equal to `media_id` with [fill_from, fill_to) seconds replaced by noise matched to the spectrum and level
+    of [learn_from, learn_to) seconds of `learn_media`: Welch's power spectrum of the learned range shapes fresh white
+    noise of the gap's length, crossfaded over 10 ms at each end inside the gap; the rest byte-identical."""
+    import hashlib
+
+    import numpy as np
+
+    from .audacity import _wav_bytes
+
+    view, rate = _wav_view(media_id)
+    src, src_rate = (view, rate) if learn_media == media_id else _wav_view(learn_media)
+    if src_rate != rate:
+        raise media.MediaError("the room tone and the clip to fill have different sample rates")
+    frames, channels = int(view.shape[0]), int(view.shape[1])
+    ls, le = int(round(learn_from * rate)), int(round(learn_to * rate))
+    fs, fe = int(round(fill_from * rate)), int(round(fill_to * rate))
+    if not (0 <= ls < le <= int(src.shape[0])) or le - ls < int(0.1 * rate):
+        raise media.MediaError("the room tone must be a range of at least 0.1 s inside its clip")
+    if not (0 <= fs < fe <= frames):
+        raise media.MediaError("the range to fill must lie inside the clip")
+    n = min(4096, 1 << int(np.log2(le - ls)))
+    hop = n // 2
+    window = np.hanning(n)
+    norm = float(np.sum(window**2))
+    length = fe - fs
+    fade = min(int(0.01 * rate), length // 4)
+    env = np.ones(length)
+    if fade > 0:
+        ramp = np.linspace(0.0, 1.0, fade, endpoint=False)
+        env[:fade] = ramp
+        env[-fade:] = ramp[::-1]
+    rng = np.random.default_rng(int.from_bytes(hashlib.sha256(f"{media_id}:{fs}:{fe}".encode()).digest()[:8], "little"))
+    out = np.array(view, dtype=np.float32)
+    for c in range(channels):
+        x = np.asarray(src[ls:le, min(c, int(src.shape[1]) - 1)], dtype=np.float64)
+        psd = np.mean([np.abs(np.fft.rfft(x[i : i + n] * window)) ** 2 for i in range(0, len(x) - n + 1, hop)], axis=0) / norm
+        shaped = np.fft.rfft(rng.standard_normal(length)) * np.sqrt(np.interp(np.fft.rfftfreq(length), np.fft.rfftfreq(n), psd))
+        tone = np.fft.irfft(shaped, n=length)
+        out[fs:fe, c] = (out[fs:fe, c] * (1.0 - env) + tone * env).astype(np.float32)
+    stem = str(media.media_info(media_id)["name"]).rsplit(".", 1)[0]
+    name = stem if stem.endswith(" (room tone)") else f"{stem} (room tone)"
+    return media.import_wav(f"{name}.wav", _wav_bytes([out[:, c] for c in range(channels)], rate))
+
+
 def _phase_correlation(media_id: str) -> float | None:
     """Pearson correlation of the left and right channels over the whole file, -1 (opposed) to 1 (mono), read in chunks."""
     import numpy as np
