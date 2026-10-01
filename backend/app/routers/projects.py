@@ -1,9 +1,20 @@
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from ..services import media, projects
+from ..services import audacity, media, projects
 
 router = APIRouter()
+
+
+@router.post("/projects/import-audacity")
+async def import_audacity(request: Request) -> dict:
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "the request carried no file")
+    try:
+        return audacity.import_aup_zip(data)
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
 
 
 @router.get("/projects")
