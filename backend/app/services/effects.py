@@ -111,6 +111,7 @@ FORMWAV_CHAINS = {
     "band-gain": "firequalizer=gain_entry='entry(0,0);entry(1940,0);entry(2000,-30);entry(4000,-30);entry(4120,0);entry(24000,0)'",
     "dialogue-isolate": "",
     "reverb": "asplit=3[d][s][m];[s]atrim=0:1.5,aeval=(random(0)*2-1)*exp(-t/0.8):c=same[ir];[m][ir]afir=dry=1:wet=1:gtype=rms[w];[d][w]amix=inputs=2:weights=0.7 0.3:normalize=0",
+    "ramp": "rubberband=tempo=1:pitch=1",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
@@ -123,7 +124,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
-    ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch...")]),
+    ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("ramp", "Ramp tempo and pitch...")]),
     ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
@@ -199,6 +200,10 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
         {"size": ("Size", 0.2, 6, 1.5, "s"), "decay": ("Decay", 0.1, 5, 0.8, "s"), "mix": ("Mix", 0, 100, 30, "%")},
         lambda v: f"asplit=3[d][s][m];[s]atrim=0:{v['size']:.2f},aeval=(random(0)*2-1)*exp(-t/{v['decay']:.2f}):c=same[ir];[m][ir]afir=dry=1:wet=1:gtype=rms[w];[d][w]amix=inputs=2:weights={1 - v['mix'] / 100:.2f} {v['mix'] / 100:.2f}:normalize=0",
     ),
+    "ramp": (
+        {"tempo_from": ("Tempo at start", 50, 200, 100, "%"), "tempo_to": ("Tempo at end", 50, 200, 100, "%"), "pitch_from": ("Pitch at start", -12, 12, 0, "st"), "pitch_to": ("Pitch at end", -12, 12, 0, "st")},
+        lambda v: "rubberband=tempo=1:pitch=1",
+    ),
     "band-gain": (
         {"low": ("From", 20, 20000, 2000, "Hz"), "high": ("To", 40, 22000, 4000, "Hz"), "gain": ("Gain", -60, 24, -30, "dB")},
         lambda v: (lambda lo, hi, g: f"firequalizer=gain_entry='entry(0,0);entry({lo * 0.97:.1f},0);entry({lo:.1f},{g:.1f});entry({hi:.1f},{g:.1f});entry({hi * 1.03:.1f},0);entry(24000,0)'")(
@@ -252,7 +257,24 @@ def _controls(key: str) -> list[dict]:
 
 #: Effects whose output does not line up sample for sample with the source (length or order changes), so they apply to a
 #: whole clip only, never to a range inside one.
-RETIMING = {"tempo-faster", "tempo-slower", "stretch-rhythmic", "speed-faster", "extreme-stretch", "truncate-silence", "reverse"}
+RETIMING = {"tempo-faster", "tempo-slower", "stretch-rhythmic", "speed-faster", "extreme-stretch", "truncate-silence", "reverse", "ramp"}
+
+
+def _ramp_chain(v: dict[str, float], duration: float, steps: int = 100) -> str:
+    """rubberband driven by asendcmd: tempo and pitch move linearly from their start to their end values in `steps` pieces over `duration` seconds, each piece set at its own centre."""
+    tf, tt = v["tempo_from"] / 100, v["tempo_to"] / 100
+    pf, pt = 2 ** (v["pitch_from"] / 12), 2 ** (v["pitch_to"] / 12)
+    cmds = []
+    for i in range(steps):
+        at = i * duration / steps
+        k = (i + 0.5) / steps
+        tempo = tf + (tt - tf) * k
+        pitch = pf * (pt / pf) ** k
+        if abs(pitch - tempo) < 0.002:
+            pitch *= 1.001
+        cmds.append(f"{at:.4f} rubberband tempo {tempo:.5f}; {at:.4f} rubberband pitch {pitch:.5f}")
+    joined = "; ".join(cmds)
+    return f"asendcmd=c='{joined}',rubberband=tempo={tf:.5f}:pitch={pf:.5f}"
 
 
 def catalogue() -> list[dict]:
@@ -300,6 +322,8 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
         if peak_db + gain > -1:
             chain += f",alimiter=limit={10 ** (-1 / 20):.5f}:level=false"
     noise = _noise_range(params, int(info["frames"]) / rate)
+    if name == "ramp":
+        chain = _ramp_chain(values, int(info["frames"]) / rate)
     if noise and "afftdn" in chain:
         start, end = noise
         span = end - start
