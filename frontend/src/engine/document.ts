@@ -200,7 +200,7 @@ export type Command =
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
   | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean }
-  | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef }
+  | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef; feather?: number }
   | { type: "remove-marker"; markerId: string }
   | { type: "set-marker"; markerId: string; at?: number; label?: string }
   | { type: "set-region"; regionId: string; start?: number; end?: number; label?: string }
@@ -304,9 +304,14 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
             };
           };
           const out: Clip[] = [];
-          if (from > c.start) out.push(piece(c.start, from, c.id, c.mediaId));
-          out.push(piece(from, to, from > c.start ? newId() : c.id, cmd.media.id));
-          if (to < end) out.push(piece(to, end, newId(), c.mediaId));
+          const hasLeft = from > c.start;
+          const hasRight = to < end;
+          const f = Math.max(0, Math.min(Math.round(cmd.feather ?? 0), Math.floor((to - from) / 2), hasLeft ? from - c.start : Infinity, hasRight ? end - to : Infinity));
+          const fl = hasLeft ? f : 0;
+          const fr = hasRight ? f : 0;
+          if (hasLeft) out.push({ ...piece(c.start, from, c.id, c.mediaId), ...(fl ? { fadeOut: fl } : {}) });
+          out.push({ ...piece(from - fl, to + fr, hasLeft ? newId() : c.id, cmd.media.id), ...(fl ? { fadeIn: fl } : {}), ...(fr ? { fadeOut: fr } : {}) });
+          if (hasRight) out.push({ ...piece(to, end, newId(), c.mediaId), ...(fr ? { fadeIn: fr } : {}) });
           return out;
         }),
       }));

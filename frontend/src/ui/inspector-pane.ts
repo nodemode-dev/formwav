@@ -25,7 +25,7 @@ const BODY = `
   <div class="fw-fx-params"></div>
   <div class="fw-analyze-buttons"><select data-preset="fx" aria-label="Preset for this effect"><option value="">Presets</option></select><button type="button" class="fw-ibtn" data-preset="fx-save">Save preset</button><button type="button" class="fw-ibtn" data-preset="fx-delete">Delete</button></div>
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
   <ol class="fw-chain" hidden></ol>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
@@ -332,9 +332,11 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       if (inRange) {
-        engine.dispatch({ type: "set-range-media", trackId: target.track.id, clipId: target.clip.id, start: inRange.start, end: inRange.end, media: out as unknown as MediaRef });
         const rate = engine.get("document").sampleRate;
-        setText(notice, `Applied ${label} to ${((Math.min(inRange.end, target.clip.start + target.clip.length) - Math.max(inRange.start, target.clip.start)) / rate).toFixed(2)} s of the clip${withNoise}`);
+        const featherMs = Math.max(0, Math.min(500, Number(body.querySelector<HTMLInputElement>("[data-feather]")?.value) || 0));
+        const feather = Math.round((featherMs / 1000) * rate);
+        engine.dispatch({ type: "set-range-media", trackId: target.track.id, clipId: target.clip.id, start: inRange.start, end: inRange.end, media: out as unknown as MediaRef, ...(feather ? { feather } : {}) });
+        setText(notice, `Applied ${label} to ${((Math.min(inRange.end, target.clip.start + target.clip.length) - Math.max(inRange.start, target.clip.start)) / rate).toFixed(2)} s of the clip${feather ? `, feathered ${featherMs} ms` : ""}${withNoise}`);
       } else {
         engine.dispatch({ type: "set-clip-media", trackId: target.track.id, clipId: target.clip.id, media: out as unknown as MediaRef });
         setText(notice, `Applied ${label} to the clip${withNoise}`);
