@@ -16,6 +16,9 @@ const BODY = `
   <label class="fw-field"><span>Fade out</span><input type="number" step="0.01" min="0" data-f="fadeOut"><output>s</output></label>
   <label class="fw-field"><span>Fade curve</span><select data-f="shape"><option value="linear">Linear</option><option value="equal-power">Equal power</option><option value="s-curve">S-curve</option><option value="exponential">Exponential</option></select><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-clip-act="crossfade" title="Fade this clip and the one it overlaps on its track across each other, equal power" disabled>Crossfade overlap</button></div>
+  <div class="fw-insp-head">Draw samples</div>
+  <canvas class="fw-draw-canvas" data-draw width="512" height="128" aria-label="256 samples of the clip around the playhead, each a point; drag to redraw them"></canvas>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-draw-act="load" title="Show 256 samples of this clip around the playhead at single-sample zoom">Show samples at playhead</button><button type="button" class="fw-ibtn" data-draw-act="apply" disabled title="Write the drawn samples into the clip's audio as one undo step">Apply drawing</button><button type="button" class="fw-ibtn" data-draw-act="revert" disabled>Revert</button></div>
 </div>
 <div class="fw-insp-section fw-insp-effects" hidden>
   <div class="fw-insp-head">Effects</div>
@@ -934,6 +937,128 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     { scope: "master", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="master"]'), sig: "" },
   ];
   const masterSection = body.querySelector<HTMLElement>(".fw-insp-master");
+  const drawCanvas = body.querySelector<HTMLCanvasElement>("[data-draw]");
+  const drawApply = body.querySelector<HTMLButtonElement>('[data-draw-act="apply"]');
+  const drawRevert = body.querySelector<HTMLButtonElement>('[data-draw-act="revert"]');
+  let drawing: { mediaId: string; trackId: string; clipId: string; start: number; original: number[]; values: number[] } | null = null;
+  let stroke: { i: number; v: number } | null = null;
+  const paintDraw = () => {
+    const ctx = drawCanvas?.getContext("2d");
+    if (!drawCanvas || !ctx) return;
+    const w = drawCanvas.width;
+    const h = drawCanvas.height;
+    const style = getComputedStyle(drawCanvas);
+    const token = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+    ctx.clearRect(0, 0, w, h);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = token("--border-color", "#3a3a3a");
+    ctx.beginPath();
+    ctx.moveTo(0, h / 2);
+    ctx.lineTo(w, h / 2);
+    ctx.stroke();
+    if (!drawing) return;
+    const n = drawing.values.length;
+    const x = (i: number) => ((i + 0.5) / n) * w;
+    const y = (v: number) => ((1 - v) * h) / 2;
+    const line = (vals: number[], colour: string) => {
+      ctx.strokeStyle = colour;
+      ctx.beginPath();
+      vals.forEach((v, i) => (i ? ctx.lineTo(x(i), y(v)) : ctx.moveTo(x(i), y(v))));
+      ctx.stroke();
+    };
+    line(drawing.original, token("--text-secondary", "#8a8a8a"));
+    line(drawing.values, token("--accent-color", "#f97316"));
+    ctx.fillStyle = token("--accent-color", "#f97316");
+    drawing.values.forEach((v, i) => ctx.fillRect(x(i) - 1, y(v) - 1, 2, 2));
+  };
+  const pointAt = (e: PointerEvent) => {
+    const r = (drawCanvas as HTMLCanvasElement).getBoundingClientRect();
+    const n = drawing ? drawing.values.length : 1;
+    return { i: Math.min(n - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * n))), v: Math.min(1, Math.max(-1, 1 - (2 * (e.clientY - r.top)) / r.height)) };
+  };
+  const drawRun = (a: { i: number; v: number }, b: { i: number; v: number }) => {
+    if (!drawing) return;
+    const lo = Math.min(a.i, b.i);
+    const hi = Math.max(a.i, b.i);
+    for (let i = lo; i <= hi; i++) drawing.values[i] = hi === lo ? b.v : a.v + ((b.v - a.v) * (i - a.i)) / (b.i - a.i);
+  };
+  body.querySelector<HTMLButtonElement>('[data-draw-act="load"]')?.addEventListener("click", async () => {
+    const doc = engine.get("document");
+    const hit = find(doc);
+    if (!hit) {
+      setText(notice, "Select one clip to draw on");
+      return;
+    }
+    const inClip = Math.min(Math.max(engine.get("transport").positionSamples - hit.clip.start, 0), Math.max(0, hit.clip.length - 1));
+    const centre = (hit.clip.sourceIn ?? 0) + inClip;
+    try {
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/samples?start=${Math.max(0, centre - 128)}&count=256`);
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; start?: number; count?: number; channels?: number[][] };
+      if (!res.ok || !out.channels?.length) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      drawing = { mediaId: hit.clip.mediaId, trackId: hit.track.id, clipId: hit.clip.id, start: out.start ?? 0, original: out.channels[0].slice(), values: out.channels[0].slice() };
+      if (drawApply) drawApply.disabled = true;
+      if (drawRevert) drawRevert.disabled = true;
+      paintDraw();
+      setText(notice, `Showing samples ${out.start} to ${(out.start ?? 0) + (out.count ?? 0) - 1} of the clip's audio, each one a point you can redraw by dragging`);
+    } catch (err) {
+      setText(notice, `Could not show the samples: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+  drawCanvas?.addEventListener("pointerdown", (e) => {
+    if (!drawing || e.button !== 0) return;
+    drawCanvas.setPointerCapture(e.pointerId);
+    stroke = pointAt(e);
+    drawRun(stroke, stroke);
+    paintDraw();
+    e.preventDefault();
+  });
+  drawCanvas?.addEventListener("pointermove", (e) => {
+    if (!drawing || !stroke) return;
+    const p = pointAt(e);
+    drawRun(stroke, p);
+    stroke = p;
+    paintDraw();
+  });
+  const endStroke = () => {
+    if (!stroke || !drawing) return;
+    stroke = null;
+    const d = drawing;
+    const changed = d.values.some((v, i) => v !== d.original[i]);
+    if (drawApply) drawApply.disabled = !changed;
+    if (drawRevert) drawRevert.disabled = !changed;
+  };
+  drawCanvas?.addEventListener("pointerup", endStroke);
+  drawCanvas?.addEventListener("pointercancel", endStroke);
+  drawRevert?.addEventListener("click", () => {
+    if (!drawing) return;
+    drawing.values = drawing.original.slice();
+    paintDraw();
+    if (drawApply) drawApply.disabled = true;
+    drawRevert.disabled = true;
+    setText(notice, "Put the samples back as they were");
+  });
+  drawApply?.addEventListener("click", async () => {
+    const d = drawing;
+    if (!d) return;
+    const lo = d.values.findIndex((v, i) => v !== d.original[i]);
+    let hi = d.values.length - 1;
+    while (hi > lo && d.values[hi] === d.original[hi]) hi--;
+    if (lo < 0) return;
+    drawApply.disabled = true;
+    try {
+      const res = await fetch(`/api/media/${d.mediaId}/draw`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ start: d.start + lo, values: d.values.slice(lo, hi + 1) }) });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; id?: string };
+      if (!res.ok || !out.id) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "set-clip-media", trackId: d.trackId, clipId: d.clipId, media: out as unknown as MediaRef });
+      drawing = { ...d, mediaId: out.id, original: d.values.slice() };
+      if (drawRevert) drawRevert.disabled = true;
+      paintDraw();
+      setText(notice, `Redrew ${hi - lo + 1} sample${hi === lo ? "" : "s"} of the clip; undo puts them back`);
+    } catch (err) {
+      drawApply.disabled = false;
+      setText(notice, `Could not apply the drawing: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
   const ttFrom = body.querySelector<HTMLInputElement>('[data-tt="from"]');
   const ttTo = body.querySelector<HTMLInputElement>('[data-tt="to"]');
   body.querySelector<HTMLButtonElement>('[data-tt="apply"]')?.addEventListener("click", () => {
