@@ -1640,3 +1640,10 @@ Pro Tools records many inputs at once. A click on a track's arm button still arm
 - logged: v1.4.0 · 2026-10-01
 
 The entry above says three takes opened together put every click on the same timeline sample. That held in one run; the release gate's run of the same test on the fresh 1.4.0 engine put the second and third tracks' clicks 32 samples late and 64 samples early against the first (every click of each track offset alike, so a constant per input). Alignment by capture start frame therefore lands within about 1.3 ms for inputs opened together and within 2 ms (96 samples) for inputs opened 40 and 80 ms late, varying between runs; the cause is consistent with each input opening its own stream, whose start carries some jitter. The fix in BUILD_NOTES (one stream per device shared by its tracks) stands, and the record now says "within about 2 ms".
+
+### src/ui/projects.ts, src/io/projects-client.ts, styles/workspace.css · session lists show thumbnails
+- refers-to: src/ui/projects.ts :: the `.fw-session-thumb` image in the Open popover's rows (`updateRow`) and in the Recent sessions rows; src/io/projects-client.ts :: `ProjectSummary.thumbnail`; src/styles/workspace.css :: `.fw-session-thumb`
+- kind: explainer
+- logged: v1.5.0 (in progress) · 2026-10-01
+
+Both session lists show a saved session's thumbnail above its name when it has one: the image has its 160 by 32 box reserved by width and height attributes and CSS, so nothing moves when it loads, and its address carries the session's revision so a new save shows a new picture. Verified in Chromium at 1280 px: the Open list showed thumbnails for the two sessions saved with them (each loaded at 320 by 64 into a 160-pixel box) and none for a session saved before this release, and the picture of the room-tone session shows the tone, the two bursts and the gap (screenshot); no page errors; production build passes.

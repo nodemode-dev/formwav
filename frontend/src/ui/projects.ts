@@ -95,6 +95,12 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
     row.dataset.name = p.name;
     setText(row.querySelector(".fw-popover-name"), p.name);
     setText(row.querySelector(".fw-popover-meta"), `${p.tracks} ${p.tracks === 1 ? "track" : "tracks"} · ${when(p.savedAt)}`);
+    const thumb = row.querySelector<HTMLImageElement>(".fw-session-thumb");
+    if (thumb) {
+      const src = p.thumbnail ? `/api/projects/${encodeURIComponent(p.name)}/thumbnail.png?r=${p.revision}` : "";
+      if (src && thumb.getAttribute("src") !== src) thumb.setAttribute("src", src);
+      if (thumb.hidden === !!p.thumbnail) thumb.hidden = !p.thumbnail;
+    }
   };
 
   const show = async () => {
@@ -112,7 +118,7 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
         const row = document.createElement("button");
         row.type = "button";
         row.className = "fw-popover-row";
-        row.innerHTML = `<span class="fw-popover-name"></span><span class="fw-popover-meta"></span>`;
+        row.innerHTML = `<img class="fw-session-thumb" alt="" width="160" height="32" hidden><span class="fw-popover-name"></span><span class="fw-popover-meta"></span>`;
         updateRow(row, p);
         return row;
       },
@@ -177,6 +183,15 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
         const meta = document.createElement("span");
         meta.className = "fw-recent-meta";
         meta.textContent = `${p.tracks} track${p.tracks === 1 ? "" : "s"}${p.savedAt ? ` · ${new Date(p.savedAt).toLocaleDateString()}` : ""}`;
+        if (p.thumbnail) {
+          const thumb = document.createElement("img");
+          thumb.className = "fw-session-thumb";
+          thumb.alt = "";
+          thumb.width = 160;
+          thumb.height = 32;
+          thumb.src = `/api/projects/${encodeURIComponent(p.name)}/thumbnail.png?r=${p.revision}`;
+          row.append(thumb);
+        }
         row.append(title, meta);
         return row;
       }),

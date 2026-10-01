@@ -7,6 +7,7 @@ export interface ProjectSummary {
   bytes: number;
   appVersion: string | null;
   revision: number;
+  thumbnail?: boolean;
 }
 
 export interface OpenedProject {

@@ -148,6 +148,8 @@
 .fw-recent-title { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); }
 .fw-recent-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; font: inherit; color: var(--text-primary); text-align: start; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; cursor: pointer; }
 .fw-recent-row:hover { border-color: var(--accent-color); }
+.fw-session-thumb { display: block; inline-size: 160px; block-size: 32px; flex: none; object-fit: fill; background: var(--bg-input); border-radius: 4px; }
+.fw-session-thumb[hidden] { display: none; }
 .fw-recent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fw-recent-meta { flex: none; font-size: 12px; color: var(--text-secondary); }
 .fw-fx-search { inline-size: 100%; padding: 4px 8px; font: inherit; font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
