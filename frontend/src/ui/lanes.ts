@@ -909,7 +909,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
 
   type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out" | "gain" | "range";
   type Member = { trackId: string; clip: Clip; node: HTMLElement };
-  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number; group: Member[]; ripple: boolean; followers: Member[]; reorder: boolean };
+  type Gesture = { kind: GestureKind; node: HTMLElement; trackId: string; clip: Clip; startX: number; startY: number; dx: number; dy: number; moved: boolean; low: number; high: number; group: Member[]; ripple: boolean; followers: Member[]; reorder: boolean; stretch?: boolean };
   let drag: Gesture | null = null;
   const EDGE_PX = 6;
 
@@ -1035,7 +1035,11 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         if (otherNode) followers.push({ trackId, clip: other, node: otherNode });
       }
     }
-    drag = { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low, high, group, ripple, followers, reorder };
+    const stretch = kind === "trim-right" && e.altKey;
+    const spanSpp = samplesPerPixel(doc);
+    drag = stretch
+      ? { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low: -(clip.length * 0.5) / spanSpp, high: clip.length / spanSpp, group, ripple: false, followers: [], reorder: false, stretch }
+      : { kind, node, trackId, clip, startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false, low, high, group, ripple, followers, reorder };
     node.setPointerCapture(e.pointerId);
     e.preventDefault();
   });
@@ -1094,6 +1098,28 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
   };
 
+  /** Audacity's clip stretching: every clip in the gesture re-timed by `ratio` with the Fit to length render, each media once, one undo step. */
+  const stretchGroup = async (group: Member[], ratio: number) => {
+    const notice = host.querySelector<HTMLElement>(".fw-notice");
+    const percent = Math.round(ratio * 1000) / 10;
+    setText(notice, `Stretching to ${percent}%...`);
+    try {
+      const rendered = new Map<string, MediaRef>();
+      for (const m of group) {
+        if (rendered.has(m.clip.mediaId)) continue;
+        const params = encodeURIComponent(JSON.stringify({ percent: (1 / ratio - 1) * 100 }));
+        const res = await fetch(`/api/media/${m.clip.mediaId}/effect?name=stretch-rhythmic&params=${params}`, { method: "POST" });
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        rendered.set(m.clip.mediaId, out as unknown as MediaRef);
+      }
+      engine.dispatch({ type: "batch", commands: group.map((m) => ({ type: "set-clip-media" as const, trackId: m.trackId, clipId: m.clip.id, media: rendered.get(m.clip.mediaId) as MediaRef })) });
+      setText(notice, `Stretched ${group.length === 1 ? "the clip" : `${group.length} clips`} to ${percent}% of ${group.length === 1 ? "its" : "their"} length, pitch kept`);
+    } catch (err) {
+      setText(notice, `Could not stretch: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   const commit = (d: Gesture, spp: number) => {
     if (d.kind === "gain") {
       const delta = dragGain(d.clip.gainDb, d.dy, d.node.clientHeight) - d.clip.gainDb;
@@ -1115,6 +1141,10 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         type: "batch",
         commands: d.group.map((m) => ({ type: "move-clip" as const, trackId: m.trackId, clipId: m.clip.id, start: m.clip.start + delta })),
       });
+    else if (d.stretch) {
+      const ratio = (d.clip.length + delta) / d.clip.length;
+      if (Math.abs(ratio - 1) >= 0.001) void stretchGroup(d.group, ratio);
+    }
     else if (d.kind === "trim-left" || d.kind === "trim-right") {
       const left = d.kind === "trim-left";
       const bounds = d.group.map((m) => ({
