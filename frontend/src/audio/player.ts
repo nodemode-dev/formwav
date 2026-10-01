@@ -210,13 +210,28 @@ export class Player {
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
+  private latestPosition: Extract<WorkletReply, { type: "position" }> | null = null;
+  private positionTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private handlePosition(reply: Extract<WorkletReply, { type: "position" }>): void {
+    this.engine.setTransport({ positionSamples: reply.position });
+    this.lastIntegrated = reply.loudness[2];
+    if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks, reply.loudness, reply.busPeaks);
+    else this.emitLevel(0, 0, [], [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, reply.loudness[2]]);
+  }
+
   private onReply = (e: MessageEvent<WorkletReply>): void => {
     const reply = e.data;
     if (reply.type === "position") {
-      this.engine.setTransport({ positionSamples: reply.position });
-      this.lastIntegrated = reply.loudness[2];
-      if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks, reply.loudness, reply.busPeaks);
-      else this.emitLevel(0, 0, [], [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, reply.loudness[2]]);
+      this.latestPosition = reply;
+      if (this.positionTimer === null) {
+        this.positionTimer = setTimeout(() => {
+          this.positionTimer = null;
+          const latest = this.latestPosition;
+          this.latestPosition = null;
+          if (latest) this.handlePosition(latest);
+        }, 16);
+      }
     }
     else if (reply.type === "ended") {
       this.engine.setTransport({ positionSamples: reply.position, playing: false });
