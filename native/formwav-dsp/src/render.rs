@@ -86,6 +86,8 @@ pub fn pan_gains(pan: f32) -> (f32, f32) {
 pub struct Player {
     sources: HashMap<u32, AudioBuffer>,
     clips: Vec<PlayClip>,
+    order: Vec<usize>,
+    order_dirty: bool,
     position: u64,
     peak_left: f32,
     peak_right: f32,
@@ -126,12 +128,25 @@ impl Player {
         self.clips.clear();
         self.clip_fx.clear();
         self.meter_fx.clear();
+        self.order_dirty = true;
     }
 
     pub fn add_clip(&mut self, clip: PlayClip) {
         self.clips.push(clip);
         self.clip_fx.push(Vec::new());
         self.meter_fx.push(Vec::new());
+        self.order_dirty = true;
+    }
+
+    fn ensure_order(&mut self) {
+        if !self.order_dirty {
+            return;
+        }
+        self.order.clear();
+        self.order.extend(0..self.clips.len());
+        let clips = &self.clips;
+        self.order.sort_by_key(|&i| (clips[i].track, clips[i].start));
+        self.order_dirty = false;
     }
 
     pub fn set_rate(&mut self, rate: f32) {
@@ -353,8 +368,18 @@ impl Player {
             if !select(clip) {
                 continue;
             }
-            let Some(src) = self.sources.get(&clip.source) else { continue };
-            let Some(l) = src.channels.first() else { continue };
+            self.mix_one(fx, left, right, from, to, index);
+        }
+    }
+
+    fn mix_one(&self, fx: &mut [Vec<crate::fx::Biquad>], left: &mut [f32], right: &mut [f32], from: u64, to: u64, index: usize) {
+        let clip = &self.clips[index];
+        if clip.start >= to || clip.start + clip.length <= from {
+            return;
+        }
+        {
+            let Some(src) = self.sources.get(&clip.source) else { return };
+            let Some(l) = src.channels.first() else { return };
             let r = src.channels.get(1).unwrap_or(l);
             let mut chain = fx.get_mut(index).filter(|c| !c.is_empty());
             let a = from.max(clip.start);
@@ -416,6 +441,8 @@ impl Player {
         if self.track_peaks.len() <= count {
             self.track_peaks.resize(count + 1, (0.0, 0.0));
         }
+        self.ensure_order();
+        let to = from + n as u64;
         let mut meter_left = std::mem::take(&mut self.meter_left);
         let mut meter_right = std::mem::take(&mut self.meter_right);
         if meter_left.len() < n {
@@ -423,16 +450,33 @@ impl Player {
             meter_right.resize(n, 0.0);
         }
         let mut meter_fx = std::mem::take(&mut self.meter_fx);
-        for track in 1..=count as u32 {
-            meter_left[..n].fill(0.0);
-            meter_right[..n].fill(0.0);
-            self.mix(&mut meter_fx, &mut meter_left[..n], &mut meter_right[..n], from, |c| c.track == track);
-            let peak = &mut self.track_peaks[track as usize];
-            for i in 0..n {
-                peak.0 = peak.0.max(meter_left[i].abs());
-                peak.1 = peak.1.max(meter_right[i].abs());
+        let order = std::mem::take(&mut self.order);
+        let mut i = 0;
+        while i < order.len() {
+            let track = self.clips[order[i]].track;
+            let mut j = i;
+            while j < order.len() && self.clips[order[j]].track == track {
+                j += 1;
             }
+            let run = &order[i..j];
+            if run.iter().any(|&k| {
+                let c = &self.clips[k];
+                c.start < to && c.start + c.length > from
+            }) {
+                meter_left[..n].fill(0.0);
+                meter_right[..n].fill(0.0);
+                for &k in run {
+                    self.mix_one(&mut meter_fx, &mut meter_left[..n], &mut meter_right[..n], from, to, k);
+                }
+                let peak = &mut self.track_peaks[track as usize];
+                for s in 0..n {
+                    peak.0 = peak.0.max(meter_left[s].abs());
+                    peak.1 = peak.1.max(meter_right[s].abs());
+                }
+            }
+            i = j;
         }
+        self.order = order;
         self.meter_fx = meter_fx;
         self.meter_left = meter_left;
         self.meter_right = meter_right;
