@@ -243,3 +243,11 @@
 /* The status bar's Output choice: a compact select in its own slot. */
 .fw-st-output { display: flex; align-items: center; gap: 6px; flex: none; }
 .fw-st-output select { block-size: 20px; max-inline-size: 220px; padding: 0 4px; font-size: var(--fs-11); }
+
+/* The note editor in the dock: a head with snap and its state, then the canvas filling the rest. */
+.fw-piano:not([hidden]) { display: grid; grid-template-rows: auto minmax(0, 1fr); block-size: 100%; min-block-size: 0; }
+.fw-piano-head { display: flex; align-items: center; gap: 12px; min-block-size: 30px; padding: 0 10px; border-block-end: 1px solid var(--line-0); font-size: var(--fs-11); color: var(--text-muted); }
+.fw-piano-opt { display: flex; align-items: center; gap: 6px; }
+.fw-piano-opt select { block-size: 22px; font-size: var(--fs-11); }
+.fw-piano-state { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-piano-canvas { display: block; inline-size: 100%; block-size: 100%; min-block-size: 0; cursor: crosshair; outline: none; }

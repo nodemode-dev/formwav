@@ -40,6 +40,7 @@ import { mountFileMenu } from "./ui/file-menu";
 import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
+import { mountPianoRoll } from "./ui/piano-roll";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
@@ -101,6 +102,7 @@ if (host) {
   mountOutputMeter(host, player);
   mountTrackMeters(host, engine, player);
   mountMixer(host, engine, player);
+  mountPianoRoll(host, engine);
   mountMediaPane(host, engine);
   mountModelsPane(host, engine);
   mountInspector(host, engine);
