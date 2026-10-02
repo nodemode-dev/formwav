@@ -12,6 +12,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   let busy = false;
   let choice: { format: string; what: "mix" | "stems" | "multichannel" | "preview" } = { format: "wav", what: "mix" };
+  let platform = "";
   const dialog = document.createElement("dialog");
   dialog.className = "fw-export-dialog";
   dialog.innerHTML = `<form method="dialog">
@@ -22,9 +23,17 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     <option value="ogg">OGG Vorbis</option><option value="m4a">M4A, AAC 256 kbps</option></select></label>
   <label class="fw-field fw-field-stack"><span>What</span><select data-x="what">
     <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option><option value="preview">Streaming preview: add a track that sounds like the encoded file (MP3, OGG or M4A)</option></select></label>
+  <label class="fw-field fw-field-stack" data-x="platform-row" hidden><span>Platform loudness</span><select data-x="platform">
+    <option value="">None: the codec only</option><option value="spotify">Spotify: -14 LUFS, lifts quiet mixes only to -1 dB true peak</option><option value="youtube">YouTube: -14 LUFS, turns loud mixes down only</option><option value="apple">Apple Music: -16 LUFS, modelled as turning down only (sources disagree on lifting)</option></select></label>
   <div class="fw-dialog-actions"><button type="submit" class="fw-ibtn" value="cancel">Cancel</button><button type="submit" class="fw-ibtn fw-btn-export" value="export">Export</button></div>
 </form>`;
   host.append(dialog);
+  const platformRow = dialog.querySelector<HTMLElement>('[data-x="platform-row"]');
+  const showPlatform = () => {
+    const preview = dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value === "preview";
+    if (platformRow && platformRow.hidden === preview) platformRow.hidden = !preview;
+  };
+  dialog.querySelector('[data-x="what"]')?.addEventListener("change", showPlatform);
 
   const render = () => {
     const has = engine.get("document").tracks.length > 0;
@@ -48,7 +57,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     );
     try {
       if (choice.what === "preview") {
-        const res = await fetch(`/api/render?format=${encodeURIComponent(choice.format)}&what=preview`, {
+        const res = await fetch(`/api/render?format=${encodeURIComponent(choice.format)}&what=preview&platform=${encodeURIComponent(platform)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(doc),
@@ -57,7 +66,10 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
         if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `the engine answered ${res.status}`);
         const media = body as unknown as MediaRef;
         engine.dispatch({ type: "import-media", media, at: 0 });
-        final = `Added ${media.name}: solo it against the mix to hear the codec`;
+        const level = body as { platform?: string; loudness?: number; gainDb?: number };
+        final = level.platform
+          ? `Added ${media.name}: the mix measures ${level.loudness} LUFS, so ${level.platform} plays it ${(level.gainDb ?? 0) >= 0 ? "+" : ""}${level.gainDb} dB`
+          : `Added ${media.name}: solo it against the mix to hear the codec`;
         return;
       }
       const mix = await renderMix(doc, { format: choice.format, what: choice.what });
@@ -92,6 +104,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     const what = dialog.querySelector<HTMLSelectElement>('[data-x="what"]');
     if (format) format.value = choice.format;
     if (what) what.value = choice.what;
+    showPlatform();
     dialog.showModal();
   });
   dialog.addEventListener("close", () => {
@@ -99,6 +112,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     const format = dialog.querySelector<HTMLSelectElement>('[data-x="format"]')?.value ?? "wav";
     const what = (dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value ?? "mix") as "mix" | "stems" | "multichannel" | "preview";
     choice = { format, what };
+    platform = what === "preview" ? (dialog.querySelector<HTMLSelectElement>('[data-x="platform"]')?.value ?? "") : "";
     void run();
   });
   window.addEventListener("keydown", (e) => {

@@ -57,8 +57,38 @@ def track_activity(document: dict = Body(...), trackId: str = "", threshold: flo
     return {"seconds": round(total, 4), "thresholdDb": round(threshold, 1), "regions": regions}
 
 
+#: Each platform's playback normalization (RX-44): its integrated loudness target and what it does to reach it.
+#: Spotify (Normal): its support article "Loudness normalization on Spotify": -14 LUFS (ITU-R BS.1770); louder masters
+#: turned down, softer ones lifted only until their true peak reaches -1 dBTP (its example: -20 LUFS at -5 dBTP is lifted
+#: to -16). YouTube: -14 LUFS, turned down only, never lifted. Apple Music (Sound Check): -16 LUFS; sources disagree on
+#: whether it lifts softer tracks, so it is modelled as turning down only, and the interface says so.
+PLATFORMS = {
+    "spotify": ("Spotify", -14.0, "up-to-peak"),
+    "youtube": ("YouTube", -14.0, "down"),
+    "apple": ("Apple Music", -16.0, "down"),
+}
+
+
+def _platform_gain(path: str, platform: str) -> tuple[float, float, float]:
+    """(gain in dB the platform applies, the integrated loudness, the true peak) for a decoded preview."""
+    from ..services.tools import _num, _run_text
+
+    _, target, mode = PLATFORMS[platform]
+    text = _run_text(["-i", path, "-af", "ebur128=peak=true"])
+    loudness = _num(r"I:\s+(-?[0-9.]+) LUFS", text)
+    peak = _num(r"True peak:\s+Peak:\s+(-?[0-9.]+) dBFS", text)
+    if loudness is None or loudness <= -70 or peak is None:
+        raise media.MediaError("the mix is too quiet to measure its loudness")
+    gain = target - loudness
+    if mode == "down":
+        gain = min(0.0, gain)
+    elif gain > 0:
+        gain = min(gain, max(0.0, -1.0 - peak))
+    return gain, loudness, peak
+
+
 @router.post("/render")
-def render_session(document: dict = Body(...), format: str = "wav", what: str = "mix") -> Response:
+def render_session(document: dict = Body(...), format: str = "wav", what: str = "mix", platform: str = "") -> Response:
     try:
         if what in ("stems", "multichannel"):
             import io
@@ -100,7 +130,18 @@ def render_session(document: dict = Body(...), format: str = "wav", what: str = 
                 done = subprocess.run([media._tool("ffmpeg"), "-v", "error", "-nostdin", "-y", "-i", str(src), "-ar", str(rate), "-c:a", "pcm_f32le", str(dst)], capture_output=True, timeout=900)
                 if done.returncode != 0:
                     raise media.MediaError(done.stderr.decode(errors="replace").strip()[-300:])
-                return media.import_wav(f"Streaming preview ({export.FORMATS[format][3]}).wav", dst.read_bytes())
+                if not platform:
+                    return media.import_wav(f"Streaming preview ({export.FORMATS[format][3]}).wav", dst.read_bytes())
+                if platform not in PLATFORMS:
+                    raise render.RenderError(f"no platform named {platform} (one of {', '.join(PLATFORMS)})")
+                gain, loudness, peak = _platform_gain(str(dst), platform)
+                level = Path(tmp) / "level.wav"
+                done = subprocess.run([media._tool("ffmpeg"), "-v", "error", "-nostdin", "-y", "-i", str(dst), "-af", f"volume={gain:.4f}dB", "-c:a", "pcm_f32le", str(level)], capture_output=True)
+                if done.returncode != 0:
+                    raise media.MediaError(done.stderr.decode(errors="replace").strip()[-300:])
+                name = PLATFORMS[platform][0]
+                out = media.import_wav(f"Streaming preview ({export.FORMATS[format][3]}, {name} {gain:+.1f} dB).wav", level.read_bytes())
+                return {**out, "platform": name, "loudness": round(loudness, 1), "truePeak": round(peak, 1), "gainDb": round(gain, 2)}
         data, ext, mime = export.encode(result["wav"], format)
     except KeyError as err:
         raise HTTPException(404, "the session uses media the engine does not have") from err
