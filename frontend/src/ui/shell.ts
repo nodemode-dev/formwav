@@ -28,9 +28,14 @@ function shellHtml(): string {
         <span class="fw-name">formwav</span>
       </div>
       <div class="fw-tools" role="group" aria-label="Session">
-        <button class="fw-ibtn" type="button" data-action="save" title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span></button>
-        <button class="fw-ibtn" type="button" data-action="open" aria-haspopup="dialog" title="Open (Cmd or Ctrl O)">${icon("folderOpen", ICON_SIZE.control)}<span>Open</span></button>
-        <button class="fw-ibtn" type="button" data-action="import" title="Import any audio or video file">${icon("upload", ICON_SIZE.control)}<span>Import</span></button>
+        <div class="fw-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">File</button>
+          <div class="cv-menu fw-menu-pop" role="menu" aria-label="File" hidden>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="save" title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span><kbd>⌘S</kbd></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="open" aria-haspopup="dialog" title="Open (Cmd or Ctrl O)">${icon("folderOpen", ICON_SIZE.control)}<span>Open…</span><kbd>⌘O</kbd></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="import" title="Import any audio or video file">${icon("upload", ICON_SIZE.control)}<span>Import…</span></button>
+          </div>
+        </div>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="undo" aria-label="Undo" title="Undo" disabled>${icon("undo", ICON_SIZE.control)}</button>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="redo" aria-label="Redo" title="Redo" disabled>${icon("redo", ICON_SIZE.control)}</button>
       </div>
@@ -56,7 +61,7 @@ function shellHtml(): string {
     </aside>
     <div class="fw-pane-divider" data-side="media" role="separator" aria-orientation="vertical" aria-label="Resize the Media pane" tabindex="0"></div>
     <section class="fw-pane fw-pane-timeline" aria-label="Timeline">
-      <div class="fw-tool-tray" role="toolbar" aria-label="Edit modes"></div>
+      <div class="fw-tool-tray" role="toolbar" aria-label="Timeline options"><div class="fw-opt-group" data-group="edit" data-label="Edit" role="group" aria-label="Edit"></div><div class="fw-opt-group fw-opt-view" data-group="view" data-label="View" role="group" aria-label="View"></div></div>
       <main class="fw-stage" data-view="empty">
         <section class="fw-empty">
           <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>

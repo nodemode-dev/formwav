@@ -9,7 +9,7 @@ const IMAGE_W = 2048;
 const IMAGE_H = 256;
 
 export function mountSpectrogramView(host: HTMLElement, engine: Engine): void {
-  const tray = host.querySelector<HTMLElement>(".fw-tool-tray");
+  const tray = host.querySelector<HTMLElement>('.fw-tool-tray [data-group="view"]') ?? host.querySelector<HTMLElement>(".fw-tool-tray");
   const lanes = host.querySelector<HTMLElement>(".fw-lanes");
   if (!tray || !lanes) return;
   const button = document.createElement("button");

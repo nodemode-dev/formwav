@@ -126,7 +126,9 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
     });
     const none = items.length === 0;
     if (empty.hidden === none) empty.hidden = !none;
-    const r = openButton.getBoundingClientRect();
+    // Open lives in the File menu, which has closed by the time the list loads; anchor to whatever is on screen.
+    const own = openButton.getBoundingClientRect();
+    const r = own.width > 0 ? own : (openButton.closest(".fw-menu")?.querySelector(".fw-menu-btn")?.getBoundingClientRect() ?? own);
     popover.style.top = `${Math.round(r.bottom + 4)}px`;
     popover.style.left = `${Math.round(r.left)}px`;
     popover.hidden = false;

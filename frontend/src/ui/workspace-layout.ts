@@ -118,7 +118,7 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
       return {};
     }
   };
-  const tray = host.querySelector<HTMLElement>(".fw-tool-tray");
+  const tray = host.querySelector<HTMLElement>('.fw-tool-tray [data-group="view"]') ?? host.querySelector<HTMLElement>(".fw-tool-tray");
   const menu = document.createElement("select");
   menu.className = "fw-layout-select";
   menu.setAttribute("aria-label", "Workspace layout");

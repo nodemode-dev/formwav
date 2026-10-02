@@ -180,3 +180,29 @@
 .fw-transport .fw-out-meter { grid-template-columns: auto 84px auto; }
 .fw-transport .fw-meter { inline-size: 56px; }
 .fw-transport .fw-latency-measure { padding: 0 8px; }
+
+/* Options row groups: Edit (snap, edit modes, punch, bars) at the left, View (mixer, spectrogram, layout) pushed right
+ * behind a hairline; each group named by a small label, chips 4 apart, groups 16 apart. */
+.fw-tool-tray { gap: 16px; }
+.fw-opt-group { display: flex; flex: none; align-items: center; gap: 4px; }
+.fw-opt-group::before { content: attr(data-label); margin-inline-end: 6px; font-size: var(--fs-11); font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text-muted); }
+.fw-opt-view { margin-inline-start: auto; padding-inline-start: 16px; border-inline-start: 1px solid var(--line-1); }
+
+/* The File menu: a quiet title-bar menu button and its pop in the suite's glass (cv-menu), items with their glyph,
+ * label and shortcut in three columns. */
+.fw-menu { position: relative; }
+.fw-topbar .fw-menu-btn { block-size: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: var(--fs-12); }
+.fw-topbar .fw-menu-btn:hover,
+.fw-topbar .fw-menu-btn[aria-expanded="true"] { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-menu-pop { position: absolute; inset-block-start: calc(100% + 6px); inset-inline-start: 0; z-index: var(--z-menu); display: grid; gap: 2px; min-inline-size: 208px; padding: 6px; border-radius: 10px; }
+.fw-menu-pop[hidden] { display: none; }
+.fw-topbar .fw-menu-pop .fw-ibtn { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; block-size: 30px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-primary); font-size: var(--fs-13); text-align: start; }
+.fw-topbar .fw-menu-pop .fw-ibtn:is(:hover, :focus-visible) { background: var(--accent-soft); color: var(--accent-ink); outline: none; }
+.fw-menu-pop kbd { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-muted); }
+
+/* A narrow stage: option chips that carry an icon show only the icon (each keeps its title), so the whole row, View
+ * group included, stays on screen instead of scrolling a control out of sight. */
+@container (max-width: 1060px) {
+  .fw-tool-tray .fw-mode:has(svg) > span { display: none; }
+  .fw-tool-tray .fw-mode:has(svg) { padding: 0 7px; }
+}
