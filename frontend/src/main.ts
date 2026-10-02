@@ -39,6 +39,7 @@ import { mountStatusBar } from "./ui/status-bar";
 import { mountFileMenu } from "./ui/file-menu";
 import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
+import { renderNotes } from "./audio/notes";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
@@ -116,7 +117,7 @@ if (host) {
   mountDock(host);
   mountProjects(host, engine, player);
 }
-if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player } });
+if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
 activateAll(engine);
 // The suite's faces are requested by name before the reveal: fonts.ready alone resolved before Inter had been asked
 // for, so on a slow network the app showed in a fallback face and shifted when Inter swapped in. Never longer than 4 s.

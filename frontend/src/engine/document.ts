@@ -222,6 +222,8 @@ export type Command =
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
+  /** A note clip's edited notes and the instrument's new rendering of them, replaced together (one undo step). */
+  | { type: "set-clip-notes"; trackId: string; clipId: string; notes: readonly NoteEvent[]; media: MediaRef }
   | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean }
   | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef; feather?: number }
   | { type: "remove-marker"; markerId: string }
@@ -339,6 +341,16 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         }),
       }));
       return changed ? { ...next, media: { ...doc.media, [cmd.media.id]: cmd.media } } : doc;
+    }
+    case "set-clip-notes": {
+      // the notes are the truth and the media their rendering: both change at once, and the clip (untrimmed, as the
+      // instrument renders from the first note's time) covers the whole new rendering, release included
+      const notes = cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))) }));
+      const next = mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.map((c) => (c.id === cmd.clipId ? { ...c, notes, mediaId: cmd.media.id, sourceIn: 0, length: sessionLength(cmd.media, doc.sampleRate) } : c)),
+      }));
+      return next === doc ? doc : { ...next, media: { ...next.media, [cmd.media.id]: cmd.media } };
     }
     case "set-clip-media": {
       let changed = false;
