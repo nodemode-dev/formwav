@@ -113,6 +113,7 @@ FORMWAV_CHAINS = {
     "reverb": "asplit=3[d][s][m];[s]atrim=0:1.5,aeval=(random(0)*2-1)*exp(-t/0.8):c=same[ir];[m][ir]afir=dry=1:wet=1:gtype=rms[w];[d][w]amix=inputs=2:weights=0.7 0.3:normalize=0",
     "ramp": "rubberband=tempo=1:pitch=1",
     "dereverb": "anull",
+    "spot-heal": "anull",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
@@ -126,7 +127,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("ramp", "Ramp tempo and pitch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb...")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -207,6 +208,10 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     ),
     "dereverb": (
         {"amount": ("Amount", 0, 100, 70, "%"), "rt60": ("Reverb time", 0.2, 3, 0.8, "s"), "floor": ("Floor", 6, 30, 18, "dB")},
+        lambda v: "anull",
+    ),
+    "spot-heal": (
+        {"low": ("Low", 20, 24000, 1000, "Hz"), "high": ("High", 20, 24000, 8000, "Hz"), "from": ("From", 0, 86400, 0, "s"), "to": ("To", 0, 86400, 0.1, "s")},
         lambda v: "anull",
     ),
     "band-gain": (
@@ -331,7 +336,59 @@ def _dereverb(x, rate: int, v: dict):
     return y
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb}
+def _spot_heal(x, rate: int, v: dict):
+    """Spectral repair of a box (Audition's Spot Healing Brush, RX's Spectral Repair in its attenuate mode): inside the
+    box from `from` to `to` seconds and `low` to `high` Hz, each bin's magnitude is capped at the level the four frames
+    before and after the box predict (interpolated between them in dB across the box), the phase kept; whatever stands
+    above its surroundings (a whistle, a click) comes down to them, and material running through the box at its
+    surroundings' level passes. Only a segment around the box is transformed; every frame outside it reconstructs
+    exactly, so the audio outside the box is unchanged."""
+    import numpy as np
+
+    n = 2048 if rate > 32000 else 1024
+    hop = n // 4
+    win = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n)
+    ola = float((win**2).sum()) / hop
+    lo, hi = sorted((float(v["low"]), float(v["high"])))
+    t0, t1 = sorted((float(v["from"]), float(v["to"])))
+    bins = n // 2 + 1
+    b0, b1 = max(0, int(lo * n / rate)), min(bins, int(np.ceil(hi * n / rate)) + 1)
+    s0 = max(0, int(t0 * rate) - 6 * n)
+    s1 = min(len(x), int(t1 * rate) + 6 * n)
+    if b1 <= b0 or s1 - s0 < 2 * n:
+        return x.astype(np.float32)
+    y = x.astype(np.float32).copy()
+    for c in range(x.shape[1]):
+        seg = np.concatenate([np.zeros(n), x[s0:s1, c].astype(np.float64), np.zeros(n)])
+        frames = np.lib.stride_tricks.sliding_window_view(seg, n)[::hop]
+        spec = np.fft.rfft(frames * win, axis=1)
+        # frame i covers segment samples i*hop - n .. i*hop, its centre at i*hop - n/2 (segment time)
+        centre = (np.arange(len(spec)) * hop - n / 2 + s0) / rate
+        # every frame whose window overlaps the box: a click 10 ms wide reaches every frame its 43 ms windows cover
+        half = n / 2 / rate
+        inside = np.nonzero((centre + half >= t0) & (centre - half <= t1))[0]
+        if len(inside):
+            f0, f1 = int(inside[0]), int(inside[-1])
+            left = np.abs(spec[max(0, f0 - 4) : f0, b0:b1])
+            right = np.abs(spec[f1 + 1 : f1 + 5, b0:b1])
+            ref_l = np.log(left.mean(axis=0) + 1e-12) if len(left) else None
+            ref_r = np.log(right.mean(axis=0) + 1e-12) if len(right) else None
+            ref_l = ref_r if ref_l is None else ref_l
+            ref_r = ref_l if ref_r is None else ref_r
+            for k in range(f0, f1 + 1):
+                w = (k - f0 + 1) / (f1 - f0 + 2)
+                ref = np.exp((1 - w) * ref_l + w * ref_r)
+                mag = np.abs(spec[k, b0:b1])
+                spec[k, b0:b1] *= np.minimum(1.0, ref / (mag + 1e-12))
+        back = np.fft.irfft(spec, n, axis=1) * win
+        out = np.zeros(len(seg))
+        for k in range(len(back)):
+            out[k * hop : k * hop + n] += back[k]
+        y[s0:s1, c] = (out[n : n + (s1 - s0)] / ola).astype(np.float32)
+    return y
+
+
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal}
 
 
 def apply(media_id: str, name: str, params: dict | None = None) -> dict:
