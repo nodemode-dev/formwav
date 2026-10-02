@@ -23,6 +23,8 @@ pub struct Shared {
     pub player: Player,
     pub playing: bool,
     pub end: u64,
+    /// Set by the audio callback when playback runs to the end; the next report carries it once.
+    pub ended: bool,
 }
 
 pub struct NativeOutput {
@@ -89,7 +91,7 @@ impl NativeOutput {
     pub fn open(device: Option<String>, rate: u32) -> Result<NativeOutput, String> {
         let mut player = Player::new();
         player.set_rate(rate as f32);
-        let shared = Arc::new(Mutex::new(Shared { player, playing: false, end: 0 }));
+        let shared = Arc::new(Mutex::new(Shared { player, playing: false, end: 0, ended: false }));
         let (ready_tx, ready_rx) = mpsc::channel::<Result<String, String>>();
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
         let state = shared.clone();
@@ -124,6 +126,7 @@ impl NativeOutput {
                                         s.player.render(&mut left[..frames], &mut right[..frames]);
                                         if s.end > 0 && s.player.position() >= s.end {
                                             s.playing = false;
+                                            s.ended = true;
                                         }
                                         true
                                     }
@@ -239,6 +242,7 @@ impl NativeOutput {
         let rate = self.rate;
         self.with(|s| {
             s.player.reset_loudness(rate);
+            s.ended = false;
             s.playing = true;
         });
     }
@@ -250,6 +254,9 @@ impl NativeOutput {
     /// What the worklet reports: the message the interface already reads.
     pub fn report(&self) -> String {
         self.with(|s| {
+            let ended = s.ended;
+            s.ended = false;
+            let playing = s.playing;
             let p = &mut s.player;
             let (left, right) = p.take_peaks();
             let mut tracks = vec![0f32; MAX_TRACKS * 2];
@@ -260,7 +267,8 @@ impl NativeOutput {
             serde_json::json!({
                 "type": "position",
                 "position": p.position(),
-                "playing": s.playing,
+                "playing": playing,
+                "ended": ended,
                 "peakLeft": left,
                 "peakRight": right,
                 "trackPeaks": &tracks[..tn * 2],

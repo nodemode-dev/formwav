@@ -33,7 +33,6 @@ class NativePort extends EventTarget {
 
   constructor(private readonly ws: WebSocket) {
     super();
-    let wasPlaying = false;
     const deliver = (data: Reply) => {
       const event = new MessageEvent<Reply>("message", { data });
       this.dispatchEvent(event);
@@ -43,12 +42,9 @@ class NativePort extends EventTarget {
       const data = JSON.parse(String(e.data)) as Reply;
       if (data.type === "loaded") Object.assign(data, { id: data.source, frames: 1 });
       deliver(data);
-      // the worklet says "ended" when playback runs out; native output stops itself and reports playing false, so the
-      // same reply is made here (after a user's stop it is harmless: the transport is already stopped)
-      if (data.type === "position") {
-        if (wasPlaying && data.playing === false) deliver({ type: "ended", position: data.position });
-        wasPlaying = data.playing === true;
-      }
+      // the worklet says "ended" when playback runs out; native output's audio callback marks the end itself and the
+      // next report carries the mark once, however quickly playback finished between reports
+      if (data.type === "position" && data.ended === true) deliver({ type: "ended", position: data.position });
     });
   }
 
