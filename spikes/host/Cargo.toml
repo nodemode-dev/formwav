@@ -12,3 +12,5 @@ publish = false
 clap-sys = "0.5"
 vst3 = "0.3"
 libloading = "0.8"
+x11rb = "0.13"
+libc = "0.2"

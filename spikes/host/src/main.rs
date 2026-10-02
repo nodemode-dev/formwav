@@ -12,6 +12,9 @@ use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::entry::clap_plugin_entry;
 use clap_sys::events::{clap_event_header, clap_input_events, clap_output_events};
 use clap_sys::ext::audio_ports::{clap_plugin_audio_ports, CLAP_EXT_AUDIO_PORTS};
+use clap_sys::ext::gui::{clap_host_gui, clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI, CLAP_WINDOW_API_X11};
+use clap_sys::ext::posix_fd_support::{clap_host_posix_fd_support, clap_plugin_posix_fd_support, CLAP_EXT_POSIX_FD_SUPPORT, CLAP_POSIX_FD_ERROR, CLAP_POSIX_FD_READ, CLAP_POSIX_FD_WRITE};
+use clap_sys::ext::timer_support::{clap_host_timer_support, clap_plugin_timer_support, CLAP_EXT_TIMER_SUPPORT};
 use clap_sys::factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
 use clap_sys::host::clap_host;
 use clap_sys::process::{clap_process, CLAP_PROCESS_ERROR};
@@ -74,8 +77,72 @@ fn report(format: &str, plugin: &str, name: &str, found: u32, ports: (u32, u32),
     );
 }
 
-unsafe extern "C" fn host_get_extension(_host: *const clap_host, _id: *const c_char) -> *const c_void {
-    ptr::null()
+// The host's run loop for plugin editors: on Linux a plugin's GUI draws from timers and from its X11 connection's
+// file descriptor, both of which the host must drive (CLAP's timer-support and posix-fd-support extensions).
+static TIMERS: std::sync::Mutex<Vec<(u32, u32, std::time::Instant)>> = std::sync::Mutex::new(Vec::new());
+static FDS: std::sync::Mutex<Vec<(i32, u32)>> = std::sync::Mutex::new(Vec::new());
+
+unsafe extern "C" fn register_timer(_host: *const clap_host, period_ms: u32, timer_id: *mut u32) -> bool {
+    let mut timers = TIMERS.lock().unwrap();
+    let id = timers.iter().map(|t| t.0 + 1).max().unwrap_or(1);
+    timers.push((id, period_ms.max(1), std::time::Instant::now()));
+    *timer_id = id;
+    true
+}
+
+unsafe extern "C" fn unregister_timer(_host: *const clap_host, timer_id: u32) -> bool {
+    TIMERS.lock().unwrap().retain(|t| t.0 != timer_id);
+    true
+}
+
+unsafe extern "C" fn register_fd(_host: *const clap_host, fd: i32, flags: u32) -> bool {
+    FDS.lock().unwrap().push((fd, flags));
+    true
+}
+
+unsafe extern "C" fn modify_fd(_host: *const clap_host, fd: i32, flags: u32) -> bool {
+    FDS.lock().unwrap().iter_mut().filter(|f| f.0 == fd).for_each(|f| f.1 = flags);
+    true
+}
+
+unsafe extern "C" fn unregister_fd(_host: *const clap_host, fd: i32) -> bool {
+    FDS.lock().unwrap().retain(|f| f.0 != fd);
+    true
+}
+
+unsafe extern "C" fn gui_nothing(_host: *const clap_host) {}
+
+unsafe extern "C" fn gui_yes(_host: *const clap_host) -> bool {
+    true
+}
+
+unsafe extern "C" fn gui_resize(_host: *const clap_host, _width: u32, _height: u32) -> bool {
+    true
+}
+
+unsafe extern "C" fn gui_closed(_host: *const clap_host, _was_destroyed: bool) {}
+
+static HOST_TIMERS: clap_host_timer_support = clap_host_timer_support { register_timer: Some(register_timer), unregister_timer: Some(unregister_timer) };
+static HOST_FDS: clap_host_posix_fd_support = clap_host_posix_fd_support { register_fd: Some(register_fd), modify_fd: Some(modify_fd), unregister_fd: Some(unregister_fd) };
+static HOST_GUI: clap_host_gui = clap_host_gui {
+    resize_hints_changed: Some(gui_nothing),
+    request_resize: Some(gui_resize),
+    request_show: Some(gui_yes),
+    request_hide: Some(gui_yes),
+    closed: Some(gui_closed),
+};
+
+unsafe extern "C" fn host_get_extension(_host: *const clap_host, id: *const c_char) -> *const c_void {
+    let id = CStr::from_ptr(id);
+    if id == CLAP_EXT_TIMER_SUPPORT {
+        &HOST_TIMERS as *const clap_host_timer_support as *const c_void
+    } else if id == CLAP_EXT_POSIX_FD_SUPPORT {
+        &HOST_FDS as *const clap_host_posix_fd_support as *const c_void
+    } else if id == CLAP_EXT_GUI {
+        &HOST_GUI as *const clap_host_gui as *const c_void
+    } else {
+        ptr::null()
+    }
 }
 
 unsafe extern "C" fn host_request(_host: *const clap_host) {}
@@ -174,6 +241,117 @@ fn run_clap(path: &str) -> Result<(), String> {
         ((*plugin).destroy.ok_or("no destroy")?)(plugin);
         (entry.deinit.ok_or("entry without deinit")?)();
         report("clap", &id, &name, found, ports, status != CLAP_PROCESS_ERROR, &input, &output);
+        Ok(())
+    }
+}
+
+fn run_clap_gui(path: &str, seconds: f64) -> Result<(), String> {
+    use std::time::{Duration, Instant};
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _, CreateWindowAux, PropMode, WindowClass};
+    use x11rb::wrapper::ConnectionExt as _;
+    unsafe {
+        let lib = libloading::Library::new(path).map_err(|e| format!("could not load {path}: {e}"))?;
+        let entry: libloading::Symbol<*const clap_plugin_entry> = lib.get(b"clap_entry\0").map_err(|e| format!("no clap_entry: {e}"))?;
+        let entry = &**entry;
+        let c_path = CString::new(path).unwrap();
+        if !(entry.init.ok_or("entry without init")?)(c_path.as_ptr()) {
+            return Err("the plugin's entry refused to initialise".into());
+        }
+        let factory = (entry.get_factory.ok_or("entry without get_factory")?)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
+        let desc = ((*factory).get_plugin_descriptor.ok_or("factory without descriptors")?)(factory, 0);
+        let host = Box::new(clap_host {
+            clap_version: CLAP_VERSION,
+            host_data: ptr::null_mut(),
+            name: c"formwav".as_ptr(),
+            vendor: c"nodemode-ai".as_ptr(),
+            url: c"https://github.com/nodemode-ai/formwav".as_ptr(),
+            version: c"spike".as_ptr(),
+            get_extension: Some(host_get_extension),
+            request_restart: Some(host_request),
+            request_process: Some(host_request),
+            request_callback: Some(host_request),
+        });
+        let plugin = ((*factory).create_plugin.ok_or("factory without create")?)(factory, &*host, (*desc).id);
+        if plugin.is_null() || !((*plugin).init.ok_or("plugin without init")?)(plugin) {
+            return Err("the plugin would not initialise".into());
+        }
+        let ext = |id: &CStr| ((*plugin).get_extension.unwrap())(plugin, id.as_ptr());
+        let gui = (ext(CLAP_EXT_GUI) as *const clap_plugin_gui).as_ref().ok_or("the plugin has no editor (no clap.gui)")?;
+        if !(gui.is_api_supported.ok_or("gui without is_api_supported")?)(plugin, CLAP_WINDOW_API_X11.as_ptr(), false) {
+            return Err("the editor cannot embed in an X11 window".into());
+        }
+        if !(gui.create.ok_or("gui without create")?)(plugin, CLAP_WINDOW_API_X11.as_ptr(), false) {
+            return Err("the editor would not be created".into());
+        }
+        let (mut width, mut height) = (0u32, 0u32);
+        (gui.get_size.ok_or("gui without get_size")?)(plugin, &mut width, &mut height);
+        let (conn, screen_num) = x11rb::connect(None).map_err(|e| format!("no X display: {e}"))?;
+        let screen = &conn.setup().roots[screen_num];
+        let win = conn.generate_id().map_err(|e| e.to_string())?;
+        conn.create_window(x11rb::COPY_DEPTH_FROM_PARENT, win, screen.root, 40, 40, width.max(1) as u16, height.max(1) as u16, 0, WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new().background_pixel(screen.black_pixel))
+            .map_err(|e| e.to_string())?;
+        conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, b"formwav plugin editor").map_err(|e| e.to_string())?;
+        conn.map_window(win).map_err(|e| e.to_string())?;
+        conn.flush().map_err(|e| e.to_string())?;
+        let parent = clap_window { api: CLAP_WINDOW_API_X11.as_ptr(), specific: clap_window_handle { x11: win as std::ffi::c_ulong } };
+        if !(gui.set_parent.ok_or("gui without set_parent")?)(plugin, &parent) {
+            return Err("the editor would not take the window".into());
+        }
+        let shown = (gui.show.ok_or("gui without show")?)(plugin);
+        eprintln!("fwhost: editor {width}x{height} in X11 window 0x{win:x}, shown {shown}");
+        let timer_ext = (ext(CLAP_EXT_TIMER_SUPPORT) as *const clap_plugin_timer_support).as_ref();
+        let fd_ext = (ext(CLAP_EXT_POSIX_FD_SUPPORT) as *const clap_plugin_posix_fd_support).as_ref();
+        let deadline = Instant::now() + Duration::from_secs_f64(seconds);
+        let (mut timer_calls, mut fd_calls) = (0u64, 0u64);
+        while Instant::now() < deadline {
+            let fds: Vec<(i32, u32)> = FDS.lock().unwrap().clone();
+            let mut polls: Vec<libc::pollfd> = fds
+                .iter()
+                .map(|(fd, flags)| libc::pollfd {
+                    fd: *fd,
+                    events: (if flags & CLAP_POSIX_FD_READ != 0 { libc::POLLIN } else { 0 }) | (if flags & CLAP_POSIX_FD_WRITE != 0 { libc::POLLOUT } else { 0 }),
+                    revents: 0,
+                })
+                .collect();
+            libc::poll(polls.as_mut_ptr(), polls.len() as libc::nfds_t, 5);
+            if let Some(on_fd) = fd_ext.and_then(|e| e.on_fd) {
+                for p in polls.iter().filter(|p| p.revents != 0) {
+                    let mut flags = 0;
+                    if p.revents & libc::POLLIN != 0 {
+                        flags |= CLAP_POSIX_FD_READ;
+                    }
+                    if p.revents & libc::POLLOUT != 0 {
+                        flags |= CLAP_POSIX_FD_WRITE;
+                    }
+                    if p.revents & (libc::POLLERR | libc::POLLHUP) != 0 {
+                        flags |= CLAP_POSIX_FD_ERROR;
+                    }
+                    on_fd(plugin, p.fd, flags);
+                    fd_calls += 1;
+                }
+            }
+            let now = Instant::now();
+            let due: Vec<u32> = TIMERS.lock().unwrap().iter_mut().filter(|t| now >= t.2).map(|t| {
+                t.2 = now + Duration::from_millis(t.1 as u64);
+                t.0
+            }).collect();
+            if let Some(on_timer) = timer_ext.and_then(|e| e.on_timer) {
+                for id in due {
+                    on_timer(plugin, id);
+                    timer_calls += 1;
+                }
+            }
+            while let Ok(Some(_)) = conn.poll_for_event() {}
+        }
+        let (timers, fds) = (TIMERS.lock().unwrap().len(), FDS.lock().unwrap().len());
+        (gui.hide.ok_or("gui without hide")?)(plugin);
+        (gui.destroy.ok_or("gui without destroy")?)(plugin);
+        conn.destroy_window(win).map_err(|e| e.to_string())?;
+        conn.flush().map_err(|e| e.to_string())?;
+        ((*plugin).destroy.ok_or("no destroy")?)(plugin);
+        (entry.deinit.ok_or("entry without deinit")?)();
+        println!("{{\"format\": \"clap\", \"editor\": true, \"size\": [{width}, {height}], \"shown\": {shown}, \"timers\": {timers}, \"fds\": {fds}, \"timer_calls\": {timer_calls}, \"fd_calls\": {fd_calls}}}");
         Ok(())
     }
 }
@@ -285,7 +463,8 @@ fn main() {
     let result = match (args.get(1).map(String::as_str), args.get(2)) {
         (Some("clap"), Some(path)) => run_clap(path),
         (Some("vst3"), Some(path)) => run_vst3(path),
-        _ => Err("usage: fwhost clap <plugin.clap> | fwhost vst3 <plugin.vst3>".into()),
+        (Some("clap-gui"), Some(path)) => run_clap_gui(path, args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0)),
+        _ => Err("usage: fwhost clap <plugin.clap> | fwhost vst3 <plugin.vst3> | fwhost clap-gui <plugin.clap> [seconds]".into()),
     };
     if let Err(message) = result {
         eprintln!("fwhost: {message}");
