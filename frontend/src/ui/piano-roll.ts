@@ -45,7 +45,14 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   const state = panel.querySelector<HTMLElement>(".fw-piano-state");
   const snapSelect = panel.querySelector<HTMLSelectElement>("[data-snap]") as HTMLSelectElement;
 
+  // Several note clips edit together on one grid in session time (PT-17): each note keeps its owning clip (owner),
+  // converted back into that clip's media frames when a gesture commits; `target` is the first, for the guards.
+  type Target = { trackId: string; clipId: string; start: number; sourceIn: number; ratio: number; length: number };
   let target: { trackId: string; clipId: string } | null = null;
+  let wanted: { trackId: string; clipId: string }[] = [];
+  let targets: Target[] = [];
+  let owner: number[] = [];
+  let origin = 0;
   let notes: NoteEvent[] = [];
   let selected = new Set<number>();
   let rate = 48000;
@@ -57,23 +64,37 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   let userRowH = 0;
   let topPitch: number | null = null;
 
-  const findClip = (ids: readonly string[]) => {
+  const findClips = (ids: readonly string[]) => {
     const doc = engine.get("document");
-    for (const t of doc.tracks) for (const c of t.clips) if (ids.includes(c.id) && c.notes && c.notes.length) return { trackId: t.id, clipId: c.id };
-    return null;
+    const found: { trackId: string; clipId: string }[] = [];
+    for (const t of doc.tracks) for (const c of t.clips) if (ids.includes(c.id) && c.notes && c.notes.length) found.push({ trackId: t.id, clipId: c.id });
+    return found;
   };
   const load = () => {
     const doc = engine.get("document");
-    const clip = target ? doc.tracks.find((t) => t.id === target?.trackId)?.clips.find((c) => c.id === target?.clipId) : undefined;
-    if (!clip || !clip.notes) {
-      target = null;
-      notes = [];
+    targets = [];
+    owner = [];
+    notes = [];
+    let firstName = "notes";
+    for (const w of wanted) {
+      const clip = doc.tracks.find((t) => t.id === w.trackId)?.clips.find((c) => c.id === w.clipId);
+      if (!clip || !clip.notes) continue;
+      const ratio = doc.sampleRate / (doc.media[clip.mediaId]?.sampleRate ?? doc.sampleRate);
+      if (!targets.length) firstName = doc.media[clip.mediaId]?.name.replace(/\.wav$/i, "") ?? "notes";
+      const index = targets.push({ trackId: w.trackId, clipId: w.clipId, start: clip.start, sourceIn: clip.sourceIn, ratio, length: clip.length }) - 1;
+      for (const n of clip.notes) {
+        notes.push({ ...n, at: clip.start + (n.at - clip.sourceIn) * ratio, length: n.length * ratio });
+        owner.push(index);
+      }
+    }
+    rate = doc.sampleRate;
+    target = targets.length ? { trackId: targets[0].trackId, clipId: targets[0].clipId } : null;
+    origin = targets.length ? Math.min(...targets.map((t) => t.start)) : 0;
+    if (!target) {
       setText(state, "Select a note clip to edit its notes");
       return;
     }
-    notes = clip.notes.map((n) => ({ ...n }));
-    rate = doc.media[clip.mediaId]?.sampleRate ?? doc.sampleRate;
-    setText(state, `${doc.media[clip.mediaId]?.name.replace(/\.wav$/i, "") ?? "notes"} · ${notes.length} notes`);
+    setText(state, targets.length === 1 ? `${firstName} · ${notes.length} notes` : `${targets.length} clips · ${notes.length} notes`);
   };
   const snapFrames = () => Math.round(Number(snapSelect.value) * BEAT_SECONDS * rate);
   const snap = (frame: number) => {
@@ -97,13 +118,13 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     rows = Math.max(1, Math.min(128, Math.floor(avail / rowH)));
     const top = Math.min(127, Math.max(rows - 1, topPitch ?? Math.min(127, Math.max(hi, lo + rows - 1))));
     low = Math.max(0, top - rows + 1);
-    const end = Math.max(rate, ...notes.map((n) => n.at + n.length)) + rate / 2;
+    const end = Math.max(rate, ...notes.map((n) => n.at + n.length - origin)) + rate / 2;
     pxPerFrame = Math.max(1e-6, (w - KEY_W) / end);
-    Object.assign(canvas.dataset, { keyW: String(KEY_W), low: String(low), rows: String(rows), rowH: String(rowH), pxPerFrame: String(pxPerFrame), velH: String(VEL_H) });
+    Object.assign(canvas.dataset, { keyW: String(KEY_W), low: String(low), rows: String(rows), rowH: String(rowH), pxPerFrame: String(pxPerFrame), velH: String(VEL_H), origin: String(origin) });
     return { w, h };
   };
   const yOf = (pitch: number) => (low + rows - 1 - pitch) * rowH;
-  const xOf = (frame: number) => KEY_W + frame * pxPerFrame;
+  const xOf = (frame: number) => KEY_W + (frame - origin) * pxPerFrame;
 
   const draw = () => {
     if (panel.hidden) return;
@@ -153,8 +174,19 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   const commit = async () => {
     if (!target) return;
     setText(state, "Rendering…");
+    // a snapshot first: each render updates the document, which reloads this editor while the loop is still running
+    const edited = notes.map((n) => ({ ...n }));
+    const owners = [...owner];
+    const clips = [...targets];
     try {
-      await renderNotes(engine, target.trackId, target.clipId, notes);
+      for (let t = 0; t < clips.length; t++) {
+        const tg = clips[t];
+        const mine = edited.filter((_, i) => owners[i] === t).map((n) => ({ ...n, at: Math.max(0, Math.round((n.at - tg.start) / tg.ratio + tg.sourceIn)), length: Math.max(1, Math.round(n.length / tg.ratio)) }));
+        const doc = engine.get("document");
+        const clip = doc.tracks.find((x) => x.id === tg.trackId)?.clips.find((c) => c.id === tg.clipId);
+        if (!clip || !mine.length || JSON.stringify(clip.notes) === JSON.stringify(mine)) continue;
+        await renderNotes(engine, tg.trackId, tg.clipId, mine);
+      }
     } catch (err) {
       setText(state, `Not rendered: ${err instanceof Error ? err.message : String(err)}`);
       load();
@@ -202,7 +234,9 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
       const found = hit(x, y);
       if (!found) {
         const length = snapFrames() || Math.round(BEAT_SECONDS * rate * 0.5);
-        notes.push({ at: Math.max(0, snap((x - KEY_W) / pxPerFrame)), length, pitch: Math.min(127, Math.max(0, low + rows - 1 - Math.floor(y / rowH))), velocity: 100 });
+        const at = Math.max(0, snap(origin + (x - KEY_W) / pxPerFrame));
+        notes.push({ at, length, pitch: Math.min(127, Math.max(0, low + rows - 1 - Math.floor(y / rowH))), velocity: 100 });
+        owner.push(Math.max(0, targets.findIndex((t) => at >= t.start && at < t.start + t.length)));
         selected = new Set([notes.length - 1]);
         changed = true;
         draw();
@@ -269,7 +303,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     const doc = engine.get("document");
     const clip = doc.tracks.find((t) => t.id === target?.trackId)?.clips.find((c) => c.id === target?.clipId);
     const name = `${(clip ? doc.media[clip.mediaId]?.name : undefined)?.replace(/\.wav$/i, "") ?? "notes"}.mid`;
-    const url = URL.createObjectURL(new Blob([midiFile(notes, rate)], { type: "audio/midi" }));
+    const url = URL.createObjectURL(new Blob([midiFile(notes.map((n) => ({ ...n, at: n.at - origin })), rate)], { type: "audio/midi" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = name;
@@ -302,6 +336,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     e.preventDefault();
     e.stopPropagation();
     if (selected.size && target) {
+      owner = owner.filter((_, i) => !selected.has(i));
       notes = notes.filter((_, i) => !selected.has(i));
       selected = new Set();
       draw();
@@ -317,9 +352,9 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   });
   host.addEventListener("fw-selection", (e) => {
     const ids = (e as CustomEvent<string[]>).detail ?? [];
-    const found = findClip(ids);
-    if (!found) return;
-    target = found;
+    const found = findClips(ids);
+    if (!found.length) return;
+    wanted = found;
     selected = new Set();
     load();
     draw();
