@@ -346,11 +346,16 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       // the notes are the truth and the media their rendering: both change at once, and the clip (untrimmed, as the
       // instrument renders from the first note's time) covers the whole new rendering, release included
       const notes = cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))) }));
+      const previous = doc.tracks.find((t) => t.id === cmd.trackId)?.clips.find((c) => c.id === cmd.clipId)?.mediaId;
       const next = mapTrack(doc, cmd.trackId, (t) => ({
         ...t,
         clips: t.clips.map((c) => (c.id === cmd.clipId ? { ...c, notes, mediaId: cmd.media.id, sourceIn: 0, length: sessionLength(cmd.media, doc.sampleRate) } : c)),
       }));
-      return next === doc ? doc : { ...next, media: { ...next.media, [cmd.media.id]: cmd.media } };
+      if (next === doc) return doc;
+      const media: Record<string, MediaRef> = { ...next.media, [cmd.media.id]: cmd.media };
+      // the rendering it replaces leaves the media list once no clip plays it (undo restores the whole earlier session)
+      if (previous && previous !== cmd.media.id && !next.tracks.some((t) => t.clips.some((c) => c.mediaId === previous || c.pitchMediaId === previous))) delete media[previous];
+      return { ...next, media };
     }
     case "set-clip-media": {
       let changed = false;

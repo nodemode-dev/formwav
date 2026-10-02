@@ -39,7 +39,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   panel.className = "fw-piano";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Note editor");
-  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="0">Off</option><option value="1">1/4</option><option value="0.5">1/8</option><option value="0.25" selected>1/16</option></select></label><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag to move, drag an edge to resize, Delete to remove"></canvas>`;
+  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="0">Off</option><option value="1">1/4</option><option value="0.5">1/8</option><option value="0.25" selected>1/16</option></select></label><button type="button" class="fw-ibtn" data-zoom="out" title="Shorter rows (Ctrl or Cmd and the wheel)">Zoom −</button><button type="button" class="fw-ibtn" data-zoom="in" title="Taller rows (Ctrl or Cmd and the wheel)">Zoom +</button><button type="button" class="fw-ibtn" data-zoom="fit" title="Fit the notes; the wheel scrolls pitch">Fit</button><button type="button" class="fw-ibtn" data-quantize title="Move the selected notes' starts (all notes when none is selected) to the snap grid (Q)">Quantize</button><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag to move, drag an edge to resize, Delete to remove"></canvas>`;
   transport.before(panel);
   const canvas = panel.querySelector("canvas") as HTMLCanvasElement;
   const state = panel.querySelector<HTMLElement>(".fw-piano-state");
@@ -54,6 +54,8 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   let rowH = 10;
   let pxPerFrame = 0.01;
   let dragging = false;
+  let userRowH = 0;
+  let topPitch: number | null = null;
 
   const findClip = (ids: readonly string[]) => {
     const doc = engine.get("document");
@@ -89,9 +91,12 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
       lo -= 1;
       if (hi - lo + 1 < MIN_ROWS) hi += 1;
     }
-    low = Math.max(0, lo);
-    rows = Math.min(128 - low, hi - lo + 1);
-    rowH = Math.max(4, (h - VEL_H) / rows);
+    const avail = Math.max(1, h - VEL_H);
+    // fit to the notes until the user zooms (Ctrl or Cmd and the wheel) or scrolls (the wheel); Fit returns to it
+    rowH = userRowH > 0 ? userRowH : Math.max(4, avail / (hi - lo + 1));
+    rows = Math.max(1, Math.min(128, Math.floor(avail / rowH)));
+    const top = Math.min(127, Math.max(rows - 1, topPitch ?? Math.min(127, Math.max(hi, lo + rows - 1))));
+    low = Math.max(0, top - rows + 1);
     const end = Math.max(rate, ...notes.map((n) => n.at + n.length)) + rate / 2;
     pxPerFrame = Math.max(1e-6, (w - KEY_W) / end);
     Object.assign(canvas.dataset, { keyW: String(KEY_W), low: String(low), rows: String(rows), rowH: String(rowH), pxPerFrame: String(pxPerFrame), velH: String(VEL_H) });
@@ -232,7 +237,53 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     canvas.addEventListener("pointerup", up);
   });
 
+  const zoom = (factor: number) => {
+    userRowH = Math.min(28, Math.max(4, (userRowH || rowH) * factor));
+    draw();
+  };
+  // the selected notes' starts (all notes' when none is selected) moved to the snap grid, one gesture
+  const quantize = () => {
+    const s = snapFrames();
+    if (!target || s <= 0 || !notes.length) return;
+    const which = selected.size ? selected : new Set(notes.map((_, i) => i));
+    let changed = false;
+    notes = notes.map((n, i) => {
+      if (!which.has(i)) return n;
+      const at = Math.round(n.at / s) * s;
+      if (at !== n.at) changed = true;
+      return { ...n, at };
+    });
+    draw();
+    if (changed) void commit();
+  };
+  panel.querySelector('[data-zoom="out"]')?.addEventListener("click", () => zoom(1 / 1.25));
+  panel.querySelector('[data-zoom="in"]')?.addEventListener("click", () => zoom(1.25));
+  panel.querySelector('[data-zoom="fit"]')?.addEventListener("click", () => {
+    userRowH = 0;
+    topPitch = null;
+    draw();
+  });
+  panel.querySelector("[data-quantize]")?.addEventListener("click", quantize);
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15);
+      else {
+        topPitch = Math.min(127, Math.max(rows - 1, (topPitch ?? low + rows - 1) + (e.deltaY < 0 ? 2 : -2)));
+        draw();
+      }
+    },
+    { passive: false },
+  );
+
   canvas.addEventListener("keydown", (e) => {
+    if (e.key === "q" || e.key === "Q") {
+      e.preventDefault();
+      e.stopPropagation();
+      quantize();
+      return;
+    }
     if (e.key !== "Delete" && e.key !== "Backspace") return;
     // the editor's Delete removes notes; it must never reach the lanes, which would delete the selected clip
     e.preventDefault();
