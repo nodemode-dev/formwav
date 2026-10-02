@@ -267,9 +267,10 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     learnedNoise && learnedNoise.mediaId === mediaId && learnsNoise.has(name) ? { noise_from: learnedNoise.start, noise_to: learnedNoise.end } : {};
   const syncBand = () => {
     const band = range?.band;
-    if (!band || !range || (pick?.value !== "band-gain" && pick?.value !== "spot-heal")) return;
-    const fills: [string, number][] = [["low", band.lowHz], ["high", band.highHz]];
-    if (pick?.value === "spot-heal") {
+    const contour = pick?.value === "dialogue-contour"; // a time span only, from any range selection
+    if (!range || (!contour && (!band || (pick?.value !== "band-gain" && pick?.value !== "spot-heal")))) return;
+    const fills: [string, number][] = band && !contour ? [["low", band.lowHz], ["high", band.highHz]] : [];
+    if (pick?.value === "spot-heal" || contour) {
       // the box's time in the media's own seconds, from the clip the marquee was drawn on
       const doc = engine.get("document");
       const r = range;

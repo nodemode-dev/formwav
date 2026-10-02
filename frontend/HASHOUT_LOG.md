@@ -1710,3 +1710,10 @@ A marquee drawn in the spectrogram view already filled Band gain's Low and High;
 - logged: v1.16.0 (in progress) · 2026-10-01
 
 With one clip selected, the Inspector lists the clips on other tracks that overlap it as the possible source of a leak; De-bleed sends the chosen one as the reference, with the offset taken from where both clips sit in the session (the reference's frame at this clip's media frame 0) and the Amount, and swaps this clip's media for the result in one undo step. Verified in Chromium at 1280 px with a backing track on track 1 from 0 s and the recording it bled into on track 2 at 0.5 s: the backing's clip was the only choice offered, De-bleed took the bleed left in the recording from -15.81 to -48.78 dB relative to the line it carries (the engine's own figure), one undo step, the clip's start (0.5 s) and length (8 s) unchanged; the row looked at in a screenshot; 54 commands all dispatched; no page errors; production build passes.
+
+### src/ui/inspector-pane.ts · a time selection fills Dialogue contour's span (RX-17)
+- refers-to: src/ui/inspector-pane.ts :: `syncBand` (Dialogue contour takes From and To from any range, no frequency band needed)
+- kind: explainer
+- logged: v1.18.0 (in progress) · 2026-10-01
+
+A range drawn on a clip (its upper half, in the waveform view) fills Dialogue contour's From and To in the clip's media seconds, the way a marquee fills Spot heal's box, so a ramp or a flattening applies to the selected phrase. Verified in Chromium at 1280 px: a range from 1.8 to 2.95 s filled 1.8 and 2.95; with Shift at end 3 semitones, Apply reported 1.15 s of the clip in one undo step; the five syllables outside the span stayed at 0 cents and the three inside rose 72, 166 and 257 cents against 55, 149 and 243 by the ramp; no page errors. (The first attempt drew the range 30% down the clip, onto the gain line at 25%, and adjusted the gain instead: no range was made, which a capture of the range events showed; the drag was moved to 10%.)
