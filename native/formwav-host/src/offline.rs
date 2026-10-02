@@ -89,7 +89,44 @@ pub(crate) unsafe fn clap_open(path: &Path) -> Result<(libloading::Library, *con
     Ok((lib, entry))
 }
 
-pub(crate) unsafe fn vst3_open(path: &Path) -> Result<(libloading::os::unix::Library, ComPtr<IPluginFactory>), String> {
+/// What keeps a loaded VST3 module alive: the dlopened library on Linux, the CFBundle on macOS.
+#[cfg(not(target_os = "macos"))]
+pub(crate) type Vst3Module = libloading::os::unix::Library;
+#[cfg(target_os = "macos")]
+pub(crate) type Vst3Module = crate::mac::Bundle;
+
+/// macOS: the module is a bundle; `bundleEntry` gets the bundle before the factory is taken (the VST3 SDK's way).
+#[cfg(target_os = "macos")]
+pub(crate) unsafe fn vst3_open(path: &Path) -> Result<(Vst3Module, ComPtr<IPluginFactory>), String> {
+    let bundle = crate::mac::Bundle::open(path)?;
+    let entry = bundle.symbol("bundleEntry");
+    if !entry.is_null() {
+        let entry: unsafe extern "C" fn(*mut c_void) -> bool = std::mem::transmute(entry);
+        if !entry(bundle.as_ptr()) {
+            return Err("the module refused to enter".into());
+        }
+    }
+    let get_factory = bundle.symbol("GetPluginFactory");
+    if get_factory.is_null() {
+        return Err("no GetPluginFactory".into());
+    }
+    let get_factory: unsafe extern "C" fn() -> *mut IPluginFactory = std::mem::transmute(get_factory);
+    let factory = ComPtr::from_raw(get_factory()).ok_or("GetPluginFactory returned nothing")?;
+    Ok((bundle, factory))
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) unsafe fn vst3_close(bundle: Vst3Module) {
+    let exit = bundle.symbol("bundleExit");
+    if !exit.is_null() {
+        let exit: unsafe extern "C" fn() -> bool = std::mem::transmute(exit);
+        exit();
+    }
+    drop(bundle);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) unsafe fn vst3_open(path: &Path) -> Result<(Vst3Module, ComPtr<IPluginFactory>), String> {
     let binary = crate::vst3_binary(&path.to_string_lossy())?;
     let lib = libloading::os::unix::Library::new(&binary).map_err(|e| format!("could not load {}: {e}", binary.display()))?;
     let handle = lib.into_raw();
@@ -104,7 +141,8 @@ pub(crate) unsafe fn vst3_open(path: &Path) -> Result<(libloading::os::unix::Lib
     Ok((lib, factory))
 }
 
-pub(crate) unsafe fn vst3_close(lib: libloading::os::unix::Library) {
+#[cfg(not(target_os = "macos"))]
+pub(crate) unsafe fn vst3_close(lib: Vst3Module) {
     if let Ok(exit) = lib.get::<unsafe extern "C" fn() -> bool>(b"ModuleExit\0") {
         exit();
     }

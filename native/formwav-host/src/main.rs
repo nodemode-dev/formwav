@@ -5,6 +5,8 @@
 //!
 //! The buffer is 100 ms of a 1 kHz sine at -12 dBFS on both channels at 48 kHz; the report is one JSON line.
 
+#[cfg(target_os = "macos")]
+mod mac;
 mod offline;
 mod params;
 mod wav;
