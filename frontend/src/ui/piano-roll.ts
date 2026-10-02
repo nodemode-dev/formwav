@@ -1,6 +1,6 @@
 import type { Engine } from "../engine";
 import type { NoteEvent } from "../engine/document";
-import { renderNotes } from "../audio/notes";
+import { midiFile, renderNotes } from "../audio/notes";
 import { setText } from "../vendor/nodemode/dom-stable";
 
 /**
@@ -39,7 +39,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   panel.className = "fw-piano";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Note editor");
-  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="0">Off</option><option value="1">1/4</option><option value="0.5">1/8</option><option value="0.25" selected>1/16</option></select></label><button type="button" class="fw-ibtn" data-zoom="out" title="Shorter rows (Ctrl or Cmd and the wheel)">Zoom −</button><button type="button" class="fw-ibtn" data-zoom="in" title="Taller rows (Ctrl or Cmd and the wheel)">Zoom +</button><button type="button" class="fw-ibtn" data-zoom="fit" title="Fit the notes; the wheel scrolls pitch">Fit</button><button type="button" class="fw-ibtn" data-quantize title="Move the selected notes' starts (all notes when none is selected) to the snap grid (Q)">Quantize</button><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag to move, drag an edge to resize, Delete to remove"></canvas>`;
+  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="0">Off</option><option value="1">1/4</option><option value="0.5">1/8</option><option value="0.25" selected>1/16</option></select></label><button type="button" class="fw-ibtn" data-zoom="out" title="Shorter rows (Ctrl or Cmd and the wheel)">Zoom −</button><button type="button" class="fw-ibtn" data-zoom="in" title="Taller rows (Ctrl or Cmd and the wheel)">Zoom +</button><button type="button" class="fw-ibtn" data-zoom="fit" title="Fit the notes; the wheel scrolls pitch">Fit</button><button type="button" class="fw-ibtn" data-quantize title="Move the selected notes' starts (all notes when none is selected) to the snap grid (Q)">Quantize</button><button type="button" class="fw-ibtn" data-export-midi title="Save this note clip as a Standard MIDI File (120 BPM)">Export MIDI</button><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag to move, drag an edge to resize, Delete to remove"></canvas>`;
   transport.before(panel);
   const canvas = panel.querySelector("canvas") as HTMLCanvasElement;
   const state = panel.querySelector<HTMLElement>(".fw-piano-state");
@@ -264,6 +264,19 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     draw();
   });
   panel.querySelector("[data-quantize]")?.addEventListener("click", quantize);
+  panel.querySelector("[data-export-midi]")?.addEventListener("click", () => {
+    if (!target || !notes.length) return;
+    const doc = engine.get("document");
+    const clip = doc.tracks.find((t) => t.id === target?.trackId)?.clips.find((c) => c.id === target?.clipId);
+    const name = `${(clip ? doc.media[clip.mediaId]?.name : undefined)?.replace(/\.wav$/i, "") ?? "notes"}.mid`;
+    const url = URL.createObjectURL(new Blob([midiFile(notes, rate)], { type: "audio/midi" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setText(state, `Exported ${name}`);
+  });
   canvas.addEventListener(
     "wheel",
     (e) => {
