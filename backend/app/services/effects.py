@@ -115,6 +115,7 @@ FORMWAV_CHAINS = {
     "dereverb": "anull",
     "spot-heal": "anull",
     "wow-flutter": "anull",
+    "pitch-correct": "anull",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
@@ -128,7 +129,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("ramp", "Ramp tempo and pitch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter...")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -217,6 +218,10 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     ),
     "wow-flutter": (
         {"low": ("Track from", 30, 12000, 500, "Hz"), "high": ("Track to", 30, 12000, 4000, "Hz"), "amount": ("Amount", 0, 100, 100, "%")},
+        lambda v: "anull",
+    ),
+    "pitch-correct": (
+        {"key": ("Key (0 C to 11 B)", 0, 11, 0, ""), "scale": ("Scale (0 chromatic, 1 major, 2 minor)", 0, 2, 0, ""), "speed": ("Retune speed", 0, 400, 20, "ms"), "amount": ("Amount", 0, 100, 100, "%")},
         lambda v: "anull",
     ),
     "band-gain": (
@@ -444,7 +449,110 @@ def _wow_flutter(x, rate: int, v: dict):
     return y
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter}
+def _f0_track(mono, rate: int):
+    """YIN (de Cheveigne and Kawahara) every 5 ms on a 16 kHz copy, 60 to 1000 Hz: the cumulative-mean-normalised
+    difference's first dip under 0.15 (else its minimum, voiced only under 0.35), refined by a parabola. Returns the
+    hop in seconds and per-frame frequencies, 0 where unvoiced."""
+    import numpy as np
+
+    factor = max(1, rate // 16000)
+    fs = rate / factor
+    if factor > 1:
+        k = np.arange(-32, 33)
+        lp = np.sinc(k / factor) * np.hamming(len(k)) / factor
+        sig = np.convolve(mono, lp, mode="same")[::factor]
+    else:
+        sig = mono
+    w, hop = int(0.032 * fs), int(0.005 * fs)
+    lo, hi = max(2, int(fs / 1000)), int(fs / 60)
+    sig = np.concatenate([sig, np.zeros(w + hi + 1)])
+    count = max(0, (len(sig) - w - hi - 1) // hop)
+    span = w + hi + 1
+    size = 1 << int(np.ceil(np.log2(w + span)))
+    out = np.zeros(count)
+    for b in range(0, count, 256):
+        idx = np.arange(b, min(count, b + 256))
+        frames = np.stack([sig[i * hop : i * hop + span] for i in idx])
+        r = np.fft.irfft(np.conj(np.fft.rfft(frames[:, :w], size)) * np.fft.rfft(frames, size), size)[:, : hi + 1]
+        sq = np.concatenate([np.zeros((len(idx), 1)), np.cumsum(frames**2, axis=1)], axis=1)
+        e0 = sq[:, w : w + 1]
+        et = sq[:, w : w + hi + 1] - sq[:, : hi + 1]
+        d = np.maximum(e0 + et - 2 * r, 0)
+        d[:, 0] = 0
+        cm = np.ones_like(d)
+        cm[:, 1:] = d[:, 1:] * np.arange(1, hi + 1) / np.maximum(np.cumsum(d[:, 1:], axis=1), 1e-20)
+        for j in range(len(idx)):
+            row = cm[j]
+            under = np.nonzero(row[lo:hi] < 0.15)[0]
+            if len(under):
+                t0 = lo + int(under[0])
+                t = t0 + int(np.argmin(row[t0 : min(hi, t0 + max(2, t0 // 4))]))
+            else:
+                t = lo + int(np.argmin(row[lo:hi]))
+                if row[t] > 0.35:
+                    continue
+            a, c0, c = row[t - 1], row[t], row[min(hi, t + 1)]
+            den = a - 2 * c0 + c
+            frac = 0.5 * (a - c) / den if abs(den) > 1e-12 else 0.0
+            out[idx[j]] = fs / (t + max(-0.5, min(0.5, frac)))
+    return hop / fs, out
+
+
+def _pitch_correct(x, rate: int, v: dict):
+    """Pitch correction (Pro Tools with Melodyne, Auto-Tune's correction): the pitch is tracked every 5 ms, each voiced
+    frame's target is the nearest note of the key and scale (chromatic, major or minor), the correction glides to it
+    with the Retune speed (0 ms snaps) and is scaled by Amount, and rubberband applies it over time from a command file
+    every 10 ms; unvoiced frames glide back to no shift. The length is kept."""
+    import os
+    import tempfile as _tf
+
+    import numpy as np
+
+    from .audacity import _wav_bytes
+
+    if v["amount"] <= 0:  # no correction asked: the input untouched (rubberband at a ratio of 1 still resynthesises)
+        return x.astype(np.float32)
+    step, f0 = _f0_track(x.mean(axis=1).astype(np.float64), rate)
+    scales = {0: range(12), 1: (0, 2, 4, 5, 7, 9, 11), 2: (0, 2, 3, 5, 7, 8, 10)}
+    allowed = sorted({(int(v["key"]) + d) % 12 for d in scales.get(int(v["scale"]), range(12))})
+    target = np.zeros(len(f0))
+    for i, f in enumerate(f0):
+        if f > 0:
+            midi = 69 + 12 * np.log2(f / 440.0)
+            cands = [round(midi) + d for d in range(-2, 3) if (round(midi) + d) % 12 in allowed]
+            target[i] = (min(cands, key=lambda m: abs(m - midi)) - midi) / 12  # octaves to shift
+    alpha = 0.0 if v["speed"] <= 0 else float(np.exp(-step / (v["speed"] / 1000.0)))
+    shift, acc = np.zeros(len(target)), 0.0
+    for i, t in enumerate(target):
+        acc = alpha * acc + (1 - alpha) * t
+        shift[i] = acc
+    ratio = 2 ** (shift * v["amount"] / 100.0)
+    with _tf.TemporaryDirectory() as tmp:
+        src, cmd, dst = (os.path.join(tmp, n) for n in ("in.wav", "pitch.cmd", "out.wav"))
+        with open(src, "wb") as f:
+            f.write(_wav_bytes([x[:, c] for c in range(x.shape[1])], rate))
+        with open(cmd, "w") as f:
+            # a command only when the ratio has moved by half a cent: a held note is one command, a glide one every
+            # 10 ms while it moves (100 commands a second throughout left most notes uncorrected or overshot)
+            last = None
+            for i in range(0, len(ratio), 2):
+                if last is None or abs(1200 * np.log2(ratio[i] / last)) >= 0.5:
+                    f.write(f"{i * step:.4f} rubberband pitch {ratio[i]:.6f};\n")
+                    last = ratio[i]
+        # consistency is rubberband's mode for pitch that changes over time, and smooth transients stop it resetting
+        # phase inside held notes: with its defaults the same commands left notes wobbling over 40 to 100 cents
+        chain = f"asendcmd=f={cmd},rubberband=tempo=1:pitch=1:pitchq=consistency:transients=smooth"
+        done = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", src, "-af", chain, "-c:a", "pcm_f32le", dst], capture_output=True, timeout=900)
+        if done.returncode != 0:
+            raise media.MediaError(f"Pitch correction failed: {done.stderr.decode(errors='replace').strip()[-300:]}")
+        raw = np.frombuffer(subprocess.run([media._tool("ffmpeg"), "-v", "error", "-i", dst, "-f", "f32le", "-"], capture_output=True).stdout, dtype="<f4")
+    y = raw.reshape(-1, x.shape[1])[: len(x)]
+    if len(y) < len(x):
+        y = np.concatenate([y, np.zeros((len(x) - len(y), x.shape[1]), dtype=np.float32)])
+    return y.astype(np.float32)
+
+
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:
