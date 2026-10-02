@@ -26,6 +26,15 @@ def _loopback(client: str) -> bool:
     return client.startswith("127.") or client in ("::1", "localhost", "testclient")
 
 
+def ws_allowed(origin: str | None, host: str | None) -> bool:
+    """A WebSocket is accepted only from the app's own origins, since browsers let any page open one to 127.0.0.1: the
+    dev origins, or the engine's own (the desktop app serves the page from the engine; the lockdown has already held
+    the Host to loopback, so no other site can present it). Every WebSocket router uses this one check."""
+    from .config import cors_origins
+
+    return bool(origin) and (origin in cors_origins() or origin == f"http://{host}")
+
+
 class LocalOnly:
     def __init__(self, app):
         self.app = app

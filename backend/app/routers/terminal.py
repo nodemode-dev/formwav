@@ -26,9 +26,9 @@ router = APIRouter()
 
 
 def _allowed(origin: str | None, host: str | None) -> bool:
-    # the dev origins, or the engine's own (the desktop app serves the page from the engine; the lockdown has already
-    # held the Host to loopback, so no other site can present it)
-    return bool(origin) and (origin in cors_origins() or origin == f"http://{host}")
+    from ..core.security import ws_allowed
+
+    return ws_allowed(origin, host)
 
 
 @router.websocket("/terminal")
