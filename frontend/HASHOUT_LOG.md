@@ -1850,3 +1850,10 @@ The Player talks to its node only through `port`, so native output is a stand-in
 - logged: v1.30.0 (in progress) · 2026-10-02
 
 The previous entry's open issue: the stand-in inferred the worklet's "ended" from a report going from playing to stopped, which never happened when playback finished inside one report interval. The audio callback now marks the end itself, play clears a stale mark, and the next report carries it once ("ended": true); the stand-in turns that into the worklet's "ended" reply, on which the Player stops the transport. Verified in Chromium at 1288 by 683: on native output the phrase played to the end and the transport read stopped at 144000; switched back to Browser (focus moved off the Output menu before Space, the previous test's fault), the worklet played in real time (24576 frames in half a second at 48 kHz) and no new native socket opened; the choice cleared to the browser; no page errors; the core's tests pass.
+
+### src/ui/import.ts, shell.ts · a MIDI file imported and played by the built-in instrument
+- refers-to: src/ui/import.ts :: the .mid and .midi branch (POST /api/midi/import at the session's rate); src/ui/shell.ts :: the file input accepts .mid and .midi
+- kind: explainer
+- logged: v1.31.0 (in progress) · 2026-10-02
+
+Importing a .mid file sends it to the engine, which reads its notes and renders them with the built-in instrument, and the rendering is placed like any imported audio; the notice names the note count and tempo. The notes are not yet kept in the document (a note field on clips, drawing them in the lane and re-rendering after edits come next), so for now the clip is its rendering. Verified in Chromium at 1288 by 683 with a hand-built MIDI file: the notice read "Imported test-song.mid: 3 notes at 120 BPM, played by the built-in instrument", the clip held the 4.2 s rendering, playing it moved the master meter to 0.266, no page errors; the design and reach audits clean before committing.
