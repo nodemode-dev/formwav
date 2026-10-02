@@ -42,6 +42,10 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-field" data-gfor="tone"><span>Hz</span><input type="number" data-g="freq" value="440" min="20" max="20000" step="1"><span></span></label>
 <label class="fw-field" data-gfor="tone"><span>Wave</span><select data-g="waveform"><option value="sine">Sine</option><option value="square">Square</option><option value="sawtooth">Sawtooth</option><option value="triangle">Triangle</option></select><span></span></label>
 <label class="fw-field" data-gfor="tone"><span>Level</span><input type="number" data-g="amplitude" value="0.5" min="0" max="1" step="0.05" title="Amplitude, 0 to 1 of full scale"><span></span></label>
+<label class="fw-field" data-gfor="chirp"><span>From</span><input type="number" data-g="sweepFrom" value="100" min="1" max="23999" step="1"><span>Hz</span></label>
+<label class="fw-field" data-gfor="chirp"><span>To</span><input type="number" data-g="sweepTo" value="8000" min="1" max="23999" step="1"><span>Hz</span></label>
+<label class="fw-field" data-gfor="chirp"><span>Curve</span><select data-g="sweepCurve"><option value="linear">Linear</option><option value="log">Logarithmic</option></select><span></span></label>
+<label class="fw-field" data-gfor="chirp"><span>Level</span><input type="number" data-g="sweepLevel" value="0.5" min="0" max="1" step="0.05" title="Amplitude, 0 to 1 of full scale"><span></span></label>
 <label class="fw-field" data-gfor="dtmf"><span>Digits</span><input type="text" data-g="digits" value="0123456789" maxlength="64"><span></span></label>
 <button type="button" class="fw-ibtn" data-g="go">Add on a new track</button>`;
   (host.querySelector<HTMLElement>(".fw-create-body") ?? list).append(gen);
@@ -121,6 +125,12 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
       waveform: g<HTMLSelectElement>("waveform").value,
       amplitude: g<HTMLInputElement>("amplitude").value,
     });
+    if (params.get("kind") === "chirp") {
+      params.set("freq", g<HTMLInputElement>("sweepFrom").value);
+      params.set("freq_end", g<HTMLInputElement>("sweepTo").value);
+      params.set("curve", g<HTMLSelectElement>("sweepCurve").value);
+      params.set("amplitude", g<HTMLInputElement>("sweepLevel").value);
+    }
     const notice = host.querySelector<HTMLElement>(".fw-notice");
     button.disabled = true;
     try {

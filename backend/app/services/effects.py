@@ -104,6 +104,7 @@ FORMWAV_CHAINS = {
     "mid-side-decode": "stereotools=mode=ms>lr",
     "peak-normalize": "",
     "paulstretch": "",
+    "downmix-mono": "",
     "loudness-streaming": "loudnorm=I=-14:TP=-1:LRA=11",
     "loudness-broadcast": "loudnorm=I=-23:TP=-2:LRA=15",
     "exciter": "aexciter=amount=2",
@@ -132,7 +133,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("paulstretch", "Paulstretch..."), ("ramp", "Ramp tempo and pitch...")]),
     ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour...")]),
-    ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
+    ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("downmix-mono", "Downmix to mono"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
 LABELS = {key: label for _, items in GROUPS for key, label in items}
@@ -185,6 +186,15 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "speed-faster": ({"percent": ("Speed", -50, 100, 10, "%")}, lambda v: f"aresample=48000,asetrate={round(48000 * (1 + v['percent'] / 100))},aresample=48000"),
     "extreme-stretch": ({"factor": ("Stretch", 1.5, 10, 4, "x")}, lambda v: f"rubberband=tempo={1 / v['factor']:.5f}"),
     "paulstretch": ({"factor": ("Stretch", 1, 100, 8, "x"), "resolution": ("Time resolution", 0.02, 2, 0.25, "s")}, None),
+    # RX-18: dither to any depth from 8 to 24 bits. ffmpeg dithers (with Shibata noise shaping) only to its integer
+    # formats, so the signal is scaled by an exact power of two around it: for N bits at 16 (N up to 16) or 32 (above),
+    # 2^(N - 16) or 2^(N - 32), which lands the grid on 2^-(N - 1); 16 bits shaped is the chain this replaced, unchanged
+    "dither": (
+        {"bits": ("Bit depth", 8, 24, 16, " bits", 1), "shaping": ("Noise shaping (1 = on)", 0, 1, 1, "", 1)},
+        lambda v: (lambda bits, fmt, top, method: f"volume={2.0 ** (bits - top)!r},aresample=osf={fmt}:dither_method={method},aresample=osf=flt,volume={2.0 ** (top - bits)!r}")(
+            int(round(v["bits"])), "s16" if v["bits"] <= 16 else "s32", 16 if v["bits"] <= 16 else 32, "shibata" if v["shaping"] >= 0.5 else "triangular"
+        ),
+    ),
     # RX-04's amount: the processed channels blended with the untouched ones; 100% is the fixed chain these replaced
     "center-extract": ({"amount": ("Amount", 0, 100, 100, "%")}, lambda v: f"pan=stereo|c0={1 - v['amount'] / 200:.6f}*c0+{v['amount'] / 200:.6f}*c1|c1={v['amount'] / 200:.6f}*c0+{1 - v['amount'] / 200:.6f}*c1"),
     "center-remove": ({"amount": ("Amount", 0, 100, 100, "%")}, lambda v: f"pan=stereo|c0=c0-{v['amount'] / 100:.6f}*c1|c1=c1-{v['amount'] / 100:.6f}*c0"),
@@ -644,6 +654,14 @@ def _paulstretch(x, rate: int, v: dict):
     return y.astype(np.float32)
 
 
+def _downmix_mono(x, rate: int, v: dict):
+    """Downmix to mono (RX-30): one channel, the mean of all the clip's channels, so a stereo clip becomes a mono one
+    at the same level for content common to both."""
+    import numpy as np
+
+    return x.astype(np.float64).mean(axis=1, keepdims=True).astype(np.float32)
+
+
 def _peak_normalize(x, rate: int, v: dict):
     """Audacity's Normalize: each channel's DC offset removed first when asked (its mean subtracted), then the peak
     brought to the target, the channels together (their balance kept) or each to the target on its own."""
@@ -663,7 +681,7 @@ def _peak_normalize(x, rate: int, v: dict):
     return (y * gains).astype(np.float32)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch}
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:

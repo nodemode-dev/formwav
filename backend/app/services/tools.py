@@ -62,11 +62,30 @@ def _tone(freq: float, seconds: float, rate: int, waveform: str, amplitude: floa
     return _wav_bytes([(amplitude * wave).astype(np.float32)], rate)
 
 
-def generate(kind: str, seconds: float, rate: int, freq: float = 440.0, digits: str = "", waveform: str = "sine", amplitude: float = 0.5) -> dict:
+def generate(kind: str, seconds: float, rate: int, freq: float = 440.0, digits: str = "", waveform: str = "sine", amplitude: float = 0.5, freq_end: float = 8000.0, curve: str = "linear") -> dict:
     """Renders a generated signal (mono, 32-bit float at `rate`) into new media."""
     if kind not in KINDS:
         raise media.MediaError(f"no generator named {kind}")
     seconds = max(0.01, min(float(seconds), 3600.0))
+    if kind == "chirp":
+        # RX-39: a sweep from `freq` to `freq_end`, linear or logarithmic (equal time per octave, as acoustic
+        # measurement uses), at `amplitude`; the phase in closed form, so the instantaneous frequency is exact
+        from .audacity import _wav_bytes
+
+        f0, f1 = float(freq), float(freq_end)
+        if not (1 <= f0 < rate / 2 and 1 <= f1 < rate / 2):
+            raise media.MediaError(f"a sweep's frequencies must be from 1 Hz to below {rate // 2} Hz")
+        if curve not in ("linear", "log"):
+            raise media.MediaError("a sweep's curve is linear or log")
+        amplitude = max(0.0, min(float(amplitude), 1.0))
+        t = np.arange(int(round(seconds * rate)), dtype=np.float64) / rate
+        if curve == "log" and f0 != f1:
+            k = np.log(f1 / f0) / seconds
+            phase = 2 * np.pi * f0 * (np.exp(k * t) - 1) / k
+        else:
+            phase = 2 * np.pi * (f0 * t + (f1 - f0) * t * t / (2 * seconds))
+        name = f"Sweep {f0:g} to {f1:g} Hz {curve} {seconds:g} s.wav"
+        return media.import_wav(name, _wav_bytes([(amplitude * np.sin(phase)).astype(np.float32)], rate))
     if kind == "tone":
         if waveform not in WAVEFORMS:
             raise media.MediaError(f"no waveform named {waveform} (one of {', '.join(WAVEFORMS)})")
@@ -131,6 +150,22 @@ def stats(media_id: str) -> dict:
         raise media.MediaError("could not read the file's statistics")
     peak = result.get("peakDb")
     result["clipped"] = peak is not None and peak >= -0.01
+    # Crest factor and dynamic range (RX-50): astats reports them per channel only, never in its overall block, so the
+    # panel's rows stayed empty; they are measured here exactly: peak over RMS across every channel, and the loudest
+    # less the quietest non-silent 50 ms RMS window in dB (Audition's definition)
+    view, rate = _wav_view(media_id)
+    x = np.asarray(view, dtype=np.float64)
+    if x.size:
+        rms = float(np.sqrt(np.mean(x**2)))
+        if rms > 0:
+            result["crestFactor"] = round(float(np.abs(x).max()) / rms, 3)
+        win = max(1, int(rate * 0.05))
+        blocks = x.shape[0] // win
+        if blocks >= 1:
+            levels = 10 * np.log10(np.mean(x[: blocks * win].reshape(blocks, win, -1) ** 2, axis=(1, 2)) + 1e-30)
+            live = levels[levels > -120]
+            if live.size:
+                result["dynamicRangeDb"] = round(float(live.max() - live.min()), 2)
     if int(info.get("channels") or 0) == 2:
         result["phaseCorrelation"] = _phase_correlation(media_id)
     return result
