@@ -230,7 +230,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
 
   const pick = body.querySelector<HTMLSelectElement>('[data-fx="pick"]');
   const paramsBox = body.querySelector<HTMLElement>(".fw-fx-params");
-  type Control = { id: string; label: string; min: number; max: number; default: number; unit: string };
+  type Control = { id: string; label: string; min: number; max: number; default: number; unit: string; step?: number };
   const controls = new Map<string, Control[]>();
   const showControls = () => {
     const list = controls.get(pick?.value ?? "") ?? [];
@@ -245,13 +245,14 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         input.type = c.unit === "s" && c.max > 60 ? "number" : "range";
         input.min = String(c.min);
         input.max = String(c.max);
-        input.step = c.unit === "s" && c.max > 60 ? "0.001" : c.max - c.min > 20 ? "1" : "0.1";
+        input.step = c.step ? String(c.step) : c.unit === "s" && c.max > 60 ? "0.001" : c.max - c.min > 20 ? "1" : "0.1";
         input.value = String(c.default);
         input.dataset.default = String(c.default);
         input.dataset.param = c.id;
         const out = document.createElement("output");
         out.textContent = `${c.default} ${c.unit}`;
         input.addEventListener("input", () => {
+          input.dataset.touched = "1";
           out.textContent = `${input.value} ${c.unit}`;
         });
         row.append(name, input, out);
@@ -259,7 +260,14 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       }),
     );
   };
-  const currentParams = () => Object.fromEntries([...(paramsBox?.querySelectorAll<HTMLInputElement>("input[data-param]") ?? [])].map((i) => [i.dataset.param, Number(i.value)]));
+  // A plugin's own parameter (p<id>) goes only once moved: a slider rounds its default to its step, and sending that
+  // rounded value would change a sound the user never touched.
+  const currentParams = () =>
+    Object.fromEntries(
+      [...(paramsBox?.querySelectorAll<HTMLInputElement>("input[data-param]") ?? [])]
+        .filter((i) => !/^p\d+$/.test(i.dataset.param ?? "") || i.dataset.touched === "1")
+        .map((i) => [i.dataset.param, Number(i.value)]),
+    );
   const retiming = new Set<string>();
   const learnsNoise = new Set<string>();
   let learnedNoise: { mediaId: string; start: number; end: number } | null = null;
@@ -297,6 +305,25 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     syncBand();
   });
   pick?.addEventListener("change", showControls);
+  // A plugin's own parameters (generated controls, AU-29) are fetched the first time it is picked and drawn after its
+  // Tail; a failed fetch is forgotten, so picking it again tries again.
+  const fetchedPlugins = new Set<string>();
+  pick?.addEventListener("change", () => {
+    const name = pick.value;
+    if (!name.startsWith("plugin:") || fetchedPlugins.has(name)) return;
+    fetchedPlugins.add(name);
+    fetch(`/api/plugins/params?name=${encodeURIComponent(name)}`)
+      .then((res) => (res.ok ? res.json() : { params: [] }))
+      .then((p: { params?: Control[] }) => {
+        if (!p.params?.length) {
+          fetchedPlugins.delete(name);
+          return;
+        }
+        controls.set(name, [...(controls.get(name) ?? []).filter((c) => !/^p\d+$/.test(c.id)), ...p.params]);
+        if (pick.value === name) showControls();
+      })
+      .catch(() => fetchedPlugins.delete(name));
+  });
   pick?.addEventListener("change", syncBand);
   // iZotope RX's module search: filter the Effects menu by name or group.
   const search = body.querySelector<HTMLInputElement>('[data-fx="search"]');

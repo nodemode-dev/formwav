@@ -95,9 +95,11 @@ def params(name: str) -> list[dict]:
             return []
         controls = []
         for r in rows[:64]:
-            control = {"id": f"p{r['id']}", "label": r["name"], "min": r["min"], "max": r["max"], "default": r["default"]}
+            control = {"id": f"p{r['id']}", "label": r["name"], "min": r["min"], "max": r["max"], "default": r["default"], "unit": ""}
             if r.get("steps", 0) > 0:
                 control["step"] = (r["max"] - r["min"]) / r["steps"]
+            elif r["max"] > r["min"]:
+                control["step"] = (r["max"] - r["min"]) / 1000
             controls.append(control)
         _params[name] = controls
     return _params[name]
