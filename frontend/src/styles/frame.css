@@ -211,7 +211,7 @@
  * open panel filling the body, the height dragged from the top edge. */
 .fw-dock { position: relative; flex: none; display: grid; grid-template-rows: auto minmax(0, 1fr); block-size: var(--fw-dock-h, 260px); max-block-size: 75%; background: var(--bg-secondary); border-block-start: 1px solid var(--line-0); }
 .fw-dock[hidden] { display: none; }
-.fw-dock-grip { position: absolute; inset-block-start: -3px; inset-inline: 0; z-index: 1; block-size: 6px; cursor: row-resize; touch-action: none; }
+.fw-dock-grip { position: absolute; inset-block-start: -3px; inset-inline: 0; z-index: var(--z-raised); block-size: 6px; cursor: row-resize; touch-action: none; }
 .fw-dock-grip:hover,
 .fw-dock-grip:focus-visible { background: var(--accent-color-dim); outline: none; }
 .fw-dock-head { display: flex; align-items: center; gap: 4px; min-block-size: 34px; padding: 0 8px; background: var(--group-head); border-block-end: 1px solid var(--line-0); }
