@@ -5,6 +5,8 @@ pub mod onsets;
 pub mod peaks;
 #[cfg(feature = "python")]
 mod python;
+#[cfg(feature = "native")]
+pub mod native;
 pub mod render;
 pub mod wav;
 #[cfg(target_arch = "wasm32")]

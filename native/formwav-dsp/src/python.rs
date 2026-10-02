@@ -117,8 +117,89 @@ fn onsets(data: &[u8], sensitivity: f32) -> PyResult<(u32, Vec<u64>)> {
     Ok((buf.sample_rate, crate::onsets::detect(&mono, buf.sample_rate, sensitivity)))
 }
 
+/// Native audio output for the engine (crate::native): the Player on a device's stream, driven by the worklet's
+/// messages; sources load straight from WAV bytes (the engine's media files).
+#[cfg(feature = "native")]
+#[pyclass(name = "NativeOutput")]
+struct PyNativeOutput {
+    inner: Option<crate::native::NativeOutput>,
+}
+
+#[cfg(feature = "native")]
+impl PyNativeOutput {
+    fn out(&self) -> PyResult<&crate::native::NativeOutput> {
+        self.inner.as_ref().ok_or_else(|| PyValueError::new_err("the native output is closed"))
+    }
+}
+
+#[cfg(feature = "native")]
+#[pymethods]
+impl PyNativeOutput {
+    #[new]
+    #[pyo3(signature = (rate, device=None))]
+    fn new(rate: u32, device: Option<String>) -> PyResult<Self> {
+        let out = crate::native::NativeOutput::open(device, rate).map_err(PyValueError::new_err)?;
+        Ok(Self { inner: Some(out) })
+    }
+
+    #[getter]
+    fn device(&self) -> PyResult<String> {
+        Ok(self.out()?.device.clone())
+    }
+
+    #[getter]
+    fn rate(&self) -> PyResult<u32> {
+        Ok(self.out()?.rate)
+    }
+
+    fn load_wav(&self, id: u32, data: &[u8]) -> PyResult<()> {
+        let buf = decode_wav(data).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        self.out()?.load_source(id, buf.sample_rate, buf.channels);
+        Ok(())
+    }
+
+    fn set_mix(&self, json: &str) -> PyResult<()> {
+        self.out()?.set_mix(json).map_err(PyValueError::new_err)
+    }
+
+    fn seek(&self, position: u64) -> PyResult<()> {
+        self.out()?.seek(position);
+        Ok(())
+    }
+
+    fn set_loop(&self, start: u64, end: u64) -> PyResult<()> {
+        self.out()?.set_loop(start, end);
+        Ok(())
+    }
+
+    fn play(&self) -> PyResult<()> {
+        self.out()?.play();
+        Ok(())
+    }
+
+    fn stop(&self) -> PyResult<()> {
+        self.out()?.stop();
+        Ok(())
+    }
+
+    fn report(&self) -> PyResult<String> {
+        Ok(self.out()?.report())
+    }
+
+    fn close(&mut self) {
+        self.inner = None;
+    }
+
+    #[staticmethod]
+    fn devices() -> Vec<String> {
+        crate::native::devices()
+    }
+}
+
 #[pymodule]
 fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    #[cfg(feature = "native")]
+    m.add_class::<PyNativeOutput>()?;
     m.add_function(wrap_pyfunction!(probe, m)?)?;
     m.add_function(wrap_pyfunction!(peaks, m)?)?;
     m.add_function(wrap_pyfunction!(render, m)?)?;

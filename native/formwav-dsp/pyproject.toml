@@ -9,5 +9,5 @@ license = { text = "Apache-2.0" }
 dynamic = ["version"]
 
 [tool.maturin]
-features = ["python"]
+features = ["python", "native"]
 module-name = "formwav_dsp"
