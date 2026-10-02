@@ -14,7 +14,7 @@ interface Choice {
   ready: boolean;
   needs: string;
   fields: string[];
-  run: (v: Record<string, string>) => Promise<{ media: MediaRef; at?: number }>;
+  run: (v: Record<string, string>) => Promise<{ media: MediaRef; at?: number } | { done: string }>;
 }
 type Providers = { providers: { id: string; ready: boolean; needs: string; presets?: { model: string; label: string; fields: string[] }[]; models?: { id: string; label: string; fields?: string[] }[] }[] };
 
@@ -52,6 +52,21 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   };
   const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
   const choices: Choice[] = [];
+  // The clip under the time selection (on a selected track, or any), and the selection in its source's own seconds.
+  const regenTarget = () => {
+    const sel = engine.get("selection");
+    if (!sel || sel.end <= sel.start) return null;
+    const doc = engine.get("document");
+    for (const t of doc.tracks) {
+      if (sel.trackIds.length && !sel.trackIds.includes(t.id)) continue;
+      const c = t.clips.find((x) => x.start <= sel.start && x.start + x.length >= sel.end);
+      if (!c) continue;
+      const rate = doc.media[c.mediaId]?.sampleRate ?? doc.sampleRate;
+      const ratio = rate / doc.sampleRate;
+      return { t, c, ratio, startS: (c.sourceIn + (sel.start - c.start) * ratio) / rate, endS: (c.sourceIn + (sel.end - c.start) * ratio) / rate };
+    }
+    return null;
+  };
 
   const build = (p: Providers) => {
     const el = p.providers.find((x) => x.id === "elevenlabs");
@@ -59,6 +74,26 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     const local = p.providers.find((x) => x.id === "local");
     if (el) {
       choices.push({ id: "el-speech", label: "Speech (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["text", "voice"], run: async (v) => ({ media: await post("/api/providers/elevenlabs/speech", { text: v.text, voice_id: v.voice }) }) });
+      choices.push({
+        id: "el-regen", label: "Regenerate the selected words in their speaker's voice (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["text"],
+        run: async (v) => {
+          const target = regenTarget();
+          if (!target) throw new Error("Select the words to replace first: drag across them on a clip in the lanes");
+          const { t, c, startS, endS, ratio } = target;
+          const out = await post("/api/providers/elevenlabs/regenerate", { media_id: c.mediaId, start_s: startS, end_s: endS, text: v.text });
+          const delta = Math.round(out.delta_frames / ratio);
+          const later = t.clips.filter((x) => x.id !== c.id && x.start >= c.start + c.length);
+          engine.dispatch({
+            type: "batch",
+            commands: [
+              { type: "set-clip-media", trackId: t.id, clipId: c.id, media: out.media },
+              { type: "set-clip-bounds", trackId: t.id, clipId: c.id, start: c.start, sourceIn: c.sourceIn, length: c.length + delta },
+              ...later.map((x) => ({ type: "move-clip" as const, trackId: t.id, clipId: x.id, start: x.start + delta })),
+            ],
+          });
+          return { done: `Replaced ${(endS - startS).toFixed(2)} s with ${Number(out.inserted_s).toFixed(2)} s in the speaker's voice${later.length ? `; ${later.length} later clip${later.length === 1 ? "" : "s"} moved ${(delta / engine.get("document").sampleRate).toFixed(2)} s` : ""}` };
+        },
+      });
       choices.push({ id: "el-sound", label: "Sound effect (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["text", "duration"], run: async (v) => ({ media: await post("/api/providers/elevenlabs/sound", { text: v.text, duration_s: Number(v.duration) }) }) });
       choices.push({
         id: "el-dub", label: "Dub a clip (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["clip", "language"],
@@ -113,6 +148,21 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
         }
       }).catch(() => setText(state, "Could not list the voices"));
     }
+    if (c?.id === "el-regen") {
+      const target = regenTarget();
+      const text = box.querySelector<HTMLTextAreaElement>(".fw-models-text");
+      if (!target) setText(state, "Select the words to replace on a clip, then type what they should say");
+      else if (text) {
+        fetch(`/api/media/${target.c.mediaId}/transcript`, { method: "POST" })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error("no transcript"))))
+          .then((d: { words?: { text: string; start: number; end: number }[] }) => {
+            const words = (d.words ?? []).filter((w) => w.end > target.startS + 0.02 && w.start < target.endS - 0.02).map((w) => w.text.trim());
+            if (words.length && !text.value.trim()) text.value = words.join(" ");
+            setText(state, words.length ? "Edit the words, then make it" : "Type what the selection should say");
+          })
+          .catch(() => setText(state, "Type what the selection should say (no transcript for this clip)"));
+      }
+    }
     if (c?.fields.includes("clip")) {
       const doc = engine.get("document");
       const rate = doc.sampleRate;
@@ -135,9 +185,13 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     go.disabled = true;
     setText(state, `Making it with ${c.label}...`);
     try {
-      const { media, at } = await c.run(v);
-      engine.dispatch({ type: "import-media", media, at: at ?? engine.get("transport").positionSamples });
-      setText(state, `Added ${media.name}`);
+      const result = await c.run(v);
+      if ("done" in result) {
+        setText(state, result.done);
+      } else {
+        engine.dispatch({ type: "import-media", media: result.media, at: result.at ?? engine.get("transport").positionSamples });
+        setText(state, `Added ${result.media.name}`);
+      }
     } catch (err) {
       setText(state, err instanceof Error ? err.message : String(err));
     } finally {
