@@ -78,7 +78,7 @@ pub fn clap_binary(path: &Path) -> Result<PathBuf, String> {
     std::fs::read_dir(&inner).ok().and_then(|mut d| d.find_map(|e| e.ok().map(|e| e.path()))).ok_or_else(|| format!("{} has no binary", path.display()))
 }
 
-unsafe fn clap_open(path: &Path) -> Result<(libloading::Library, *const clap_plugin_entry), String> {
+pub(crate) unsafe fn clap_open(path: &Path) -> Result<(libloading::Library, *const clap_plugin_entry), String> {
     let binary = clap_binary(path)?;
     let lib = libloading::Library::new(&binary).map_err(|e| format!("could not load {}: {e}", binary.display()))?;
     let entry = *lib.get::<*const clap_plugin_entry>(b"clap_entry\0").map_err(|e| format!("no clap_entry: {e}"))?;
@@ -89,7 +89,7 @@ unsafe fn clap_open(path: &Path) -> Result<(libloading::Library, *const clap_plu
     Ok((lib, entry))
 }
 
-unsafe fn vst3_open(path: &Path) -> Result<(libloading::os::unix::Library, ComPtr<IPluginFactory>), String> {
+pub(crate) unsafe fn vst3_open(path: &Path) -> Result<(libloading::os::unix::Library, ComPtr<IPluginFactory>), String> {
     let binary = crate::vst3_binary(&path.to_string_lossy())?;
     let lib = libloading::os::unix::Library::new(&binary).map_err(|e| format!("could not load {}: {e}", binary.display()))?;
     let handle = lib.into_raw();
@@ -104,13 +104,13 @@ unsafe fn vst3_open(path: &Path) -> Result<(libloading::os::unix::Library, ComPt
     Ok((lib, factory))
 }
 
-unsafe fn vst3_close(lib: libloading::os::unix::Library) {
+pub(crate) unsafe fn vst3_close(lib: libloading::os::unix::Library) {
     if let Ok(exit) = lib.get::<unsafe extern "C" fn() -> bool>(b"ModuleExit\0") {
         exit();
     }
 }
 
-unsafe fn vst3_effects(factory: &ComPtr<IPluginFactory>) -> Vec<(TUID, String)> {
+pub(crate) unsafe fn vst3_effects(factory: &ComPtr<IPluginFactory>) -> Vec<(TUID, String)> {
     let mut effects = Vec::new();
     for index in 0..factory.countClasses() {
         let mut info: PClassInfo = std::mem::zeroed();
@@ -166,7 +166,7 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
 /// Runs `input` (mono becomes both sides; beyond two channels, the first two) through the plugin's first audio effect,
 /// in blocks of BLOCK frames with its clock advancing, followed by `tail_s` seconds of silence so reverbs and delays
 /// can ring out; returns stereo.
-pub fn process(format: &str, plugin: &Path, input: &Audio, tail_s: f64) -> Result<Audio, String> {
+pub fn process(format: &str, plugin: &Path, input: &Audio, tail_s: f64, values: &[(u32, f64)]) -> Result<Audio, String> {
     let rate = input.rate;
     let frames = input.channels.first().map_or(0, |c| c.len());
     let total = frames + (tail_s.max(0.0) * rate as f64) as usize;
@@ -179,15 +179,16 @@ pub fn process(format: &str, plugin: &Path, input: &Audio, tail_s: f64) -> Resul
     let mut out = vec![vec![0f32; total], vec![0f32; total]];
     unsafe {
         match format {
-            "clap" => clap_process(plugin, rate, &left, &right, &mut out)?,
-            "vst3" => vst3_process(plugin, rate, &left, &right, &mut out)?,
+            "clap" => clap_process(plugin, rate, &left, &right, &mut out, values)?,
+            "vst3" => vst3_process(plugin, rate, &left, &right, &mut out, values)?,
             other => return Err(format!("unknown plugin format {other}")),
         }
     }
     Ok(Audio { rate, channels: out })
 }
 
-unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out: &mut [Vec<f32>]) -> Result<(), String> {
+unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out: &mut [Vec<f32>], values: &[(u32, f64)]) -> Result<(), String> {
+    let param_events = crate::params::ClapEvents::new(values);
     let (lib, entry) = clap_open(path)?;
     let factory = ((*entry).get_factory.ok_or("no get_factory")?)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
     if factory.is_null() {
@@ -216,7 +217,7 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     if !((*plugin).activate.ok_or("no activate")?)(plugin, rate as f64, 1, BLOCK as u32) || !((*plugin).start_processing.ok_or("no start_processing")?)(plugin) {
         return Err("the plugin would not start".into());
     }
-    let in_events = clap_input_events { ctx: ptr::null_mut(), size: Some(crate::no_events_size), get: Some(crate::no_events_get) };
+    let in_events = clap_input_events { ctx: &param_events as *const crate::params::ClapEvents as *mut c_void, size: Some(crate::params::clap_events_size), get: Some(crate::params::clap_events_get) };
     let out_events = clap_output_events { ctx: ptr::null_mut(), try_push: Some(crate::no_events_push) };
     // Latency compensation: a plugin that reports latency outputs that much later, so it runs that many frames of
     // silence past the end and the output is taken from that point, lining up sample for sample with the input.
@@ -249,6 +250,7 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
         if ((*plugin).process.ok_or("no process")?)(plugin, &process) == CLAP_PROCESS_ERROR {
             return Err(format!("the plugin failed at frame {pos}"));
         }
+        param_events.live.set(false);
         pos += n;
     }
     for (channel, dst) in out.iter_mut().enumerate() {
@@ -263,7 +265,9 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     Ok(())
 }
 
-unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out: &mut [Vec<f32>]) -> Result<(), String> {
+unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out: &mut [Vec<f32>], values: &[(u32, f64)]) -> Result<(), String> {
+    let changes = ComWrapper::new(crate::params::Vst3Changes::new(values));
+    let changes_ptr = changes.to_com_ptr::<vst3::Steinberg::Vst::IParameterChanges>().ok_or("parameter changes")?;
     let (lib, factory) = vst3_open(path)?;
     let (cid, _) = vst3_effects(&factory).into_iter().next().ok_or("the module holds no audio effect")?;
     let mut obj: *mut c_void = ptr::null_mut();
@@ -310,7 +314,7 @@ unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
             numOutputs: 1,
             inputs: &mut in_bus,
             outputs: &mut out_bus,
-            inputParameterChanges: ptr::null_mut(),
+            inputParameterChanges: if values.is_empty() || !changes.live.get() { ptr::null_mut() } else { changes_ptr.as_ptr() },
             outputParameterChanges: ptr::null_mut(),
             inputEvents: ptr::null_mut(),
             outputEvents: ptr::null_mut(),
@@ -320,6 +324,7 @@ unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
             failed = Some(pos);
             break;
         }
+        changes.live.set(false);
         pos += n;
     }
     for (channel, dst) in out.iter_mut().enumerate() {

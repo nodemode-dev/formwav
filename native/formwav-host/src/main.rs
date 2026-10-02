@@ -6,6 +6,7 @@
 //! The buffer is 100 ms of a 1 kHz sine at -12 dBFS on both channels at 48 kHz; the report is one JSON line.
 
 mod offline;
+mod params;
 mod wav;
 
 use std::ffi::{c_char, c_void, CStr, CString};
@@ -642,6 +643,7 @@ fn main() {
         (Some("vst3"), Some(path)) => run_vst3(path),
         (Some("clap-gui"), Some(path)) => run_clap_gui(path, args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0)),
         (Some("vst3-gui"), Some(path)) => run_vst3_gui(path, args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0)),
+        (Some("params"), Some(format)) if args.len() >= 4 => params::list(format, std::path::Path::new(&args[3])).map(|list| println!("{}", params::to_json(&list))),
         (Some("scan"), _) => {
             let dirs: Vec<std::path::PathBuf> = if args.len() > 2 { args[2..].iter().map(std::path::PathBuf::from).collect() } else { offline::default_dirs() };
             println!("[{}]", offline::scan(&dirs).join(",\n "));
@@ -649,7 +651,11 @@ fn main() {
         }
         (Some("process"), Some(format)) if args.len() >= 6 => wav::read(&args[4]).and_then(|input| {
             let tail = args.get(6).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-            let output = offline::process(format, std::path::Path::new(&args[3]), &input, tail)?;
+            let values = match args.get(7) {
+                Some(text) => params::parse_values(text)?,
+                None => Vec::new(),
+            };
+            let output = offline::process(format, std::path::Path::new(&args[3]), &input, tail, &values)?;
             wav::write(&args[5], &output)?;
             println!("{{\"frames\": {}, \"rate\": {}, \"channels\": 2}}", output.channels[0].len(), output.rate);
             Ok(())
