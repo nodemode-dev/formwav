@@ -22,6 +22,41 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
     `<button class="fw-out-clip" type="button" data-clip="false" aria-label="Output clip indicator, click to reset" title="Output reached 0 dBFS (click to reset)"></button>`;
   transport?.append(meter);
 
+  // AA-02: the running phase meter, the master's correlation while playing: +1 at the right (mono-safe), 0 in the
+  // middle (unrelated), -1 at the left (cancelling when summed to mono); lightly smoothed; idle when nothing plays
+  const phase = document.createElement("div");
+  phase.className = "fw-phase-meter";
+  phase.dataset.state = "idle";
+  phase.setAttribute("role", "meter");
+  phase.setAttribute("aria-label", "Phase correlation");
+  phase.setAttribute("aria-valuemin", "-1");
+  phase.setAttribute("aria-valuemax", "1");
+  phase.title = "Phase correlation while playing: +1 mono-safe, 0 unrelated, -1 cancelling in mono";
+  phase.innerHTML = `<span class="fw-meter-label" aria-hidden="true">φ</span><div class="fw-phase-track"><span class="fw-phase-dot"></span></div>`;
+  transport?.append(phase);
+  const dot = phase.querySelector<HTMLElement>(".fw-phase-dot");
+  let smooth: number | null = null;
+  player.onOutputLevel((_left, _right, _tracks, _loudness, _buses, correlation) => {
+    if (correlation === null || !Number.isFinite(correlation)) {
+      smooth = null;
+      if (phase.dataset.state !== "idle") {
+        phase.dataset.state = "idle";
+        phase.removeAttribute("aria-valuenow");
+        delete phase.dataset.correlation;
+        if (dot) dot.style.insetInlineStart = "50%";
+      }
+      return;
+    }
+    smooth = smooth === null ? correlation : smooth + 0.35 * (correlation - smooth);
+    const text = smooth.toFixed(2);
+    if (phase.dataset.correlation === text) return;
+    phase.dataset.correlation = text;
+    phase.setAttribute("aria-valuenow", text);
+    const state = smooth < 0 ? "negative" : "positive";
+    if (phase.dataset.state !== state) phase.dataset.state = state;
+    if (dot) dot.style.insetInlineStart = `${(((smooth + 1) / 2) * 100).toFixed(1)}%`;
+  });
+
   const lufs = document.createElement("output");
   lufs.className = "fw-lufs";
   lufs.title = "Output loudness since play started (BS.1770): momentary 400 ms, short-term 3 s, integrated";

@@ -91,6 +91,9 @@ pub struct Player {
     position: u64,
     peak_left: f32,
     peak_right: f32,
+    /// The master's sums of left times right, left squared and right squared since the last take_correlation
+    /// (AA-02's running phase meter).
+    corr: (f64, f64, f64),
     loop_range: Option<(u64, u64)>,
     buses: Vec<Bus>,
     scratch_left: Vec<f32>,
@@ -344,6 +347,10 @@ impl Player {
         for i in 0..n {
             self.peak_left = self.peak_left.max(left[i].abs());
             self.peak_right = self.peak_right.max(right[i].abs());
+            let (l, r) = (f64::from(left[i]), f64::from(right[i]));
+            self.corr.0 += l * r;
+            self.corr.1 += l * l;
+            self.corr.2 += r * r;
         }
         if let Some(meter) = self.loudness.as_mut() {
             meter.process(&left[..n], &right[..n]);
@@ -498,6 +505,18 @@ impl Player {
         peaks
     }
 
+    /// The master's phase correlation since the last call (AA-02's running meter): the sum of left times right over
+    /// the root of the product of their energies, +1 identical, 0 unrelated, -1 opposed; NaN with nothing playing.
+    pub fn take_correlation(&mut self) -> f32 {
+        let (lr, ll, rr) = std::mem::take(&mut self.corr);
+        let d = (ll * rr).sqrt();
+        if d > 1e-12 {
+            (lr / d).clamp(-1.0, 1.0) as f32
+        } else {
+            f32::NAN
+        }
+    }
+
     /// Per-track peak metering. Each track's clips are summed into a meter scratch, so overlapping clips
     /// are measured together as the track plays them (post track gain and pan, before any bus). The pass
     /// never writes to the output, so the rendered audio is unchanged by metering.
@@ -607,6 +626,40 @@ mod tests {
         assert_eq!(buf.frames(), 1000);
         assert_eq!((buf.channels[0][99], buf.channels[0][100], buf.channels[0][299], buf.channels[0][300]), (0.0, 0.5, 0.5, 0.0));
         assert_eq!((buf.channels[1][100], buf.channels[1][999]), (-0.25, -0.25));
+    }
+
+    #[test]
+    fn the_running_correlation_reads_identical_inverted_unrelated_and_silent_channels() {
+        let render_pair = |left: Vec<f32>, right: Vec<f32>| {
+            let mut p = Player::new();
+            p.set_rate(48000.0);
+            p.alloc_source(1, 48000, 2, left.len());
+            let inter: Vec<f32> = left.iter().zip(&right).flat_map(|(&l, &r)| [l, r]).collect();
+            p.write_source(1, 0, &inter);
+            p.add_clip(PlayClip { source: 1, start: 0, source_in: 0, length: left.len() as u64, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 1, gain_env: 0, pan_env: 0 });
+            let (mut l, mut r) = (vec![0f32; left.len()], vec![0f32; left.len()]);
+            p.render(&mut l, &mut r);
+            let first = p.take_correlation();
+            (first, p.take_correlation())
+        };
+        let tone: Vec<f32> = (0..4800).map(|i| 0.5 * (i as f32 * 0.05).sin()).collect();
+        let inverted: Vec<f32> = tone.iter().map(|v| -v).collect();
+        let (same, again) = render_pair(tone.clone(), tone.clone());
+        assert!((same - 1.0).abs() < 1e-4, "identical {same}");
+        assert!(again.is_nan(), "the sums reset after a read: {again}");
+        let (opposed, _) = render_pair(tone.clone(), inverted);
+        assert!((opposed + 1.0).abs() < 1e-4, "inverted {opposed}");
+        let mut seed = 12345u32;
+        let mut noise = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            (seed >> 8) as f32 / (1u32 << 24) as f32 - 0.5
+        };
+        let a: Vec<f32> = (0..48000).map(|_| noise()).collect();
+        let b: Vec<f32> = (0..48000).map(|_| noise()).collect();
+        let (unrelated, _) = render_pair(a, b);
+        assert!(unrelated.abs() < 0.05, "independent noise {unrelated}");
+        let (silent, _) = render_pair(vec![0.0; 480], vec![0.0; 480]);
+        assert!(silent.is_nan(), "silence {silent}");
     }
 
     fn tone_through_lowpass(automate: bool) -> (f32, f32) {

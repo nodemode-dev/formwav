@@ -28,6 +28,7 @@ interface CoreExports {
   fw_add_master_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
   fw_add_bus_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
   fw_take_peaks(player: number, out: number): void;
+  fw_take_correlation(player: number): number;
   fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
   fw_take_bus_peaks(player: number, out: number, maxBuses: number): number;
   fw_loudness_reset(player: number, rate: number): void;
@@ -84,7 +85,7 @@ export type WorkletReply =
   | { type: "ready" }
   | { type: "error"; message: string }
   | { type: "loaded"; id: number; frames: number }
-  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; trackPeaks: number[]; loudness: number[]; busPeaks: number[] }
+  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; correlation?: number | null; trackPeaks: number[]; loudness: number[]; busPeaks: number[] }
   | { type: "ended"; position: number };
 
 /** The AudioWorkletGlobalScope's context sample rate. */
@@ -142,6 +143,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
     const core = this.core;
     if (!core) return;
     core.fw_take_peaks(this.player, this.peaks);
+    const correlation = core.fw_take_correlation(this.player);
     const tracks = core.fw_take_track_peaks(this.player, this.peaks + 8, MAX_METERED_TRACKS);
     const loudnessAt = this.peaks + 8 + MAX_METERED_TRACKS * 8;
     core.fw_loudness(this.player, loudnessAt);
@@ -154,6 +156,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       playing: this.playing,
       peakLeft: peaks[0],
       peakRight: peaks[1],
+      correlation: Number.isNaN(correlation) ? null : correlation,
       trackPeaks: Array.from(peaks.subarray(2)),
       loudness: Array.from(new Float32Array(core.memory.buffer, loudnessAt, 3)),
       busPeaks: Array.from(new Float32Array(core.memory.buffer, busesAt, buses * 2)),

@@ -291,3 +291,21 @@
 /* The statistics' RMS histogram (AA-04): a bar per 3 dB from -60 to 0 dBFS, heights relative to the fullest bin */
 .fw-rms-hist { display: flex; align-items: flex-end; gap: 1px; block-size: 44px; padding-block: 2px; }
 .fw-rms-hist span { flex: 1 1 0; min-block-size: 1px; background: var(--fw-audio); border-radius: 1px 1px 0 0; }
+
+/* The running phase meter (AA-02): -1 at the left (cancelling), +1 at the right (mono-safe), a dot at the reading */
+.fw-phase-meter { display: flex; align-items: center; gap: 6px; flex: none; }
+.fw-phase-track { position: relative; inline-size: 56px; block-size: 8px; border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--fw-record) 40%, var(--surface-2)), var(--surface-2) 50%, color-mix(in srgb, var(--fw-audio) 40%, var(--surface-2))); }
+.fw-phase-dot { position: absolute; top: 50%; inset-inline-start: 50%; inline-size: 8px; block-size: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--text-primary); }
+.fw-phase-meter[data-state="idle"] .fw-phase-dot { opacity: 0.35; }
+.fw-phase-meter[data-state="negative"] .fw-phase-dot { background: var(--fw-record); }
+
+/* Recording settings in a popover (latency, Measure, pre-roll): set once, not watched while playing, so they leave the
+   transport bar, which had run 233 px past its 752 px with the OUT, phase and IN meters out of view; a popover sits in
+   the top layer, above the transport and unclipped by its scrolling */
+.fw-rec-btn { flex: none; }
+.fw-rec-pop:popover-open { display: flex; align-items: center; gap: 8px; }
+.fw-rec-pop { position: fixed; inset: auto auto 72px 50%; translate: -50% 0; margin: 0; padding: 10px 12px; color: var(--text-primary); background: var(--surface-raised); border: 1px solid var(--line-2); border-radius: 10px; }
+/* the output meter's bar column and the phase track a little narrower, so the transport holds every meter at the
+   default width (the bars' width comes from the meter's grid column, 84 px before) */
+.fw-transport .fw-out-meter { grid-template-columns: auto 52px auto; }
+.fw-transport .fw-phase-track { inline-size: 48px; }

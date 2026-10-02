@@ -184,6 +184,15 @@ pub unsafe extern "C" fn fw_take_peaks(player: *mut Player, out: *mut f32) {
     *out.add(1) = right;
 }
 
+/// The master's phase correlation since the last call (AA-02); NaN with nothing playing.
+///
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_take_correlation(player: *mut Player) -> f32 {
+    (*player).take_correlation()
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_take_track_peaks(player: *mut Player, out: *mut f32, max_tracks: u32) -> u32 {
     let buf = std::slice::from_raw_parts_mut(out, max_tracks as usize * 2);

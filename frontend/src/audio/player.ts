@@ -335,15 +335,15 @@ export class Player {
   }
 
   private lastIntegrated = Number.NEGATIVE_INFINITY;
-  private levelListeners = new Set<(left: number, right: number, tracks: number[], loudness: number[] | null, buses: number[]) => void>();
+  private levelListeners = new Set<(left: number, right: number, tracks: number[], loudness: number[] | null, buses: number[], correlation: number | null) => void>();
 
   /** Master peaks, per-track peaks as [left, right] pairs in the document's track order, [M, S, I] loudness in LUFS (null on stop), and per-bus peak pairs in the document's bus order. */
-  onOutputLevel(listener: (left: number, right: number, tracks: number[], loudness: number[] | null, buses: number[]) => void): void {
+  onOutputLevel(listener: (left: number, right: number, tracks: number[], loudness: number[] | null, buses: number[], correlation: number | null) => void): void {
     this.levelListeners.add(listener);
   }
 
-  private emitLevel(left: number, right: number, tracks: number[], loudness: number[] | null, buses: number[] = []): void {
-    for (const listener of this.levelListeners) listener(left, right, tracks, loudness, buses);
+  private emitLevel(left: number, right: number, tracks: number[], loudness: number[] | null, buses: number[] = [], correlation: number | null = null): void {
+    for (const listener of this.levelListeners) listener(left, right, tracks, loudness, buses, correlation);
   }
 
   get skipped(): number {
@@ -397,7 +397,7 @@ export class Player {
   private handlePosition(reply: Extract<WorkletReply, { type: "position" }>): void {
     this.engine.setTransport({ positionSamples: reply.position });
     this.lastIntegrated = reply.loudness[2];
-    if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks, reply.loudness, reply.busPeaks);
+    if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks, reply.loudness, reply.busPeaks, reply.correlation ?? null);
     else this.emitLevel(0, 0, [], [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, reply.loudness[2]]);
   }
 

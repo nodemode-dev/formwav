@@ -275,6 +275,7 @@ impl NativeOutput {
             let playing = s.playing;
             let p = &mut s.player;
             let (left, right) = p.take_peaks();
+            let correlation = p.take_correlation();
             let mut tracks = vec![0f32; MAX_TRACKS * 2];
             let tn = p.take_track_peaks(&mut tracks);
             let mut buses = vec![0f32; MAX_BUSES * 2];
@@ -287,6 +288,7 @@ impl NativeOutput {
                 "ended": ended,
                 "peakLeft": left,
                 "peakRight": right,
+                "correlation": if correlation.is_nan() { None } else { Some(correlation) },
                 "trackPeaks": &tracks[..tn * 2],
                 "loudness": [m, st, i],
                 "busPeaks": &buses[..bn * 2],
