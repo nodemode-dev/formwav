@@ -251,3 +251,6 @@
 .fw-piano-opt select { block-size: 22px; font-size: var(--fs-11); }
 .fw-piano-state { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .fw-piano-canvas { display: block; inline-size: 100%; block-size: 100%; min-block-size: 0; cursor: crosshair; outline: none; }
+
+/* The title bar's notice never pushes the actions: it keeps one line and truncates. */
+.fw-topbar .fw-notice { max-inline-size: 26vw; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
