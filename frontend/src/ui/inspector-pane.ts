@@ -220,10 +220,11 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         const name = document.createElement("span");
         name.textContent = c.label;
         const input = document.createElement("input");
-        input.type = "range";
+        // a time over a long span (Spot heal's box) is typed or filled from the marquee, to the millisecond
+        input.type = c.unit === "s" && c.max > 60 ? "number" : "range";
         input.min = String(c.min);
         input.max = String(c.max);
-        input.step = c.max - c.min > 20 ? "1" : "0.1";
+        input.step = c.unit === "s" && c.max > 60 ? "0.001" : c.max - c.min > 20 ? "1" : "0.1";
         input.value = String(c.default);
         input.dataset.default = String(c.default);
         input.dataset.param = c.id;
@@ -245,11 +246,23 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     learnedNoise && learnedNoise.mediaId === mediaId && learnsNoise.has(name) ? { noise_from: learnedNoise.start, noise_to: learnedNoise.end } : {};
   const syncBand = () => {
     const band = range?.band;
-    if (!band || pick?.value !== "band-gain") return;
-    for (const [param, hz] of [["low", band.lowHz], ["high", band.highHz]] as const) {
+    if (!band || !range || (pick?.value !== "band-gain" && pick?.value !== "spot-heal")) return;
+    const fills: [string, number][] = [["low", band.lowHz], ["high", band.highHz]];
+    if (pick?.value === "spot-heal") {
+      // the box's time in the media's own seconds, from the clip the marquee was drawn on
+      const doc = engine.get("document");
+      const r = range;
+      const clip = doc.tracks.find((t) => t.id === r.trackId)?.clips.find((c) => r.start >= c.start && r.start < c.start + c.length);
+      if (!clip) return;
+      const toMedia = (s: number) => (clip.sourceIn + Math.min(Math.max(s, clip.start), clip.start + clip.length) - clip.start) / doc.sampleRate;
+      fills.push(["from", toMedia(r.start)], ["to", toMedia(r.end)]);
+    }
+    for (const [param, value0] of fills) {
+      const hz = param === "from" || param === "to" ? Math.round(value0 * 1000) / 1000 : value0;
       const input = body.querySelector<HTMLInputElement>(`.fw-fx-params input[data-param=${param}]`);
       if (!input) continue;
-      const value = String(Math.round(Math.min(Number(input.max), Math.max(Number(input.min), hz))));
+      const clamped = Math.min(Number(input.max), Math.max(Number(input.min), hz));
+      const value = String(param === "from" || param === "to" ? clamped : Math.round(clamped));
       if (input.value !== value) {
         input.value = value;
         input.dispatchEvent(new Event("input", { bubbles: true }));
