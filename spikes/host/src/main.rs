@@ -17,9 +17,41 @@ use clap_sys::host::clap_host;
 use clap_sys::process::{clap_process, CLAP_PROCESS_ERROR};
 use clap_sys::version::CLAP_VERSION;
 
+use vst3::Steinberg::Vst::{
+    AudioBusBuffers, AudioBusBuffers__type0, BusDirections_, IAudioProcessor, IAudioProcessorTrait, IComponent, IComponentTrait, IHostApplication, IHostApplicationTrait, MediaTypes_, ProcessData,
+    ProcessModes_, ProcessSetup, SpeakerArr, String128, SymbolicSampleSizes_,
+};
+use vst3::Steinberg::{kNotImplemented, kResultOk, tresult, FUnknown, IPluginBaseTrait, IPluginFactory, IPluginFactoryTrait, PClassInfo, TUID};
+use vst3::{Class, ComPtr, ComWrapper, Interface};
+
+struct HostApplication;
+
+impl Class for HostApplication {
+    type Interfaces = (IHostApplication,);
+}
+
+impl IHostApplicationTrait for HostApplication {
+    unsafe fn getName(&self, name: *mut String128) -> tresult {
+        let name = &mut *name;
+        let text: Vec<u16> = "formwav".encode_utf16().collect();
+        name[..text.len()].copy_from_slice(&text);
+        name[text.len()] = 0;
+        kResultOk
+    }
+
+    unsafe fn createInstance(&self, _cid: *mut TUID, _iid: *mut TUID, obj: *mut *mut c_void) -> tresult {
+        *obj = ptr::null_mut();
+        kNotImplemented
+    }
+}
+
 const RATE: f64 = 48_000.0;
 const FRAMES: usize = 4_800;
 const BLOCKS: usize = 10;
+
+fn blocks() -> usize {
+    std::env::var("FWHOST_BLOCKS").ok().and_then(|v| v.parse().ok()).unwrap_or(BLOCKS)
+}
 
 fn test_signal() -> [Vec<f32>; 2] {
     let amp = 10f32.powf(-12.0 / 20.0);
@@ -116,7 +148,7 @@ fn run_clap(path: &str) -> Result<(), String> {
         // carry latency, so the first block is reported beside the last, settled one.
         let mut status = CLAP_PROCESS_ERROR + 1;
         let mut first_db = 0.0;
-        for block in 0..BLOCKS {
+        for block in 0..blocks() {
             let process = clap_process {
                 steady_time: (block * FRAMES) as i64,
                 frames_count: FRAMES as u32,
@@ -146,11 +178,114 @@ fn run_clap(path: &str) -> Result<(), String> {
     }
 }
 
+fn vst3_binary(path: &str) -> Result<std::path::PathBuf, String> {
+    let bundle = std::path::Path::new(path);
+    if bundle.is_file() {
+        return Ok(bundle.to_path_buf());
+    }
+    let dir = bundle.join("Contents").join(format!("{}-linux", std::env::consts::ARCH));
+    std::fs::read_dir(&dir)
+        .map_err(|e| format!("{} is not a VST3 bundle with a Linux binary: {e}", path))?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| p.extension().is_some_and(|x| x == "so"))
+        .ok_or_else(|| format!("no .so in {}", dir.display()))
+}
+
+fn run_vst3(path: &str) -> Result<(), String> {
+    unsafe {
+        let binary = vst3_binary(path)?;
+        let lib = libloading::os::unix::Library::new(&binary).map_err(|e| format!("could not load {}: {e}", binary.display()))?;
+        let handle = lib.into_raw();
+        let lib = libloading::os::unix::Library::from_raw(handle);
+        if let Ok(entry) = lib.get::<unsafe extern "C" fn(*mut c_void) -> bool>(b"ModuleEntry\0") {
+            if !entry(handle) {
+                return Err("the module refused to enter".into());
+            }
+        }
+        let get_factory = lib.get::<unsafe extern "C" fn() -> *mut IPluginFactory>(b"GetPluginFactory\0").map_err(|e| format!("no GetPluginFactory: {e}"))?;
+        let factory = ComPtr::from_raw(get_factory()).ok_or("GetPluginFactory returned nothing")?;
+        let classes = factory.countClasses();
+        let mut found: Option<(TUID, String)> = None;
+        for index in 0..classes {
+            let mut info: PClassInfo = std::mem::zeroed();
+            if factory.getClassInfo(index, &mut info) == kResultOk && CStr::from_ptr(info.category.as_ptr()).to_bytes() == b"Audio Module Class" {
+                found = Some((info.cid, CStr::from_ptr(info.name.as_ptr()).to_string_lossy().into_owned()));
+                break;
+            }
+        }
+        let (cid, name) = found.ok_or("the module holds no audio effect")?;
+        let mut obj: *mut c_void = ptr::null_mut();
+        if factory.createInstance(cid.as_ptr(), IComponent::IID.as_ptr() as *const c_char, &mut obj) != kResultOk || obj.is_null() {
+            return Err("the factory would not create the component".into());
+        }
+        let component = ComPtr::from_raw(obj as *mut IComponent).ok_or("no component")?;
+        let host = ComWrapper::new(HostApplication);
+        let context = host.to_com_ptr::<IHostApplication>().ok_or("host context")?;
+        if component.initialize(context.as_ptr() as *mut FUnknown) != kResultOk {
+            return Err("the component would not initialise".into());
+        }
+        let processor = component.cast::<IAudioProcessor>().ok_or("the component is not an audio processor")?;
+        let ports = (component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32) as u32, component.getBusCount(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32) as u32);
+        let mut ins = [SpeakerArr::kStereo];
+        let mut outs = [SpeakerArr::kStereo];
+        processor.setBusArrangements(ins.as_mut_ptr(), 1, outs.as_mut_ptr(), 1);
+        component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32, 0, 1);
+        component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32, 0, 1);
+        let mut setup = ProcessSetup { processMode: ProcessModes_::kRealtime as i32, symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32, maxSamplesPerBlock: FRAMES as i32, sampleRate: RATE };
+        if processor.setupProcessing(&mut setup) != kResultOk || component.setActive(1) != kResultOk {
+            return Err("the processor would not set up or activate".into());
+        }
+        processor.setProcessing(1);
+        let input = test_signal();
+        let mut output = [vec![0f32; FRAMES], vec![0f32; FRAMES]];
+        let mut in_ptrs = [input[0].as_ptr() as *mut f32, input[1].as_ptr() as *mut f32];
+        let mut out_ptrs = [output[0].as_mut_ptr(), output[1].as_mut_ptr()];
+        let mut in_bus = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: AudioBusBuffers__type0 { channelBuffers32: in_ptrs.as_mut_ptr() } };
+        let mut out_bus = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: AudioBusBuffers__type0 { channelBuffers32: out_ptrs.as_mut_ptr() } };
+        let mut ok = true;
+        let mut first_db = 0.0;
+        for block in 0..blocks() {
+            let mut data = ProcessData {
+                processMode: ProcessModes_::kRealtime as i32,
+                symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
+                numSamples: FRAMES as i32,
+                numInputs: 1,
+                numOutputs: 1,
+                inputs: &mut in_bus,
+                outputs: &mut out_bus,
+                inputParameterChanges: ptr::null_mut(),
+                outputParameterChanges: ptr::null_mut(),
+                inputEvents: ptr::null_mut(),
+                outputEvents: ptr::null_mut(),
+                processContext: ptr::null_mut(),
+            };
+            ok &= processor.process(&mut data) == kResultOk;
+            if block == 0 {
+                first_db = (rms_db(&output[0]) + rms_db(&output[1])) / 2.0;
+            }
+        }
+        eprintln!("fwhost: first block {first_db:.2} dB RMS out, last block below");
+        processor.setProcessing(0);
+        component.setActive(0);
+        component.terminate();
+        drop(processor);
+        drop(component);
+        drop(factory);
+        if let Ok(exit) = lib.get::<unsafe extern "C" fn() -> bool>(b"ModuleExit\0") {
+            exit();
+        }
+        let id: String = cid.iter().map(|b| format!("{:02X}", *b as u8)).collect();
+        report("vst3", &id, &name, classes as u32, ports, ok, &input, &output);
+        Ok(())
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let result = match (args.get(1).map(String::as_str), args.get(2)) {
         (Some("clap"), Some(path)) => run_clap(path),
-        _ => Err("usage: fwhost clap <plugin.clap>".into()),
+        (Some("vst3"), Some(path)) => run_vst3(path),
+        _ => Err("usage: fwhost clap <plugin.clap> | fwhost vst3 <plugin.vst3>".into()),
     };
     if let Err(message) = result {
         eprintln!("fwhost: {message}");
