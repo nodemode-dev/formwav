@@ -103,6 +103,7 @@ FORMWAV_CHAINS = {
     "mid-side-encode": "stereotools=mode=lr>ms",
     "mid-side-decode": "stereotools=mode=ms>lr",
     "peak-normalize": "",
+    "paulstretch": "",
     "loudness-streaming": "loudnorm=I=-14:TP=-1:LRA=11",
     "loudness-broadcast": "loudnorm=I=-23:TP=-2:LRA=15",
     "exciter": "aexciter=amount=2",
@@ -129,7 +130,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
-    ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("ramp", "Ramp tempo and pitch...")]),
+    ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("paulstretch", "Paulstretch..."), ("ramp", "Ramp tempo and pitch...")]),
     ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
@@ -183,6 +184,10 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "pitch-up-semitone": ({"semitones": ("Pitch", -12, 12, 1, "st")}, lambda v: f"rubberband=pitch={2 ** (v['semitones'] / 12):.6f}"),
     "speed-faster": ({"percent": ("Speed", -50, 100, 10, "%")}, lambda v: f"aresample=48000,asetrate={round(48000 * (1 + v['percent'] / 100))},aresample=48000"),
     "extreme-stretch": ({"factor": ("Stretch", 1.5, 10, 4, "x")}, lambda v: f"rubberband=tempo={1 / v['factor']:.5f}"),
+    "paulstretch": ({"factor": ("Stretch", 1, 100, 8, "x"), "resolution": ("Time resolution", 0.02, 2, 0.25, "s")}, None),
+    # RX-04's amount: the processed channels blended with the untouched ones; 100% is the fixed chain these replaced
+    "center-extract": ({"amount": ("Amount", 0, 100, 100, "%")}, lambda v: f"pan=stereo|c0={1 - v['amount'] / 200:.6f}*c0+{v['amount'] / 200:.6f}*c1|c1={v['amount'] / 200:.6f}*c0+{1 - v['amount'] / 200:.6f}*c1"),
+    "center-remove": ({"amount": ("Amount", 0, 100, 100, "%")}, lambda v: f"pan=stereo|c0=c0-{v['amount'] / 100:.6f}*c1|c1=c1-{v['amount'] / 100:.6f}*c0"),
     "truncate-silence": ({"threshold": ("Below", -80, -20, -45, "dB"), "seconds": ("Longer than", 0.1, 5, 0.5, "s")}, lambda v: f"silenceremove=stop_periods=-1:stop_duration={v['seconds']:.2f}:stop_threshold={v['threshold']:.1f}dB"),
     "denoise": ({"floor": ("Noise floor", -80, -20, -25, "dB")}, lambda v: f"afftdn=nf={v['floor']:.1f}"),
     "de-ess-strong": ({"intensity": ("Intensity", 0, 100, 80, "%")}, lambda v: f"deesser=i={v['intensity'] / 100:.2f}:m=0.5:f=0.5"),
@@ -282,7 +287,7 @@ def _controls(key: str) -> list[dict]:
 
 #: Effects whose output does not line up sample for sample with the source (length or order changes), so they apply to a
 #: whole clip only, never to a range inside one.
-RETIMING = {"tempo-faster", "tempo-slower", "stretch-rhythmic", "speed-faster", "extreme-stretch", "truncate-silence", "reverse", "ramp"}
+RETIMING = {"tempo-faster", "tempo-slower", "stretch-rhythmic", "speed-faster", "extreme-stretch", "paulstretch", "truncate-silence", "reverse", "ramp"}
 
 
 def _ramp_chain(v: dict[str, float], duration: float, steps: int = 100) -> str:
@@ -601,6 +606,44 @@ def _dialogue_contour(x, rate: int, v: dict):
     return _rubberband_pitch(x, rate, 2**shift, step, "Dialogue contour", formants=True)
 
 
+def _paulstretch(x, rate: int, v: dict):
+    """Paulstretch (AU-B13), written from the published algorithm (Nasca's; no code taken): windows of the source,
+    `resolution` seconds long, are read at 1/`factor` of the output's pace, each spectrum's magnitudes kept and its
+    phases randomised (one set for all channels, so the stereo image holds), and the frames overlap-added at a quarter
+    window with a Hann window; the output is normalised for the windows' overlap and to the source's level. A longer
+    window smears more (smoother, less defined); the random phases are seeded, so the same input gives the same
+    output. Output is limited to ten minutes."""
+    import numpy as np
+
+    factor, win = float(v["factor"]), max(64, int(v["resolution"] * rate) // 4 * 4)
+    frames, channels = x.shape
+    total = int(round(frames * factor))
+    if total > 600 * rate:
+        raise media.MediaError(f"stretched {factor:g} times this clip would run {total / rate / 60:.1f} minutes; Paulstretch keeps its output under 10")
+    hann = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(win) / win)
+    hop_out = win // 4
+    hop_in = hop_out / factor
+    source = np.vstack([x.astype(np.float64), np.zeros((win, channels))])
+    out = np.zeros((total + win, channels), dtype=np.float64)
+    overlap = np.zeros(total + win)
+    rng = np.random.default_rng(1)
+    pos, at = 0.0, 0
+    while at < total:
+        i = min(int(pos), frames)
+        spectrum = np.fft.rfft(source[i : i + win] * hann[:, None], axis=0)
+        phases = np.exp(2j * np.pi * rng.random(spectrum.shape[0]))[:, None]
+        out[at : at + win] += np.fft.irfft(np.abs(spectrum) * phases, n=win, axis=0) * hann[:, None]
+        overlap[at : at + win] += hann**2
+        pos += hop_in
+        at += hop_out
+    y = out[:total] / np.sqrt(np.maximum(overlap[:total], 1e-3))[:, None]
+    level_in = float(np.sqrt(np.mean(x.astype(np.float64) ** 2)))
+    level_out = float(np.sqrt(np.mean(y**2)))
+    if level_out > 1e-12:
+        y *= level_in / level_out
+    return y.astype(np.float32)
+
+
 def _peak_normalize(x, rate: int, v: dict):
     """Audacity's Normalize: each channel's DC offset removed first when asked (its mean subtracted), then the peak
     brought to the target, the channels together (their balance kept) or each to the target on its own."""
@@ -620,7 +663,7 @@ def _peak_normalize(x, rate: int, v: dict):
     return (y * gains).astype(np.float32)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize}
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:
