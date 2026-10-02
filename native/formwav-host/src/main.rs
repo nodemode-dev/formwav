@@ -538,11 +538,11 @@ fn vst3_binary(path: &str) -> Result<std::path::PathBuf, String> {
     if bundle.is_file() {
         return Ok(bundle.to_path_buf());
     }
-    let dir = bundle.join("Contents").join(format!("{}-linux", std::env::consts::ARCH));
+    let dir = if cfg!(target_os = "macos") { bundle.join("Contents").join("MacOS") } else { bundle.join("Contents").join(format!("{}-linux", std::env::consts::ARCH)) };
     std::fs::read_dir(&dir)
         .map_err(|e| format!("{} is not a VST3 bundle with a Linux binary: {e}", path))?
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .find(|p| p.extension().is_some_and(|x| x == "so"))
+        .find(|p| if cfg!(target_os = "macos") { p.is_file() } else { p.extension().is_some_and(|x| x == "so") })
         .ok_or_else(|| format!("no .so in {}", dir.display()))
 }
 

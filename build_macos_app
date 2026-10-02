@@ -42,6 +42,10 @@ TRIPLE=$(rustc -Vv | awk '/^host:/ {print $2}')
 mkdir -p src-tauri/binaries
 cp backend/dist/formwav-engine "src-tauri/binaries/formwav-engine-$TRIPLE"
 echo "sidecar: src-tauri/binaries/formwav-engine-$TRIPLE"
+# The plugin host runs beside the engine (one process per plugin job); the shell tells the engine where it is.
+cargo build --release --manifest-path native/formwav-host/Cargo.toml
+cp native/formwav-host/target/release/fwhost "src-tauri/binaries/fwhost-$TRIPLE"
+echo "sidecar: src-tauri/binaries/fwhost-$TRIPLE"
 
 say "Generating app icons"
 cargo tauri icon src-tauri/icons/icon.png

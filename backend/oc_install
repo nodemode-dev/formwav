@@ -15,6 +15,8 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 1
 fi
 maturin develop --release -m ../native/formwav-dsp/Cargo.toml
+# The plugin host (CLAP and VST3 as effects), run by the engine as its own process; found in native/formwav-host/target.
+cargo build --release --manifest-path ../native/formwav-host/Cargo.toml
 deactivate
 # formwav's MCP server lives in its own venv: the MCP SDK needs a newer Starlette than the engine's FastAPI allows.
 python3 -m venv formwav_mcp/venv

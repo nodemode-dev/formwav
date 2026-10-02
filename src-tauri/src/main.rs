@@ -65,6 +65,8 @@ fn main() {
                 .sidecar("formwav-engine")
                 .expect("the engine sidecar is bundled")
                 .env("FORMWAV_PORT", "0")
+                // Bundled binaries sit beside the app's executable (Contents/MacOS on macOS): the plugin host is there.
+                .env("FORMWAV_HOST_BIN", std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(if cfg!(windows) { "fwhost.exe" } else { "fwhost" }))).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default())
                 .env("FORMWAV_EXIT_WITH_STDIN", "1")
                 .spawn()
                 .expect("the formwav engine failed to spawn");
