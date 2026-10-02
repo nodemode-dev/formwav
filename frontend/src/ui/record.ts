@@ -33,6 +33,25 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       latencyField.setAttribute("data-storage", "none");
     }
   });
+  // Punch and roll, lead-in recording (AU-19): recording rolls this long before the punch point, or before the
+  // playhead, so the performer hears the lead-in; only what follows that point is kept
+  const prerollField = host.querySelector<HTMLInputElement>("[data-preroll]");
+  const PREROLL_KEY = "formwav.prerollSeconds";
+  const prerollSeconds = (): number => Math.min(10, Math.max(0, Number(prerollField?.value) || 0));
+  try {
+    const saved = localStorage.getItem(PREROLL_KEY);
+    if (prerollField && saved !== null && prerollField.value !== saved) prerollField.value = saved;
+  } catch {
+    prerollField?.setAttribute("data-storage", "none");
+  }
+  prerollField?.addEventListener("change", () => {
+    if (prerollField.value !== String(prerollSeconds())) prerollField.value = String(prerollSeconds());
+    try {
+      localStorage.setItem(PREROLL_KEY, prerollField.value);
+    } catch {
+      prerollField.setAttribute("data-storage", "none");
+    }
+  });
 
   const meter = document.createElement("div");
   meter.className = "fw-meter";
@@ -94,6 +113,8 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
     for (const x of extras) if (x.trackId === trackId) x.rec.setMonitor(on);
   });
   let punchRange: { start: number; end: number } | null = null;
+  /** With a pre-roll and no punch or loop range: the frame where the kept take begins (the playhead at Record). */
+  let leadIn: number | null = null;
   let loopRange: { start: number; end: number } | null = null;
   let lastPosition = 0;
 
@@ -130,14 +151,23 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       const position = engine.get("transport").positionSamples;
       punchRange = punchEnabled() && armed && doc.loop && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
       loopRange = !punchRange && doc.loop?.enabled && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
-      lastPosition = position;
-      active = await startRecording(player, position, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false);
+      // the roll: playback and capture start the pre-roll before the punch point (or the playhead); the take keeps
+      // only the punch range, or with no punch range only what follows the playhead (lead-in recording)
+      const roll = Math.round(prerollSeconds() * doc.sampleRate);
+      const recordAt = punchRange ? punchRange.start : position;
+      const rollFrom = roll > 0 ? Math.max(0, recordAt - roll) : position;
+      leadIn = roll > 0 && !punchRange && !loopRange ? recordAt : null;
+      // startRecording plays from the player's current position and only labels the take with the one it is given:
+      // the player must be at the roll point first, or the label and the audio disagree
+      if (rollFrom !== position) player.seek(rollFrom);
+      lastPosition = rollFrom;
+      active = await startRecording(player, rollFrom, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false);
       const missed: string[] = [];
       for (const id of armedTracks().slice(1)) {
         const track = doc.tracks.find((t) => t.id === id);
         if (!track) continue;
         try {
-          extras.push({ trackId: id, rec: await startRecording(player, position, laneLevel(id), trackInput(id), trackMonitor(id), false) });
+          extras.push({ trackId: id, rec: await startRecording(player, rollFrom, laneLevel(id), trackInput(id), trackMonitor(id), false) });
           addRecordingTrack(id);
         } catch {
           missed.push(track.name);
@@ -193,6 +223,8 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       }
       const punch = punchRange;
       punchRange = null;
+      const lead = leadIn;
+      leadIn = null;
       const loop = loopRange;
       loopRange = null;
       const lag = Math.round((latencyMs() / 1000) * take.sampleRate);
@@ -211,6 +243,12 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
           const to = Math.min(frames, punch.end - origin);
           if (to <= from) return "Stopped before the punch range; nothing was recorded";
           channels = channels.map((c) => c.slice(from, to));
+          at = origin + from;
+        } else if (lead !== null) {
+          // lead-in recording: the pre-roll was heard, not kept; the take begins at the playhead where Record was pressed
+          const from = Math.max(0, lead - origin);
+          if (from >= frames) return "Stopped during the pre-roll; nothing was recorded";
+          channels = channels.map((c) => c.subarray(from));
           at = origin + from;
         }
         takes++;

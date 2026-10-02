@@ -76,6 +76,7 @@ function shellHtml(): string {
         <output class="fw-clock" role="button" tabindex="0" data-mode="time" title="Click to switch the clock between time and timecode at 24, 25 or 30 frames per second">00:00:00.000</output>
         <label class="fw-speed" title="Play at speed: faster or slower, pitch following (playback only)">Speed <select data-speed aria-label="Playback speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
         <label class="fw-speed" title="Recording latency compensation: each take lands this many milliseconds earlier, undoing the round trip from playback to your microphone. Measure it once with a loopback cable (the Measure button beside this field) and type it here; 0 leaves takes where they were recorded">Latency <input type="number" data-latency min="0" max="500" step="1" value="0" aria-label="Recording latency compensation in milliseconds"> ms</label>
+        <label class="fw-speed" title="Pre-roll: recording rolls this long before the punch point (or the playhead) so you hear the lead-in; only what follows that point is kept">Pre-roll <input type="number" data-preroll min="0" max="10" step="0.5" value="0" aria-label="Pre-roll in seconds"> s</label>
       </footer>
     </section>
     <div class="fw-pane-divider" data-side="inspector" role="separator" aria-orientation="vertical" aria-label="Resize the Inspector pane" tabindex="0"></div>
