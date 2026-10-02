@@ -158,8 +158,8 @@ function schedulePaint(canvas: HTMLCanvasElement, mediaId: string): void {
     .catch(() => undefined);
 }
 
-const GAIN_TOP_DB = 12;
-const GAIN_SPAN_DB = 48;
+export const GAIN_TOP_DB = 12;
+export const GAIN_SPAN_DB = 48;
 
 function gainFraction(db: number): number {
   return Math.min(1, Math.max(0, (GAIN_TOP_DB - db) / GAIN_SPAN_DB));

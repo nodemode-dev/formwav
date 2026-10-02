@@ -315,3 +315,9 @@
 .fw-field input[type="number"]::-webkit-outer-spin-button { margin: 0; appearance: none; -webkit-appearance: none; }
 .fw-field input:disabled { opacity: 0.4; }
 .fw-field output { font-family: var(--font-mono); color: var(--text-secondary); text-align: end; }
+
+/* Clip envelope points on the clip (AU-12): handles over the envelope line, drag to move, Alt-click to remove */
+.fw-env-points { position: absolute; inset: 0; pointer-events: none; }
+.fw-env-points[hidden] { display: none; }
+.fw-env-point { position: absolute; inline-size: 9px; block-size: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--accent-color); border: 1.5px solid var(--surface-0); pointer-events: auto; cursor: grab; touch-action: none; }
+.fw-env-point:active { cursor: grabbing; }

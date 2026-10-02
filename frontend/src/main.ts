@@ -41,6 +41,7 @@ import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
 import { mountPianoRoll } from "./ui/piano-roll";
+import { mountEnvelopeEdit } from "./ui/envelope-edit";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
@@ -103,6 +104,7 @@ if (host) {
   mountTrackMeters(host, engine, player);
   mountMixer(host, engine, player);
   mountPianoRoll(host, engine);
+  mountEnvelopeEdit(host, engine);
   mountMediaPane(host, engine);
   mountModelsPane(host, engine);
   mountInspector(host, engine);
