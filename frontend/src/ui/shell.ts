@@ -82,6 +82,7 @@ function shellHtml(): string {
     <aside class="fw-pane fw-pane-inspector" aria-label="Inspector">
       <div class="fw-pane-header"><span class="fw-pane-title">Inspector</span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
       <div class="fw-pane-body fw-inspector-body"></div>
+      <div class="fw-insp-strip"><button type="button" class="fw-panel-toggle fw-strip-expand" data-pane="inspector" aria-label="Show the Inspector" title="Show the Inspector">${fvIcon("collapseLeft", 16)}</button><span class="fw-strip-label" aria-hidden="true">Inspector</span></div>
     </aside>
   </div>
   <footer class="fw-status" aria-label="Status">

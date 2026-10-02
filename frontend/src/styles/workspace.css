@@ -39,7 +39,7 @@
 .fw-workspace[data-media="off"] { --fw-media-w: 0px; --fw-media-gap: 0px; }
 .fw-workspace[data-inspector="off"] { --fw-inspector-w: 0px; --fw-inspector-gap: 0px; }
 .fw-workspace[data-media="off"] :is(.fw-pane-media, .fw-pane-divider[data-side="media"]),
-.fw-workspace[data-inspector="off"] :is(.fw-pane-inspector, .fw-pane-divider[data-side="inspector"]) { display: none; }
+.fw-workspace[data-inspector="off"] .fw-pane-divider[data-side="inspector"] { display: none; }
 
 /* formcut's pane dividers (containers.css .pane-divider). */
 .fw-pane-divider { border-radius: 6px; cursor: col-resize; touch-action: none; transition: background 120ms ease; }

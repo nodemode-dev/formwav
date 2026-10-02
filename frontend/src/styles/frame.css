@@ -225,3 +225,17 @@
 .fw-dock-body > :is(.fw-term, .fw-mixer):not([hidden]) { block-size: 100%; max-block-size: none; margin: 0; border: 0; border-radius: 0; }
 .fw-dock .fw-term-title { display: none; }
 .fw-dock-body > .fw-mixer:not([hidden]) { overflow: auto; }
+
+/* The side column's strip (shell-composer): a hidden Inspector stays a 46 px strip with an expand button and its
+ * name, so it can be found again where it was rather than only from the title bar. */
+:root { --fw-strip-w: 46px; }
+.fw-insp-strip { display: none; }
+.fw-workspace[data-inspector="off"] .fw-pane-inspector > :not(.fw-insp-strip) { display: none; }
+.fw-workspace[data-inspector="off"] .fw-insp-strip { display: flex; flex-direction: column; align-items: center; gap: 12px; padding-block-start: 8px; border-inline-start: 1px solid var(--line-0); block-size: 100%; }
+.fw-strip-expand { display: inline-grid; place-items: center; inline-size: 34px; block-size: 34px; padding: 0; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--text-secondary); }
+.fw-strip-expand:hover { border-color: var(--line-2); background: var(--surface-raised); color: var(--text-primary); }
+.fw-strip-label { writing-mode: vertical-rl; font-size: var(--fs-11); font-weight: 600; letter-spacing: 0.6px; text-transform: uppercase; color: var(--text-muted); }
+
+/* The selected track (the one holding the selected clip) takes the active card: an accent wash over its header. */
+.fw-lane:has(.fw-clip[aria-selected="true"]) .fw-lane-head { background: linear-gradient(90deg, color-mix(in srgb, var(--accent-color) 16%, var(--surface-1)), var(--surface-1) 85%); }
+.fw-lane:has(.fw-clip[aria-selected="true"]) .fw-lane-name { color: var(--accent-ink); }

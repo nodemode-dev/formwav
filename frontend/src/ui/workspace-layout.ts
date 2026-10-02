@@ -54,7 +54,7 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
     layout = { ...layout, inspector: clamp("inspector", layout.inspector) };
     // The width variables are inline, which outranks the stylesheet, so a hidden pane is zeroed here.
     setVar("--fw-media-w", shown("media") ? `${layout.media}px` : "0px");
-    setVar("--fw-inspector-w", shown("inspector") ? `${layout.inspector}px` : "0px");
+    setVar("--fw-inspector-w", shown("inspector") ? `${layout.inspector}px` : "var(--fw-strip-w, 46px)");
     for (const side of ["media", "inspector"] as Side[]) {
       const state = shown(side) ? "on" : "off";
       if (ws.dataset[side] !== state) ws.dataset[side] = state;
