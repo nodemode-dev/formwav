@@ -18,6 +18,7 @@ import { mountLoop } from "./ui/loop";
 import { mountExport } from "./ui/export";
 import { mountNormalize } from "./ui/normalize";
 import { mountTerminal } from "./ui/terminal-pane";
+import { mountAgent } from "./ui/agent-pane";
 import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
 import { mountOutputMeter, mountTrackMeters } from "./ui/meter";
@@ -73,6 +74,7 @@ if (host) {
   mountExport(host, engine);
   mountNormalize(host, engine);
   mountTerminal(host);
+  mountAgent(host, engine);
   mountRuler(host, engine, player);
   mountGrid(host);
   mountOutputMeter(host, player);
