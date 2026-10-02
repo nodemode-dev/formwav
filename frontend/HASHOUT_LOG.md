@@ -1766,3 +1766,10 @@ A Models choice regenerates the time selection: the clip under it is found, the 
 - logged: v1.25.0 (in progress) · 2026-10-01
 
 The engine now refuses a POST, PUT, PATCH or DELETE under /api without `x-formwav-local: 1` (backend app/core/security.py). Every request this app makes goes through fetch (no XMLHttpRequest, beacons or event streams: 60 call sites), so one wrapper installed before any mount adds the header to its own origin's mutating /api requests and leaves everything else untouched. Verified: the record and play harnesses (imports, edits, renders through the app) pass, the record harness's layout shift 0.0036, no page errors.
+
+### src/ui/projects.ts · the session the desktop app was asked to open
+- refers-to: src/ui/projects.ts :: the ?open= handling at the end of `mountProjects`
+- kind: explainer
+- logged: v1.25.0 (in progress) · 2026-10-01
+
+The desktop shell passes a .fmw the user opened with formwav as ?open=<path> on the page's address (the page has no Tauri API); at start-up the address is cleaned (a reload does not open it again) and the file opened through the engine, loaded like a saved session with its name in the name field. Verified in Chromium: opened with ?open= on an exported session, its Music and Voice tracks loaded, the name field read "My Take (2)" (the right copy, as a different file had the plain name), the address came back to /, no page errors.

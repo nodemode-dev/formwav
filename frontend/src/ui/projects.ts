@@ -239,4 +239,22 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       void show();
     }
   });
+
+  // The desktop app hands over a .fmw the user opened with it as ?open=<path> (src-tauri main.rs); the address is
+  // cleaned first so a reload does not open it again.
+  const handed = new URLSearchParams(location.search).get("open");
+  if (handed) {
+    history.replaceState(null, "", location.pathname);
+    void withNotice(`Opening ${handed.split(/[\\/]/).pop()}`, async () => {
+      const res = await fetch("/api/projects/open-file", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: handed }) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) return `Could not open ${handed}: ${typeof out.detail === "string" ? out.detail : res.status}`;
+      player.stop();
+      engine.loadDocument(out.document);
+      lastSaved = engine.get("document");
+      known = { name: out.name, revision: out.revision };
+      if (nameField && nameField.value !== out.name) nameField.value = out.name;
+      return `Opened ${out.name}`;
+    });
+  }
 }
