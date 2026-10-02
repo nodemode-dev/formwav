@@ -90,6 +90,7 @@ function shellHtml(): string {
     <span class="fw-st-rate" title="The session's sample rate"></span>
     <span class="fw-st-tracks"></span>
     <span class="fw-st-length" title="The session's length"></span>
+    <label class="fw-st-output" title="Where playback is heard: the browser's own audio, or the engine's native output on a device">Output <select data-output aria-label="Output"></select></label>
     <span class="fw-st-hint"></span>
   </footer>
 </div>`;

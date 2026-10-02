@@ -2,6 +2,7 @@ import type { Engine, SessionDoc } from "../engine";
 import { FADE_SHAPES, type TrackFx } from "../engine/document";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
+import { NativeNode, nativeChoice } from "./native-node";
 
 const CORE_URL = "/core/formwav_dsp.wasm";
 
@@ -269,6 +270,12 @@ function streamInfo(doc: SessionDoc, mediaId: string, position: number): StreamI
 
 async function loadInto(node: AudioWorkletNode, sources: Map<string, number>, mediaId: string, nextId: () => number, info?: StreamInfo, wait = false): Promise<void> {
   if (sources.has(mediaId)) return;
+  if ((node as unknown) instanceof NativeNode) {
+    const id = nextId();
+    await (node as unknown as NativeNode).loadSource(id, mediaId);
+    sources.set(mediaId, id);
+    return;
+  }
   if (info && info.frames > 60 * info.rate) return streamInto(node, sources, mediaId, nextId, info, wait);
   const res = await fetch(`/api/media/${mediaId}/audio`);
   if (!res.ok) throw new Error(`audio request answered ${res.status}`);
@@ -280,6 +287,8 @@ async function loadInto(node: AudioWorkletNode, sources: Map<string, number>, me
 }
 
 async function makeNode(ctx: BaseAudioContext, core: ArrayBuffer): Promise<AudioWorkletNode> {
+  const device = nativeChoice();
+  if (device !== null) return (await NativeNode.open(ctx.sampleRate, device)) as unknown as AudioWorkletNode;
   await ctx.audioWorklet.addModule(workletUrl);
   const node = new AudioWorkletNode(ctx, "formwav-player", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
   node.connect(ctx.destination);
@@ -392,6 +401,17 @@ export class Player {
   };
 
   private starting: Promise<AudioWorkletNode> | null = null;
+
+  /** Drops the current output (worklet or native) so the next play builds the one now chosen; the session is untouched. */
+  async resetOutput(): Promise<void> {
+    if (this.node) send(this.node, { type: "stop" });
+    if ((this.node as unknown) instanceof NativeNode) (this.node as unknown as NativeNode).close();
+    if (this.ctx) await this.ctx.close();
+    this.ctx = null;
+    this.node = null;
+    this.sources.clear();
+    this.pending.clear();
+  }
 
   private ensure(): Promise<AudioWorkletNode> {
     const rate = this.engine.get("document").sampleRate;

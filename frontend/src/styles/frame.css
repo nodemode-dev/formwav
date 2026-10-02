@@ -239,3 +239,7 @@
 /* The selected track (the one holding the selected clip) takes the active card: an accent wash over its header. */
 .fw-lane:has(.fw-clip[aria-selected="true"]) .fw-lane-head { background: linear-gradient(90deg, color-mix(in srgb, var(--accent-color) 16%, var(--surface-1)), var(--surface-1) 85%); }
 .fw-lane:has(.fw-clip[aria-selected="true"]) .fw-lane-name { color: var(--accent-ink); }
+
+/* The status bar's Output choice: a compact select in its own slot. */
+.fw-st-output { display: flex; align-items: center; gap: 6px; flex: none; }
+.fw-st-output select { block-size: 20px; max-inline-size: 220px; padding: 0 4px; font-size: var(--fs-11); }
