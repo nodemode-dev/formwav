@@ -1,5 +1,8 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import type { FadeShape, TrackFx } from "../engine/document";
+import { PALETTE } from "../engine/document";
+
+const COLOURS = PALETTE.map((k) => `<option value="${k}">${k[0].toUpperCase()}${k.slice(1)}</option>`).join("");
 import { loadPresets, savePresets, type Preset } from "../io/presets-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { inputDevices, inputSignature, onInputsChanged, refreshInputs, setTrackInput, setTrackMonitor, trackInput, trackMonitor } from "./inputs";
@@ -14,6 +17,7 @@ const BODY = `
   <label class="fw-field"><span>Pitch</span><input type="range" min="-12" max="12" step="1" value="0" data-pitch data-default="0" title="Non-destructive: the original is kept"><output data-pitch-out>0 st</output></label>
   <label class="fw-field"><span>Fade in</span><input type="number" step="0.01" min="0" data-f="fadeIn"><output>s</output></label>
   <label class="fw-field"><span>Fade out</span><input type="number" step="0.01" min="0" data-f="fadeOut"><output>s</output></label>
+  <label class="fw-field"><span>Colour</span><select data-clip-color aria-label="Clip colour"><option value="">The track's</option>${COLOURS}</select><span></span></label>
   <label class="fw-field"><span>Fade curve</span><select data-f="shape"><option value="linear">Linear</option><option value="equal-power">Equal power</option><option value="s-curve">S-curve</option><option value="exponential">Exponential</option></select><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-clip-act="crossfade" title="Fade this clip and the one it overlaps on its track across each other, equal power" disabled>Crossfade overlap</button></div>
   <div class="fw-insp-head">Gain envelope</div>
@@ -54,6 +58,7 @@ const BODY = `
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
+  <label class="fw-field"><span>Colour</span><select data-track-color aria-label="Track colour"><option value="">Green</option>${COLOURS.replace('<option value="green">Green</option>', "")}</select><span></span></label>
   <label class="fw-field"><span>Input</span><select data-track-input aria-label="Input device for recording on this track"><option value="">System default</option></select><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button><label class="fw-sam-opt" title="Hear this track's input through the speakers while it records (software playthrough; a headphone mix avoids feedback)"><input type="checkbox" data-track-monitor> Monitor input</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="delete" title="Delete this track and its clips (undo brings it back)">Delete track</button></div>
@@ -766,8 +771,20 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (nameInput && hit && document.activeElement !== nameInput && nameInput.value !== hit.track.name) nameInput.value = hit.track.name;
     const can = !!overlapOf(doc);
     if (crossBtn && crossBtn.disabled === can) crossBtn.disabled = !can;
+    const trackColor = host.querySelector<HTMLSelectElement>("[data-track-color]");
+    if (trackColor && hit && document.activeElement !== trackColor && trackColor.value !== (hit.track.color ?? "")) trackColor.value = hit.track.color ?? "";
+    const clipColor = host.querySelector<HTMLSelectElement>("[data-clip-color]");
+    if (clipColor && hit && document.activeElement !== clipColor && clipColor.value !== (hit.clip.color ?? "")) clipColor.value = hit.clip.color ?? "";
   };
   engine.subscribe("document", syncTrackControls);
+  host.querySelector("[data-track-color]")?.addEventListener("change", (e) => {
+    const hit = find(engine.get("document"));
+    if (hit) engine.dispatch({ type: "set-track-color", trackId: hit.track.id, color: (e.target as HTMLSelectElement).value });
+  });
+  host.querySelector("[data-clip-color]")?.addEventListener("change", (e) => {
+    const hit = find(engine.get("document"));
+    if (hit) engine.dispatch({ type: "set-clip-color", trackId: hit.track.id, clipId: hit.clip.id, color: (e.target as HTMLSelectElement).value });
+  });
   host.addEventListener("fw-selection", () => queueMicrotask(syncTrackControls));
   nameInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") nameInput.blur();

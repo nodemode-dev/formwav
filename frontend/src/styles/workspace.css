@@ -198,7 +198,9 @@
 .fw-clip-env[data-on="true"] { display: block; }
 .fw-clip-env polyline { fill: none; stroke: var(--accent-color); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 /* Audio clips wear the suite's audio tag (formcut's audio clips are the same green); selection and take states keep their own, more specific rules. */
-.fw-clip { background: var(--fw-audio-shade); border-color: color-mix(in srgb, var(--fw-audio) 45%, transparent); color: var(--fw-audio); }
+.fw-clip { --fw-c: var(--fw-clip-color, var(--fw-lane-color, var(--fw-audio))); background: var(--fw-audio-shade); border-color: color-mix(in srgb, var(--fw-c) 45%, transparent); color: var(--fw-c); }
+/* a coloured track or clip (AU-10): the fill mixes its colour into the surface; the waveform paints in var(--fw-c) */
+.fw-lane[style*="--fw-lane-color"] .fw-clip, .fw-clip[style*="--fw-clip-color"] { background: color-mix(in srgb, var(--fw-c) 20%, var(--surface-0)); }
 /* Track beds alternate between the suite's two working surfaces. */
 .fw-lane-body { background: var(--surface-1); }
 .fw-lane:nth-child(even) .fw-lane-body { background: var(--surface-2); }

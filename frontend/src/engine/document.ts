@@ -31,6 +31,9 @@ export function fadeCurve(x: number, shape: FadeShape | undefined): number {
   }
 }
 
+/** Track and clip colours (AU-10): keys stored in the session, their shades the token sheet's --fw-color-<key>. */
+export const PALETTE: readonly string[] = ["green", "blue", "amber", "red", "violet", "cyan", "pink", "slate"];
+
 /** One note of a note clip, in frames of the clip's media (the instrument's rendering starts at media frame 0). */
 export interface NoteEvent {
   at: number;
@@ -46,6 +49,8 @@ export interface Clip {
   mediaId: string;
   /** A note clip's notes, the truth its media renders (the built-in instrument); absent on audio clips. */
   notes?: readonly NoteEvent[];
+  /** A palette key for this clip alone, over its track's colour; absent follows the track. */
+  color?: string;
   start: number;
   length: number;
   sourceIn: number;
@@ -112,6 +117,8 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
 }
 
 export interface Track {
+  /** A palette key (green, blue, amber, red, violet, cyan, pink, slate) for its header bar and clips; absent is green. */
+  color?: string;
   /** Realtime effects in order (Audacity's realtime stack); bypassed ones are skipped. */
   fx?: TrackFx[];
   /** Volume (dB) and pan automation; when present each replaces the track's static fader or pan. */
@@ -231,6 +238,9 @@ export type Command =
   | { type: "set-region"; regionId: string; start?: number; end?: number; label?: string }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
+  /** A palette key, or "" for the default (green for a track; the track's colour for a clip). */
+  | { type: "set-track-color"; trackId: string; color: string }
+  | { type: "set-clip-color"; trackId: string; clipId: string; color: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
   | { type: "set-track-mute"; trackId: string; mute: boolean }
@@ -676,6 +686,25 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "rename-track": {
       const name = cmd.name.trim();
       return name ? mapTrack(doc, cmd.trackId, (t) => (t.name === name ? t : { ...t, name })) : doc;
+    }
+    case "set-track-color": {
+      const color = PALETTE.includes(cmd.color) ? cmd.color : undefined;
+      return mapTrack(doc, cmd.trackId, (t) => {
+        if (t.color === color) return t;
+        const { color: _old, ...rest } = t;
+        return color ? { ...rest, color } : rest;
+      });
+    }
+    case "set-clip-color": {
+      const color = PALETTE.includes(cmd.color) ? cmd.color : undefined;
+      return mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.map((c) => {
+          if (c.id !== cmd.clipId || c.color === color) return c;
+          const { color: _old, ...rest } = c;
+          return color ? { ...rest, color } : rest;
+        }),
+      }));
     }
     case "set-track-gain":
       return mapTrack(doc, cmd.trackId, (t) => (t.gainDb === cmd.gainDb ? t : { ...t, gainDb: cmd.gainDb }));

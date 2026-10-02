@@ -233,6 +233,15 @@ body.nm-home .nm-canvas-surface { display: none !important; }
   --fw-record: #ff475a;
   --fw-record-shade: #3a1519;
   --fw-now-line: #ff475a;
+  /* track and clip colours (AU-10); green is the audio colour, so an uncoloured track looks as it always did */
+  --fw-color-green: #50e2a5;
+  --fw-color-blue: #5b9dff;
+  --fw-color-amber: #f5b13d;
+  --fw-color-red: #ff6b6b;
+  --fw-color-violet: #a98bff;
+  --fw-color-cyan: #3fd4e0;
+  --fw-color-pink: #ff7ac6;
+  --fw-color-slate: #9aa5b8;
   --z-toast: 3000;
 }
 

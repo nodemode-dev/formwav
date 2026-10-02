@@ -203,6 +203,8 @@ function clipNode(): HTMLElement {
 }
 
 function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number): void {
+  const clipColor = clip.color ? `var(--fw-color-${clip.color})` : "";
+  if (node.style.getPropertyValue("--fw-clip-color") !== clipColor) node.style.setProperty("--fw-clip-color", clipColor);
   const left = `${(clip.start / spp).toFixed(2)}px`;
   const width = `${Math.max(1, clip.length / spp).toFixed(2)}px`;
   if (node.dataset.left !== left) {
@@ -298,6 +300,8 @@ function laneNode(): HTMLElement {
 
 function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: number): void {
   setText(node.querySelector(".fw-lane-name"), track.name);
+  const laneColor = track.color ? `var(--fw-color-${track.color})` : "";
+  if (node.style.getPropertyValue("--fw-lane-color") !== laneColor) node.style.setProperty("--fw-lane-color", laneColor);
   const arm = node.querySelector<HTMLElement>(".fw-arm");
   const armed = String(isArmed(track.id));
   if (arm && arm.getAttribute("aria-pressed") !== armed) arm.setAttribute("aria-pressed", armed);

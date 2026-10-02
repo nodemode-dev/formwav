@@ -24,7 +24,7 @@
   padding: 0 10px 0 14px;
   background: var(--surface-1);
   border-inline-end: 1px solid var(--line-1);
-  box-shadow: inset 3px 0 0 var(--fw-audio);
+  box-shadow: inset 3px 0 0 var(--fw-lane-color, var(--fw-audio));
 }
 .fw-lane-head .fw-lane-name { grid-area: name; font-size: var(--fs-13); font-weight: 600; color: var(--text-primary); }
 .fw-lane-head .fw-lane-meta { grid-area: meta; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
