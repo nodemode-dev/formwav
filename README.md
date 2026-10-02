@@ -65,6 +65,8 @@ The engine reads `backend/.env`, which is never committed; `backend/.env.example
 | `FORMWAV_DATA_DIR` | Where imported media is stored; `backend/data` when unset |
 | `FORMWAV_MAX_IMPORT_MB` | Largest file the engine accepts for import |
 | `FORMWAV_TERMINAL` | `0` turns the embedded terminal off |
+| `ANTHROPIC_API_KEY` | The in-app agent's key (the Agent button); stays in the engine, never sent to the page |
+| `FORMWAV_AGENT_MODEL` | The agent's model; `claude-sonnet-5-5` when unset |
 
 ## Connect an agent (MCP)
 
