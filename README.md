@@ -67,6 +67,14 @@ The engine reads `backend/.env`, which is never committed; `backend/.env.example
 | `FORMWAV_TERMINAL` | `0` turns the embedded terminal off |
 | `ANTHROPIC_API_KEY` | The in-app agent's key (the Agent button); stays in the engine, never sent to the page |
 | `FORMWAV_AGENT_MODEL` | The agent's model; `claude-sonnet-5-5` when unset |
+| `ELEVENLABS_API_KEY` | ElevenLabs speech, sound effects and dubbing in the Models section |
+| `FAL_KEY` | fal models (ACE-Step and others) in the Models section |
+
+## Generate with models
+
+The Models section of the Media pane makes audio with models and puts it on a new track: speech in an ElevenLabs voice, sound effects, a clip dubbed into another language (placed where the clip starts), and music from ACE-Step 1.5 or any other fal model. Put `ELEVENLABS_API_KEY` and `FAL_KEY` in `backend/.env` (they stay in the engine); a provider without its key is listed but off.
+
+Open-weight models run on your own machine: copy `backend/local_models.example.json` to `backend/models/local_models.json` (ignored by git, like the weights) and give each model the command that makes one file. formwav fills `{prompt}`, `{lyrics}`, `{duration}` and `{out}`, runs it, and imports `{out}`. For ACE-Step 1.5, install it from github.com/ACE-Step/ACE-Step-1.5 with its weights and take the script and flags from its README; the example entry shows where they go.
 
 ## Connect an agent (MCP)
 
