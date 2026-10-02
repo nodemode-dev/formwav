@@ -116,6 +116,7 @@ FORMWAV_CHAINS = {
     "spot-heal": "anull",
     "wow-flutter": "anull",
     "pitch-correct": "anull",
+    "dialogue-contour": "anull",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
@@ -129,7 +130,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("ramp", "Ramp tempo and pitch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction...")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -218,6 +219,10 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     ),
     "wow-flutter": (
         {"low": ("Track from", 30, 12000, 500, "Hz"), "high": ("Track to", 30, 12000, 4000, "Hz"), "amount": ("Amount", 0, 100, 100, "%")},
+        lambda v: "anull",
+    ),
+    "dialogue-contour": (
+        {"range": ("Intonation range", 0, 200, 100, "%"), "start": ("Shift at start", -6, 6, 0, "st"), "end": ("Shift at end", -6, 6, 0, "st"), "smooth": ("Smoothing", 0, 500, 80, "ms"), "from": ("From", 0, 86400, 0, "s"), "to": ("To", 0, 86400, 0, "s")},
         lambda v: "anull",
     ),
     "pitch-correct": (
@@ -503,12 +508,7 @@ def _pitch_correct(x, rate: int, v: dict):
     frame's target is the nearest note of the key and scale (chromatic, major or minor), the correction glides to it
     with the Retune speed (0 ms snaps) and is scaled by Amount, and rubberband applies it over time from a command file
     every 10 ms; unvoiced frames glide back to no shift. The length is kept."""
-    import os
-    import tempfile as _tf
-
     import numpy as np
-
-    from .audacity import _wav_bytes
 
     if v["amount"] <= 0:  # no correction asked: the input untouched (rubberband at a ratio of 1 still resynthesises)
         return x.astype(np.float32)
@@ -526,25 +526,36 @@ def _pitch_correct(x, rate: int, v: dict):
     for i, t in enumerate(target):
         acc = alpha * acc + (1 - alpha) * t
         shift[i] = acc
-    ratio = 2 ** (shift * v["amount"] / 100.0)
+    return _rubberband_pitch(x, rate, 2 ** (shift * v["amount"] / 100.0), step, "Pitch correction")
+
+
+def _rubberband_pitch(x, rate: int, ratio, step: float, label: str, formants: bool = False):
+    """`x` shifted in pitch by `ratio` (one value every `step` seconds) through rubberband, the length kept. A command
+    is written only when the ratio has moved by half a cent (100 commands a second throughout left notes uncorrected
+    or overshot); consistency is rubberband's mode for pitch that changes over time, and smooth transients stop it
+    resetting phase inside held notes (its defaults left notes wobbling over 40 to 100 cents); `formants` keeps the
+    voice's formants where they were, for speech."""
+    import os
+    import tempfile as _tf
+
+    import numpy as np
+
+    from .audacity import _wav_bytes
+
     with _tf.TemporaryDirectory() as tmp:
         src, cmd, dst = (os.path.join(tmp, n) for n in ("in.wav", "pitch.cmd", "out.wav"))
         with open(src, "wb") as f:
             f.write(_wav_bytes([x[:, c] for c in range(x.shape[1])], rate))
         with open(cmd, "w") as f:
-            # a command only when the ratio has moved by half a cent: a held note is one command, a glide one every
-            # 10 ms while it moves (100 commands a second throughout left most notes uncorrected or overshot)
             last = None
             for i in range(0, len(ratio), 2):
                 if last is None or abs(1200 * np.log2(ratio[i] / last)) >= 0.5:
                     f.write(f"{i * step:.4f} rubberband pitch {ratio[i]:.6f};\n")
                     last = ratio[i]
-        # consistency is rubberband's mode for pitch that changes over time, and smooth transients stop it resetting
-        # phase inside held notes: with its defaults the same commands left notes wobbling over 40 to 100 cents
-        chain = f"asendcmd=f={cmd},rubberband=tempo=1:pitch=1:pitchq=consistency:transients=smooth"
+        chain = f"asendcmd=f={cmd},rubberband=tempo=1:pitch=1:pitchq=consistency:transients=smooth" + (":formant=preserved" if formants else "")
         done = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", src, "-af", chain, "-c:a", "pcm_f32le", dst], capture_output=True, timeout=900)
         if done.returncode != 0:
-            raise media.MediaError(f"Pitch correction failed: {done.stderr.decode(errors='replace').strip()[-300:]}")
+            raise media.MediaError(f"{label} failed: {done.stderr.decode(errors='replace').strip()[-300:]}")
         raw = np.frombuffer(subprocess.run([media._tool("ffmpeg"), "-v", "error", "-i", dst, "-f", "f32le", "-"], capture_output=True).stdout, dtype="<f4")
     y = raw.reshape(-1, x.shape[1])[: len(x)]
     if len(y) < len(x):
@@ -552,7 +563,42 @@ def _pitch_correct(x, rate: int, v: dict):
     return y.astype(np.float32)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct}
+def _dialogue_contour(x, rate: int, v: dict):
+    """RX's Dialogue Contour: a line's intonation reshaped. Between From and To (the whole clip when To is not after
+    From), the pitch is tracked every 5 ms, its slow contour (the voiced pitch smoothed over Smoothing ms, in octaves)
+    is scaled about its median by Range (0% flat, 100% as it was, 200% twice the movement), and a ramp from Shift at
+    start to Shift at end (semitones) is added; the small fast movements of the voice are kept, unvoiced moments follow
+    the ramp, and rubberband applies the difference with the formants kept where they were. Range 100% with no shift
+    returns the input untouched."""
+    import numpy as np
+
+    if abs(v["range"] - 100) < 1e-9 and abs(v["start"]) < 1e-9 and abs(v["end"]) < 1e-9:
+        return x.astype(np.float32)
+    step, f0 = _f0_track(x.mean(axis=1).astype(np.float64), rate)
+    t = np.arange(len(f0)) * step
+    t0, t1 = float(v["from"]), float(v["to"])
+    if t1 <= t0:
+        t0, t1 = 0.0, len(x) / rate
+    inside = (t >= t0) & (t < t1)
+    voiced = (f0 > 0) & inside
+    shift = np.zeros(len(f0))  # octaves
+    ramp = (v["start"] + (v["end"] - v["start"]) * np.clip((t - t0) / max(t1 - t0, 1e-9), 0, 1)) / 12
+    shift[inside] = ramp[inside]
+    if voiced.sum() >= 4 and abs(v["range"] - 100) > 1e-9:
+        p = np.log2(np.where(voiced, f0, 1.0))
+        idx = np.nonzero(voiced)[0]
+        filled = np.interp(np.arange(len(f0)), idx, p[idx])  # unvoiced gaps bridged for the smoothing
+        k = max(1, int(round(v["smooth"] / 1000 / step)))
+        slow = np.convolve(np.pad(filled, k, mode="edge"), np.ones(2 * k + 1) / (2 * k + 1), mode="same")[k:-k] if k > 1 else filled
+        ref = float(np.median(p[voiced]))
+        shift[voiced] += (v["range"] / 100.0 - 1.0) * (slow[voiced] - ref)
+    # the shift eases in and out over 20 ms at the edges of the span, so the audio outside it is not jolted
+    ease = max(1, int(0.02 / step))
+    shift = np.convolve(np.pad(shift, ease, mode="edge"), np.ones(2 * ease + 1) / (2 * ease + 1), mode="same")[ease:-ease]
+    return _rubberband_pitch(x, rate, 2**shift, step, "Dialogue contour", formants=True)
+
+
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:
