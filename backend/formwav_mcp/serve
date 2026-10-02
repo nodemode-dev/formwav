@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# formwav's MCP server from any working directory (MCP clients launch stdio servers from their own): stdio by default,
+# --http for Streamable HTTP on 127.0.0.1:8061/mcp. Installed by backend/oc_install.
+set -e
+cd "$(dirname "$0")/.."
+exec formwav_mcp/venv/bin/python -m formwav_mcp.server "$@"

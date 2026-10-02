@@ -64,6 +64,21 @@ The engine reads `backend/.env`, which is never committed; `backend/.env.example
 | `FORMWAV_CORS_ORIGINS` | Browser origins allowed to call the engine directly |
 | `FORMWAV_DATA_DIR` | Where imported media is stored; `backend/data` when unset |
 | `FORMWAV_MAX_IMPORT_MB` | Largest file the engine accepts for import |
+| `FORMWAV_TERMINAL` | `0` turns the embedded terminal off |
+
+## Connect an agent (MCP)
+
+formwav ships an MCP server in `backend/formwav_mcp` (installed by `formwav_oc_install` into its own venv). With formwav running, an agent can list, measure, repair, transcribe and export your media and render saved sessions through twelve `formwav_*` tools; every edit makes new media and keeps the source. Claude Desktop (`claude_desktop_config.json`) or any client that launches stdio servers:
+
+```json
+{
+  "mcpServers": {
+    "formwav": { "command": "/path/to/formwav/backend/formwav_mcp/serve" }
+  }
+}
+```
+
+Claude Code: `claude mcp add formwav -- /path/to/formwav/backend/formwav_mcp/serve`. For clients that speak Streamable HTTP, start it with `formwav_mcp/serve --http` and point them at `http://127.0.0.1:8061/mcp` (loopback only; requests from other web origins are refused). `FORMWAV_ENGINE` points it at an engine on another port.
 
 ## Architecture
 
