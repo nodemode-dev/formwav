@@ -1,0 +1,185 @@
+/*
+ * The frame: formvis's app frame mapped onto formwav (formai-design-lang, shell-composer frame-anatomy and
+ * app-frame-maps; media-adapter audio-surfaces for the transport row). Loaded after shell.css and workspace.css; each
+ * region's recipe lives here once. Columns sit on hairlines: no gutters, no outer radius, no floating islands; rounding
+ * belongs to the chips, cards and rows the columns hold. Sizes are app-block tokens so no literal sits in a rule.
+ */
+
+:root {
+  --fw-titlebar-h: 40px;
+  --fw-options-h: 40px;
+  --fw-transport-h: 44px;
+  --fw-status-h: 28px;
+  --fw-group-head-h: 36px;
+  --fw-resizer-w: 6px;
+  --fw-record: #ff475a;
+  --fw-record-shade: #3a1519;
+  --fw-now-line: #ff475a;
+}
+
+/* The grid: title bar, workspace, status bar. */
+.fw-shell { grid-template-rows: var(--fw-titlebar-h) minmax(0, 1fr) var(--fw-status-h); }
+
+/* Title bar: brand, file tools, the session as the document title, column toggles and Export, the one primary. */
+.fw-topbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  block-size: var(--fw-titlebar-h);
+  padding: 0 12px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-1));
+  border-block-end: 1px solid var(--line-0);
+}
+.fw-topbar .fw-name { font-size: var(--fs-13); font-weight: 600; letter-spacing: 0.2px; }
+.fw-topbar .fw-tools { gap: 2px; }
+.fw-topbar .fw-tools .fw-ibtn { block-size: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: var(--fs-12); }
+.fw-topbar .fw-tools .fw-ibtn:hover:not(:disabled) { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-topbar .fw-tools .fw-ibtn-icon { inline-size: 28px; padding: 0; justify-content: center; }
+.fw-topbar-mid { display: flex; justify-content: center; min-inline-size: 0; }
+.fw-topbar .fw-session-name {
+  inline-size: clamp(160px, 28vw, 320px);
+  block-size: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line-1);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-size: var(--fs-13);
+  text-align: center;
+}
+.fw-topbar .fw-session-name:hover { border-color: var(--line-3); }
+.fw-topbar-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; }
+.fw-topbar .fw-panel-toggle,
+.fw-topbar-actions > .fw-ibtn:not(.fw-btn-export) {
+  block-size: 28px;
+  min-inline-size: 28px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+}
+.fw-topbar .fw-panel-toggle[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
+.fw-topbar .fw-btn-export { block-size: 28px; padding: 0 12px; border-radius: 7px; }
+
+/* Workspace: the left dock, the stage column and the side column, on hairlines with resizers between. */
+.fw-workspace {
+  grid-template-columns: var(--fw-media-w, 264px) var(--fw-media-gap, var(--fw-resizer-w)) minmax(360px, 1fr) var(--fw-inspector-gap, var(--fw-resizer-w)) var(--fw-inspector-w, 284px);
+  gap: 0;
+  padding: 0;
+}
+.fw-pane { border-radius: 0; }
+.fw-pane-media { background: var(--bg-secondary); }
+.fw-pane-timeline { background: var(--canvas-bg); }
+.fw-pane-inspector { background: var(--surface-0); }
+.fw-pane-divider { border-radius: 0; background: var(--bg-secondary); }
+.fw-pane-divider[data-side="media"] { border-inline-start: 1px solid var(--line-0); }
+.fw-pane-divider[data-side="inspector"] { border-inline-end: 1px solid var(--line-0); }
+.fw-pane-divider:hover,
+.fw-pane-divider.is-dragging { background: var(--accent-color-dim); }
+
+/* A pane's head is a group head; its tabs are chips. */
+.fw-pane-header { min-block-size: var(--fw-group-head-h); padding: 0 8px; background: var(--group-head); border-block-end: 1px solid var(--line-0); }
+.fw-pane-tabs { display: flex; flex-wrap: nowrap; gap: 2px; overflow-x: auto; }
+.fw-pane-tab { flex: none; block-size: 26px; padding: 0 9px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: var(--fs-12); }
+.fw-pane-tab:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.fw-pane-tab.is-active { border-color: var(--line-3); background: var(--surface-raised); color: var(--text-primary); }
+.fw-pane-title { font-size: var(--fs-12); font-weight: 600; letter-spacing: 0.3px; color: var(--text-secondary); text-transform: uppercase; }
+
+/* Options row: the timeline's modes and views in one row of chips, scrolling sideways when narrow. */
+.fw-tool-tray {
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-block-size: var(--fw-options-h);
+  padding: 0 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+  background: var(--surface-0);
+  border-block-end: 1px solid var(--line-0);
+}
+.fw-tool-tray > * { flex: none; }
+.fw-tool-tray .fw-mode { block-size: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-secondary); font-size: var(--fs-12); }
+.fw-tool-tray .fw-mode:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-tool-tray .fw-mode[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
+.fw-tool-tray select { block-size: 28px; border-radius: 8px; }
+
+/* Transport row: above the status bar, its buttons title-tool squares, the clock the one large readout. */
+.fw-pane-timeline .fw-transport {
+  flex: none;
+  min-block-size: var(--fw-transport-h);
+  gap: 14px;
+  padding: 0 12px;
+  background: var(--surface-1);
+  border-block-start: 1px solid var(--line-0);
+}
+.fw-transport-controls { gap: 4px; }
+.fw-tbtn { inline-size: 30px; block-size: 30px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-secondary); }
+.fw-tbtn:hover:not(:disabled) { background: var(--surface-raised); color: var(--text-primary); }
+.fw-tbtn[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
+.fw-tbtn[data-action="record"][aria-pressed="true"] { border-color: var(--fw-record); background: var(--fw-record); color: #fff; }
+.fw-clock { min-inline-size: 13ch; font-family: var(--font-mono); font-size: var(--fs-14); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+
+/* Status bar: fixed slots so a changing value never moves its neighbour; the hint takes the rest. */
+.fw-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-inline-size: 0;
+  padding: 0 16px;
+  overflow: hidden;
+  white-space: nowrap;
+  background: var(--bg-secondary);
+  border-block-start: 1px solid var(--line-0);
+  color: var(--text-muted);
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+}
+.fw-status .fw-engine { min-inline-size: 150px; padding: 0; border: 0; background: none; font-size: var(--fs-11); }
+.fw-st-rate { min-inline-size: 92px; }
+.fw-st-tracks { min-inline-size: 150px; }
+.fw-st-length { min-inline-size: 120px; }
+.fw-st-hint { flex: 1; min-inline-size: 0; overflow: hidden; text-align: end; text-overflow: ellipsis; }
+
+/* The transport row never wraps: controls and clock at the left, the meters pushed to the right. The row answers to
+ * its own width (a container query), so a narrow stage drops text labels (their tooltips keep the names) and the
+ * detailed LUFS readout (the Loudness window shows all three values) before anything would wrap or clip. */
+.fw-pane-timeline { container-type: inline-size; }
+.fw-pane-timeline .fw-transport { flex-wrap: nowrap; overflow-x: auto; }
+.fw-transport > * { flex: none; }
+.fw-transport .fw-out-meter { margin-inline-start: auto; grid-template-columns: auto 128px auto; row-gap: 3px; }
+.fw-transport .fw-out-track { block-size: 5px; border-radius: 2px; }
+@container (max-width: 1060px) {
+  .fw-transport .fw-lufs { display: none; }
+  .fw-transport .fw-speed { gap: 0; font-size: 0; }
+  .fw-transport .fw-speed :is(select, input) { font-size: var(--fs-12); }
+}
+
+/* A tab strip that would overflow its column wraps to a second row rather than hiding a tab off the edge. */
+.fw-pane-tabs { flex-wrap: wrap; overflow: visible; padding-block: 5px; }
+
+/* The input meter (the record module's) sits compactly after the output meter; the latency field keeps its unit when
+ * its label is dropped. */
+.fw-transport .fw-meter { inline-size: 72px; }
+@container (max-width: 1060px) {
+  .fw-transport .fw-speed:has([data-latency])::after { content: "ms"; margin-inline-start: 4px; font-size: var(--fs-11); color: var(--text-muted); }
+}
+
+/* The media pane's head gives its tabs the full width, so they wrap instead of running off the edge. */
+.fw-pane-media .fw-pane-header { grid-template-columns: minmax(0, 1fr) auto; }
+
+/* A media row: name over its facts at the left, its place-on-timeline button a compact icon at the right. */
+.fw-media-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 4px; align-items: center; }
+.fw-media-item .fw-media-name { grid-column: 1; grid-row: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-media-item .fw-media-meta { grid-column: 1; grid-row: 2; }
+.fw-media-item .fw-media-place { grid-column: 3; grid-row: 1 / span 2; inline-size: 28px; block-size: 28px; padding: 0; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-secondary); }
+.fw-media-item .fw-media-place:hover { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
+
+/* The transport's measured fit at a 752 px stage (the owner's window with both columns open): 8 px gaps, 28 px
+ * buttons, a 12-character clock slot, 96 px meter bars and a 56 px input meter. */
+.fw-pane-timeline .fw-transport { gap: 8px; padding: 0 8px; }
+.fw-transport .fw-tbtn { inline-size: 28px; block-size: 28px; }
+.fw-transport .fw-clock { min-inline-size: 12ch; }
+.fw-transport .fw-out-meter { grid-template-columns: auto 96px auto; }
+.fw-transport .fw-meter { inline-size: 56px; }
+.fw-transport .fw-latency-measure { padding: 0 8px; }

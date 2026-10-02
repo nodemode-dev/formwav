@@ -42,10 +42,6 @@ function shellHtml(): string {
     <div class="fw-topbar-actions">
       <button type="button" class="fw-panel-toggle" data-pane="media" aria-pressed="true" aria-label="Media pane" title="Show or hide the Media pane">${fvIcon("collapseLeft", 16)}</button>
       <button type="button" class="fw-panel-toggle" data-pane="inspector" aria-pressed="true" aria-label="Inspector pane" title="Show or hide the Inspector pane">${fvIcon("collapseRight", 16)}</button>
-      <span class="fw-engine" data-state="pending" role="status" aria-live="polite">
-        <span class="fw-engine-dot"></span>
-        <span class="fw-engine-text"></span>
-      </span>
       <button class="fw-ibtn fw-btn-export" type="button" data-action="export" title="Export the mix as a WAV file (Cmd or Ctrl Shift E)" disabled>${icon("download", ICON_SIZE.control)}<span>Export</span></button>
     </div>
   </header>
@@ -83,6 +79,13 @@ function shellHtml(): string {
       <div class="fw-pane-body fw-inspector-body"></div>
     </aside>
   </div>
+  <footer class="fw-status" aria-label="Status">
+    <span class="fw-engine" data-state="pending" role="status" aria-live="polite"><span class="fw-engine-dot"></span><span class="fw-engine-text"></span></span>
+    <span class="fw-st-rate" title="The session's sample rate"></span>
+    <span class="fw-st-tracks"></span>
+    <span class="fw-st-length" title="The session's length"></span>
+    <span class="fw-st-hint"></span>
+  </footer>
 </div>`;
 }
 

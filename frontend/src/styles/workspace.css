@@ -113,7 +113,7 @@
 .fw-pane-media:is([data-tab="voice"], [data-tab="transcript"], [data-tab="labels"]) .fw-media-empty { display: none; }
 .fw-pane-media:is([data-tab="voice"], [data-tab="transcript"], [data-tab="labels"]) :is(.fw-pane-meta, .fw-pane-end) { display: none; }
 .fw-pane-media .fw-pane-header { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
-.fw-pane-media .fw-pane-tabs { grid-column: 1 / -1; flex-wrap: nowrap; gap: 1px; overflow-x: auto; scrollbar-width: none; }
+.fw-pane-media .fw-pane-tabs { grid-column: 1 / -1; gap: 1px; }
 .fw-pane-media .fw-pane-tab { flex: none; padding: 3px 6px; }
 
 .fw-labels-body { display: grid; align-content: start; gap: 8px; padding: 0 8px 8px; }

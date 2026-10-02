@@ -7,6 +7,7 @@ import "./styles/fonts.css";
 import "./styles/light-mode.css";
 import "./styles/shell.css";
 import "./styles/workspace.css";
+import "./styles/frame.css";
 import "./styles/scrollbars.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
@@ -33,6 +34,7 @@ import { mountSpectrogramView } from "./ui/spectrogram-view";
 import { mountWorkspaceLayout } from "./ui/workspace-layout";
 import { mountRecord } from "./ui/record";
 import { mountLatencyProbe } from "./ui/latency-probe";
+import { mountStatusBar } from "./ui/status-bar";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
@@ -104,6 +106,7 @@ if (host) {
   mountWorkspaceLayout(host);
   mountRecord(host, engine, player);
   mountLatencyProbe(host);
+  mountStatusBar(host, engine);
   mountProjects(host, engine, player);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player } });
