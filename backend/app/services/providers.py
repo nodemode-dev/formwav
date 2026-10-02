@@ -118,13 +118,86 @@ def elevenlabs_voices() -> list[dict]:
     return [{"voice_id": v.get("voice_id"), "name": v.get("name"), "category": v.get("category")} for v in data.get("voices", [])]
 
 
-def elevenlabs_speech(text: str, voice_id: str, model_id: str = "eleven_multilingual_v2") -> dict:
+def elevenlabs_speech(text: str, voice_id: str, model_id: str = "eleven_multilingual_v2", rate: int | None = None) -> dict:
     if not text.strip() or not voice_id.strip():
         raise ProviderError(422, "speech needs text and a voice_id (from the voices list)")
     key = _key("ELEVENLABS_API_KEY", "ElevenLabs")
     body = json.dumps({"text": text, "model_id": model_id}).encode()
     status, raw, _ = _http("POST", f"{_el_base()}/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128", {"xi-api-key": key, "content-type": "application/json", "accept": "audio/mpeg"}, body)
-    return media.import_audio(f"Speech - {text[:40].strip()}.mp3", _ok("ElevenLabs", status, raw))
+    return media.import_audio(f"Speech - {text[:40].strip()}.mp3", _ok("ElevenLabs", status, raw), rate)
+
+
+def elevenlabs_clone(media_id: str) -> str:
+    """A voice cloned from a media's own speech (its first 90 s as 16-bit mono WAV, under ElevenLabs' 10 MB per file),
+    made once per media and remembered in the media store's voices.json, so regenerating again costs no new clone."""
+    import io
+    import wave
+
+    import numpy as np
+
+    from .tools import _wav_view
+
+    cache_path = media.media_dir() / "voices.json"
+    try:
+        cache = json.loads(cache_path.read_text()) if cache_path.is_file() else {}
+    except ValueError:
+        cache = {}
+    if cache.get(media_id):
+        return cache[media_id]
+    key = _key("ELEVENLABS_API_KEY", "ElevenLabs")
+    info = media.media_info(media_id)
+    view, rate = _wav_view(media_id)
+    x = np.asarray(view[: 90 * rate], dtype=np.float64)  # float in both cases: 16-bit sources read through _Scaled
+    mono = np.clip(x.mean(axis=1), -1.0, 1.0)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes((mono * 32767.0).astype("<i2").tobytes())
+    body, ctype = _multipart({"name": f"formwav - {info.get('name', media_id)}"[:100], "remove_background_noise": "false"}, {"files": ("voice-sample.wav", buf.getvalue(), "audio/wav")})
+    status, raw, _ = _http("POST", f"{_el_base()}/v1/voices/add", {"xi-api-key": key, "content-type": ctype}, body, timeout=600)
+    voice_id = json.loads(_ok("ElevenLabs", status, raw)).get("voice_id")
+    if not voice_id:
+        raise ProviderError(502, "ElevenLabs made the voice but sent back no voice_id")
+    cache[media_id] = voice_id
+    cache_path.write_text(json.dumps(cache))
+    return voice_id
+
+
+def elevenlabs_regenerate(media_id: str, start_s: float, end_s: float, text: str) -> dict:
+    """The words between start_s and end_s of a media (seconds in its own timeline), spoken again as `text` in the
+    speaker's cloned voice and spliced in with 10 ms equal-power crossfades: a new media, the source kept. Returns it
+    with the voice used and how many source frames longer (or shorter) it is, so the caller can ripple what follows."""
+    import numpy as np
+
+    from .audacity import _wav_bytes
+    from .tools import _wav_view
+
+    if not text.strip():
+        raise ProviderError(422, "type the words to say instead")
+    view, rate = _wav_view(media_id)
+    frames, ch = int(view.shape[0]), int(view.shape[1])
+    a, b = max(0, int(round(float(start_s) * rate))), min(frames, int(round(float(end_s) * rate)))
+    if b - a < int(0.05 * rate):
+        raise ProviderError(422, "select at least 50 ms of the clip to regenerate")
+    voice = elevenlabs_clone(media_id)
+    spoken = elevenlabs_speech(text, voice, rate=rate)
+    sview, srate = _wav_view(spoken["id"])
+    if srate != rate:
+        raise ProviderError(500, f"the new speech came back at {srate} Hz, not the source's {rate} Hz")
+    x = np.asarray(view[0:frames], dtype=np.float64)  # float in both cases: 16-bit sources read through _Scaled
+    s = np.asarray(sview[0 : int(sview.shape[0])], dtype=np.float64)
+    s = np.repeat(s.mean(axis=1, keepdims=True), ch, axis=1) if s.shape[1] != ch else s
+    n = int(s.shape[0])
+    f = max(1, min(int(0.010 * rate), a, frames - b, n // 2))
+    ramp = np.linspace(0.0, np.pi / 2, f, endpoint=False)[:, None]
+    fade_in, fade_out = np.sin(ramp), np.cos(ramp)
+    out = np.concatenate([x[: a - f], x[a - f : a] * fade_out + s[:f] * fade_in, s[f : n - f], s[n - f :] * fade_out + x[b : b + f] * fade_in, x[b + f :]])
+    info = media.media_info(media_id)
+    stem = str(info.get("name", "clip")).rsplit(".", 1)[0]
+    new = media.import_wav(f"{stem} (regenerated).wav", _wav_bytes([out[:, c].astype(np.float32) for c in range(ch)], rate))
+    return {"media": new, "voice_id": voice, "replaced_s": [a / rate, b / rate], "inserted_s": n / rate, "delta_frames": int(out.shape[0]) - frames, "source_rate": rate}
 
 
 def elevenlabs_sound(text: str, duration_s: float | None = None) -> dict:

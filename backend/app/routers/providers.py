@@ -38,6 +38,15 @@ def elevenlabs_sound(body: dict = Body(...)) -> dict:
     return _run(prov.elevenlabs_sound, str(body.get("text", "")), float(duration) if duration else None)
 
 
+@router.post("/providers/elevenlabs/regenerate", status_code=201)
+def elevenlabs_regenerate(body: dict = Body(...)) -> dict:
+    try:
+        start, end = float(body.get("start_s", 0)), float(body.get("end_s", 0))
+    except (TypeError, ValueError) as err:
+        raise HTTPException(422, "start_s and end_s are seconds in the media") from err
+    return _run(prov.elevenlabs_regenerate, str(body.get("media_id", "")), start, end, str(body.get("text", "")))
+
+
 @router.post("/providers/elevenlabs/dub", status_code=202)
 def elevenlabs_dub(body: dict = Body(...)) -> dict:
     return _run(prov.elevenlabs_dub_start, str(body.get("media_id", "")), str(body.get("target_lang", "")).strip() or "es", str(body.get("source_lang") or "auto"))
