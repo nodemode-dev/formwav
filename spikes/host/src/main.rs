@@ -19,6 +19,7 @@ use clap_sys::version::CLAP_VERSION;
 
 const RATE: f64 = 48_000.0;
 const FRAMES: usize = 4_800;
+const BLOCKS: usize = 10;
 
 fn test_signal() -> [Vec<f32>; 2] {
     let amp = 10f32.powf(-12.0 / 20.0);
@@ -111,18 +112,31 @@ fn run_clap(path: &str) -> Result<(), String> {
         let mut out_buf = clap_audio_buffer { data32: out_ptrs.as_mut_ptr(), data64: ptr::null_mut(), channel_count: 2, latency: 0, constant_mask: 0 };
         let in_events = clap_input_events { ctx: ptr::null_mut(), size: Some(no_events_size), get: Some(no_events_get) };
         let out_events = clap_output_events { ctx: ptr::null_mut(), try_push: Some(no_events_push) };
-        let process = clap_process {
-            steady_time: 0,
-            frames_count: FRAMES as u32,
-            transport: ptr::null(),
-            audio_inputs: &in_buf,
-            audio_outputs: &mut out_buf,
-            audio_inputs_count: 1,
-            audio_outputs_count: 1,
-            in_events: &in_events,
-            out_events: &out_events,
-        };
-        let status = ((*plugin).process.ok_or("plugin without process")?)(plugin, &process);
+        // Ten consecutive blocks with the clock advancing, as a DAW would run it: real plugins ramp parameters in and
+        // carry latency, so the first block is reported beside the last, settled one.
+        let mut status = CLAP_PROCESS_ERROR + 1;
+        let mut first_db = 0.0;
+        for block in 0..BLOCKS {
+            let process = clap_process {
+                steady_time: (block * FRAMES) as i64,
+                frames_count: FRAMES as u32,
+                transport: ptr::null(),
+                audio_inputs: &in_buf,
+                audio_outputs: &mut out_buf,
+                audio_inputs_count: 1,
+                audio_outputs_count: 1,
+                in_events: &in_events,
+                out_events: &out_events,
+            };
+            let s = ((*plugin).process.ok_or("plugin without process")?)(plugin, &process);
+            if s == CLAP_PROCESS_ERROR {
+                status = s;
+            }
+            if block == 0 {
+                first_db = (rms_db(&output[0]) + rms_db(&output[1])) / 2.0;
+            }
+        }
+        eprintln!("fwhost: first block {first_db:.2} dB RMS out, last block below");
         ((*plugin).stop_processing.ok_or("no stop_processing")?)(plugin);
         ((*plugin).deactivate.ok_or("no deactivate")?)(plugin);
         ((*plugin).destroy.ok_or("no destroy")?)(plugin);
