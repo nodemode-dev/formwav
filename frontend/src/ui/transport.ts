@@ -11,8 +11,17 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
   const stop = button("stop");
   const lanes = host.querySelector<HTMLElement>(".fw-lanes");
   const notice = host.querySelector<HTMLElement>(".fw-notice");
-  const speed = host.querySelector<HTMLSelectElement>("[data-speed]");
-  speed?.addEventListener("change", () => player.setSpeed(Number(speed.value) || 1));
+  // Play-at-speed (AU-42): a continuous slider on a powers-of-two scale (1 times in the middle, halving and doubling an
+  // equal travel), applied while it moves; double-click resets it to 1 times through the page's slider reset
+  const speed = host.querySelector<HTMLInputElement>("[data-speed]");
+  const speedOut = host.querySelector<HTMLElement>("[data-speed-out]");
+  const applySpeed = () => {
+    const x = 2 ** (Number(speed?.value) || 0);
+    player.setSpeed(x);
+    setText(speedOut, `${x.toFixed(2)}×`);
+  };
+  speed?.addEventListener("input", applySpeed);
+  speed?.addEventListener("change", applySpeed);
   const playhead = document.createElement("div");
   playhead.className = "fw-playhead";
   playhead.setAttribute("aria-hidden", "true");

@@ -133,11 +133,43 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
       if (headX !== null) player.seek(toSamples(headX));
     });
   };
+  // Scrubbing (AU-42): dragging the playhead plays what passes under it, at the drag's own speed (0.25 to 4 times);
+  // moving back seeks back and plays forward in short bursts (Audacity's seek-scrub); holding still goes quiet; the
+  // release restores the speed slider's value and keeps playing only if playback was running before the grab
+  let scrub: { wasPlaying: boolean; x: number; t: number; idle: number } | null = null;
+  const sliderSpeed = () => 2 ** (Number(host.querySelector<HTMLInputElement>("[data-speed]")?.value) || 0);
+  const scrubStart = (e: PointerEvent) => {
+    scrub = { wasPlaying: engine.get("transport").playing, x: e.offsetX, t: e.timeStamp, idle: 0 };
+  };
+  const scrubMove = (e: PointerEvent) => {
+    if (!scrub) return;
+    const dt = (e.timeStamp - scrub.t) / 1000;
+    if (dt > 0) {
+      const frames = Math.abs(toSamples(e.offsetX) - toSamples(scrub.x));
+      player.setSpeed(Math.min(4, Math.max(0.25, frames / dt / engine.get("document").sampleRate)));
+    }
+    scrub.x = e.offsetX;
+    scrub.t = e.timeStamp;
+    if (!engine.get("transport").playing) void player.play();
+    window.clearTimeout(scrub.idle);
+    scrub.idle = window.setTimeout(() => {
+      if (dragHead && engine.get("transport").playing) player.stop();
+    }, 120);
+  };
+  const scrubEnd = () => {
+    if (!scrub) return;
+    window.clearTimeout(scrub.idle);
+    player.setSpeed(sliderSpeed());
+    if (!scrub.wasPlaying && engine.get("transport").playing) player.stop();
+    else if (scrub.wasPlaying && !engine.get("transport").playing) void player.play();
+    scrub = null;
+  };
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || !engine.get("document").tracks.length) return;
     if (nearHead(e.offsetX)) {
       dragHead = true;
       canvas.setPointerCapture(e.pointerId);
+      scrubStart(e);
       return;
     }
     pressX = e.offsetX;
@@ -145,6 +177,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
   });
   canvas.addEventListener("pointermove", (e) => {
     if (dragHead) {
+      scrubMove(e);
       seekSoon(e.offsetX);
       return;
     }
@@ -165,6 +198,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
       if (headRaf) cancelAnimationFrame(headRaf);
       headRaf = 0;
       player.seek(toSamples(e.offsetX));
+      scrubEnd();
       return;
     }
     if (pressX === null) return;
@@ -183,6 +217,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     dragHead = false;
     headX = null;
     pressX = null;
+    scrubEnd();
     if (pending) {
       pending = null;
       draw();
