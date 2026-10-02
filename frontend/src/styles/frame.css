@@ -264,3 +264,21 @@
 .fw-knob[data-disabled="true"] { cursor: default; opacity: 0.45; }
 .fw-knob:has(+ .fw-knob-input:focus-visible) { box-shadow: 0 0 0 2px var(--accent-color); }
 .fw-knob-input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+
+/* A compact strip in the dock: the fader beside a column of the pan knob, its readout and the buttons, so a strip
+   fits the dock's default height (it stood 329 px in 201 px, the pan below the fold until the Mixer scrolled). */
+.fw-dock .fw-strip {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "name name" "meter meter" "fader knob" "fader db" "fader buttons" "out out" "vca vca";
+  align-items: center;
+  row-gap: 4px;
+  column-gap: 6px;
+}
+.fw-dock .fw-strip-name { grid-area: name; }
+.fw-dock .fw-strip-meter { grid-area: meter; }
+.fw-dock .fw-strip-fader { grid-area: fader; inline-size: 76px; }
+.fw-dock .fw-strip .fw-knob { grid-area: knob; }
+.fw-dock .fw-strip-db { grid-area: db; }
+.fw-dock .fw-strip-buttons { grid-area: buttons; }
+.fw-dock .fw-strip-out { grid-area: out; }
+.fw-dock .fw-strip-vca { grid-area: vca; }
