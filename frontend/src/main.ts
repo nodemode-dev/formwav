@@ -8,6 +8,7 @@ import "./styles/light-mode.css";
 import "./styles/shell.css";
 import "./styles/workspace.css";
 import "./styles/frame.css";
+import "./styles/surfaces.css";
 import "./styles/scrollbars.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";

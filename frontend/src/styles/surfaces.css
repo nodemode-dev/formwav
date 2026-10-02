@@ -1,0 +1,54 @@
+/*
+ * Audio surfaces (formai-design-lang media-adapter, audio-surfaces): the lane bed, track headers as cards, clips, the
+ * playhead and the meters. Loaded after frame.css; geometry the lanes' code measures (lane height, header width) is
+ * left as it is, only the surfaces change.
+ */
+
+/* The bed: lanes alternate surfaces on hairline separators; below the last lane the stage is surface-0. */
+.fw-pane-timeline .fw-stage { background: var(--surface-0); }
+.fw-lane { border-block-end: 1px solid var(--line-1); }
+.fw-lane:nth-child(odd of .fw-lane) .fw-lane-body { background: var(--surface-1); }
+.fw-lane:nth-child(even of .fw-lane) .fw-lane-body { background: var(--surface-2); }
+
+/* A track header is a card: the audio colour bar at its left, the name over its facts, then the lane's meter and
+ * its toggles on one row. */
+.fw-lane-head {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "name takes arm"
+    "meta meta meta"
+    "meter ms curve";
+  align-content: center;
+  row-gap: 6px;
+  column-gap: 6px;
+  padding: 0 10px 0 14px;
+  background: var(--surface-1);
+  border-inline-end: 1px solid var(--line-1);
+  box-shadow: inset 3px 0 0 var(--fw-audio);
+}
+.fw-lane-head .fw-lane-name { grid-area: name; font-size: var(--fs-13); font-weight: 600; color: var(--text-primary); }
+.fw-lane-head .fw-lane-meta { grid-area: meta; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-lane-head .fw-takes-toggle { grid-area: takes; }
+.fw-lane-head .fw-arm { grid-area: arm; }
+.fw-lane-head .fw-lane-meter { grid-area: meter; align-self: center; display: grid; row-gap: 3px; min-inline-size: 0; }
+.fw-lane-head .fw-lane-ms { grid-area: ms; display: flex; gap: 4px; }
+.fw-lane-head .fw-auto-toggle { grid-area: curve; }
+
+/* Header toggles: bordered squares; on is accent-soft, except arm. */
+.fw-lane-head .fw-icon-btn { display: inline-grid; place-items: center; inline-size: 26px; block-size: 24px; padding: 0; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface-0); color: var(--text-secondary); }
+.fw-lane-head .fw-icon-btn[hidden] { display: none; }
+.fw-lane-head .fw-icon-btn:hover { border-color: var(--line-3); color: var(--text-primary); }
+.fw-lane-head .fw-icon-btn:is([aria-pressed="true"], [aria-expanded="true"]) { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
+.fw-lane-head .fw-arm { inline-size: 20px; block-size: 20px; padding: 0; border: 1.5px solid var(--line-3); border-radius: 50%; background: transparent; }
+.fw-lane-head .fw-arm:hover { border-color: var(--fw-record); }
+.fw-lane-head .fw-arm[aria-pressed="true"] { border-color: var(--fw-record); background: var(--fw-record); box-shadow: 0 0 0 3px var(--fw-record-shade); }
+
+/* Clips are cards; the playhead is the now-line red, never the accent. */
+.fw-clip { border-radius: 6px; }
+.fw-playhead { inline-size: 2px; background: var(--fw-now-line); }
+
+/* Meters: the level in --ok; the track marks where the meter's own scale (linear from -60 dBFS) puts -12 dB (80%)
+ * and -3 dB (95%), the warn and danger zones, since a gradient on a scaled bar would stretch with the level. */
+.fw-out-track { block-size: 5px; border-radius: 2px; overflow: hidden; background: linear-gradient(90deg, var(--surface-0) 0 80%, color-mix(in srgb, var(--warn) 22%, var(--surface-0)) 80% 95%, color-mix(in srgb, var(--danger) 30%, var(--surface-0)) 95%); }
+.fw-out-bar { block-size: 100%; background: var(--ok); transform-origin: left center; }
+.fw-lane-head .fw-out-track { block-size: 4px; }

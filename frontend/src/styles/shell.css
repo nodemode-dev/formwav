@@ -468,8 +468,6 @@ html, body, #app { height: 100%; }
   display: flex;
   flex-direction: column;
   row-gap: 2px;
-  inline-size: calc(var(--space-8) * 3);
-  margin-top: var(--space-2);
 }
 
 .fw-lane-meter .fw-out-bar { transform: scaleX(0); }
@@ -581,9 +579,6 @@ html, body, #app { height: 100%; }
 .fw-auto-points circle { fill: var(--bg-primary); stroke: var(--accent-color); stroke-width: 1.5; cursor: grab; }
 
 .fw-auto-toggle {
-  position: absolute;
-  right: var(--space-2);
-  bottom: var(--space-2);
   padding: 0 var(--space-1);
   font-size: var(--fs-11);
   color: var(--text-secondary);
@@ -596,9 +591,6 @@ html, body, #app { height: 100%; }
 .fw-auto-toggle[aria-expanded="true"] { color: var(--accent-color); border-color: var(--accent-color); }
 
 .fw-lane-ms {
-  position: absolute;
-  right: calc(var(--space-2) + 44px);
-  bottom: var(--space-2);
   display: flex;
   gap: 4px;
 }
