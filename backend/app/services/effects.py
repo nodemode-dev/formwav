@@ -503,12 +503,40 @@ def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 1
         lags = np.concatenate([np.arange(0, min(est_n - 1, int(0.25 * rate)) + 1), -np.arange(1, min(est_n - 1, int(0.05 * rate)) + 1)])
         start = int(lags[np.argmax(np.abs(xcorr[lags % size]))]) - lead
         h = np.linalg.solve(toeplitz, xcorr[(start + np.arange(taps)) % size])
-        est = through(ref, h)
-        shifted = np.zeros(frames_n)
-        if start >= 0:
-            shifted[start:] = est[: frames_n - start]
-        else:
-            shifted[: frames_n + start] = est[-start:]
+
+        def placed(h):  # the reference through h, delayed by `start`
+            est = through(ref, h)
+            out = np.zeros(frames_n)
+            if start >= 0:
+                out[start:] = est[: frames_n - start]
+            else:
+                out[: frames_n + start] = est[-start:]
+            return out
+
+        shifted = placed(h)
+        # A second fit where the wanted sound is quietest: wherever it shares a pitch with the reference, the first fit
+        # took some of it for leak (a line's harmonic on a pad's note held a fixture to 9.3 dB); the path is fitted
+        # again from the 30% of 50 ms blocks left quietest by the first subtraction (pauses, breaths, gaps)
+        blk = max(1, int(0.05 * rate))
+        nb = est_n // blk
+        if nb >= 20:
+            energy = ((xc[: nb * blk] - shifted[: nb * blk]) ** 2).reshape(nb, blk).mean(axis=1)
+            mask = np.zeros(est_n)
+            # each block weighted by the inverse of what the first fit left in it: pauses dominate when there are
+            # some, and without any the weights are near uniform (a cut at the quietest 30% still took in sung blocks)
+            mask[: nb * blk] = np.repeat(1.0 / (energy + 1e-3 * float(np.median(energy)) + 1e-20), blk)
+            ref_at = np.zeros(est_n)  # the reference delayed by `start`, over the fitted span
+            if start >= 0:
+                ref_at[start:] = ref[: est_n - start]
+            else:
+                ref_at[: est_n + start] = ref[-start : est_n - start]
+            RA = np.fft.rfft(ref_at, size)
+            p = np.fft.irfft(np.fft.rfft(mask * xc[:est_n], size) * np.conj(RA), size)[:taps]
+            a = np.fft.irfft(np.fft.rfft(mask * ref_at, size) * np.conj(RA), size)[:taps]
+            quiet = a[np.abs(np.arange(taps)[:, None] - np.arange(taps)[None, :])]
+            quiet[np.diag_indices(taps)] += 1e-9 * max(float(a[0]), 1e-30)
+            if a[0] > 0:
+                shifted = placed(np.linalg.solve(quiet, p))
         y[:, c] = (xc - k * shifted).astype(np.float32)
     stem = str(info["name"]).rsplit(".", 1)[0]
     return media.import_wav(f"{stem} (De-bleed {k * 100:g}%).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
