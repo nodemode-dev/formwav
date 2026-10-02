@@ -32,6 +32,7 @@ import { mountLabelsPane } from "./ui/labels-pane";
 import { mountSpectrogramView } from "./ui/spectrogram-view";
 import { mountWorkspaceLayout } from "./ui/workspace-layout";
 import { mountRecord } from "./ui/record";
+import { mountLatencyProbe } from "./ui/latency-probe";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
@@ -102,6 +103,7 @@ if (host) {
   mountSpectrogramView(host, engine);
   mountWorkspaceLayout(host);
   mountRecord(host, engine, player);
+  mountLatencyProbe(host);
   mountProjects(host, engine, player);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player } });

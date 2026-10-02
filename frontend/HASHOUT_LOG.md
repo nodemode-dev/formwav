@@ -1773,3 +1773,10 @@ The engine now refuses a POST, PUT, PATCH or DELETE under /api without `x-formwa
 - logged: v1.25.0 (in progress) · 2026-10-01
 
 The desktop shell passes a .fmw the user opened with formwav as ?open=<path> on the page's address (the page has no Tauri API); at start-up the address is cleaned (a reload does not open it again) and the file opened through the engine, loaded like a saved session with its name in the name field. Verified in Chromium: opened with ?open= on an exported session, its Music and Voice tracks loaded, the name field read "My Take (2)" (the right copy, as a different file had the plain name), the address came back to /, no page errors.
+
+### src/ui/latency-probe.ts, public/latency-probe.html, src/ui/shell.ts · spike A's latency probe inside the app
+- refers-to: src/ui/latency-probe.ts :: `mountLatencyProbe`; public/latency-probe.html (the sidecar's spikes/latency probe, copied unchanged); src/ui/shell.ts :: the Latency field's tooltip; src/main.ts :: its mount after recording
+- kind: explainer
+- logged: v1.26.0 (in progress) · 2026-10-02
+
+Spike A measures the webview's output and round-trip latency on the owner's machines, which the build container cannot (no audio device), and its probe lived only in the planning docs, out of reach of the desktop app (no address bar). It now ships in the interface (public/latency-probe.html, so the desktop engine serves it from its own origin) and a Measure button beside the transport's Latency field opens it in a dialog (the iframe allowed the microphone and the clipboard); the round trip it reports goes in that field, which already moves each take back by that much. Verified in Chromium: the button beside the field; the dialog opened with the probe (its title and three steps); its first step read this browser's context (AudioWorklet available, 44.1 kHz, base latency 10 ms, output latency 0 ms); the dialog closed; a desktop-mode engine served the probe (200); no page errors; the design audit at 0 FAIL, 0 WARN. The round trip itself needs a loopback cable and a microphone, the owner's.

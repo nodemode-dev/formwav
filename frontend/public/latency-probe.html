@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>formwav spike A · latency probe</title>
+<style>
+:root { color-scheme: dark; --bg: #0d0d0d; --surface: #161616; --border: #262626; --text: #fafafa; --dim: #a1a1aa; --accent: #f97316; --gap: 12px; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+h1 { font-size: 18px; margin: 0 0 4px; }
+p { color: var(--dim); margin: 0 0 var(--gap); }
+.row { display: flex; gap: var(--gap); margin: var(--gap) 0; }
+button { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: 0.5; cursor: default; }
+table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+td { padding: 6px 10px; border-top: 1px solid var(--border); }
+tr:first-child td { border-top: 0; }
+td:first-child { color: var(--dim); width: 45%; }
+output { display: inline-block; min-width: 22ch; font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+#status { display: block; height: 1.5em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--accent); margin: var(--gap) 0; }
+textarea { width: 100%; height: 150px; box-sizing: border-box; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; padding: 8px; resize: vertical; }
+</style>
+</head>
+<body>
+<main>
+<h1>formwav spike A · latency probe</h1>
+<p>Serve this file from localhost (microphone access needs a secure context), connect an output of the audio interface to an input with a cable, turn processing off at the OS level, then run. Each engine stands in for a Tauri webview: Safari for WKWebView, Edge for WebView2, GNOME Web for WebKitGTK.</p>
+<div class="row">
+<button id="btnInfo" type="button">1 · Read context</button>
+<button id="btnTrip" type="button">2 · Measure round trip</button>
+<button id="btnCopy" type="button">3 · Copy report</button>
+</div>
+<output id="status">Idle.</output>
+<table>
+<tr><td>Engine (user agent)</td><td><output id="oUa">-</output></td></tr>
+<tr><td>AudioWorklet available</td><td><output id="oWorklet">-</output></td></tr>
+<tr><td>Context sample rate</td><td><output id="oRate">-</output></td></tr>
+<tr><td>baseLatency (reported)</td><td><output id="oBase">-</output></td></tr>
+<tr><td>outputLatency (reported)</td><td><output id="oOut">-</output></td></tr>
+<tr><td>Input track settings</td><td><output id="oInput">-</output></td></tr>
+<tr><td>Clicks sent / detected</td><td><output id="oCount">-</output></td></tr>
+<tr><td>Round trip, median</td><td><output id="oMedian">-</output></td></tr>
+<tr><td>Round trip, min / max</td><td><output id="oRange">-</output></td></tr>
+<tr><td>Detection threshold</td><td><output id="oThresh">-</output></td></tr>
+</table>
+<p></p>
+<textarea id="report" readonly spellcheck="false"></textarea>
+</main>
+<script>
+const WORKLET = `
+class Probe extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    const o = options.processorOptions;
+    this.interval = o.interval; this.clicks = o.clicks; this.warmup = o.warmup;
+    this.frame = 0; this.sent = []; this.found = []; this.floor = 0; this.threshold = 0;
+    this.nextClick = this.warmup; this.armedFrom = -1; this.done = false;
+  }
+  process(inputs, outputs) {
+    const out = outputs[0]; const inp = inputs[0] && inputs[0][0];
+    const n = out[0].length;
+    for (let i = 0; i < n; i++) {
+      const f = this.frame + i;
+      let s = 0;
+      if (this.sent.length < this.clicks && f >= this.nextClick && f < this.nextClick + 4) s = 0.8;
+      if (this.sent.length < this.clicks && f === this.nextClick + 3) { this.sent.push(this.nextClick); this.armedFrom = this.nextClick; this.nextClick += this.interval; }
+      for (const ch of out) ch[i] = s;
+      if (!inp) continue;
+      const a = Math.abs(inp[i]);
+      if (f < this.warmup) { if (a > this.floor) this.floor = a; continue; }
+      if (this.threshold === 0) this.threshold = Math.max(0.05, this.floor * 8);
+      if (this.armedFrom >= 0 && a > this.threshold && f > this.armedFrom) { this.found.push(f - this.armedFrom); this.armedFrom = -1; }
+    }
+    this.frame += n;
+    if (!this.done && this.sent.length >= this.clicks && this.frame > this.sent[this.sent.length - 1] + this.interval) {
+      this.done = true;
+      this.port.postMessage({ sent: this.sent.length, found: this.found, floor: this.floor, threshold: this.threshold });
+    }
+    return !this.done;
+  }
+}
+registerProcessor('formwav-probe', Probe);
+`;
+const $ = (id) => document.getElementById(id);
+const setText = (id, text) => { const el = $(id); if (el.textContent !== text) el.textContent = text; };
+const report = {};
+let ctx = null;
+
+function ms(frames, rate) { return (1000 * frames / rate).toFixed(2) + ' ms'; }
+
+async function ensureContext() {
+  if (!ctx) ctx = new AudioContext({ latencyHint: 'interactive' });
+  if (ctx.state !== 'running') await ctx.resume();
+  return ctx;
+}
+
+async function readInfo() {
+  const c = await ensureContext();
+  report.userAgent = navigator.userAgent;
+  report.audioWorklet = typeof AudioWorkletNode === 'function' && !!c.audioWorklet;
+  report.sampleRate = c.sampleRate;
+  report.baseLatencyMs = typeof c.baseLatency === 'number' ? +(c.baseLatency * 1000).toFixed(2) : null;
+  report.outputLatencyMs = typeof c.outputLatency === 'number' ? +(c.outputLatency * 1000).toFixed(2) : null;
+  setText('oUa', navigator.userAgent.slice(0, 60));
+  setText('oWorklet', report.audioWorklet ? 'yes' : 'no');
+  setText('oRate', c.sampleRate + ' Hz');
+  setText('oBase', report.baseLatencyMs === null ? 'not exposed' : report.baseLatencyMs + ' ms');
+  setText('oOut', report.outputLatencyMs === null ? 'not exposed' : report.outputLatencyMs + ' ms');
+  writeReport();
+}
+
+async function measure() {
+  $('btnTrip').disabled = true;
+  try {
+    const c = await ensureContext();
+    setText('status', 'Opening input with echo cancellation, noise suppression and gain control off...');
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+    const track = stream.getAudioTracks()[0];
+    const st = track.getSettings ? track.getSettings() : {};
+    report.inputSettings = { deviceId: st.deviceId ? 'set' : 'unknown', echoCancellation: st.echoCancellation, noiseSuppression: st.noiseSuppression, autoGainControl: st.autoGainControl, sampleRate: st.sampleRate, latency: st.latency };
+    setText('oInput', 'ec ' + st.echoCancellation + ' · ns ' + st.noiseSuppression + ' · agc ' + st.autoGainControl);
+    const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
+    await c.audioWorklet.addModule(url);
+    const clicks = 20;
+    const node = new AudioWorkletNode(c, 'formwav-probe', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], processorOptions: { interval: Math.round(c.sampleRate * 0.4), clicks, warmup: Math.round(c.sampleRate * 0.5) } });
+    const src = c.createMediaStreamSource(stream);
+    src.connect(node); node.connect(c.destination);
+    setText('status', 'Sending ' + clicks + ' clicks through the loopback...');
+    const result = await new Promise((resolve) => { node.port.onmessage = (e) => resolve(e.data); });
+    src.disconnect(); node.disconnect(); track.stop();
+    const found = result.found.slice().sort((a, b) => a - b);
+    report.clicksSent = result.sent; report.clicksDetected = found.length;
+    report.noiseFloor = +result.floor.toFixed(4); report.threshold = +result.threshold.toFixed(4);
+    report.roundTripFrames = found;
+    setText('oCount', result.sent + ' / ' + found.length);
+    setText('oThresh', result.threshold.toFixed(4) + ' (floor ' + result.floor.toFixed(4) + ')');
+    if (found.length) {
+      const med = found[Math.floor(found.length / 2)];
+      report.roundTripMedianMs = +(1000 * med / c.sampleRate).toFixed(2);
+      report.roundTripMinMs = +(1000 * found[0] / c.sampleRate).toFixed(2);
+      report.roundTripMaxMs = +(1000 * found[found.length - 1] / c.sampleRate).toFixed(2);
+      setText('oMedian', ms(med, c.sampleRate) + ' (' + med + ' frames)');
+      setText('oRange', ms(found[0], c.sampleRate) + ' / ' + ms(found[found.length - 1], c.sampleRate));
+      setText('status', found.length < result.sent ? 'Done, some clicks missed: raise the loopback level or check the cable.' : 'Done.');
+    } else {
+      setText('oMedian', 'no clicks detected');
+      setText('oRange', '-');
+      setText('status', 'No clicks detected: check the cable, the input selection and the level.');
+    }
+    writeReport();
+  } catch (err) {
+    setText('status', 'Failed: ' + (err && err.message ? err.message : String(err)));
+  } finally {
+    $('btnTrip').disabled = false;
+  }
+}
+
+function writeReport() {
+  const text = JSON.stringify({ probe: 'formwav spike A', at: new Date().toISOString(), ...report }, null, 1);
+  const ta = $('report');
+  if (ta.value !== text) ta.value = text;
+}
+
+$('btnInfo').addEventListener('click', () => { readInfo().catch((e) => setText('status', 'Failed: ' + e.message)); });
+$('btnTrip').addEventListener('click', () => { readInfo().then(measure); });
+$('btnCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('report').value); setText('status', 'Report copied.'); }
+  catch (e) { $('report').select(); setText('status', 'Select the report text and copy it manually.'); }
+});
+</script>
+</body>
+</html>

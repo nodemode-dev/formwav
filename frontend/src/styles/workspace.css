@@ -216,6 +216,10 @@
 .fw-models-row select option:disabled { color: var(--text-muted); }
 .fw-models-state { margin: 0; font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
 .fw-models { display: grid; gap: 8px; }
+.fw-latency-dialog { inline-size: min(760px, 92vw); block-size: min(620px, 86vh); padding: 0; }
+.fw-latency-dialog[open] { display: grid; grid-template-rows: auto 1fr; }
+.fw-latency-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--group-head); border-block-end: 1px solid var(--line-0); color: var(--text-primary); }
+.fw-latency-frame { inline-size: 100%; block-size: 100%; border: 0; background: var(--surface-0); }
 .fw-agent-log { margin: 0; padding: 8px 12px; list-style: none; overflow-y: auto; display: grid; align-content: start; gap: 6px; font-size: 13px; color: var(--text-secondary); }
 .fw-agent-log li { overflow-wrap: anywhere; }
 .fw-agent-you { color: var(--text-primary); font-weight: 600; }
