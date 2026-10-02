@@ -48,6 +48,53 @@ impl IHostApplicationTrait for HostApplication {
     }
 }
 
+// The VST3 editor's frame, which on Linux is also its run loop: the view registers its X11 descriptor and its timers
+// here, and the host calls them back (Steinberg::Linux::IRunLoop, queried from the IPlugFrame).
+struct EditorFrame {
+    handlers: std::cell::RefCell<Vec<(vst3::ComPtr<vst3::Steinberg::Linux::IEventHandler>, i32)>>,
+    timers: std::cell::RefCell<Vec<(vst3::ComPtr<vst3::Steinberg::Linux::ITimerHandler>, u64, std::time::Instant)>>,
+}
+
+impl Class for EditorFrame {
+    type Interfaces = (vst3::Steinberg::IPlugFrame, vst3::Steinberg::Linux::IRunLoop);
+}
+
+impl vst3::Steinberg::IPlugFrameTrait for EditorFrame {
+    unsafe fn resizeView(&self, view: *mut vst3::Steinberg::IPlugView, new_size: *mut vst3::Steinberg::ViewRect) -> tresult {
+        use vst3::Steinberg::IPlugViewTrait;
+        if let Some(view) = vst3::ComRef::from_raw(view) {
+            view.onSize(new_size);
+        }
+        kResultOk
+    }
+}
+
+impl vst3::Steinberg::Linux::IRunLoopTrait for EditorFrame {
+    unsafe fn registerEventHandler(&self, handler: *mut vst3::Steinberg::Linux::IEventHandler, fd: vst3::Steinberg::Linux::FileDescriptor) -> tresult {
+        if let Some(handler) = vst3::ComRef::from_raw(handler) {
+            self.handlers.borrow_mut().push((handler.to_com_ptr(), fd));
+        }
+        kResultOk
+    }
+
+    unsafe fn unregisterEventHandler(&self, handler: *mut vst3::Steinberg::Linux::IEventHandler) -> tresult {
+        self.handlers.borrow_mut().retain(|(h, _)| h.as_ptr() != handler);
+        kResultOk
+    }
+
+    unsafe fn registerTimer(&self, handler: *mut vst3::Steinberg::Linux::ITimerHandler, milliseconds: vst3::Steinberg::Linux::TimerInterval) -> tresult {
+        if let Some(handler) = vst3::ComRef::from_raw(handler) {
+            self.timers.borrow_mut().push((handler.to_com_ptr(), milliseconds.max(1), std::time::Instant::now()));
+        }
+        kResultOk
+    }
+
+    unsafe fn unregisterTimer(&self, handler: *mut vst3::Steinberg::Linux::ITimerHandler) -> tresult {
+        self.timers.borrow_mut().retain(|(h, _, _)| h.as_ptr() != handler);
+        kResultOk
+    }
+}
+
 const RATE: f64 = 48_000.0;
 const FRAMES: usize = 4_800;
 const BLOCKS: usize = 10;
@@ -356,6 +403,133 @@ fn run_clap_gui(path: &str, seconds: f64) -> Result<(), String> {
     }
 }
 
+fn run_vst3_gui(path: &str, seconds: f64) -> Result<(), String> {
+    use std::time::{Duration, Instant};
+    use vst3::Steinberg::Linux::{IEventHandlerTrait, ITimerHandlerTrait};
+    use vst3::Steinberg::Vst::{IConnectionPoint, IConnectionPointTrait, IEditController, IEditControllerTrait};
+    use vst3::Steinberg::{kPlatformTypeX11EmbedWindowID, kResultTrue, IPlugFrame, IPlugViewTrait, ViewRect};
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _, CreateWindowAux, PropMode, WindowClass};
+    use x11rb::wrapper::ConnectionExt as _;
+    unsafe {
+        let binary = vst3_binary(path)?;
+        let lib = libloading::os::unix::Library::new(&binary).map_err(|e| format!("could not load {}: {e}", binary.display()))?;
+        let handle = lib.into_raw();
+        let lib = libloading::os::unix::Library::from_raw(handle);
+        if let Ok(entry) = lib.get::<unsafe extern "C" fn(*mut c_void) -> bool>(b"ModuleEntry\0") {
+            if !entry(handle) {
+                return Err("the module refused to enter".into());
+            }
+        }
+        let get_factory = lib.get::<unsafe extern "C" fn() -> *mut IPluginFactory>(b"GetPluginFactory\0").map_err(|e| format!("no GetPluginFactory: {e}"))?;
+        let factory = ComPtr::from_raw(get_factory()).ok_or("GetPluginFactory returned nothing")?;
+        let mut cid: Option<TUID> = None;
+        for index in 0..factory.countClasses() {
+            let mut info: PClassInfo = std::mem::zeroed();
+            if factory.getClassInfo(index, &mut info) == kResultOk && CStr::from_ptr(info.category.as_ptr()).to_bytes() == b"Audio Module Class" {
+                cid = Some(info.cid);
+                break;
+            }
+        }
+        let cid = cid.ok_or("the module holds no audio effect")?;
+        let mut obj: *mut c_void = ptr::null_mut();
+        if factory.createInstance(cid.as_ptr(), IComponent::IID.as_ptr() as *const c_char, &mut obj) != kResultOk {
+            return Err("the factory would not create the component".into());
+        }
+        let component = ComPtr::from_raw(obj as *mut IComponent).ok_or("no component")?;
+        let host = ComWrapper::new(HostApplication);
+        let context = host.to_com_ptr::<IHostApplication>().ok_or("host context")?;
+        component.initialize(context.as_ptr() as *mut FUnknown);
+        let (controller, separate) = match component.cast::<IEditController>() {
+            Some(controller) => (controller, false),
+            None => {
+                let mut controller_cid: TUID = [0; 16];
+                if component.getControllerClassId(&mut controller_cid) != kResultOk {
+                    return Err("the component names no edit controller".into());
+                }
+                let mut obj: *mut c_void = ptr::null_mut();
+                factory.createInstance(controller_cid.as_ptr(), IEditController::IID.as_ptr() as *const c_char, &mut obj);
+                let controller = ComPtr::from_raw(obj as *mut IEditController).ok_or("the factory would not create the edit controller")?;
+                controller.initialize(context.as_ptr() as *mut FUnknown);
+                (controller, true)
+            }
+        };
+        let points = (component.cast::<IConnectionPoint>(), controller.cast::<IConnectionPoint>());
+        if let (Some(a), Some(b)) = (&points.0, &points.1) {
+            a.connect(b.as_ptr());
+            b.connect(a.as_ptr());
+        }
+        let view = ComPtr::from_raw(controller.createView(c"editor".as_ptr())).ok_or("the controller made no editor view")?;
+        if view.isPlatformTypeSupported(kPlatformTypeX11EmbedWindowID) != kResultTrue {
+            return Err("the editor cannot embed in an X11 window".into());
+        }
+        let frame = ComWrapper::new(EditorFrame { handlers: Default::default(), timers: Default::default() });
+        let frame_ptr = frame.to_com_ptr::<IPlugFrame>().ok_or("frame")?;
+        view.setFrame(frame_ptr.as_ptr());
+        let mut rect: ViewRect = std::mem::zeroed();
+        view.getSize(&mut rect);
+        let (width, height) = ((rect.right - rect.left).max(1) as u16, (rect.bottom - rect.top).max(1) as u16);
+        let (conn, screen_num) = x11rb::connect(None).map_err(|e| format!("no X display: {e}"))?;
+        let screen = &conn.setup().roots[screen_num];
+        let win = conn.generate_id().map_err(|e| e.to_string())?;
+        conn.create_window(x11rb::COPY_DEPTH_FROM_PARENT, win, screen.root, 40, 40, width, height, 0, WindowClass::INPUT_OUTPUT, 0, &CreateWindowAux::new().background_pixel(screen.black_pixel))
+            .map_err(|e| e.to_string())?;
+        conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, b"formwav plugin editor (VST3)").map_err(|e| e.to_string())?;
+        conn.map_window(win).map_err(|e| e.to_string())?;
+        conn.flush().map_err(|e| e.to_string())?;
+        if view.attached(win as usize as *mut c_void, kPlatformTypeX11EmbedWindowID) != kResultOk {
+            return Err("the editor would not attach to the window".into());
+        }
+        eprintln!("fwhost: VST3 editor {width}x{height} in X11 window 0x{win:x} (controller {})", if separate { "separate" } else { "in the component" });
+        let deadline = Instant::now() + Duration::from_secs_f64(seconds);
+        let (mut timer_calls, mut fd_calls) = (0u64, 0u64);
+        while Instant::now() < deadline {
+            let handlers: Vec<_> = frame.handlers.borrow().iter().map(|(h, fd)| (h.clone(), *fd)).collect();
+            let mut polls: Vec<libc::pollfd> = handlers.iter().map(|(_, fd)| libc::pollfd { fd: *fd, events: libc::POLLIN, revents: 0 }).collect();
+            libc::poll(polls.as_mut_ptr(), polls.len() as libc::nfds_t, 5);
+            for (p, (h, fd)) in polls.iter().zip(&handlers) {
+                if p.revents != 0 {
+                    h.onFDIsSet(*fd);
+                    fd_calls += 1;
+                }
+            }
+            let now = Instant::now();
+            let due: Vec<_> = frame.timers.borrow_mut().iter_mut().filter(|t| now >= t.2).map(|t| {
+                t.2 = now + Duration::from_millis(t.1);
+                t.0.clone()
+            }).collect();
+            for t in due {
+                t.onTimer();
+                timer_calls += 1;
+            }
+            while let Ok(Some(_)) = conn.poll_for_event() {}
+        }
+        let (timers, fds) = (frame.timers.borrow().len(), frame.handlers.borrow().len());
+        view.removed();
+        view.setFrame(ptr::null_mut());
+        drop(view);
+        if let (Some(a), Some(b)) = (&points.0, &points.1) {
+            a.disconnect(b.as_ptr());
+            b.disconnect(a.as_ptr());
+        }
+        drop(points);
+        conn.destroy_window(win).map_err(|e| e.to_string())?;
+        conn.flush().map_err(|e| e.to_string())?;
+        if separate {
+            controller.terminate();
+        }
+        drop(controller);
+        component.terminate();
+        drop(component);
+        drop(factory);
+        if let Ok(exit) = lib.get::<unsafe extern "C" fn() -> bool>(b"ModuleExit\0") {
+            exit();
+        }
+        println!("{{\"format\": \"vst3\", \"editor\": true, \"size\": [{width}, {height}], \"separate_controller\": {separate}, \"timers\": {timers}, \"fds\": {fds}, \"timer_calls\": {timer_calls}, \"fd_calls\": {fd_calls}}}");
+        Ok(())
+    }
+}
+
 fn vst3_binary(path: &str) -> Result<std::path::PathBuf, String> {
     let bundle = std::path::Path::new(path);
     if bundle.is_file() {
@@ -464,6 +638,7 @@ fn main() {
         (Some("clap"), Some(path)) => run_clap(path),
         (Some("vst3"), Some(path)) => run_vst3(path),
         (Some("clap-gui"), Some(path)) => run_clap_gui(path, args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0)),
+        (Some("vst3-gui"), Some(path)) => run_vst3_gui(path, args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0)),
         _ => Err("usage: fwhost clap <plugin.clap> | fwhost vst3 <plugin.vst3> | fwhost clap-gui <plugin.clap> [seconds]".into()),
     };
     if let Err(message) = result {
