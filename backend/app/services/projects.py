@@ -198,6 +198,37 @@ def open_project(name: str) -> dict:
     return {"name": path.stem, "savedAt": manifest.get("savedAt"), "revision": int(manifest.get("revision", 1)), "document": doc}
 
 
+def open_file(path_text: str) -> dict:
+    """A .fmw from anywhere on this machine (the desktop app hands over a session file the user opened): checked to be
+    a formwav session, copied into the sessions under its own name, or "name (2)" and on when a different session
+    already has it (the same file twice reuses its copy), then opened like any saved session."""
+    import shutil
+
+    source = Path(path_text).expanduser()
+    if source.suffix.lower() != ".fmw" or not source.is_file():
+        raise ProjectError("open a .fmw file that exists on this machine")
+    try:
+        _, _, z = _read(source)
+        z.close()
+    except zipfile.BadZipFile as err:
+        raise ProjectError("the file is damaged") from err
+    stem = re.sub(r"[^A-Za-z0-9 .,'()\-_]", "", source.stem).strip()[:72] or "Session"
+    if not stem[0].isalnum():
+        stem = f"Session {stem}"[:72]
+    data = source.read_bytes()
+    for n in range(1, 100):
+        name = stem if n == 1 else f"{stem} ({n})"
+        target = _path(name)
+        if not target.exists():
+            target.write_bytes(data)
+            break
+        if target.read_bytes() == data:
+            break
+    else:
+        raise ProjectError("too many sessions share this name")
+    return open_project(name)
+
+
 def list_projects() -> list[dict]:
     items = []
     for path in sorted(projects_dir().glob("*.fmw"), key=lambda p: p.stat().st_mtime, reverse=True):

@@ -37,6 +37,16 @@ def save_project(name: str, document: dict = Body(...), base: int | None = None)
         raise HTTPException(400, str(err)) from err
 
 
+@router.post("/projects/open-file")
+def open_project_file(body: dict = Body(...)) -> dict:
+    try:
+        return projects.open_file(str(body.get("path", "")))
+    except media.CoreMissing as err:
+        raise HTTPException(503, str(err)) from err
+    except (projects.ProjectError, media.MediaError) as err:
+        raise HTTPException(400, str(err)) from err
+
+
 @router.get("/projects/{name}")
 def open_project(name: str) -> dict:
     try:
