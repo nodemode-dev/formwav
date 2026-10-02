@@ -12,9 +12,6 @@
   --fw-status-h: 28px;
   --fw-group-head-h: 36px;
   --fw-resizer-w: 6px;
-  --fw-record: #ff475a;
-  --fw-record-shade: #3a1519;
-  --fw-now-line: #ff475a;
 }
 
 /* The grid: title bar, workspace, status bar. */
@@ -117,7 +114,7 @@
 .fw-tbtn { inline-size: 30px; block-size: 30px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-secondary); }
 .fw-tbtn:hover:not(:disabled) { background: var(--surface-raised); color: var(--text-primary); }
 .fw-tbtn[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
-.fw-tbtn[data-action="record"][aria-pressed="true"] { border-color: var(--fw-record); background: var(--fw-record); color: #fff; }
+.fw-tbtn[data-action="record"][aria-pressed="true"] { border-color: var(--fw-record); background: var(--fw-record); color: var(--text-on-accent); }
 .fw-clock { min-inline-size: 13ch; font-family: var(--font-mono); font-size: var(--fs-14); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
 
 /* Status bar: fixed slots so a changing value never moves its neighbour; the hint takes the rest. */

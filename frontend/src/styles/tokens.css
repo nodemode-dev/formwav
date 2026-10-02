@@ -230,6 +230,9 @@ body.nm-home .nm-canvas-surface { display: none !important; }
 :root {
   --fw-audio: #50e2a5;
   --fw-audio-shade: #153729;
+  --fw-record: #ff475a;
+  --fw-record-shade: #3a1519;
+  --fw-now-line: #ff475a;
   --z-toast: 3000;
 }
 
