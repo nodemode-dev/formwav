@@ -177,6 +177,6 @@
 .fw-pane-timeline .fw-transport { gap: 8px; padding: 0 8px; }
 .fw-transport .fw-tbtn { inline-size: 28px; block-size: 28px; }
 .fw-transport .fw-clock { min-inline-size: 12ch; }
-.fw-transport .fw-out-meter { grid-template-columns: auto 96px auto; }
+.fw-transport .fw-out-meter { grid-template-columns: auto 84px auto; }
 .fw-transport .fw-meter { inline-size: 56px; }
 .fw-transport .fw-latency-measure { padding: 0 8px; }
