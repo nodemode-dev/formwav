@@ -62,6 +62,20 @@ def selfcheck() -> int:
 def main() -> int:
     if "--selfcheck" in sys.argv:
         return selfcheck()
+    if os.environ.get("FORMWAV_EXIT_WITH_STDIN") == "1":
+        # The shell holds the write end of this stdin pipe; it closes however the shell ends (a quit, a crash, a
+        # SIGKILL), and then the engine ends too. Its own kill alone cannot do it: SIGKILL reaches only the onefile
+        # bootloader, never the Python process serving, which would live on as an orphan.
+        import threading
+
+        def exit_with_shell() -> None:
+            try:
+                while sys.stdin.buffer.read(65536):
+                    pass
+            finally:
+                os._exit(0)
+
+        threading.Thread(target=exit_with_shell, daemon=True).start()
     data = user_data_dir()
     data.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("FORMWAV_DATA_DIR", str(data))

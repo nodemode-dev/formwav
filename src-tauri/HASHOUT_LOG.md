@@ -8,3 +8,10 @@ Context for the desktop shell lives here rather than in code comments.
 - logged: v1.25.0 (in progress) · 2026-10-01
 
 The owner asked for a Tauri desktop app like the other form editors. Built to the tauri-compiler skill's shell-and-engine shape (its sidecar template and port-handshake reference): the shell starts the frozen engine (`binaries/formwav-engine`, placed by the build script with the target triple) with FORMWAV_PORT=0, reads the port the OS gave it from uvicorn's bind line on either stream, then opens one window at that loopback address, 90% of the primary monitor, centred, with a floor; if the engine ends without a port, a native message says so and the app exits instead of showing a blank window; quitting kills the engine. The page gets no Tauri API (capabilities: core defaults, the dialog, and running that one sidecar), so it is the same web app as in the browser, served by the engine from its own origin. A `.fmw` opened with the app (macOS's Opened event, or the first argument elsewhere) reaches the page as an `?open=` query on its address, held until the window exists or applied by navigating it. Icons are generated from the owner's 512 px logomark upscaled to the 1024 px master Tauri expects (the build script regenerates the set with `cargo tauri icon`); a native 1024 px master would be sharper.
+
+### src/main.rs · FORMWAV_EXIT_WITH_STDIN, and the shell run for real
+- refers-to: src/main.rs :: the sidecar's environment
+- kind: warning-context
+- logged: v1.25.0 (in progress) · 2026-10-01
+
+The shell asks the engine to end when its stdin pipe closes (backend desktop_entry.py has the reason: SIGKILL reaches only the onefile bootloader, and the exit handler does not run on every ending). Verified on Linux under Xvfb at 1600 by 1000, the shell built here (cargo build, 3 min 33 s) with the frozen engine beside it: launched with a .fmw as its argument, a window titled formwav opened at 1440 by 900 at (80, 50), 90% of the screen and centred, showing formwav served by the engine with that session open ("My Take", its Music and Voice tracks and markers); closing the window and SIGKILL of the shell each left no engine process.

@@ -761,3 +761,10 @@ From the tauri-compiler skill's engine entry: `--selfcheck` prints one JSON line
 - logged: v1.25.0 (in progress) · 2026-10-01
 
 A session file the user opens with the desktop app reaches the page as ?open=<path>; the engine checks it is a readable formwav session, copies it into the sessions under its own name (or "name (2)" and on when a different session already has it; the same file again reuses its copy), and opens it like any saved session. Verified: an exported session opened from /tmp/outside as "My Take" with its 2 tracks, again without a duplicate, a different file of the same name as "My Take (2)"; a .wav, a missing path and a damaged file refused with what to do.
+
+### desktop_entry.py · the engine ends with its shell, however the shell ends
+- refers-to: desktop_entry.py :: `exit_with_shell` in `main` (FORMWAV_EXIT_WITH_STDIN)
+- kind: warning-context
+- logged: v1.25.0 (in progress) · 2026-10-01
+
+Running the real shell under a virtual display found the engine orphaned when the window closed: both onefile processes lived on. Two causes compound: the shell's exit handler may not run when the window is destroyed or the shell crashes, and its kill is SIGKILL, which a PyInstaller onefile bootloader cannot pass to its Python child, so even a clean quit would orphan the server. The shell now sets FORMWAV_EXIT_WITH_STDIN=1 and the engine ends when its stdin, a pipe whose write end only the shell holds, reaches end-of-file, which happens however the shell ends. Opt-in, so the engine run on its own (the build script's selfcheck, the tests) is unaffected. Verified under Xvfb with the real shell: closing the window left no engine process; SIGKILL of the shell (no exit handler can run) left none within 4 s; the frozen engine without the flag and with stdin at /dev/null stayed up and healthy.

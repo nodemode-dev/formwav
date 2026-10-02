@@ -63,6 +63,7 @@ fn main() {
                 .sidecar("formwav-engine")
                 .expect("the engine sidecar is bundled")
                 .env("FORMWAV_PORT", "0")
+                .env("FORMWAV_EXIT_WITH_STDIN", "1")
                 .spawn()
                 .expect("the formwav engine failed to spawn");
             app.state::<Backend>().0.lock().unwrap().replace(child);
