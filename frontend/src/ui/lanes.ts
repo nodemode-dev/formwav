@@ -294,7 +294,7 @@ function updateFolder(row: HTMLElement, bus: { id: string; name: string }, count
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle fw-icon-btn" hidden aria-expanded="false" aria-label="Takes" title="Show every take as a lane; drag across a take to comp that range">${fcIcon("layers")}</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><div class="fw-lane-ms"><button type="button" class="fw-lane-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute this track"><span class="fw-glyph-off">${fcIcon("speaker")}</span><span class="fw-glyph-on">${fcIcon("mute")}</span></button><button type="button" class="fw-lane-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo this track">${fcIcon("headphones")}</button></div><button type="button" class="fw-auto-toggle fw-icon-btn" aria-expanded="false" aria-label="Automation" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">${fcIcon("curve")}</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-heads" hidden aria-hidden="true"></div><div class="fw-take-rows" hidden></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead"></button><button type="button" class="fw-takes-toggle fw-icon-btn" hidden aria-expanded="false" aria-label="Takes" title="Show every take as a lane; drag across a take to comp that range">${fcIcon("layers")}</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><div class="fw-lane-ms"><button type="button" class="fw-lane-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute this track"><span class="fw-glyph-off">${fcIcon("speaker")}</span><span class="fw-glyph-on">${fcIcon("mute")}</span></button><button type="button" class="fw-lane-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo this track">${fcIcon("headphones")}</button></div><button type="button" class="fw-auto-toggle fw-icon-btn" aria-expanded="false" aria-label="Automation" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">${fcIcon("curve")}</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span><span class="fw-auto-fx-head" hidden><select class="fw-auto-fx" aria-label="Effect parameter to automate"></select></span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="fx" data-fx="0" data-key="freq" aria-label="Effect parameter automation" hidden><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-heads" hidden aria-hidden="true"></div><div class="fw-take-rows" hidden></div>`;
   return lane;
 }
 
@@ -331,7 +331,10 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
   if (autoHeads && autoHeads.hidden === autoOpen) autoHeads.hidden = !autoOpen;
   if (autoRows) {
     if (autoRows.hidden === autoOpen) autoRows.hidden = !autoOpen;
-    if (autoOpen) for (const row of autoRows.querySelectorAll<HTMLElement>(".fw-auto-row")) drawAutoLane(row, track, row.dataset.param === "pan" ? "pan" : "volume", spp);
+    if (autoOpen) {
+      syncFxRow(node, track);
+      for (const row of autoRows.querySelectorAll<HTMLElement>(".fw-auto-row")) if (!row.hidden) drawAutoLane(row, track, rowScale(row), spp);
+    }
   }
   const takeClips = track.clips.filter((c) => (c.takes?.length ?? 0) > 1);
   const count = takeClips.reduce((most, c) => Math.max(most, c.takes?.length ?? 0), 0);
@@ -402,26 +405,115 @@ const AUTO_ROW_H = 48;
 const AUTO_INSET = 5;
 
 type AutoParam = "volume" | "pan";
+/** A row's scale: volume, pan, or a filter parameter (PT-19): frequency and Q logarithmic, as they are heard. */
+type AutoScale = AutoParam | "freq" | "gain" | "q";
 
-/** Where a value sits down an automation row, 0 at the top: volume +12 to -36 dB; pan left (-1) to right (+1). */
-function autoFraction(param: AutoParam, value: number): number {
-  return param === "volume" ? gainFraction(value) : Math.min(1, Math.max(0, (value + 1) / 2));
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+/** Where a value sits down an automation row, 0 at the top: volume +12 to -36 dB; pan left (-1) to right (+1);
+ * frequency 20 kHz to 20 Hz; gain +24 to -24 dB; Q 18 to 0.1. */
+function autoFraction(param: AutoScale, value: number): number {
+  switch (param) {
+    case "volume":
+      return gainFraction(value);
+    case "pan":
+      return clamp01((value + 1) / 2);
+    case "freq":
+      return clamp01(1 - Math.log(Math.max(20, value) / 20) / Math.log(1000));
+    case "gain":
+      return clamp01((24 - value) / 48);
+    case "q":
+      return clamp01(1 - Math.log(Math.max(0.1, value) / 0.1) / Math.log(180));
+  }
 }
 
 /** The value at a fraction down an automation row (the inverse of autoFraction), rounded as the document stores it. */
-function autoValue(param: AutoParam, frac: number): number {
-  return param === "volume" ? Math.round((GAIN_TOP_DB - frac * GAIN_SPAN_DB) * 10) / 10 : Math.round((frac * 2 - 1) * 100) / 100;
+function autoValue(param: AutoScale, frac: number): number {
+  switch (param) {
+    case "volume":
+      return Math.round((GAIN_TOP_DB - frac * GAIN_SPAN_DB) * 10) / 10;
+    case "pan":
+      return Math.round((frac * 2 - 1) * 100) / 100;
+    case "freq":
+      return Math.round(20 * 1000 ** (1 - frac));
+    case "gain":
+      return Math.round((24 - 48 * frac) * 10) / 10;
+    case "q":
+      return Math.round(0.1 * 180 ** (1 - frac) * 100) / 100;
+  }
+}
+
+/** The scale a row draws on: volume or pan, or for the effect row the chosen parameter (its data-key). */
+function rowScale(row: HTMLElement): AutoScale {
+  const p = row.dataset.param;
+  if (p === "volume" || p === "pan") return p;
+  return row.dataset.key === "gain" || row.dataset.key === "q" ? row.dataset.key : "freq";
+}
+
+/** The filter an effect row automates (its data-fx), or nothing when the track has no such filter. */
+function rowFilter(row: HTMLElement, track: Track) {
+  const f = row.dataset.param === "fx" ? track.fx?.[Number(row.dataset.fx)] : undefined;
+  return f && f.kind !== "compressor" ? f : undefined;
+}
+
+/** A row's points: the track's volume or pan automation, or the chosen filter parameter's. */
+function rowPoints(row: HTMLElement, track: Track): AutoPoint[] {
+  const p = row.dataset.param;
+  if (p === "volume" || p === "pan") return track.automation?.[p] ?? [];
+  const key = rowScale(row);
+  return key === "freq" || key === "gain" || key === "q" ? (rowFilter(row, track)?.automation?.[key] ?? []) : [];
+}
+
+/** The static value a row shows (dashed) while it holds no automation. */
+function rowStatic(row: HTMLElement, track: Track): number {
+  const p = row.dataset.param;
+  if (p === "volume") return track.gainDb;
+  if (p === "pan") return track.pan ?? 0;
+  const f = rowFilter(row, track);
+  const key = rowScale(row);
+  return !f ? 0 : key === "gain" ? f.gainDb : key === "q" ? f.q : f.freq;
+}
+
+const FILTER_NAMES: Record<string, string> = { highpass: "High-pass", lowpass: "Low-pass", peak: "Peak", lowshelf: "Low shelf", highshelf: "High shelf" };
+
+/** The effect row's menu follows the track's filters (frequency and Q for every filter, gain where it acts); the row
+ * and its head show only when there is a filter, and a choice that no longer exists falls back to the first. */
+function syncFxRow(node: HTMLElement, track: Track): void {
+  const select = node.querySelector<HTMLSelectElement>(".fw-auto-fx");
+  const head = node.querySelector<HTMLElement>(".fw-auto-fx-head");
+  const row = node.querySelector<HTMLElement>('.fw-auto-row[data-param="fx"]');
+  if (!select || !head || !row) return;
+  const options: [string, string][] = [];
+  (track.fx ?? []).forEach((f, i) => {
+    if (f.kind === "compressor") return;
+    const keys: [string, string][] = f.kind === "highpass" || f.kind === "lowpass" ? [["freq", "Frequency"], ["q", "Q"]] : [["freq", "Frequency"], ["gain", "Gain"], ["q", "Q"]];
+    for (const [key, label] of keys) options.push([`${i}:${key}`, `${i + 1} ${FILTER_NAMES[f.kind] ?? f.kind} · ${label}${f.automation?.[key as "freq"] ? " (automated)" : ""}`]);
+  });
+  const none = options.length === 0;
+  if (head.hidden !== none) head.hidden = none;
+  if (row.hidden !== none) row.hidden = none;
+  const html = options.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+  if (select.dataset.html !== html) {
+    select.dataset.html = html;
+    select.innerHTML = html;
+  }
+  const chosen = `${row.dataset.fx}:${row.dataset.key}`;
+  const value = options.some(([v]) => v === chosen) ? chosen : (options[0]?.[0] ?? "");
+  if (value && select.value !== value) select.value = value;
+  const [fx, key] = value.split(":");
+  if (fx !== undefined && row.dataset.fx !== fx) row.dataset.fx = fx;
+  if (key && row.dataset.key !== key) row.dataset.key = key;
 }
 
 /** Draws one automation row: the line through the points (held before the first and after the last), a circle per point; with no automation a dashed line shows the static fader or pan. */
-function drawAutoLane(row: HTMLElement, track: Track, param: AutoParam, spp: number, points: AutoPoint[] = track.automation?.[param] ?? []): void {
+function drawAutoLane(row: HTMLElement, track: Track, param: AutoScale, spp: number, points: AutoPoint[] = rowPoints(row, track)): void {
   const svg = row.querySelector<SVGSVGElement>(".fw-auto-svg");
   const line = svg?.querySelector<SVGPolylineElement>(".fw-auto-line");
   const group = svg?.querySelector<SVGGElement>(".fw-auto-points");
   if (!svg || !line || !group) return;
   const y = (value: number) => (AUTO_INSET + autoFraction(param, value) * (AUTO_ROW_H - 2 * AUTO_INSET)).toFixed(1);
   const x = (time: number) => (time / spp).toFixed(1);
-  const fallback = param === "volume" ? track.gainDb : track.pan ?? 0;
+  const fallback = rowStatic(row, track);
   const last = points[points.length - 1];
   const coords = points.length
     ? [`0,${y(points[0].value)}`, ...points.map((p) => `${x(p.time)},${y(p.value)}`), `${(last.time / spp + 100000).toFixed(1)},${y(last.value)}`]
@@ -621,8 +713,14 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     render(engine.get("document"));
   });
 
-  let autoDrag: { trackId: string; row: HTMLElement; param: AutoParam; index: number; points: AutoPoint[] } | null = null;
-  const autoPointAt = (row: HTMLElement, param: AutoParam, e: PointerEvent): AutoPoint => {
+  let autoDrag: { trackId: string; row: HTMLElement; param: AutoScale; index: number; points: AutoPoint[] } | null = null;
+  /** A row's edit: volume and pan are the track's automation; the effect row is its chosen filter parameter's. */
+  const commitAuto = (row: HTMLElement, trackId: string, points: AutoPoint[]) => {
+    const key = rowScale(row);
+    if (row.dataset.param === "fx" && (key === "freq" || key === "gain" || key === "q")) engine.dispatch({ type: "set-fx-automation", trackId, fxIndex: Number(row.dataset.fx), param: key, points });
+    else engine.dispatch({ type: "set-automation", trackId, param: row.dataset.param === "pan" ? "pan" : "volume", points });
+  };
+  const autoPointAt = (row: HTMLElement, param: AutoScale, e: PointerEvent): AutoPoint => {
     const doc = engine.get("document");
     const spp = samplesPerPixel(doc);
     const r = row.getBoundingClientRect();
@@ -639,13 +737,13 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const track = engine.get("document").tracks.find((t) => t.id === trackId);
     if (!row || !trackId || !track) return;
     e.preventDefault();
-    const param: AutoParam = row.dataset.param === "pan" ? "pan" : "volume";
-    const points = [...(track.automation?.[param] ?? [])];
+    const param = rowScale(row);
+    const points = [...rowPoints(row, track)];
     const circle = (e.target as Element).closest("circle");
     let index = circle?.parentElement ? Array.from(circle.parentElement.children).indexOf(circle) : -1;
     if (index >= 0 && e.altKey) {
       points.splice(index, 1);
-      engine.dispatch({ type: "set-automation", trackId, param, points });
+      commitAuto(row, trackId, points);
       return;
     }
     if (index < 0) {
@@ -671,11 +769,21 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const d = autoDrag;
     autoDrag = null;
     if (!d) return;
-    if (apply) engine.dispatch({ type: "set-automation", trackId: d.trackId, param: d.param, points: d.points });
+    if (apply) commitAuto(d.row, d.trackId, d.points);
     else render(engine.get("document"));
   };
   lanes.addEventListener("pointerup", () => endAuto(true));
   lanes.addEventListener("pointercancel", () => endAuto(false));
+  // the effect row's menu (PT-19): which filter parameter the row shows and edits
+  lanes.addEventListener("change", (e) => {
+    const select = (e.target as Element).closest<HTMLSelectElement>("select.fw-auto-fx");
+    const row = select?.closest(".fw-lane")?.querySelector<HTMLElement>('.fw-auto-row[data-param="fx"]');
+    if (!select || !row) return;
+    const [fx, key] = select.value.split(":");
+    row.dataset.fx = fx;
+    row.dataset.key = key;
+    render(engine.get("document"));
+  });
 
   /** Smart Tool range (interface state): a time range on one track, made by dragging in a clip's upper half. */
   let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number } } | null = null;

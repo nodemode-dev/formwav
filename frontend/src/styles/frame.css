@@ -282,3 +282,8 @@
 .fw-dock .fw-strip-buttons { grid-area: buttons; }
 .fw-dock .fw-strip-out { grid-area: out; }
 .fw-dock .fw-strip-vca { grid-area: vca; }
+
+/* The effect-parameter automation row's head (PT-19): a menu of the track's filter parameters, in the row's height */
+.fw-auto-fx-head { display: flex; align-items: center; min-inline-size: 0; }
+.fw-auto-fx-head[hidden] { display: none; }
+.fw-auto-fx { inline-size: 100%; min-inline-size: 0; block-size: 22px; font-family: var(--font-mono); font-size: var(--fs-11); }
