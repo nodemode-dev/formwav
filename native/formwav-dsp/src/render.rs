@@ -108,6 +108,10 @@ pub struct Player {
     /// pass, since `meter_tracks` mixes every clip again and a shared state would advance twice a block.
     clip_fx: Vec<Vec<crate::fx::Biquad>>,
     meter_fx: Vec<Vec<crate::fx::Biquad>>,
+    /// Each clip stage's design (kind, frequency, gain dB, Q), parallel to `clip_fx`, for automation to redesign it.
+    clip_fx_spec: Vec<Vec<(u8, f32, f32, f32)>>,
+    /// Effect parameter automation (PT-19), per clip: (stage, envelope ids for frequency, gain and Q; 0 is none).
+    clip_fx_auto: Vec<Vec<(usize, [u32; 3])>>,
     /// The master chain, run on the summed mix before the master gain, meters and loudness.
     master_fx: Vec<crate::fx::Stage>,
     /// Each bus's chain, parallel to `buses`, run on the bus's sum before its gain and pan: a track holding a
@@ -150,6 +154,8 @@ impl Player {
         self.clips.clear();
         self.clip_fx.clear();
         self.meter_fx.clear();
+        self.clip_fx_spec.clear();
+        self.clip_fx_auto.clear();
         self.order_dirty = true;
     }
 
@@ -157,7 +163,29 @@ impl Player {
         self.clips.push(clip);
         self.clip_fx.push(Vec::new());
         self.meter_fx.push(Vec::new());
+        self.clip_fx_spec.push(Vec::new());
+        self.clip_fx_auto.push(Vec::new());
         self.order_dirty = true;
+    }
+
+    /// Automates one parameter (0 frequency, 1 gain dB, 2 Q) of stage `stage` of the most recently added clip with
+    /// envelope `envelope` (add_envelope's id, natural units); false with no such clip, stage, parameter or envelope.
+    pub fn add_clip_fx_auto(&mut self, stage: usize, param: u8, envelope: u32) -> bool {
+        let (Some(specs), Some(autos)) = (self.clip_fx_spec.last(), self.clip_fx_auto.last_mut()) else {
+            return false;
+        };
+        if stage >= specs.len() || param > 2 || envelope == 0 || envelope as usize > self.envelopes.len() {
+            return false;
+        }
+        match autos.iter_mut().find(|(s, _)| *s == stage) {
+            Some((_, envs)) => envs[param as usize] = envelope,
+            None => {
+                let mut envs = [0u32; 3];
+                envs[param as usize] = envelope;
+                autos.push((stage, envs));
+            }
+        }
+        true
     }
 
     fn ensure_order(&mut self) {
@@ -184,6 +212,9 @@ impl Player {
         };
         chain.push(f);
         meter.push(f);
+        if let Some(specs) = self.clip_fx_spec.last_mut() {
+            specs.push((kind, freq, gain_db, q));
+        }
         true
     }
 
@@ -411,6 +442,9 @@ impl Player {
             let gain_right = clip.gain * pan_right;
             let fade_in = clip.fade_in.min(clip.length);
             let fade_out = clip.fade_out.min(clip.length - fade_in);
+            let autos = self.clip_fx_auto.get(index).map_or(&[][..], |v| &v[..]);
+            let specs = self.clip_fx_spec.get(index).map_or(&[][..], |v| &v[..]);
+            let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
             for t in a..b {
                 let k = t - clip.start;
                 let s = (clip.source_in + k) as usize;
@@ -425,6 +459,18 @@ impl Player {
                     fade *= fade_curve((clip.length - k) as f32 / fade_out as f32, clip.fade_shape);
                 }
                 let i = (t - from) as usize;
+                if !autos.is_empty() && (t - a) % 32 == 0 {
+                    // effect parameter automation (PT-19): redesigned every 32 samples, the filter's state kept
+                    if let Some(stages) = chain.as_deref_mut() {
+                        for &(stage, envs) in autos {
+                            let Some(&(kind, f0, g0, q0)) = specs.get(stage) else { continue };
+                            let value = |id: u32, base: f32| self.envelope(id).map_or(base, |e| e.value_at(t));
+                            if let (Some(f), Some(next)) = (stages.get_mut(stage), crate::fx::Biquad::design(kind, value(envs[0], f0), value(envs[1], g0), value(envs[2], q0), rate)) {
+                                f.retune(&next);
+                            }
+                        }
+                    }
+                }
                 let (mut xl, mut xr) = (l[s], r[s]);
                 if let Some(stages) = chain.as_deref_mut() {
                     for f in stages.iter_mut() {
@@ -561,5 +607,50 @@ mod tests {
         assert_eq!(buf.frames(), 1000);
         assert_eq!((buf.channels[0][99], buf.channels[0][100], buf.channels[0][299], buf.channels[0][300]), (0.0, 0.5, 0.5, 0.0));
         assert_eq!((buf.channels[1][100], buf.channels[1][999]), (-0.25, -0.25));
+    }
+
+    fn tone_through_lowpass(automate: bool) -> (f32, f32) {
+        tone_through(automate, 200.0)
+    }
+
+    fn tone_through(automate: bool, cutoff: f32) -> (f32, f32) {
+        let mut p = Player::new();
+        p.set_rate(48000.0);
+        p.alloc_source(1, 48000, 1, 48000);
+        let tone: Vec<f32> = (0..48000).map(|i| 0.5 * (2.0 * std::f32::consts::PI * 4000.0 * i as f32 / 48000.0).sin()).collect();
+        p.write_source(1, 0, &tone);
+        let env = p.add_envelope(&[(0, 200.0), (48000, 12000.0)], false);
+        p.add_clip(PlayClip { source: 1, start: 0, source_in: 0, length: 48000, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 1, gain_env: 0, pan_env: 0 });
+        assert!(p.add_clip_fx(crate::fx::LOWPASS, cutoff, 0.0, 0.707));
+        if automate {
+            assert!(p.add_clip_fx_auto(0, 0, env));
+        }
+        let (mut l, mut r) = (vec![0f32; 48000], vec![0f32; 48000]);
+        p.render(&mut l, &mut r);
+        let rms = |s: &[f32]| (s.iter().map(|v| v * v).sum::<f32>() / s.len() as f32).sqrt();
+        (rms(&l[2400..7200]), rms(&l[40800..45600]))
+    }
+
+    #[test]
+    fn an_automated_cutoff_opens_the_filter_over_time() {
+        let (early, late) = tone_through_lowpass(true);
+        let (still_early, still_late) = tone_through_lowpass(false);
+        // the cutoff passes 200 Hz to 12 kHz in a second: the 4 kHz tone is cut early and passes late
+        // late in the sweep the cutoff is near 12 kHz: the 4 kHz tone passes almost whole (unfiltered RMS 0.354)
+        assert!(late > 0.33, "automated late level {late}");
+        // early (0.05 to 0.15 s) the cutoff runs about 790 to 1970 Hz: the level matches a fixed filter at the
+        // envelope's mean there, 1385 Hz, so the filter follows the envelope rather than merely changing
+        let (fixed_at_mean, _) = tone_through(false, 1385.0);
+        assert!(early > 0.6 * fixed_at_mean && early < 1.6 * fixed_at_mean, "automated early {early}, fixed at 1385 Hz {fixed_at_mean}");
+        assert!(late > 5.0 * early, "automated: early {early}, late {late}");
+        // the same filter without automation stays at 200 Hz and keeps the tone cut throughout
+        assert!(still_late < 0.02 && still_early < 0.02, "fixed: {still_early} {still_late}");
+        // an automation for a stage or parameter that does not exist is refused
+        let mut p = Player::new();
+        let env = p.add_envelope(&[(0, 1.0)], false);
+        p.add_clip(PlayClip { source: 1, start: 0, source_in: 0, length: 10, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 1, gain_env: 0, pan_env: 0 });
+        assert!(!p.add_clip_fx_auto(0, 0, env));
+        assert!(p.add_clip_fx(crate::fx::PEAK, 1000.0, 6.0, 1.0));
+        assert!(!p.add_clip_fx_auto(0, 3, env) && !p.add_clip_fx_auto(0, 1, 7) && p.add_clip_fx_auto(0, 1, env));
     }
 }

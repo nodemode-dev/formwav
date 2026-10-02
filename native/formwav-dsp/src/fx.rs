@@ -75,6 +75,15 @@ impl Biquad {
 
     /// One sample through the filter on channel `ch` (0 left, 1 right).
     #[inline]
+    /// Takes `other`'s coefficients and keeps this filter's state, so an automated parameter moves without a click.
+    pub fn retune(&mut self, other: &Biquad) {
+        self.b0 = other.b0;
+        self.b1 = other.b1;
+        self.b2 = other.b2;
+        self.a1 = other.a1;
+        self.a2 = other.a2;
+    }
+
     pub fn process(&mut self, ch: usize, x: f32) -> f32 {
         let s = &mut self.state[ch & 1];
         let y = self.b0 * x + s[0];
