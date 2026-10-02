@@ -15,3 +15,10 @@ The owner asked for a Tauri desktop app like the other form editors. Built to th
 - logged: v1.25.0 (in progress) · 2026-10-01
 
 The shell asks the engine to end when its stdin pipe closes (backend desktop_entry.py has the reason: SIGKILL reaches only the onefile bootloader, and the exit handler does not run on every ending). Verified on Linux under Xvfb at 1600 by 1000, the shell built here (cargo build, 3 min 33 s) with the frozen engine beside it: launched with a .fmw as its argument, a window titled formwav opened at 1440 by 900 at (80, 50), 90% of the screen and centred, showing formwav served by the engine with that session open ("My Take", its Music and Voice tracks and markers); closing the window and SIGKILL of the shell each left no engine process.
+
+### src/main.rs · ending the engine by closing its stdin, not SIGKILL
+- refers-to: src/main.rs :: `kill_backend`
+- kind: warning-context
+- logged: v1.27.0 (in progress) · 2026-10-02
+
+Freeing a full disk turned up a 93 MB /tmp/_MEI folder: the onefile engine's unpacked self, left because its bootloader was SIGKILLed before it could remove it. The shell's quit did exactly that (CommandChild::kill is SIGKILL), so even with the engine ending on its stdin, every quit of the desktop app would have left about 90 MB in the temp folder. The shell now drops the child, which closes the stdin pipe the engine ends on (tauri-plugin-shell 2.4: CommandChild holds the stdin writer; kill sends SIGKILL), and the bootloader, still alive, removes its folder and exits. Verified on the frozen engine directly: SIGKILL of the bootloader left its unpack folder behind; closing its stdin ended both processes and removed it; afterwards no engine process and no unpack folder remained; the shell's cargo check passes with the change. Not re-run: the full shell under Xvfb with this quit path (the disk could not hold another debug build at the time); the owner's on-hardware check (after Quit, no formwav-engine process and no new _MEI folder in $TMPDIR) covers it.

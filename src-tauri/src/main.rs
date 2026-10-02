@@ -19,8 +19,10 @@ const MIN_LOGICAL: (f64, f64) = (980.0, 640.0);
 const SCREEN_FRACTION: f64 = 0.9;
 
 fn kill_backend(handle: &tauri::AppHandle) {
+    // Dropping the child closes its stdin, on which the engine ends (FORMWAV_EXIT_WITH_STDIN), letting the onefile's
+    // bootloader remove its unpack folder; SIGKILL left that folder (about 90 MB) behind in the temp folder each quit.
     if let Some(child) = handle.state::<Backend>().0.lock().unwrap().take() {
-        let _ = child.kill();
+        drop(child);
     }
 }
 
