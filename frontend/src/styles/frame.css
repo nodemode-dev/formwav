@@ -206,3 +206,22 @@
   .fw-tool-tray .fw-mode:has(svg) > span { display: none; }
   .fw-tool-tray .fw-mode:has(svg) { padding: 0 7px; }
 }
+
+/* The bottom dock: one tabbed home for Mixer, Terminal and Agent above the transport; a group-head tab strip, the
+ * open panel filling the body, the height dragged from the top edge. */
+.fw-dock { position: relative; flex: none; display: grid; grid-template-rows: auto minmax(0, 1fr); block-size: var(--fw-dock-h, 260px); max-block-size: 75%; background: var(--bg-secondary); border-block-start: 1px solid var(--line-0); }
+.fw-dock[hidden] { display: none; }
+.fw-dock-grip { position: absolute; inset-block-start: -3px; inset-inline: 0; z-index: 1; block-size: 6px; cursor: row-resize; touch-action: none; }
+.fw-dock-grip:hover,
+.fw-dock-grip:focus-visible { background: var(--accent-color-dim); outline: none; }
+.fw-dock-head { display: flex; align-items: center; gap: 4px; min-block-size: 34px; padding: 0 8px; background: var(--group-head); border-block-end: 1px solid var(--line-0); }
+.fw-dock-tabs { display: flex; gap: 2px; }
+.fw-dock-tab { block-size: 26px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-secondary); font-size: var(--fs-12); }
+.fw-dock-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-dock-tab[aria-selected="true"] { border-color: var(--line-3); background: var(--surface-raised); color: var(--text-primary); }
+.fw-dock-close { margin-inline-start: auto; display: inline-grid; place-items: center; inline-size: 26px; block-size: 26px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); }
+.fw-dock-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-dock-body { position: relative; min-block-size: 0; overflow: hidden; }
+.fw-dock-body > :is(.fw-term, .fw-mixer):not([hidden]) { block-size: 100%; max-block-size: none; margin: 0; border: 0; border-radius: 0; }
+.fw-dock .fw-term-title { display: none; }
+.fw-dock-body > .fw-mixer:not([hidden]) { overflow: auto; }

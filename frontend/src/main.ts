@@ -37,6 +37,7 @@ import { mountRecord } from "./ui/record";
 import { mountLatencyProbe } from "./ui/latency-probe";
 import { mountStatusBar } from "./ui/status-bar";
 import { mountFileMenu } from "./ui/file-menu";
+import { mountDock } from "./ui/dock";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
@@ -110,6 +111,7 @@ if (host) {
   mountLatencyProbe(host);
   mountStatusBar(host, engine);
   mountFileMenu(host);
+  mountDock(host);
   mountProjects(host, engine, player);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player } });
