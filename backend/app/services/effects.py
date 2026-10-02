@@ -172,7 +172,7 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "dialogue-isolate": ({"strength": ("Strength", 0, 100, 100, "%")}, lambda v: f"arnndn=m={_rnnoise_model()}:mix={v['strength'] / 100:.2f}"),
     "voice-clean": ({"strength": ("Strength", 0, 100, 50, "%")}, lambda v: f"highpass=f=90,afftdn=nf={-15 - 20 * v['strength'] / 100:.1f},acompressor=threshold=0.12:ratio={1.5 + 3 * v['strength'] / 100:.2f},alimiter"),
     "amplify-up": ({"db": ("Gain", -24, 24, 6, "dB")}, lambda v: f"volume={v['db']:.2f}dB"),
-    "peak-normalize": ({"target": ("Peak", -24, 0, -1, "dBFS")}, None),
+    "peak-normalize": ({"target": ("Peak", -24, 0, -1, "dBFS"), "dc": ("Remove DC (1 = on)", 0, 1, 0, "", 1), "independent": ("Each channel (1 = on)", 0, 1, 0, "", 1)}, None),
     "loudness-streaming": ({"target": ("Target", -36, -8, -14, "LUFS")}, lambda v: f"loudnorm=I={v['target']:.1f}:TP=-1:LRA=11"),
     "compress": ({"threshold": ("Threshold", -60, 0, -18, "dB"), "ratio": ("Ratio", 1, 20, 4, ":1")}, lambda v: f"acompressor=threshold={_lin(v['threshold']):.5f}:ratio={v['ratio']:.2f}:attack=10:release=150"),
     "noise-gate": ({"threshold": ("Threshold", -80, 0, -20, "dB")}, lambda v: f"agate=threshold={_lin(v['threshold']):.5f}:ratio=6:attack=5:release=120:range=0.05"),
@@ -250,7 +250,7 @@ def _values(name: str, given: dict | None) -> dict[str, float]:
     """The effect's parameter values: given ones clamped to their ranges, defaults for the rest."""
     spec = PARAMS.get(name, ({}, None))[0]
     out = {}
-    for key, (_, lo, hi, default, _) in spec.items():
+    for key, (_, lo, hi, default, *_rest) in spec.items():
         try:
             value = float((given or {}).get(key, default))
         except (TypeError, ValueError):
@@ -277,7 +277,7 @@ LEARNS_NOISE = frozenset(key for key, chain in ALL_CHAINS.items() if "afftdn" in
 
 def _controls(key: str) -> list[dict]:
     spec = PARAMS.get(key, ({}, None))[0]
-    return [{"id": p, "label": label, "min": lo, "max": hi, "default": default, "unit": unit} for p, (label, lo, hi, default, unit) in spec.items()]
+    return [{"id": p, "label": label, "min": lo, "max": hi, "default": default, "unit": unit, **({"step": step[0]} if step else {})} for p, (label, lo, hi, default, unit, *step) in spec.items()]
 
 
 #: Effects whose output does not line up sample for sample with the source (length or order changes), so they apply to a
@@ -601,7 +601,26 @@ def _dialogue_contour(x, rate: int, v: dict):
     return _rubberband_pitch(x, rate, 2**shift, step, "Dialogue contour", formants=True)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour}
+def _peak_normalize(x, rate: int, v: dict):
+    """Audacity's Normalize: each channel's DC offset removed first when asked (its mean subtracted), then the peak
+    brought to the target, the channels together (their balance kept) or each to the target on its own."""
+    import numpy as np
+
+    y = x.astype(np.float64)
+    if v.get("dc", 0) >= 0.5:
+        y = y - y.mean(axis=0, keepdims=True)
+    peaks = np.abs(y).max(axis=0)
+    if peaks.max() <= 1e-9:
+        raise media.MediaError("the clip is silent; there is nothing to normalize")
+    target = 10 ** (v["target"] / 20)
+    if v.get("independent", 0) >= 0.5:
+        gains = np.where(peaks > 1e-9, target / np.maximum(peaks, 1e-12), 1.0)
+    else:
+        gains = np.full(peaks.shape, target / peaks.max())
+    return (y * gains).astype(np.float32)
+
+
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:
@@ -730,13 +749,6 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
         return media.import_wav(f"{stem} ({LABELS.get(name, name).rstrip('.')}{detail}).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
     if name in STEREO_ONLY and channels < 2:
         raise media.MediaError(f"{LABELS.get(name, name)} works between two channels and needs a stereo clip")
-    if name == "peak-normalize":
-        from .tools import stats
-
-        peak_db = stats(media_id).get("peakDb")
-        if peak_db is None or peak_db <= -90:
-            raise media.MediaError("the clip is silent; there is nothing to normalize")
-        chain = f"volume={values['target'] - peak_db:.6f}dB"
     if chain.startswith("loudnorm="):
         # Measured, then an exact linear gain (Audition's Match Loudness, as a reference). Single-pass loudnorm runs
         # dynamically and missed a -20 LUFS target by 0.9 LU on short clips; two-pass loudnorm still missed by 0.5 LU

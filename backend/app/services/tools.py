@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import numpy as np
+
 from ..core.paths import media_dir
 from . import media
 
@@ -29,11 +31,50 @@ def _run(cmd: list[str], out: Path) -> bytes:
     return out.read_bytes()
 
 
-def generate(kind: str, seconds: float, rate: int, freq: float = 440.0, digits: str = "") -> dict:
+WAVEFORMS = ("sine", "square", "sawtooth", "triangle")
+
+
+def _tone(freq: float, seconds: float, rate: int, waveform: str, amplitude: float) -> bytes:
+    """A tone as WAV bytes: sine exactly, the others band-limited, one cycle summed from the harmonics below Nyquist
+    (square: odd at 1/n; sawtooth: all at 1/n; triangle: odd at 1/n squared, alternating), scaled to its peak and read
+    by phase, so a high tone carries no aliases at any length."""
+    from .audacity import _wav_bytes
+
+    n = int(round(seconds * rate))
+    phase = (np.arange(n, dtype=np.float64) * (freq / rate)) % 1.0
+    if waveform == "sine":
+        wave = np.sin(2 * np.pi * phase)
+    else:
+        size = 8192
+        cycle = np.arange(size) / size
+        table = np.zeros(size)
+        top = max(1, int((rate / 2 - 1) // freq))
+        for h in range(1, top + 1):
+            if waveform == "sawtooth":
+                table += np.sin(2 * np.pi * h * cycle) / h
+            elif h % 2:
+                table += (np.sin(2 * np.pi * h * cycle) / h) if waveform == "square" else ((-1) ** ((h - 1) // 2) * np.sin(2 * np.pi * h * cycle) / (h * h))
+        table /= np.abs(table).max() or 1.0
+        pos = phase * size
+        i0 = pos.astype(np.int64) % size
+        frac = pos - np.floor(pos)
+        wave = table[i0] * (1 - frac) + table[(i0 + 1) % size] * frac
+    return _wav_bytes([(amplitude * wave).astype(np.float32)], rate)
+
+
+def generate(kind: str, seconds: float, rate: int, freq: float = 440.0, digits: str = "", waveform: str = "sine", amplitude: float = 0.5) -> dict:
     """Renders a generated signal (mono, 32-bit float at `rate`) into new media."""
     if kind not in KINDS:
         raise media.MediaError(f"no generator named {kind}")
     seconds = max(0.01, min(float(seconds), 3600.0))
+    if kind == "tone":
+        if waveform not in WAVEFORMS:
+            raise media.MediaError(f"no waveform named {waveform} (one of {', '.join(WAVEFORMS)})")
+        if not 1 <= freq < rate / 2:
+            raise media.MediaError(f"a tone's frequency must be from 1 Hz to below {rate // 2} Hz")
+        amplitude = max(0.0, min(float(amplitude), 1.0))
+        name = f"Tone {freq:g} Hz {waveform} {seconds:g} s.wav"
+        return media.import_wav(name, _tone(float(freq), seconds, rate, waveform, amplitude))
     ffmpeg = media._tool("ffmpeg")
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "generated.wav"

@@ -65,11 +65,11 @@ def library_add(item: str, rate: int = 48000) -> dict:
 
 
 @router.post("/generate", status_code=201)
-def generate_signal(kind: str, seconds: float = 5.0, rate: int = 48000, freq: float = 440.0, digits: str = "") -> dict:
+def generate_signal(kind: str, seconds: float = 5.0, rate: int = 48000, freq: float = 440.0, digits: str = "", waveform: str = "sine", amplitude: float = 0.5) -> dict:
     from ..services import tools
 
     try:
-        return tools.generate(kind, seconds, _rate(str(rate)) or rate, freq, digits)
+        return tools.generate(kind, seconds, _rate(str(rate)) or rate, freq, digits, waveform, amplitude)
     except media.CoreMissing as err:
         raise HTTPException(503, str(err)) from err
     except media.MediaError as err:

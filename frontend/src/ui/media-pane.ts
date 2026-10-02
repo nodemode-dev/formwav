@@ -40,6 +40,8 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-field fw-field-stack"><span>Signal</span><select data-g="kind"><option value="tone">Tone</option><option value="noise-white">White noise</option><option value="noise-pink">Pink noise</option><option value="noise-brown">Brown noise</option><option value="silence">Silence</option><option value="chirp">Chirp, 100 Hz to 8 kHz</option><option value="dtmf">DTMF tones</option><option value="bleep">Bleep, 1 kHz</option></select></label>
 <label class="fw-field" data-gfor="tone noise-white noise-pink noise-brown silence chirp bleep"><span>Seconds</span><input type="number" data-g="seconds" value="5" min="0.1" max="3600" step="0.1"><span></span></label>
 <label class="fw-field" data-gfor="tone"><span>Hz</span><input type="number" data-g="freq" value="440" min="20" max="20000" step="1"><span></span></label>
+<label class="fw-field" data-gfor="tone"><span>Wave</span><select data-g="waveform"><option value="sine">Sine</option><option value="square">Square</option><option value="sawtooth">Sawtooth</option><option value="triangle">Triangle</option></select><span></span></label>
+<label class="fw-field" data-gfor="tone"><span>Level</span><input type="number" data-g="amplitude" value="0.5" min="0" max="1" step="0.05" title="Amplitude, 0 to 1 of full scale"><span></span></label>
 <label class="fw-field" data-gfor="dtmf"><span>Digits</span><input type="text" data-g="digits" value="0123456789" maxlength="64"><span></span></label>
 <button type="button" class="fw-ibtn" data-g="go">Add on a new track</button>`;
   (host.querySelector<HTMLElement>(".fw-create-body") ?? list).append(gen);
@@ -116,6 +118,8 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
       rate: String(doc.tracks.length ? doc.sampleRate : 48000),
       freq: g<HTMLInputElement>("freq").value,
       digits: g<HTMLInputElement>("digits").value,
+      waveform: g<HTMLSelectElement>("waveform").value,
+      amplitude: g<HTMLInputElement>("amplitude").value,
     });
     const notice = host.querySelector<HTMLElement>(".fw-notice");
     button.disabled = true;
