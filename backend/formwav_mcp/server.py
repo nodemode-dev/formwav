@@ -50,7 +50,7 @@ mcp = MCPServer(
 async def _call(method: str, path: str, *, content: bytes | None = None, headers: dict[str, str] | None = None, timeout: float = 600.0) -> httpx.Response:
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            res = await client.request(method, f"{ENGINE}{path}", content=content, headers=headers)
+            res = await client.request(method, f"{ENGINE}{path}", content=content, headers={**(headers or {}), "x-formwav-local": "1"})
     except httpx.ConnectError as err:
         raise ToolError(f"The formwav engine is not running at {ENGINE}. Start formwav (or its engine with backend/boot_backend), then retry.") from err
     if res.status_code >= 400:

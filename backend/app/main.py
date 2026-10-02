@@ -1,7 +1,10 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import cors_origins
+from .core.security import LocalOnly
 from .core.version import VERSION
 from .routers import agent, health, media, presets, projects, providers, render, terminal
 
@@ -13,6 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Samples-Per-Peak", "X-Channels", "X-Blocks"],
 )
+app.add_middleware(LocalOnly)
 app.include_router(health.router, prefix="/api")
 app.include_router(media.router, prefix="/api")
 app.include_router(presets.router, prefix="/api")
@@ -48,3 +52,11 @@ except ImportError as _voice_error:
         )
 
     app.include_router(_voice_fallback, prefix="/api")
+
+# The desktop app (desktop_entry.py) points FORMWAV_DIST at the interface built into it, served from the engine's own
+# origin so the page and the API are one origin; mounted last, after every /api route. The web build leaves it unset.
+_dist = os.environ.get("FORMWAV_DIST", "")
+if _dist and os.path.isdir(_dist):
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=_dist, html=True), name="interface")

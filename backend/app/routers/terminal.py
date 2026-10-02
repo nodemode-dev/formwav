@@ -25,13 +25,15 @@ from ..core.config import cors_origins
 router = APIRouter()
 
 
-def _allowed(origin: str | None) -> bool:
-    return bool(origin) and origin in cors_origins()
+def _allowed(origin: str | None, host: str | None) -> bool:
+    # the dev origins, or the engine's own (the desktop app serves the page from the engine; the lockdown has already
+    # held the Host to loopback, so no other site can present it)
+    return bool(origin) and (origin in cors_origins() or origin == f"http://{host}")
 
 
 @router.websocket("/terminal")
 async def terminal(ws: WebSocket) -> None:
-    if os.environ.get("FORMWAV_TERMINAL", "1") == "0" or os.name != "posix" or not _allowed(ws.headers.get("origin")):
+    if os.environ.get("FORMWAV_TERMINAL", "1") == "0" or os.name != "posix" or not _allowed(ws.headers.get("origin"), ws.headers.get("host")):
         await ws.close(code=4403)  # before accept: the handshake is refused (HTTP 403)
         return
     import fcntl
