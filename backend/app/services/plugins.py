@@ -66,8 +66,11 @@ def catalogue_group() -> list[dict]:
     return [{"group": "Plugins", "effects": effects}] if effects else []
 
 
-def apply(media_id: str, name: str, params: dict | None = None) -> dict:
-    """Renders a stored media file through the plugin `name` (plugin:<format>:<path>, as listed) into new media."""
+_params: dict[str, list[dict]] = {}
+
+
+def _installed(name: str) -> tuple[str, str, dict]:
+    """plugin:<format>:<path> resolved against the scan: only a plugin the scan found is ever loaded."""
     try:
         _, fmt, path = name.split(":", 2)
     except ValueError as err:
@@ -75,13 +78,46 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     plugin = next((p for p in scan() if p.get("format") == fmt and p.get("path") == path and "error" not in p), None)
     if plugin is None:
         raise media.MediaError(f"no installed {fmt.upper()} plugin at {path} (rescan with GET /api/plugins?refresh=1)")
+    return fmt, path, plugin
+
+
+def params(name: str) -> list[dict]:
+    """A plugin's parameters as the Inspector's controls (ids p<id>, beside the Tail control), listed by the host the
+    first time they are asked for and kept: never during a scan, which would instantiate every installed plugin."""
+    fmt, path, _ = _installed(name)
+    if name not in _params:
+        try:
+            done = subprocess.run([host_binary(), "params", fmt, path], capture_output=True, timeout=120)
+            if done.returncode != 0:
+                return []  # not kept: a failure (an old host, a busy plugin) is asked again next time
+            rows = json.loads(done.stdout or b"[]")
+        except (subprocess.TimeoutExpired, ValueError, OSError):
+            return []
+        controls = []
+        for r in rows[:64]:
+            control = {"id": f"p{r['id']}", "label": r["name"], "min": r["min"], "max": r["max"], "default": r["default"]}
+            if r.get("steps", 0) > 0:
+                control["step"] = (r["max"] - r["min"]) / r["steps"]
+            controls.append(control)
+        _params[name] = controls
+    return _params[name]
+
+
+def apply(media_id: str, name: str, params: dict | None = None) -> dict:
+    """Renders a stored media file through the plugin `name` (plugin:<format>:<path>, as listed) into new media, with
+    any parameter values chosen in its controls (p<id>) set at its first sample."""
+    fmt, path, plugin = _installed(name)
+    values = {k[1:]: float(v) for k, v in (params or {}).items() if k.startswith("p") and k[1:].isdigit()}
     tail = max(0.0, min(10.0, float((params or {}).get("tail", 0) or 0)))
     info = media.media_info(media_id)
     source = media.media_dir() / f"{media_id}.wav"
     with tempfile.TemporaryDirectory(prefix="formwav-plugin-") as tmp:
         out = Path(tmp) / "out.wav"
         try:
-            done = subprocess.run([host_binary(), "process", fmt, path, str(source), str(out), f"{tail:g}"], capture_output=True, timeout=900)
+            command = [host_binary(), "process", fmt, path, str(source), str(out), f"{tail:g}"]
+            if values:
+                command.append(json.dumps(values))
+            done = subprocess.run(command, capture_output=True, timeout=900)
         except subprocess.TimeoutExpired as err:
             raise media.MediaError(f"{plugin['name']} did not finish within 15 minutes") from err
         if done.returncode != 0 or not out.is_file():

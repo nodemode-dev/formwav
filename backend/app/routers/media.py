@@ -302,6 +302,17 @@ def list_plugins(refresh: bool = False) -> dict:
     return {"plugins": plugins.scan(refresh)}
 
 
+@router.get("/plugins/params")
+def plugin_params(name: str) -> dict:
+    """A scanned plugin's parameters as effect controls (services/plugins.py), for its generated controls."""
+    from ..services import plugins
+
+    try:
+        return {"params": plugins.params(name)}
+    except media.MediaError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from err
+
+
 @router.get("/sam-audio/status")
 def sam_audio_status() -> dict:
     """Which of SAM-Audio's preconditions are met: installed, Hugging Face login or a cached checkpoint, device."""
