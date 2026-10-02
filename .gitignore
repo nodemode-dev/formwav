@@ -34,3 +34,6 @@ backend/build/
 backend/dist/
 backend/wheels/
 backend/*.spec
+
+# spike B, the hosting spike's build output
+spikes/host/target/
