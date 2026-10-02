@@ -52,3 +52,7 @@
 .fw-out-track { block-size: 5px; border-radius: 2px; overflow: hidden; background: linear-gradient(90deg, var(--surface-0) 0 80%, color-mix(in srgb, var(--warn) 22%, var(--surface-0)) 80% 95%, color-mix(in srgb, var(--danger) 30%, var(--surface-0)) 95%); }
 .fw-out-bar { block-size: 100%; background: var(--ok); transform-origin: left center; }
 .fw-lane-head .fw-out-track { block-size: 4px; }
+
+/* The ruler is a group head over the bed; its corner (over the track headers) matches it. */
+.fw-ruler { background: var(--group-head); border-block-end: 1px solid var(--line-0); }
+.fw-ruler-corner { background: var(--group-head); border-inline-end: 1px solid var(--line-1); }
