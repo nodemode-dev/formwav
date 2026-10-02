@@ -218,7 +218,16 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     }
     let in_events = clap_input_events { ctx: ptr::null_mut(), size: Some(crate::no_events_size), get: Some(crate::no_events_get) };
     let out_events = clap_output_events { ctx: ptr::null_mut(), try_push: Some(crate::no_events_push) };
-    let (o0, o1) = (out[0].as_mut_ptr(), out[1].as_mut_ptr());
+    // Latency compensation: a plugin that reports latency outputs that much later, so it runs that many frames of
+    // silence past the end and the output is taken from that point, lining up sample for sample with the input.
+    let latency_ext = ((*plugin).get_extension.ok_or("no get_extension")?)(plugin, clap_sys::ext::latency::CLAP_EXT_LATENCY.as_ptr()) as *const clap_sys::ext::latency::clap_plugin_latency;
+    let latency = latency_ext.as_ref().and_then(|e| e.get).map_or(0, |get| get(plugin) as usize);
+    let (mut padded_l, mut padded_r) = (left.to_vec(), right.to_vec());
+    padded_l.resize(left.len() + latency, 0.0);
+    padded_r.resize(right.len() + latency, 0.0);
+    let (left, right) = (&padded_l[..], &padded_r[..]);
+    let mut wet = vec![vec![0f32; left.len()]; 2];
+    let (o0, o1) = (wet[0].as_mut_ptr(), wet[1].as_mut_ptr());
     let mut pos = 0;
     while pos < left.len() {
         let n = BLOCK.min(left.len() - pos);
@@ -241,6 +250,10 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
             return Err(format!("the plugin failed at frame {pos}"));
         }
         pos += n;
+    }
+    for (channel, dst) in out.iter_mut().enumerate() {
+        let len = dst.len();
+        dst.copy_from_slice(&wet[channel][latency..latency + len]);
     }
     ((*plugin).stop_processing.ok_or("no stop_processing")?)(plugin);
     ((*plugin).deactivate.ok_or("no deactivate")?)(plugin);
@@ -273,7 +286,14 @@ unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
         return Err("the processor would not set up or activate".into());
     }
     processor.setProcessing(1);
-    let (o0, o1) = (out[0].as_mut_ptr(), out[1].as_mut_ptr());
+    // Latency compensation, as for CLAP: run the reported latency past the end and take the output from there.
+    let latency = processor.getLatencySamples() as usize;
+    let (mut padded_l, mut padded_r) = (left.to_vec(), right.to_vec());
+    padded_l.resize(left.len() + latency, 0.0);
+    padded_r.resize(right.len() + latency, 0.0);
+    let (left, right) = (&padded_l[..], &padded_r[..]);
+    let mut wet = vec![vec![0f32; left.len()]; 2];
+    let (o0, o1) = (wet[0].as_mut_ptr(), wet[1].as_mut_ptr());
     let mut pos = 0;
     let mut failed = None;
     while pos < left.len() {
@@ -301,6 +321,10 @@ unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
             break;
         }
         pos += n;
+    }
+    for (channel, dst) in out.iter_mut().enumerate() {
+        let len = dst.len();
+        dst.copy_from_slice(&wet[channel][latency..latency + len]);
     }
     processor.setProcessing(0);
     component.setActive(0);

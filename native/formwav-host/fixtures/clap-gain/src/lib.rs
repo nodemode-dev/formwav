@@ -39,9 +39,25 @@ unsafe extern "C" fn plugin_destroy(plugin: *const clap_plugin) {
     drop(Box::from_raw(plugin as *mut clap_plugin));
 }
 
+// An optional declared latency for testing a host's compensation: FORMWAV_TEST_LATENCY=n delays the output by n
+// samples and reports n through CLAP's latency extension; unset, the fixture has none.
+static DELAY: std::sync::Mutex<Vec<std::collections::VecDeque<f32>>> = std::sync::Mutex::new(Vec::new());
+
+fn test_latency() -> u32 {
+    std::env::var("FORMWAV_TEST_LATENCY").ok().and_then(|v| v.parse().ok()).unwrap_or(0)
+}
+
 unsafe extern "C" fn plugin_activate(_plugin: *const clap_plugin, _rate: f64, _min: u32, _max: u32) -> bool {
+    let n = test_latency() as usize;
+    *DELAY.lock().unwrap() = (0..2).map(|_| std::iter::repeat(0.0).take(n).collect()).collect();
     true
 }
+
+unsafe extern "C" fn latency_get(_plugin: *const clap_plugin) -> u32 {
+    test_latency()
+}
+
+static LATENCY: clap_sys::ext::latency::clap_plugin_latency = clap_sys::ext::latency::clap_plugin_latency { get: Some(latency_get) };
 
 unsafe extern "C" fn plugin_start(_plugin: *const clap_plugin) -> bool {
     true
@@ -56,11 +72,20 @@ unsafe extern "C" fn plugin_process(_plugin: *const clap_plugin, process: *const
     }
     let input = &*process.audio_inputs;
     let output = &*process.audio_outputs;
+    let mut delay = DELAY.lock().unwrap();
     for channel in 0..input.channel_count.min(output.channel_count) as usize {
         let src = *input.data32.add(channel);
         let dst = *output.data32.add(channel);
+        let mut line = delay.get_mut(channel);
         for i in 0..process.frames_count as usize {
-            *dst.add(i) = *src.add(i) * 0.5;
+            let wet = *src.add(i) * 0.5;
+            *dst.add(i) = match line {
+                Some(ref mut l) if !l.is_empty() => {
+                    l.push_back(wet);
+                    l.pop_front().unwrap_or(0.0)
+                }
+                _ => wet,
+            };
         }
     }
     CLAP_PROCESS_CONTINUE
@@ -91,6 +116,8 @@ static AUDIO_PORTS: clap_plugin_audio_ports = clap_plugin_audio_ports { count: S
 unsafe extern "C" fn plugin_get_extension(_plugin: *const clap_plugin, id: *const c_char) -> *const c_void {
     if CStr::from_ptr(id) == CLAP_EXT_AUDIO_PORTS {
         &AUDIO_PORTS as *const clap_plugin_audio_ports as *const c_void
+    } else if CStr::from_ptr(id) == clap_sys::ext::latency::CLAP_EXT_LATENCY {
+        &LATENCY as *const clap_sys::ext::latency::clap_plugin_latency as *const c_void
     } else {
         ptr::null()
     }
