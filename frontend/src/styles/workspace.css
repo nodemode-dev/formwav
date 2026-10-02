@@ -156,9 +156,9 @@
 .fw-mic-findings { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
 .fw-mic-findings[hidden] { display: none; }
 .fw-finding { display: grid; gap: 4px; padding: 6px 8px; border-inline-start: 3px solid var(--border-color); border-radius: 4px; background: var(--bg-tertiary); }
-.fw-finding.is-ok { border-inline-start-color: var(--success-color, #3fb950); }
+.fw-finding.is-ok { border-inline-start-color: var(--ok); }
 .fw-finding.is-warn { border-inline-start-color: var(--accent-color); }
-.fw-finding.is-bad { border-inline-start-color: var(--error-color, #f85149); }
+.fw-finding.is-bad { border-inline-start-color: var(--danger); }
 .fw-finding .fw-ibtn { justify-self: start; }
 .fw-chain { display: grid; gap: 4px; margin: 0; padding-inline-start: 18px; font-size: 12px; }
 .fw-chain[hidden] { display: none; }
@@ -197,11 +197,16 @@
 .fw-clip-env { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; pointer-events: none; display: none; overflow: visible; }
 .fw-clip-env[data-on="true"] { display: block; }
 .fw-clip-env polyline { fill: none; stroke: var(--accent-color); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+/* Audio clips wear the suite's audio tag (formcut's audio clips are the same green); selection and take states keep their own, more specific rules. */
+.fw-clip { background: var(--fw-audio-shade); border-color: color-mix(in srgb, var(--fw-audio) 45%, transparent); color: var(--fw-audio); }
+/* Track beds alternate between the suite's two working surfaces. */
+.fw-lane-body { background: var(--surface-1); }
+.fw-lane:nth-child(even) .fw-lane-body { background: var(--surface-2); }
 .fw-speed select { padding: 2px 4px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 .fw-speed input[type="number"] { inline-size: 56px; padding: 2px 4px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 
 .fw-export-dialog { inline-size: min(360px, calc(100vw - 32px)); padding: 16px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; }
-.fw-export-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.fw-export-dialog::backdrop { background: var(--bg-scrim); }
 .fw-export-dialog form { display: grid; gap: 10px; }
 .fw-export-dialog select { inline-size: 100%; padding: 4px 6px; font: inherit; font-size: 13px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 .fw-dialog-title { margin: 0; font-size: 15px; font-weight: 600; }

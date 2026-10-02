@@ -2,10 +2,12 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/jetbrains-mono/400.css";
-import "./vendor/nodemode/tokens.css";
+import "./styles/tokens.css";
+import "./styles/fonts.css";
+import "./styles/light-mode.css";
 import "./styles/shell.css";
 import "./styles/workspace.css";
-import "./styles/family.css";
+import "./styles/scrollbars.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
 import "./extensions/engine-link";
@@ -30,7 +32,7 @@ import { mountRecord } from "./ui/record";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
-import { applyTheme } from "./vendor/nodemode/themes";
+import { applyTheme } from "./vendor/formvis/themes";
 
 applyTheme();
 const engine = createEngine();
@@ -86,4 +88,9 @@ if (host) {
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player } });
 activateAll(engine);
-document.fonts.ready.then(revealApp, revealApp);
+// The suite's faces are requested by name before the reveal: fonts.ready alone resolved before Inter had been asked
+// for, so on a slow network the app showed in a fallback face and shifted when Inter swapped in. Never longer than 4 s.
+Promise.race([
+  Promise.all(["400 13px Inter", "500 13px Inter", "600 13px Inter", '400 12px "JetBrains Mono"'].map((face) => document.fonts.load(face))).then(() => document.fonts.ready),
+  new Promise((done) => setTimeout(done, 4000)),
+]).then(revealApp, revealApp);

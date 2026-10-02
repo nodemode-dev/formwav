@@ -6,12 +6,17 @@ This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 It includes third-party components under their own licences:
 
-- NodeMode design system: design tokens, the fourteen theme profiles, the pre-paint
-  theme boot, the DOM-stable helpers and an icon subset, taken from the
+- formvis Studio Dark design language (the form family's shared look), from the
+  formai-design-lang pack v1.0.0 (formvis 1.53.9), Apache-2.0: copied unmodified,
+  frontend/src/styles/fonts.css, light-mode.css and scrollbars.css,
+  frontend/src/vendor/formvis/themes.ts, and the theme boot inlined verbatim in
+  frontend/index.html; frontend/src/styles/tokens.css is formvis's tokens.css with its
+  app block replaced by formwav's (the audio clip colours and the toast band). Since
+  v1.19.0; it replaced the NodeMode tokens, themes and boot listed below.
+- NodeMode design system: the DOM-stable helpers and an icon subset, taken from the
   stylized-nodemode pack v1.0.0, which mirrors the NodeMode v7.1.0 frontend.
-  MIT licence. Files copied unmodified: frontend/src/vendor/nodemode/tokens.css,
-  frontend/src/vendor/nodemode/themes.ts, frontend/src/vendor/nodemode/dom-stable.ts,
-  and the theme boot inlined verbatim in frontend/index.html. frontend/src/ui/icons.ts
+  MIT licence. File copied unmodified: frontend/src/vendor/nodemode/dom-stable.ts
+  (its tokens.css and themes.ts were retired at v1.19.0). frontend/src/ui/icons.ts
   carries twelve icons copied byte for byte from the NodeMode icon module, with a
   formwav helper around them. The shell rules in frontend/src/styles/shell.css are
   formwav's own.

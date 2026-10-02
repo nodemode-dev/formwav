@@ -617,7 +617,7 @@ html, body, #app { height: 100%; }
 }
 
 .fw-lane-ms button:hover { border-color: var(--border-light); color: var(--text-primary); }
-.fw-lane-mute[aria-pressed="true"] { color: #fff; background: var(--danger); border-color: var(--danger); }
+.fw-lane-mute[aria-pressed="true"] { color: var(--text-on-accent); background: var(--danger); border-color: var(--danger); }
 .fw-lane-solo[aria-pressed="true"] { color: var(--text-on-accent); background: var(--accent-color); border-color: var(--accent-color); }
 
 .fw-mode { display: inline-flex; align-items: center; gap: 6px; }

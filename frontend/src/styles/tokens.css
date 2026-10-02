@@ -13,23 +13,25 @@
    3. Dark is the default. Light is body.theme-light, an override layer. */
 
 :root {
-  /* ── accent (settings-driven in the app; --accent-color-dim is accent + 33 alpha) ── */
+  /* Native controls (checkboxes, dropdowns, scrollbars) in the dark, as the target's; the light profiles set light. */
+  color-scheme: dark;
+  /* ── accent (settings-driven in the app; --accent-color-dim is accent + 33 alpha); the target's lavender ── */
   --accent-color: #f97316;
   --accent-color-dim: #f9731633;
-  --accent-color-hover: #ea580c;
+  --accent-color-hover: color-mix(in srgb, var(--accent-color) 82%, #ffffff);
 
-  /* ── surfaces (theme-owned; nodemode-dark profile values) ── */
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #121218;
-  --bg-tertiary: #1a1a24;
-  --bg-node: #121218;
-  --border-color: #2a2a35;
-  --border-light: #3a3a48;
-  --text-primary: #e8e8ee;
-  --text-secondary: #a8a8b8;
-  --text-muted: #6a6a7a;
-  --canvas-bg: #0a0a0a;
-  --grid-color: rgba(255,255,255,0.04);
+  /* ── surfaces (theme-owned; the Studio Dark profile's values, measured from the target: UI_SPEC.md) ── */
+  --bg-primary: #111111;
+  --bg-secondary: #17151b;
+  --bg-tertiary: #222127;
+  --bg-node: #191919;
+  --border-color: #2a2a2a;
+  --border-light: #34333a;
+  --text-primary: #f7f7f7;
+  --text-secondary: #a4a4a4;
+  --text-muted: #717072;
+  --canvas-bg: #1c1b1d;
+  --grid-color: #5e5e60;
   --node-shadow: 0 6px 18px rgba(0,0,0,0.45);
 
   /* ── canvas geometry (the app's defaults) ── */
@@ -84,8 +86,8 @@
   --radius-pill: 999px;
 
   /* ── type ── */
-  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'JetBrains Mono', monospace;
   --fs-9: 9px;
   --fs-10: 10px;
   --fs-11: 11px;
@@ -109,8 +111,31 @@
   --text-on-accent: #fff;
   --text-on-cta: #000;          /* the homepage New Flow button: black on accent */
   --border-soft: rgba(255, 255, 255, 0.08);
-  --accent-tint: rgba(249, 115, 22, 0.06);
-  --accent-tint-strong: rgba(249, 115, 22, 0.10);
+  --accent-tint: color-mix(in srgb, var(--accent-color) 6%, transparent);
+  --accent-tint-strong: color-mix(in srgb, var(--accent-color) 10%, transparent);
+
+  /* ── Phase 21 semantic tokens: every surface, line and accent tint the redesign uses, derived from the theme's own
+     variables and the accent, so all fifteen profiles (the light ones too) are right, and nothing is hardcoded.
+     --accent-intensity (Preferences > Interface, 0 to 1.5) scales how strongly the accent tints what it marks. ── */
+  --accent-intensity: 1;
+  --surface-0: var(--bg-primary);
+  --surface-1: color-mix(in srgb, var(--bg-primary) 55%, var(--bg-tertiary));
+  --surface-2: var(--bg-node);
+  --surface-field: var(--bg-input);
+  --surface-raised: color-mix(in srgb, var(--bg-node) 70%, var(--text-primary) 8%);
+  --group-head: color-mix(in srgb, var(--bg-primary) 30%, #000);
+  --line-0: color-mix(in srgb, var(--bg-primary) 55%, #000);
+  --line-1: var(--border-color);
+  --line-2: var(--border-light);
+  --line-3: color-mix(in srgb, var(--border-light) 75%, var(--text-muted));
+  --cta-bg: #ffffff;
+  --cta-bg-hover: #f2f2f2;
+  --cta-text: #000000;
+  --accent-soft: color-mix(in srgb, var(--accent-color) calc(20% * var(--accent-intensity)), var(--surface-2));
+  --accent-line: color-mix(in srgb, var(--accent-color) calc(48% * var(--accent-intensity)), var(--line-2));
+  --accent-glow: color-mix(in srgb, var(--accent-color) calc(30% * var(--accent-intensity)), var(--surface-2));
+  --accent-ink: color-mix(in srgb, var(--accent-color) calc(80% * var(--accent-intensity)), var(--text-primary));
+  --accent-wash: color-mix(in srgb, var(--accent-color) calc(10% * var(--accent-intensity)), transparent);
 
   /* ── semantic literals the design fixes regardless of accent ── */
   --ok: #22c55e;
@@ -154,6 +179,13 @@
 
 body.theme-light {
   color-scheme: light;
+  /* The redesign's black header strips and white primary buttons, as the light profiles need them. */
+  --group-head: var(--bg-tertiary);
+  --line-0: var(--border-color);
+  --surface-raised: color-mix(in srgb, var(--bg-node) 88%, var(--text-primary) 8%);
+  --cta-bg: var(--text-primary);
+  --cta-bg-hover: color-mix(in srgb, var(--text-primary) 85%, var(--bg-primary));
+  --cta-text: var(--bg-secondary);
   --bg-input: var(--bg-secondary);
   --bg-hover: rgba(0, 0, 0, 0.06);
   --bg-scrim: rgba(40, 36, 28, 0.45);
@@ -191,3 +223,33 @@ body.animations-disabled * { transition: none !important; animation: none !impor
 
 /* ── view gate (app/_variables.css): body-mounted canvas surfaces hide on the home view ── */
 body.nm-home .nm-canvas-surface { display: none !important; }
+
+/* formwav · app tokens appended to formvis's base (formai design language): the
+   audio clip colours, which are the suite's audio tag (an audio clip is green in
+   formcut and formwav alike), and the toast band. Everything else is the suite's. */
+:root {
+  --fw-audio: #50e2a5;
+  --fw-audio-shade: #153729;
+  --z-toast: 3000;
+}
+
+body.theme-light { color-scheme: light; }
+
+/* ── Liquid glass (the owner's walkthrough): one look for every menu, dropdown and flyout, from the theme's own surface,
+   so it holds in light themes too; scrollbars hidden everywhere while scrolling still works. ── */
+:root {
+  --glass-bg: color-mix(in srgb, var(--surface-2) 82%, transparent);   /* dense enough that nothing behind reads through */
+  --glass-border: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  --glass-highlight: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --glass-filter: blur(40px) saturate(1.8);
+  --glass-shadow: 0 22px 56px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.cv-menu, .cv-dd-pop, .cv-flyout, .cv-search-pop, .cv-props-fly {
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow) !important;
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+}
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
