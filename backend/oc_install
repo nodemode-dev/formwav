@@ -15,3 +15,8 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 1
 fi
 maturin develop --release -m ../native/formwav-dsp/Cargo.toml
+deactivate
+# formwav's MCP server lives in its own venv: the MCP SDK needs a newer Starlette than the engine's FastAPI allows.
+python3 -m venv formwav_mcp/venv
+formwav_mcp/venv/bin/python -m pip install --upgrade pip
+formwav_mcp/venv/bin/python -m pip install -r formwav_mcp/requirements.txt

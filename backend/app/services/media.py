@@ -151,6 +151,23 @@ def resample_media(media_id: str, rate: int) -> dict:
     return import_wav(info["name"], wav)
 
 
+def list_media(query: str = "", limit: int = 100, offset: int = 0) -> dict:
+    """The stored media, newest first, optionally only names containing `query` (case-insensitive): a page of their
+    infos and the total, so a caller (the MCP server's agents) can pick a handle without knowing it already."""
+    q = query.lower().strip()
+    infos = []
+    for path in media_dir().glob("*.json"):
+        try:
+            info = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if not q or q in str(info.get("name", "")).lower():
+            infos.append((path.stat().st_mtime, info))
+    infos.sort(key=lambda pair: pair[0], reverse=True)
+    page = [info for _, info in infos[max(0, offset) : max(0, offset) + max(1, min(limit, 500))]]
+    return {"total": len(infos), "offset": max(0, offset), "media": page}
+
+
 def media_info(media_id: str) -> dict:
     _check_id(media_id)
     path = media_dir() / f"{media_id}.json"

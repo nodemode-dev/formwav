@@ -147,6 +147,12 @@ def media_mic_check(media_id: str) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.get("/media")
+def media_list(query: str = "", limit: int = 100, offset: int = 0) -> dict:
+    """The stored media, newest first, a page at a time (services/media.py: list_media)."""
+    return media.list_media(query, limit, offset)
+
+
 @router.post("/media/{media_id}/debleed", status_code=201)
 def media_debleed(media_id: str, reference: str, offset: int = 0, amount: float = 100.0) -> dict:
     """The recording with what leaked into it from the reference subtracted (services/effects.py: debleed)."""
