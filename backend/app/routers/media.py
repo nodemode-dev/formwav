@@ -147,6 +147,21 @@ def media_mic_check(media_id: str) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/debleed", status_code=201)
+def media_debleed(media_id: str, reference: str, offset: int = 0, amount: float = 100.0) -> dict:
+    """The recording with what leaked into it from the reference subtracted (services/effects.py: debleed)."""
+    from ..services import effects
+
+    if reference == media_id:
+        raise HTTPException(422, "the reference must be another recording")
+    try:
+        return effects.debleed(media_id, reference, offset, max(0.0, min(100.0, amount)))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/pcm")
 def media_pcm(media_id: str, start: int = 0, frames: int = 480000) -> Response:
     """Interleaved little-endian float32 frames from `start` (at most 100 s at 48 kHz per request), read from the stored
