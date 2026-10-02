@@ -20,7 +20,7 @@
 /* Title bar: brand, file tools, the session as the document title, column toggles and Export, the one primary. */
 .fw-topbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 12px;
   block-size: var(--fw-titlebar-h);
