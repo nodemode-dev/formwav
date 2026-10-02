@@ -3,6 +3,7 @@ import type { Engine, SessionDoc, Track } from "../engine";
 import type { Bus, Vca } from "../engine/document";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 import { icon as fcIcon } from "../vendor/formcut/icons";
+import { knobify, syncKnob } from "./knob";
 
 type Strip = { kind: "track"; item: Track } | { kind: "bus"; item: Bus } | { kind: "vca"; item: Vca } | { kind: "master"; item: { id: string; name: string; gainDb: number } };
 
@@ -53,10 +54,12 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
     setText(node.querySelector(".fw-strip-db"), volumeAuto ? "auto" : dbText(strip.item.gainDb));
   }
   if (pan && strip.kind !== "vca") {
+    knobify(pan);
     const value = String(strip.item.pan ?? 0);
     if (pan.value !== value) pan.value = value;
     if (pan.disabled !== panAuto) pan.disabled = panAuto;
     setAttr(pan, "title", panAuto ? "Pan follows this track's automation" : `Pan ${(strip.item.pan ?? 0).toFixed(2)}`);
+    syncKnob(pan);
   }
   setAttr(node.querySelector(".fw-strip-mute"), "aria-pressed", String(!!strip.item.mute));
   if (strip.kind === "track") {

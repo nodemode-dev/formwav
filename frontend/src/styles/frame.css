@@ -254,3 +254,13 @@
 
 /* The title bar's notice never pushes the actions: it keeps one line and truncates. */
 .fw-topbar .fw-notice { max-inline-size: 26vw; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Rotary controls (AU-14): the knob drawn before its range input, which stays focusable (keyboard) but invisible. */
+.fw-knob { display: inline-grid; place-items: center; inline-size: 30px; block-size: 30px; margin-inline: auto; border-radius: 50%; cursor: ns-resize; touch-action: none; }
+.fw-knob svg { inline-size: 100%; block-size: 100%; overflow: visible; }
+.fw-knob-track { fill: none; stroke: var(--line-2); stroke-width: 3; stroke-linecap: round; }
+.fw-knob-value { fill: none; stroke: var(--accent-color); stroke-width: 3; stroke-linecap: round; }
+.fw-knob-pointer { stroke: var(--text-primary); stroke-width: 2; stroke-linecap: round; }
+.fw-knob[data-disabled="true"] { cursor: default; opacity: 0.45; }
+.fw-knob:has(+ .fw-knob-input:focus-visible) { box-shadow: 0 0 0 2px var(--accent-color); }
+.fw-knob-input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
