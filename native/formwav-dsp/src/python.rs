@@ -117,6 +117,20 @@ fn onsets(data: &[u8], sensitivity: f32) -> PyResult<(u32, Vec<u64>)> {
     Ok((buf.sample_rate, crate::onsets::detect(&mono, buf.sample_rate, sensitivity)))
 }
 
+/// The built-in instrument (crate::synth): notes as (start frame, held frames, MIDI pitch, velocity) rendered at
+/// `rate` with the given patch; returns mono 32-bit float samples, the release included.
+#[pyfunction]
+#[pyo3(signature = (notes, rate = 48000, wave = "triangle", attack = 0.005, decay = 0.15, sustain = 0.7, release = 0.2, gain = 0.25))]
+#[allow(clippy::too_many_arguments)]
+fn render_notes<'py>(py: Python<'py>, notes: Vec<(u64, u64, u8, u8)>, rate: u32, wave: &str, attack: f32, decay: f32, sustain: f32, release: f32, gain: f32) -> PyResult<Bound<'py, PyBytes>> {
+    let wave = crate::synth::Wave::parse(wave).ok_or_else(|| PyValueError::new_err(format!("no waveform named {wave}")))?;
+    let patch = crate::synth::Patch { wave, attack, decay, sustain, release, gain };
+    let notes: Vec<crate::synth::Note> = notes.into_iter().map(|(start, length, pitch, velocity)| crate::synth::Note { start, length, pitch, velocity }).collect();
+    let samples = crate::synth::render(&notes, rate, &patch);
+    let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+    Ok(PyBytes::new(py, &bytes))
+}
+
 /// Native audio output for the engine (crate::native): the Player on a device's stream, driven by the worklet's
 /// messages; sources load straight from WAV bytes (the engine's media files).
 #[cfg(feature = "native")]
@@ -201,6 +215,7 @@ fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "native")]
     m.add_class::<PyNativeOutput>()?;
     m.add_function(wrap_pyfunction!(probe, m)?)?;
+    m.add_function(wrap_pyfunction!(render_notes, m)?)?;
     m.add_function(wrap_pyfunction!(peaks, m)?)?;
     m.add_function(wrap_pyfunction!(render, m)?)?;
     m.add_function(wrap_pyfunction!(loudness, m)?)?;

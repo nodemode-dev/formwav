@@ -8,6 +8,7 @@ mod python;
 #[cfg(feature = "native")]
 pub mod native;
 pub mod render;
+pub mod synth;
 pub mod wav;
 #[cfg(target_arch = "wasm32")]
 mod wasm;

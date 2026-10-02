@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.config import cors_origins
 from .core.security import LocalOnly
 from .core.version import VERSION
-from .routers import agent, health, media, native_audio, presets, projects, providers, render, terminal
+from .routers import agent, health, media, midi, native_audio, presets, projects, providers, render, terminal
 
 app = FastAPI(title="formwav engine", version=VERSION)
 app.add_middleware(
@@ -24,6 +24,7 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(render.router, prefix="/api")
 app.include_router(terminal.router, prefix="/api")
 app.include_router(native_audio.router)
+app.include_router(midi.router)
 app.include_router(agent.router, prefix="/api")
 app.include_router(providers.router, prefix="/api")
 
