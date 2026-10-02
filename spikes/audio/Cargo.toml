@@ -1,0 +1,15 @@
+[package]
+name = "fwaudio"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+cpal = "0.18"
+formwav-dsp = { path = "../../native/formwav-dsp" }
+
+[features]
+# Steinberg's ASIO on Windows, opt-in (owner decision v1.19.0): needs the ASIO SDK under Steinberg's licence at build
+# time, so default builds stay permissive.
+asio = ["cpal/asio"]

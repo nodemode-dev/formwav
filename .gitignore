@@ -37,3 +37,6 @@ backend/*.spec
 
 # spike B, the hosting spike's build output
 spikes/host/target/
+
+# spike: native audio output, the build output
+spikes/audio/target/
