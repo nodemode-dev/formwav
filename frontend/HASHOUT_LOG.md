@@ -1780,3 +1780,10 @@ The desktop shell passes a .fmw the user opened with formwav as ?open=<path> on 
 - logged: v1.26.0 (in progress) · 2026-10-02
 
 Spike A measures the webview's output and round-trip latency on the owner's machines, which the build container cannot (no audio device), and its probe lived only in the planning docs, out of reach of the desktop app (no address bar). It now ships in the interface (public/latency-probe.html, so the desktop engine serves it from its own origin) and a Measure button beside the transport's Latency field opens it in a dialog (the iframe allowed the microphone and the clipboard); the round trip it reports goes in that field, which already moves each take back by that much. Verified in Chromium: the button beside the field; the dialog opened with the probe (its title and three steps); its first step read this browser's context (AudioWorklet available, 44.1 kHz, base latency 10 ms, output latency 0 ms); the dialog closed; a desktop-mode engine served the probe (200); no page errors; the design audit at 0 FAIL, 0 WARN. The round trip itself needs a loopback cable and a microphone, the owner's.
+
+### (no code) · third-party plugins in the Inspector, through the effect catalogue
+- refers-to: the Inspector's clip effect picker, which lists /api/effects (backend app/services/plugins.py adds the "Plugins" group)
+- kind: explainer
+- logged: v1.28.0 (in progress) · 2026-10-02
+
+Plugins reach the interface without interface code: the engine lists installed CLAP and VST3 plugins as the catalogue's "Plugins" group, and every picker built from the catalogue offers them. Verified in Chromium with a test folder on FORMWAV_PLUGIN_PATH: the clip's effect picker showed the group (formwav test gain (CLAP), Airwindows Consolidated (VST3) and (CLAP)); choosing the test gain and "Apply to this clip" swapped the clip to "phrase (formwav test gain).wav"; no page errors. The master effects picker does not offer them, rightly: master effects run live in the browser's audio worklet, where a native plugin cannot, which waits for native playback.
