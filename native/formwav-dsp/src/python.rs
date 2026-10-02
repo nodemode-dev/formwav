@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new()))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new()))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -25,6 +25,7 @@ fn render<'py>(
     fx: Vec<(usize, u8, f32, f32, f32)>,
     master_fx: Vec<(u8, f32, f32, f32)>,
     chains: Vec<(u8, usize, u8, f32, f32, f32, f32, f32)>,
+    fx_auto: Vec<(usize, usize, u8, u32)>,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let mut player = Player::new();
     player.set_master_db(master_db);
@@ -43,6 +44,9 @@ fn render<'py>(
         player.add_clip(PlayClip { source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, track: 0, gain_env, pan_env });
         for &(_, kind, freq, gain_db, q) in fx.iter().filter(|f| f.0 == index) {
             player.add_clip_fx(kind, freq, gain_db, q);
+        }
+        for &(_, stage, param, envelope) in fx_auto.iter().filter(|a| a.0 == index) {
+            player.add_clip_fx_auto(stage, param, envelope);
         }
     }
     for (index, (id, gain, pan)) in buses.into_iter().enumerate() {

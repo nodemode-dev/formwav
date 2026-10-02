@@ -71,6 +71,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     clips: list[tuple] = []
     envelopes: list[tuple] = []
     fx: list[tuple] = []
+    fx_auto: list[tuple] = []
     chains: list[tuple] = list(bus_chains)
     end = 0
     skipped = 0
@@ -102,6 +103,17 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         else:
             # Filters are linear and run per clip; a compressor on a track routed to a user bus is not placed yet.
             stages = [s[:4] for s in stages if s[0] != 6]
+        # The filters' parameter automation (PT-19), numbered by the clip stages above (bypassed, unknown and compressor
+        # entries skipped, as the browser's flatFxAuto does); each becomes one envelope (natural units) for the track.
+        auto_envs: list[tuple[int, int, int]] = []
+        if stages:
+            filters = [f for f in (track.get("fx") or []) if (_stage(f) or (6,))[0] != 6]
+            for si, f in enumerate(filters):
+                for param, key in enumerate(("freq", "gain", "q")):
+                    pts = (f.get("automation") or {}).get(key)
+                    if pts:
+                        envelopes.append(([(int(p["time"]), float(p["value"])) for p in pts], False))
+                        auto_envs.append((si, param, len(envelopes)))
         for clip in track.get("clips", []):
             # A pitched clip plays its derived render (non-destructive pitch; same length as the original).
             play_id = clip.get("pitchMediaId") if clip.get("pitchMediaId") in doc["media"] else clip.get("mediaId")
@@ -123,8 +135,9 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
                 clip_env = len(envelopes)
             clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, track_pan, int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index, clip_env, pan_env))
             fx.extend((len(clips) - 1, *stage) for stage in stages)
+            fx_auto.extend((len(clips) - 1, si, param, env) for si, param, env in auto_envs)
             end = max(end, start + length)
-    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains
+    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains, fx_auto
 
 
 def wav_float32_stereo(interleaved: bytes, rate: int) -> bytes:
@@ -141,7 +154,7 @@ def dbfs(peak: float) -> str:
 
 def render(doc: object) -> dict:
     native = media._require_core()
-    rate, sources, clips, end, skipped, buses, envelopes, fx, chains = plan(doc)
+    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto = plan(doc)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -150,7 +163,7 @@ def render(doc: object) -> dict:
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
     chains = chains + [(2, 0, *s) for s in (_stage(f) for f in (doc.get("masterFx") or [])) if s]
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto)
     loudness = native.loudness(interleaved, 2, rate)
     return {
         "wav": wav_float32_stereo(interleaved, rate),

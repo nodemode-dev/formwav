@@ -85,6 +85,8 @@ export interface FilterFx {
   gainDb: number;
   q: number;
   bypass?: boolean;
+  /** Its parameters' automation (PT-19), session frames to Hz, dB or Q; each replaces the static value it automates. */
+  automation?: { freq?: AutoPoint[]; gain?: AutoPoint[]; q?: AutoPoint[] };
 }
 
 /** A realtime compressor (nonlinear, so the core runs it on the track's sum or the master's). */
@@ -112,7 +114,15 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
       if (f.kind === "compressor") {
         return { kind: "compressor", thresholdDb: clamp(f.thresholdDb, -60, 0, -20), ratio: clamp(f.ratio, 1, 20, 4), attackMs: clamp(f.attackMs, 0.1, 200, 10), releaseMs: clamp(f.releaseMs, 1, 2000, 150), makeupDb: clamp(f.makeupDb, 0, 24, 0), ...bypass };
       }
-      return { kind: f.kind, freq: clamp(f.freq, 20, 20000, 1000), gainDb: clamp(f.gainDb, -24, 24, 0), q: clamp(f.q, 0.1, 18, 0.707), ...bypass };
+      // automation survives cleaning (it was rebuilt from known fields only): sorted, each value clamped like its static one
+      const ranges = { freq: [20, 20000], gain: [-24, 24], q: [0.1, 18] } as const;
+      const auto: { freq?: AutoPoint[]; gain?: AutoPoint[]; q?: AutoPoint[] } = {};
+      for (const key of ["freq", "gain", "q"] as const) {
+        const pts = f.automation?.[key];
+        if (pts && pts.length) auto[key] = [...pts].sort((a, b) => a.time - b.time).map((p) => ({ time: Math.max(0, Math.round(p.time)), value: clamp(p.value, ranges[key][0], ranges[key][1], ranges[key][0]) }));
+      }
+      const automation = Object.keys(auto).length ? { automation: auto } : {};
+      return { kind: f.kind, freq: clamp(f.freq, 20, 20000, 1000), gainDb: clamp(f.gainDb, -24, 24, 0), q: clamp(f.q, 0.1, 18, 0.707), ...bypass, ...automation };
     });
 }
 
@@ -220,6 +230,8 @@ export type Command =
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
   | { type: "set-clip-group"; clipIds: string[]; groupId: string | null }
   | { type: "set-track-fx"; trackId: string; fx: TrackFx[] }
+  /** One filter's parameter automation (PT-19); empty points remove it. */
+  | { type: "set-fx-automation"; trackId: string; fxIndex: number; param: "freq" | "gain" | "q"; points: AutoPoint[] }
   | { type: "set-master-fx"; fx: TrackFx[] }
   | { type: "set-bus-fx"; busId: string; fx: TrackFx[] }
   | { type: "set-tempo"; bpm: number; beatsPerBar: number }
@@ -504,6 +516,15 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         return changed ? { ...t, clips } : t;
       });
     }
+    case "set-fx-automation":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const target = t.fx?.[cmd.fxIndex];
+        if (!t.fx || !target || target.kind === "compressor") return t;
+        const { [cmd.param]: _old, ...others } = target.automation ?? {};
+        const automation = cmd.points.length ? { ...others, [cmd.param]: cmd.points } : others;
+        const next = cleanFx(t.fx.map((f, i) => (i === cmd.fxIndex ? { ...target, automation } : f)));
+        return JSON.stringify(next) === JSON.stringify(t.fx) ? t : { ...t, fx: next };
+      });
     case "set-track-fx":
       return mapTrack(doc, cmd.trackId, (t) => {
         const fx = cleanFx(cmd.fx);

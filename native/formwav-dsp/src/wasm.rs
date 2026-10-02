@@ -137,6 +137,16 @@ pub unsafe extern "C" fn fw_add_clip_fx(player: *mut Player, kind: u32, freq: f3
     (*player).add_clip_fx(kind as u8, freq, gain_db, q) as u32
 }
 
+/// Effect parameter automation (PT-19): `param` (0 frequency, 1 gain, 2 Q) of stage `stage` of the latest clip
+/// follows envelope `envelope`; 1 when attached.
+///
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_add_clip_fx_auto(player: *mut Player, stage: u32, param: u32, envelope: u32) -> u32 {
+    (*player).add_clip_fx_auto(stage as usize, param as u8, envelope) as u32
+}
+
 /// # Safety
 /// `player` must come from `fw_player_new` and not have been freed.
 #[no_mangle]

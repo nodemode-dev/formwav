@@ -25,6 +25,22 @@ export function flatFx(fx: readonly TrackFx[] | undefined): number[] {
   return (fx ?? []).flatMap((f) => (f.bypass || f.kind === "compressor" ? [] : [codes[f.kind], f.freq, f.gainDb, f.q]));
 }
 
+/** The filters' parameter automation (PT-19) for the clip chain flatFx builds, numbered by its stages (bypassed
+ * filters and compressors skipped, as there); param 0 frequency, 1 gain, 2 Q; points flat [time, value, ...]. */
+export function flatFxAuto(fx: readonly TrackFx[] | undefined): { stage: number; param: number; points: number[] }[] {
+  const out: { stage: number; param: number; points: number[] }[] = [];
+  let stage = 0;
+  for (const f of fx ?? []) {
+    if (f.bypass || f.kind === "compressor") continue;
+    (["freq", "gain", "q"] as const).forEach((key, param) => {
+      const pts = f.automation?.[key];
+      if (pts?.length) out.push({ stage, param, points: pts.flatMap((p) => [p.time, p.value]) });
+    });
+    stage++;
+  }
+  return out;
+}
+
 /** Enabled stages of any kind as flat [kind, a, b, c, d, e, ...] for bus and master chains (backend render.py _stage,
  * core fx.rs Stage::design): filters carry frequency, gain and Q; the compressor (6) threshold, ratio, attack, release
  * and makeup. */
@@ -98,11 +114,14 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     if (track.mute || vca?.mute || (soloed && !track.solo) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
     let bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
     let fxFlat = flatFx(track.fx);
+    let fxAuto = flatFxAuto(track.fx);
     if (bus === 0 && (track.fx ?? []).some((f) => f.kind === "compressor" && !f.bypass)) {
       // A compressor must see the track's sum: its own bus (unity, centre) carries the whole chain, as in exports.
+      // (Bus chains are not automated yet, so the automation stays with the clip chain it was written for.)
       bus = buses.length + 1;
       buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx) });
       fxFlat = [];
+      fxAuto = [];
     }
     const volumePoints = track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
     const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
@@ -127,6 +146,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         gainPoints: envPoints,
         panPoints,
         fx: fxFlat.length ? fxFlat : undefined,
+        fxAuto: fxAuto.length ? fxAuto : undefined,
         fadeIn: clip.fadeIn ?? 0,
         fadeOut: clip.fadeOut ?? 0,
         fadeShape: FADE_SHAPES[clip.fadeShape ?? "linear"] ?? 0,

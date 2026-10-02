@@ -22,6 +22,7 @@ interface CoreExports {
   fw_add_bus(player: number, id: number, gain: number, pan: number): void;
   fw_set_rate(player: number, rate: number): void;
   fw_add_clip_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
+  fw_add_clip_fx_auto(player: number, stage: number, param: number, envelope: number): number;
   fw_clear_master_fx(player: number): void;
   fw_add_master_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
   fw_add_master_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
@@ -55,6 +56,8 @@ export interface WorkletClip {
   panPoints?: number[];
   /** The track's realtime filters as flat [kind, freq, gainDb, q, ...] (core codes, fx.rs). */
   fx?: number[];
+  /** Those filters' parameter automation (PT-19): stage, parameter (0 frequency, 1 gain, 2 Q), flat [time, value, ...]. */
+  fxAuto?: { stage: number; param: number; points: number[] }[];
 }
 
 export interface WorkletBus {
@@ -218,6 +221,10 @@ class PlayerProcessor extends AudioWorkletProcessor {
           const panEnv = envelope(c.panPoints, false);
           core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape, c.bus, c.track, gainEnv, panEnv);
           if (c.fx) for (let k = 0; k + 3 < c.fx.length; k += 4) core.fw_add_clip_fx(this.player, c.fx[k], c.fx[k + 1], c.fx[k + 2], c.fx[k + 3]);
+          for (const a of c.fxAuto ?? []) {
+            const env = envelope(a.points, false);
+            if (env) core.fw_add_clip_fx_auto(this.player, a.stage, a.param, env);
+          }
         }
         core.fw_clear_buses(this.player);
         for (const b of msg.buses) {

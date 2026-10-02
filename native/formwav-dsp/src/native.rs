@@ -55,6 +55,16 @@ struct MixClip {
     pan_points: Option<Vec<f64>>,
     #[serde(default)]
     fx: Option<Vec<f32>>,
+    /// The filters' parameter automation (PT-19), as the browser worklet receives it.
+    #[serde(default)]
+    fx_auto: Option<Vec<FxAuto>>,
+}
+
+#[derive(Deserialize)]
+struct FxAuto {
+    stage: usize,
+    param: u8,
+    points: Vec<f64>,
 }
 
 #[derive(Deserialize)]
@@ -211,6 +221,12 @@ impl NativeOutput {
                 });
                 for k in c.fx.as_deref().unwrap_or(&[]).chunks_exact(4) {
                     p.add_clip_fx(k[0] as u8, k[1], k[2], k[3]);
+                }
+                for a in c.fx_auto.as_deref().unwrap_or(&[]) {
+                    let env = envelope(p, &Some(a.points.clone()), false);
+                    if env > 0 {
+                        p.add_clip_fx_auto(a.stage, a.param, env);
+                    }
                 }
             }
             p.clear_buses();
