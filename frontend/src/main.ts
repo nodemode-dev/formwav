@@ -37,6 +37,18 @@ import { Player } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
 import { applyTheme } from "./vendor/formvis/themes";
 
+// The engine refuses a change (POST, PUT, PATCH, DELETE under /api) without x-formwav-local, which a foreign page
+// cannot send; every request this app makes goes through fetch, so the header is added here once, for its own origin.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+  const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+  if (url.origin !== location.origin || !url.pathname.startsWith("/api/") || method === "GET" || method === "HEAD") return nativeFetch(input, init);
+  const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+  headers.set("x-formwav-local", "1");
+  return nativeFetch(input, { ...init, headers });
+};
+
 applyTheme();
 const engine = createEngine();
 const player = new Player(engine);

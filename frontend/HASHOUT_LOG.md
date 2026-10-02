@@ -1759,3 +1759,10 @@ A Models section after the Library offers what the engine's /api/providers repor
 - logged: v1.24.0 (in progress) · 2026-10-01
 
 A Models choice regenerates the time selection: the clip under it is found, the selection turned into seconds of its source, the engine regenerates, and one batch command swaps the clip's media, lengthens or shortens the clip by the difference and moves the track's later clips by the same amount, so the edit is one undo step and nothing after it overlaps. When the clip has a transcript, choosing it fills the text with the words under the selection to edit. Verified in Chromium on the recording stand-in: 0.6 to 1.2 s of a 3.0 s clip replaced with 2.0 s, the clip 4.38 s on the regenerated media, the later clip moved from 4.0 to 5.38 s, the state saying so, one undo step restoring both; with a fixture transcript (removed after) the box filled with exactly the words inside the selection ("two three", not the neighbours ending at 0.5 s and starting at 1.3 s); without one it says to type the words. No page errors; the design audit at 0 FAIL, 0 WARN.
+
+### src/main.ts · every change the app asks of the engine carries x-formwav-local
+- refers-to: src/main.ts :: the fetch wrapper installed before the first mount
+- kind: warning-context
+- logged: v1.25.0 (in progress) · 2026-10-01
+
+The engine now refuses a POST, PUT, PATCH or DELETE under /api without `x-formwav-local: 1` (backend app/core/security.py). Every request this app makes goes through fetch (no XMLHttpRequest, beacons or event streams: 60 call sites), so one wrapper installed before any mount adds the header to its own origin's mutating /api requests and leaves everything else untouched. Verified: the record and play harnesses (imports, edits, renders through the app) pass, the record harness's layout shift 0.0036, no page errors.
