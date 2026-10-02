@@ -19,6 +19,8 @@ const BODY = `
   <div class="fw-insp-head">Gain envelope</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Point</span><input type="number" data-env="db" min="-60" max="12" step="0.5" value="-12" aria-label="Level of the envelope point in dB"> dB</label><button type="button" class="fw-ibtn" data-clip-act="env-add" title="Add a gain point at the playhead inside this clip; its level follows straight lines between points">Add point at playhead</button><button type="button" class="fw-ibtn" data-clip-act="env-clear">Clear envelope</button></div>
   <p class="fw-empty-note fw-env-readout" data-env-out>No gain envelope</p>
+  <div class="fw-insp-head">De-bleed</div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
   <div class="fw-insp-head">Draw samples</div>
   <canvas class="fw-draw-canvas" data-draw width="512" height="128" aria-label="256 samples of the clip around the playhead, each a point; drag to redraw them"></canvas>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-draw-act="load" title="Show 256 samples of this clip around the playhead at single-sample zoom">Show samples at playhead</button><button type="button" class="fw-ibtn" data-draw-act="apply" disabled title="Write the drawn samples into the clip's audio as one undo step">Apply drawing</button><button type="button" class="fw-ibtn" data-draw-act="revert" disabled>Revert</button></div>
@@ -129,6 +131,25 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     show(body.querySelector(".fw-insp-effects"), !!hit);
     show(body.querySelector(".fw-insp-analyze"), !!hit);
     show(body.querySelector(".fw-insp-quantize"), !!hit || selected.length > 0);
+    const refPick = body.querySelector<HTMLSelectElement>('[data-debleed="ref"]');
+    if (hit && refPick) {
+      const c0 = hit.clip;
+      const overlaps = doc.tracks.flatMap((t) => (t.id === hit.track.id ? [] : t.clips.filter((c) => c.start < c0.start + c0.length && c.start + c.length > c0.start).map((c) => ({ value: `${t.id}:${c.id}`, label: `${t.name}: ${doc.media[c.mediaId]?.name ?? "clip"}` }))));
+      const signature = overlaps.map((o) => `${o.value}=${o.label}`).join("|");
+      if (refPick.dataset.sig !== signature) {
+        refPick.dataset.sig = signature;
+        const keep = refPick.value;
+        refPick.replaceChildren(
+          ...(overlaps.length ? overlaps : [{ value: "", label: "no other clip overlaps" }]).map((o) => {
+            const option = document.createElement("option");
+            option.value = o.value;
+            option.textContent = o.label;
+            return option;
+          }),
+        );
+        if (overlaps.some((o) => o.value === keep)) refPick.value = keep;
+      }
+    }
     const envOut = body.querySelector<HTMLElement>("[data-env-out]");
     if (hit && envOut) {
       const env = hit.clip.envelope ?? [];
@@ -729,7 +750,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (hit && name && name !== hit.track.name) engine.dispatch({ type: "rename-track", trackId: hit.track.id, name });
     else if (hit) nameInput.value = hit.track.name;
   });
-  body.addEventListener("click", (e) => {
+  body.addEventListener("click", async (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-track-act], [data-clip-act]");
     if (!b) return;
     const doc = engine.get("document");
@@ -744,6 +765,26 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         fillInputs();
         setText(notice, list.length ? `${list.length} input${list.length === 1 ? "" : "s"} listed` : "No input device found; the system default is used");
       });
+    } else if (b.dataset.clipAct === "debleed") {
+      const hit = find(doc);
+      const [refTrack, refClipId] = (body.querySelector<HTMLSelectElement>('[data-debleed="ref"]')?.value ?? "").split(":");
+      const refClip = doc.tracks.find((t) => t.id === refTrack)?.clips.find((c) => c.id === refClipId);
+      if (!hit || !refClip) {
+        setText(notice, "Select a clip and the clip that leaked into it");
+        return;
+      }
+      // the reference's frame at this clip's media frame 0, from where both clips sit in the session
+      const offset = refClip.sourceIn - refClip.start + hit.clip.start - hit.clip.sourceIn;
+      const amount = Number(body.querySelector<HTMLInputElement>('[data-debleed="amount"]')?.value ?? 100);
+      setText(notice, "Removing the leak...");
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/debleed?reference=${refClip.mediaId}&offset=${offset}&amount=${amount}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string };
+      if (!res.ok) {
+        setText(notice, `Could not de-bleed: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+        return;
+      }
+      engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
+      setText(notice, `Removed ${amount}% of the leak from ${doc.media[refClip.mediaId]?.name ?? "the other clip"}`);
     } else if (b.dataset.clipAct === "env-add" || b.dataset.clipAct === "env-clear") {
       const hit = find(doc);
       if (!hit) {
