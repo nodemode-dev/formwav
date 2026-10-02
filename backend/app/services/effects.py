@@ -114,6 +114,7 @@ FORMWAV_CHAINS = {
     "ramp": "rubberband=tempo=1:pitch=1",
     "dereverb": "anull",
     "spot-heal": "anull",
+    "wow-flutter": "anull",
 }
 ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
@@ -127,7 +128,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("ramp", "Ramp tempo and pitch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)...")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -212,6 +213,10 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     ),
     "spot-heal": (
         {"low": ("Low", 20, 24000, 1000, "Hz"), "high": ("High", 20, 24000, 8000, "Hz"), "from": ("From", 0, 86400, 0, "s"), "to": ("To", 0, 86400, 0.1, "s")},
+        lambda v: "anull",
+    ),
+    "wow-flutter": (
+        {"low": ("Track from", 30, 12000, 500, "Hz"), "high": ("Track to", 30, 12000, 4000, "Hz"), "amount": ("Amount", 0, 100, 100, "%")},
         lambda v: "anull",
     ),
     "band-gain": (
@@ -388,7 +393,58 @@ def _spot_heal(x, rate: int, v: dict):
     return y
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal}
+def _wow_flutter(x, rate: int, v: dict):
+    """Wow and flutter removal (RX's Wow & Flutter): a steady component between Low and High Hz (a held note, a hum, a
+    tape's bias or test tone) is tracked every 5 ms (the strongest STFT peak, refined by a parabola through its log
+    magnitudes); its frequency over its median is the speed the recording drifted by, which shifts every component
+    alike, so resampling the audio by the inverse of that speed curve (cubic interpolation) undoes it. Amount scales the
+    correction. Positions are kept at frame resolution and the output is rendered a million samples at a time."""
+    import numpy as np
+
+    lo, hi = sorted((float(v["low"]), float(v["high"])))
+    # the window spans about 20 periods of the lowest frequency tracked and no more: a long window averages flutter
+    # away (8192 points at 48 kHz is one whole period of 6 Hz flutter), so a higher reference tracks faster drift
+    n = int(min(16384, max(2048, 2 ** np.ceil(np.log2(20 * rate / max(lo, 1.0))))))
+    hop = max(1, rate // 200)
+    win = np.hanning(n)
+    mono = x.mean(axis=1).astype(np.float64)
+    padded = np.concatenate([np.zeros(n // 2), mono, np.zeros(n // 2)])
+    frames = np.lib.stride_tricks.sliding_window_view(padded, n)[::hop][: len(mono) // hop + 1]
+    b0, b1 = max(1, int(lo * n / rate)), min(n // 2 - 1, int(hi * n / rate) + 1)
+    if b1 - b0 < 3 or len(frames) < 8:
+        return x.astype(np.float32)
+    freq = np.empty(len(frames))
+    for s in range(0, len(frames), 512):
+        mag = np.log(np.abs(np.fft.rfft(frames[s : s + 512] * win, axis=1))[:, b0 - 1 : b1 + 1] + 1e-12)
+        k = np.argmax(mag[:, 1:-1], axis=1) + 1
+        a, b, c = mag[np.arange(len(k)), k - 1], mag[np.arange(len(k)), k], mag[np.arange(len(k)), k + 1]
+        den = a - 2 * b + c
+        off = np.where(np.abs(den) > 1e-12, 0.5 * (a - c) / np.where(np.abs(den) > 1e-12, den, 1), 0.0)
+        freq[s : s + len(k)] = (b0 - 1 + k + off) * rate / n
+    ratio = freq / np.median(freq)
+    ratio = np.where(np.abs(ratio - 1) > 0.08, 1.0, ratio)  # a jump to another component is not a speed change
+    ratio = np.convolve(np.pad(ratio, 2, mode="edge"), np.ones(5) / 5, mode="valid")
+    ratio = 1 + (v["amount"] / 100.0) * (ratio - 1)
+    centres = np.arange(len(ratio)) * float(hop)
+    tau = np.concatenate([[0.0], np.cumsum(ratio[:-1] * hop)])  # source time at each frame centre, in samples
+    last = len(mono) - 1
+    if centres[-1] < last:  # the table runs to the last sample, so interpolation never extrapolates
+        tau = np.append(tau, tau[-1] + ratio[-1] * (last - centres[-1]))
+        centres = np.append(centres, float(last))
+    total = int(tau[-1]) + 1
+    y = np.zeros((total, x.shape[1]), dtype=np.float32)
+    src = x.astype(np.float32)
+    for s in range(0, total, 1 << 20):
+        u = np.arange(s, min(total, s + (1 << 20)), dtype=np.float64)
+        t = np.interp(u, tau, centres)
+        i = np.floor(t).astype(np.int64)
+        f = (t - i)[:, None]
+        p0, p1, p2, p3 = (src[np.clip(i + d, 0, last)] for d in (-1, 0, 1, 2))
+        y[s : s + len(u)] = p1 + 0.5 * f * (p2 - p0 + f * (2 * p0 - 5 * p1 + 4 * p2 - p3 + f * (3 * (p1 - p2) + p3 - p0)))
+    return y
+
+
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter}
 
 
 def apply(media_id: str, name: str, params: dict | None = None) -> dict:
