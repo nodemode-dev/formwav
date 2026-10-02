@@ -36,17 +36,15 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
 
   const gen = document.createElement("section");
   gen.className = "fw-insp-section fw-generate";
-  gen.dataset.panel = "media";
   gen.innerHTML = `<div class="fw-insp-head">Generate</div>
 <label class="fw-field fw-field-stack"><span>Signal</span><select data-g="kind"><option value="tone">Tone</option><option value="noise-white">White noise</option><option value="noise-pink">Pink noise</option><option value="noise-brown">Brown noise</option><option value="silence">Silence</option><option value="chirp">Chirp, 100 Hz to 8 kHz</option><option value="dtmf">DTMF tones</option><option value="bleep">Bleep, 1 kHz</option></select></label>
 <label class="fw-field" data-gfor="tone noise-white noise-pink noise-brown silence chirp bleep"><span>Seconds</span><input type="number" data-g="seconds" value="5" min="0.1" max="3600" step="0.1"><span></span></label>
 <label class="fw-field" data-gfor="tone"><span>Hz</span><input type="number" data-g="freq" value="440" min="20" max="20000" step="1"><span></span></label>
 <label class="fw-field" data-gfor="dtmf"><span>Digits</span><input type="text" data-g="digits" value="0123456789" maxlength="64"><span></span></label>
 <button type="button" class="fw-ibtn" data-g="go">Add on a new track</button>`;
-  list.after(gen);
+  (host.querySelector<HTMLElement>(".fw-create-body") ?? list).append(gen);
   const lib = document.createElement("section");
   lib.className = "fw-insp-section fw-library";
-  lib.dataset.panel = "media";
   lib.innerHTML = `<div class="fw-insp-head">Library</div>
 <label class="fw-field fw-field-stack"><span>Sound</span><select data-l="item" aria-label="Library sound"></select></label>
 <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-l="preview" disabled>Preview</button><button type="button" class="fw-ibtn" data-l="add" disabled>Add on a new track</button></div>

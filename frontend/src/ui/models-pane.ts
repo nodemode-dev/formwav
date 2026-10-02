@@ -198,5 +198,23 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
       go.disabled = false;
     }
   });
-  fetch("/api/providers").then((r) => r.json()).then(build).catch(() => setText(state, "The engine did not list its models"));
+  // Until the engine lists its models the section shows one line, not a stack of empty fields; it asks again every 4 s.
+  const kindRow = kind.closest<HTMLElement>("label");
+  for (const row of box.querySelectorAll<HTMLElement>("[data-field]")) row.hidden = true;
+  if (kindRow) kindRow.hidden = true;
+  go.hidden = true;
+  const load = () =>
+    fetch("/api/providers")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((p: Providers) => {
+        if (kindRow) kindRow.hidden = false;
+        go.hidden = false;
+        setText(state, "");
+        build(p);
+      })
+      .catch(() => {
+        setText(state, "The engine is offline; models appear here once it starts.");
+        window.setTimeout(load, 4000);
+      });
+  load();
 }
