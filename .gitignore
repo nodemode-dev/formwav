@@ -35,8 +35,8 @@ backend/dist/
 backend/wheels/
 backend/*.spec
 
-# spike B, the hosting spike's build output
-spikes/host/target/
+# formwav-host, the plugin host (spike B's host, promoted at v1.28.0): build output
+native/formwav-host/target/
 
 # spike: native audio output, the build output
 spikes/audio/target/

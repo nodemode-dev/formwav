@@ -303,7 +303,10 @@ def _ramp_chain(v: dict[str, float], duration: float, steps: int = 100) -> str:
 
 
 def catalogue() -> list[dict]:
-    return [{"group": group, "effects": [{"id": key, "label": label, "params": _controls(key), "retimes": key in RETIMING, "learnsNoise": key in LEARNS_NOISE} for key, label in items]} for group, items in GROUPS]
+    from . import plugins
+
+    built_in = [{"group": group, "effects": [{"id": key, "label": label, "params": _controls(key), "retimes": key in RETIMING, "learnsNoise": key in LEARNS_NOISE} for key, label in items]} for group, items in GROUPS]
+    return built_in + plugins.catalogue_group()
 
 
 def _dereverb(x, rate: int, v: dict):
@@ -699,6 +702,10 @@ def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 1
 def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     """Renders `name` (with `params` for an adjustable effect) over a stored media file into new media at the same rate;
     the source is kept."""
+    if name.startswith("plugin:"):
+        from . import plugins
+
+        return plugins.apply(media_id, name, params)
     chain = ALL_CHAINS.get(name)
     if chain is None:
         raise media.MediaError(f"no effect named {name}")

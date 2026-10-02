@@ -294,6 +294,14 @@ def list_effects() -> list[dict]:
     return effects.catalogue()
 
 
+@router.get("/plugins")
+def list_plugins(refresh: bool = False) -> dict:
+    """The CLAP and VST3 plugins installed here (services/plugins.py); refresh=1 scans again."""
+    from ..services import plugins
+
+    return {"plugins": plugins.scan(refresh)}
+
+
 @router.get("/sam-audio/status")
 def sam_audio_status() -> dict:
     """Which of SAM-Audio's preconditions are met: installed, Hugging Face login or a cached checkpoint, device."""
