@@ -24,6 +24,7 @@ import { mountGrid } from "./ui/grid";
 import { mountOutputMeter, mountTrackMeters } from "./ui/meter";
 import { mountMixer } from "./ui/mixer";
 import { mountMediaPane } from "./ui/media-pane";
+import { mountModelsPane } from "./ui/models-pane";
 import { mountInspector } from "./ui/inspector-pane";
 import { mountVoicePane } from "./ui/voice-pane";
 import { mountTranscriptPane } from "./ui/transcript-pane";
@@ -81,6 +82,7 @@ if (host) {
   mountTrackMeters(host, engine, player);
   mountMixer(host, engine, player);
   mountMediaPane(host, engine);
+  mountModelsPane(host, engine);
   mountInspector(host, engine);
   mountVoicePane(host, engine);
   mountTranscriptPane(host, engine, player);

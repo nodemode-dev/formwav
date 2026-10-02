@@ -210,6 +210,12 @@
 .fw-term-state { flex: 1; }
 .fw-term-body { min-block-size: 0; padding: 6px 8px; }
 .fw-agent-body { display: grid; grid-template-rows: 1fr auto; min-block-size: 0; }
+.fw-models-row { display: grid; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+.fw-models-row[hidden] { display: none; }
+.fw-models-row textarea, .fw-models-row input, .fw-models-row select { inline-size: 100%; box-sizing: border-box; font: inherit; font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; padding: 4px 6px; resize: vertical; }
+.fw-models-row select option:disabled { color: var(--text-muted); }
+.fw-models-state { margin: 0; font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.fw-models { display: grid; gap: 8px; }
 .fw-agent-log { margin: 0; padding: 8px 12px; list-style: none; overflow-y: auto; display: grid; align-content: start; gap: 6px; font-size: 13px; color: var(--text-secondary); }
 .fw-agent-log li { overflow-wrap: anywhere; }
 .fw-agent-you { color: var(--text-primary); font-weight: 600; }
