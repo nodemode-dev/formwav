@@ -719,3 +719,10 @@ The owner asked for an MCP server. Built to the mcp-dev-oracle pack's guidance f
 - logged: v1.21.0 (in progress) · 2026-10-01
 
 `-m formwav_mcp.server` only imports with backend/ as the working directory, and MCP clients launch stdio servers from their own (Claude Code has no working-directory setting), so the README's first snippet would have failed; the launcher changes into backend/ and runs the server's venv, passing --http through. The README gives Claude Desktop's config and Claude Code's `claude mcp add` against it, and the HTTP endpoint. Verified: launched from / by the SDK's stdio client, 12 tools listed; with the engine stopped, formwav_status and formwav_get_session came back as in-result errors saying to start the engine; `serve --http` answered a raw tools/list with 12 tools.
+
+### app/routers/agent.py, app/main.py · the in-app agent's model turn (owner decision, Sprint D: agent actions and controls)
+- refers-to: app/routers/agent.py :: `agent_step` (`POST /api/agent/step`), `_post`; app/main.py :: the router under /api
+- kind: warning-context
+- logged: v1.22.0 (in progress) · 2026-10-01
+
+The open session lives in the browser, so the browser runs the agent's loop; this route forwards one turn (system, messages, tools) to the Anthropic Messages API and returns the reply, so the API key stays in the engine (ANTHROPIC_API_KEY in backend/.env, which boot_backend sources) and never reaches the page. FORMWAV_AGENT_MODEL picks the model (claude-sonnet-5-5 by default), ANTHROPIC_BASE_URL points elsewhere; standard library in a worker thread, so no dependency. Verified: with no key the route answered 503 saying to put ANTHROPIC_API_KEY in backend/.env and restart; pointed at a recording stand-in of the Messages API (sidecar verification/anthropic_standin.py) with a dummy key, a run from the app sent three requests to /v1/messages carrying the engine's key, anthropic-version 2023-06-01, the model claude-sonnet-5-5 and the 16 tool definitions, the conversation growing 1, 3 and 5 messages. Stated: no real model was called (no key here); the first real run is the owner's.
