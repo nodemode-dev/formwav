@@ -166,6 +166,12 @@ def stats(media_id: str) -> dict:
             live = levels[levels > -120]
             if live.size:
                 result["dynamicRangeDb"] = round(float(live.max() - live.min()), 2)
+                # AA-04, Audition's amplitude statistics: the loudest and quietest non-silent 50 ms RMS windows, and
+                # how the windows spread across levels (3 dB bins from -60 to 0 dBFS, quieter ones in the first)
+                result["maxRmsDb"] = round(float(live.max()), 2)
+                result["minRmsDb"] = round(float(live.min()), 2)
+                counts, _ = np.histogram(np.clip(live, -60.0, -1e-9), bins=20, range=(-60.0, 0.0))
+                result["rmsHistogram"] = [int(c) for c in counts]
     if int(info.get("channels") or 0) == 2:
         result["phaseCorrelation"] = _phase_correlation(media_id)
     return result

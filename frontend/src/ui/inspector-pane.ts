@@ -452,6 +452,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const STAT_LABELS: [string, string, (v: number) => string][] = [
     ["peakDb", "Peak", (v) => `${v.toFixed(2)} dBFS`],
     ["rmsDb", "RMS", (v) => `${v.toFixed(2)} dBFS`],
+    ["maxRmsDb", "Maximum RMS", (v) => `${v.toFixed(2)} dBFS`],
+    ["minRmsDb", "Minimum RMS", (v) => `${v.toFixed(2)} dBFS`],
     ["dcOffset", "DC offset", (v) => v.toFixed(5)],
     ["crestFactor", "Crest factor", (v) => v.toFixed(2)],
     ["dynamicRangeDb", "Dynamic range", (v) => `${v.toFixed(1)} dB`],
@@ -481,6 +483,23 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
             return [dt, dd];
           }),
         );
+        // AA-04's RMS histogram: how the clip's 50 ms windows spread across levels, 3 dB a bar from -60 to 0 dBFS
+        const counts = (s as unknown as { rmsHistogram?: number[] }).rmsHistogram;
+        if (Array.isArray(counts) && counts.length) {
+          const most = Math.max(1, ...counts);
+          const dt = document.createElement("dt");
+          dt.textContent = "RMS histogram";
+          const dd = document.createElement("dd");
+          dd.className = "fw-rms-hist";
+          dd.setAttribute("aria-label", "RMS histogram, -60 to 0 dBFS in 3 dB steps");
+          counts.forEach((c, i) => {
+            const bar = document.createElement("span");
+            bar.style.blockSize = `${Math.round((c / most) * 100)}%`;
+            bar.title = `${-60 + i * 3} to ${-57 + i * 3} dBFS: ${c} window${c === 1 ? "" : "s"}`;
+            dd.append(bar);
+          });
+          statsList?.append(dt, dd);
+        }
       } else if (action === "spectrogram" && spectrogram) {
         const res = await fetch(`/api/media/${hit.clip.mediaId}/spectrogram.png`);
         if (!res.ok) throw new Error(`the engine answered ${res.status}`);

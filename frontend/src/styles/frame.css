@@ -287,3 +287,7 @@
 .fw-auto-fx-head { display: flex; align-items: center; min-inline-size: 0; }
 .fw-auto-fx-head[hidden] { display: none; }
 .fw-auto-fx { inline-size: 100%; min-inline-size: 0; block-size: 22px; font-family: var(--font-mono); font-size: var(--fs-11); }
+
+/* The statistics' RMS histogram (AA-04): a bar per 3 dB from -60 to 0 dBFS, heights relative to the fullest bin */
+.fw-rms-hist { display: flex; align-items: flex-end; gap: 1px; block-size: 44px; padding-block: 2px; }
+.fw-rms-hist span { flex: 1 1 0; min-block-size: 1px; background: var(--fw-audio); border-radius: 1px 1px 0 0; }

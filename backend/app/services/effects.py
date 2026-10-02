@@ -95,7 +95,7 @@ FORMWAV_CHAINS = {
     "de-ess-strong": "deesser=i=0.8:m=0.5:f=0.5",
     "leveler": "speechnorm=e=6:r=0.0001:l=1",
     "dither": "aresample=osf=s16:dither_method=shibata,aresample=osf=flt",
-    "phase-rotate": "aphaseshift=shift=0.25",
+    "phase-rotate": "",
     "azimuth": "adelay=delays=0|1",
     "center-extract": "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1",
     "center-remove": "pan=stereo|c0=c0-c1|c1=c1-c0",
@@ -186,6 +186,7 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "speed-faster": ({"percent": ("Speed", -50, 100, 10, "%")}, lambda v: f"aresample=48000,asetrate={round(48000 * (1 + v['percent'] / 100))},aresample=48000"),
     "extreme-stretch": ({"factor": ("Stretch", 1.5, 10, 4, "x")}, lambda v: f"rubberband=tempo={1 / v['factor']:.5f}"),
     "paulstretch": ({"factor": ("Stretch", 1, 100, 8, "x"), "resolution": ("Time resolution", 0.02, 2, 0.25, "s")}, None),
+    "phase-rotate": ({"angle": ("Angle", -180, 180, 90, " degrees", 1), "auto": ("Find the angle (1 = on)", 0, 1, 0, "", 1)}, None),
     # RX-18: dither to any depth from 8 to 24 bits. ffmpeg dithers (with Shibata noise shaping) only to its integer
     # formats, so the signal is scaled by an exact power of two around it: for N bits at 16 (N up to 16) or 32 (above),
     # 2^(N - 16) or 2^(N - 32), which lands the grid on 2^-(N - 1); 16 bits shaped is the chain this replaced, unchanged
@@ -654,6 +655,42 @@ def _paulstretch(x, rate: int, v: dict):
     return y.astype(np.float32)
 
 
+def _phase_rotate(x, rate: int, v: dict):
+    """Phase rotation (RX-34): every frequency's phase turned by the same angle, x cos(a) - H(x) sin(a) with H the
+    Hilbert transform computed exactly through the FFT, so the magnitude spectrum, and the sound, is unchanged while an
+    asymmetric waveform's peaks even out. With Find the angle, the rotation from -90 to 90 degrees in 1-degree steps
+    with the lowest peak is measured and used (a and a + 180 differ only in polarity), and it is reported in the
+    result's name through the angle. The search looks only at samples whose analytic magnitude could hold the peak,
+    and falls back to every sample when that bound does not hold."""
+    import numpy as np
+
+    x64 = x.astype(np.float64)
+    n = x64.shape[0]
+    h = np.zeros(n)
+    h[0] = 1.0
+    if n % 2 == 0:
+        h[n // 2] = 1.0
+        h[1 : n // 2] = 2.0
+    else:
+        h[1 : (n + 1) // 2] = 2.0
+    analytic = np.fft.ifft(np.fft.fft(x64, axis=0) * h[:, None], axis=0)
+    if v.get("auto", 0) >= 0.5:
+        angles = np.radians(np.arange(-90, 91))
+        mag = np.abs(analytic)
+        bound = 0.5 * float(mag.max())
+        cand = analytic[mag >= bound]
+
+        def peaks(z):
+            return np.array([np.abs((z * np.exp(1j * a)).real).max() for a in angles])
+
+        p = peaks(cand)
+        if p.min() < bound:
+            p = peaks(analytic.reshape(-1))
+        v["angle"] = float(np.degrees(angles[int(np.argmin(p))]))
+    a = np.radians(v["angle"])
+    return (analytic * np.exp(1j * a)).real.astype(np.float32)
+
+
 def _downmix_mono(x, rate: int, v: dict):
     """Downmix to mono (RX-30): one channel, the mean of all the clip's channels, so a stereo clip becomes a mono one
     at the same level for content common to both."""
@@ -681,7 +718,7 @@ def _peak_normalize(x, rate: int, v: dict):
     return (y * gains).astype(np.float32)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono}
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:
