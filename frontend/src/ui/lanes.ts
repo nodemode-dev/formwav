@@ -71,15 +71,38 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
   if (!ctx) return;
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = getComputedStyle(canvas).color;
+  const notes = info.clip.notes;
+  const sourceFrames = (info.clip.length * info.media.sampleRate) / info.sessionRate;
+  if (notes && notes.length) {
+    // a note clip draws its notes, a small piano roll over at least an octave, rather than its rendering's waveform
+    let lowest = 127;
+    let highest = 0;
+    for (const n of notes) {
+      lowest = Math.min(lowest, n.pitch);
+      highest = Math.max(highest, n.pitch);
+    }
+    const rows = Math.max(12, highest - lowest + 1);
+    const base = lowest - Math.floor((rows - (highest - lowest + 1)) / 2);
+    const noteH = h / rows;
+    const pxPerFrame = w / sourceFrames;
+    for (const n of notes) {
+      const x0 = (n.at - info.clip.sourceIn) * pxPerFrame;
+      const x1 = (n.at + n.length - info.clip.sourceIn) * pxPerFrame;
+      if (x1 < 0 || x0 > w) continue;
+      ctx.globalAlpha = 0.4 + 0.6 * (n.velocity / 127);
+      ctx.fillRect(Math.max(0, x0), h - (n.pitch - base + 1) * noteH + 1, Math.max(2, Math.min(w, x1) - Math.max(0, x0)), Math.max(2, noteH - 2));
+    }
+    ctx.globalAlpha = 1;
+  }
   const ch = Math.max(1, peaks.channels);
   const stride = ch * 2;
-  const sourceFrames = (info.clip.length * info.media.sampleRate) / info.sessionRate;
   const blocksPerPx = sourceFrames / w / peaks.samplesPerPeak;
   const startBlock = info.clip.sourceIn / peaks.samplesPerPeak;
   const rowH = h / ch;
   const half = (rowH / 2) * 0.9;
   const clipGain = 10 ** (info.clip.gainDb / 20);
-  for (let x = 0; x < w; x++) {
+  const drawWave = !(notes && notes.length);
+  for (let x = 0; drawWave && x < w; x++) {
     const b0 = Math.floor(startBlock + x * blocksPerPx);
     if (b0 >= peaks.blocks) break;
     const b1 = Math.min(peaks.blocks, Math.max(b0 + 1, Math.floor(startBlock + (x + 1) * blocksPerPx)));

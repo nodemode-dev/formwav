@@ -53,9 +53,11 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
       } else if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
         // the engine reads the file and the built-in instrument renders its notes; the rendering plays like any audio
         const res = await fetch(`/api/midi/import?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST", body: file, headers: { "X-Filename": file.name } });
-        const out = (await res.json().catch(() => ({}))) as { detail?: unknown; media?: MediaRef; notes?: unknown[]; tempo?: number };
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown; media?: MediaRef; notes?: { start: number; length: number; pitch: number; velocity: number }[]; tempo?: number };
         if (!res.ok || !out.media) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
-        engine.dispatch({ type: "import-media", media: out.media, at });
+        const rate = out.media.sampleRate;
+        const notes = (out.notes ?? []).map((n) => ({ at: n.start * rate, length: n.length * rate, pitch: n.pitch, velocity: n.velocity }));
+        engine.dispatch({ type: "import-media", media: out.media, at, notes });
         final = `Imported ${file.name}: ${out.notes?.length ?? 0} notes at ${Math.round(out.tempo ?? 120)} BPM, played by the built-in instrument`;
       } else {
         const media = await importFile(file, doc.tracks.length ? doc.sampleRate : undefined);

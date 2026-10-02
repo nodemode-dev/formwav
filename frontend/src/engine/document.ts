@@ -31,9 +31,21 @@ export function fadeCurve(x: number, shape: FadeShape | undefined): number {
   }
 }
 
+/** One note of a note clip, in frames of the clip's media (the instrument's rendering starts at media frame 0). */
+export interface NoteEvent {
+  at: number;
+  length: number;
+  /** MIDI note number, 69 being A4 */
+  pitch: number;
+  /** 1 to 127 */
+  velocity: number;
+}
+
 export interface Clip {
   id: string;
   mediaId: string;
+  /** A note clip's notes, the truth its media renders (the built-in instrument); absent on audio clips. */
+  notes?: readonly NoteEvent[];
   start: number;
   length: number;
   sourceIn: number;
@@ -195,7 +207,7 @@ export interface Selection {
 }
 
 export type Command =
-  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number } }
+  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[] }
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
   | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
@@ -615,6 +627,9 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         length: shaped ? Math.max(1, Math.round(shaped.length)) : sessionLength(cmd.media, sampleRate),
         sourceIn: shaped ? Math.max(0, Math.round(shaped.sourceIn)) : 0,
         ...(shaped?.takes && shaped.takes.length > 1 ? { takes: shaped.takes.map((s) => Math.max(0, Math.round(s))), take: shaped.take ?? shaped.takes.length - 1 } : {}),
+        ...(cmd.notes && cmd.notes.length
+          ? { notes: cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))) })) }
+          : {}),
         gainDb: 0,
       };
       const media = { ...doc.media, [cmd.media.id]: cmd.media };
