@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The formwav window: core defaults, the engine-failure dialog, and running the one bundled engine sidecar. The page itself gets no Tauri API.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [{ "name": "binaries/formwav-engine", "sidecar": true }]
+    }
+  ]
+}

@@ -22,3 +22,15 @@ backend/models/
 *.log
 .DS_Store
 Icon?
+
+# the desktop shell: build output, generated schemas, and the frozen engine the build script places
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/
+
+# the desktop build's freeze venv and output
+backend/.venv-package/
+backend/build/
+backend/dist/
+backend/wheels/
+backend/*.spec
