@@ -1,0 +1,22 @@
+[
+  {
+    "id": "ace-step-1.5",
+    "label": "ACE-Step 1.5 (this machine)",
+    "kind": "music",
+    "fields": ["prompt", "lyrics", "duration"],
+    "command": ["/path/to/ACE-Step-1.5/.venv/bin/python", "/path/to/ACE-Step-1.5/YOUR_GENERATE_SCRIPT.py", "--prompt", "{prompt}", "--lyrics", "{lyrics}", "--duration", "{duration}", "--output", "{out}"],
+    "cwd": "/path/to/ACE-Step-1.5",
+    "ext": "wav",
+    "timeout_s": 1800,
+    "note": "A template, not a working command: install ACE-Step 1.5 (github.com/ACE-Step/ACE-Step-1.5) with its weights, then replace the script and flags with the ones its README documents for writing one song to a file. formwav fills {prompt}, {lyrics}, {duration} (seconds) and {out} (the file it will import), runs the command from cwd, and imports {out} when it exits 0."
+  },
+  {
+    "id": "my-model",
+    "label": "Any open-weight model with a command line",
+    "kind": "audio",
+    "fields": ["prompt", "duration"],
+    "command": "python3 /path/to/generate.py --text {prompt} --seconds {duration} --out {out}",
+    "timeout_s": 900,
+    "note": "command may be a list of arguments (safest) or one string, split like a shell would split it; copy this file to backend/models/local_models.json and edit it there"
+  }
+]
