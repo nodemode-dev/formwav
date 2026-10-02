@@ -14,6 +14,7 @@ export default defineConfig({
       "/api": {
         target: `http://127.0.0.1:${ENGINE_PORT}`,
         changeOrigin: true,
+        ws: true,
       },
     },
   },
@@ -25,6 +26,7 @@ export default defineConfig({
       "/api": {
         target: `http://127.0.0.1:${ENGINE_PORT}`,
         changeOrigin: true,
+        ws: true,
       },
     },
   },

@@ -202,6 +202,13 @@
 /* Track beds alternate between the suite's two working surfaces. */
 .fw-lane-body { background: var(--surface-1); }
 .fw-lane:nth-child(even) .fw-lane-body { background: var(--surface-2); }
+/* The terminal docks between the lanes and the transport, taking its height from the lanes while it is open. */
+.fw-term { flex: none; display: grid; grid-template-rows: auto 1fr; block-size: 300px; margin: 0 8px 8px; background: var(--surface-0); border: 1px solid var(--line-1); border-radius: 12px; overflow: hidden; }
+.fw-term[hidden] { display: none; }
+.fw-term-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--group-head); border-block-end: 1px solid var(--line-0); font-size: 12px; color: var(--text-secondary); }
+.fw-term-title { font-weight: 600; color: var(--text-primary); }
+.fw-term-state { flex: 1; }
+.fw-term-body { min-block-size: 0; padding: 6px 8px; }
 .fw-speed select { padding: 2px 4px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 .fw-speed input[type="number"] { inline-size: 56px; padding: 2px 4px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 
