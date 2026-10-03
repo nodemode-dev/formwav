@@ -788,7 +788,11 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   /** Smart Tool range (interface state): a time range on one track, made by dragging in a clip's upper half. */
   let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number } } | null = null;
   let rangeBand: { top: number; height: number } | null = null;
-  let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean; y0: number; clipTop: number; clipHeight: number; bodyTop: number; nyquist: number; spectral: boolean } | null = null;
+  let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean; y0: number; clipTop: number; clipHeight: number; bodyTop: number; nyquist: number; spectral: boolean; dabs?: { at: number; hz: number }[] } | null = null;
+  // AA-06: with the heal brush on (the Inspector sets body[data-heal-brush]), a drag in the spectrogram view paints dabs
+  // instead of drawing a box; each dab covers BRUSH_PX either way, and the stroke goes to the Inspector on release
+  const BRUSH_PX = 8;
+  const brushDots: HTMLElement[] = [];
   let hovered: HTMLElement | null = null;
   const rangeBox = document.createElement("div");
   rangeBox.className = "fw-range";
@@ -842,6 +846,19 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   lanes.addEventListener("pointermove", (e) => {
     const d = rangeDrag;
     if (d) {
+      if (d.spectral && document.body.dataset.healBrush === "on") {
+        // AA-06: a dab where the pointer is, in session samples and Hz, drawn as a dot over the clip
+        d.moved = true;
+        const y = Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, e.clientY));
+        (d.dabs ??= []).push({ at: rangeAt(d.body, e.clientX), hz: d.nyquist * (1 - (y - d.clipTop) / d.clipHeight) });
+        const dot = document.createElement("div");
+        dot.className = "fw-brush-dot";
+        dot.style.left = `${e.clientX - d.body.getBoundingClientRect().left - BRUSH_PX}px`;
+        dot.style.top = `${y - d.bodyTop - BRUSH_PX}px`;
+        d.body.append(dot);
+        brushDots.push(dot);
+        return;
+      }
       if (!d.moved && Math.abs(e.clientX - d.x0) < 3) return;
       d.moved = true;
       const a = rangeAt(d.body, d.x0);
@@ -881,6 +898,15 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const d = rangeDrag;
     rangeDrag = null;
     if (!d) return;
+    if (d.dabs) {
+      for (const dot of brushDots.splice(0)) dot.remove();
+      if (apply && d.dabs.length) {
+        const radiusSamples = Math.abs(rangeAt(d.body, d.x0 + BRUSH_PX) - rangeAt(d.body, d.x0));
+        const radiusHz = (BRUSH_PX * d.nyquist) / d.clipHeight;
+        lanes.dispatchEvent(new CustomEvent("fw-heal-stroke", { bubbles: true, detail: { trackId: d.trackId, dabs: d.dabs, radiusSamples, radiusHz } }));
+      }
+      return;
+    }
     if (!apply || !d.moved || (range && range.end <= range.start)) clearRange();
   };
   lanes.addEventListener("pointerup", () => endRange(true));

@@ -343,3 +343,6 @@
 /* the strip is a named-area grid; its send and automation controls take full-width rows of their own (auto-placed they
    fell into one column's leftover cells, the send level 6 px wide) */
 .fw-strip-send, .fw-strip-send-level, .fw-strip-auto { grid-column: 1 / -1; }
+
+/* AA-06: the heal brush's dabs while a stroke is painted (cleared on release) */
+.fw-brush-dot { position: absolute; inline-size: 16px; block-size: 16px; border-radius: 50%; pointer-events: none; background: color-mix(in srgb, var(--accent-color) 35%, transparent); }
