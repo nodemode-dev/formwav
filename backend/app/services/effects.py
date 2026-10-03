@@ -305,7 +305,7 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
         lambda v: "anull",
     ),
     "pitch-correct": (
-        {"key": ("Key (0 C to 11 B)", 0, 11, 0, ""), "scale": ("Scale (0 chromatic, 1 major, 2 minor)", 0, 2, 0, ""), "speed": ("Retune speed", 0, 400, 20, "ms"), "amount": ("Amount", 0, 100, 100, "%"),
+        {"key": ("Key (0 C to 11 B)", 0, 11, 0, ""), "scale": ("Scale (0 chromatic, 1 major, 2 minor; chord tones 3 major, 4 minor, 5 seventh, 6 minor seventh, 7 major seventh)", 0, 7, 0, ""), "speed": ("Retune speed", 0, 400, 20, "ms"), "amount": ("Amount", 0, 100, 100, "%"),
          "formants": ("Keep formants (0 off, 1 on)", 0, 1, 0, "", 1)},
         lambda v: "anull",
     ),
@@ -789,13 +789,15 @@ def _pitch_correct(x, rate: int, v: dict):
     if v["amount"] <= 0:  # no correction asked: the input untouched (rubberband at a ratio of 1 still resynthesises)
         return x.astype(np.float32)
     step, f0 = _f0_track(x.mean(axis=1).astype(np.float64), rate)
-    scales = {0: range(12), 1: (0, 2, 4, 5, 7, 9, 11), 2: (0, 2, 3, 5, 7, 8, 10)}
+    # scales, and (3 to 7) the tones of a chord on the key (Auto-Tune's chord mode): major, minor, dominant seventh,
+    # minor seventh, major seventh; a chord's tones lie up to 5 semitones apart, so the search reaches 6 either way
+    scales = {0: range(12), 1: (0, 2, 4, 5, 7, 9, 11), 2: (0, 2, 3, 5, 7, 8, 10), 3: (0, 4, 7), 4: (0, 3, 7), 5: (0, 4, 7, 10), 6: (0, 3, 7, 10), 7: (0, 4, 7, 11)}
     allowed = sorted({(int(v["key"]) + d) % 12 for d in scales.get(int(v["scale"]), range(12))})
     target = np.zeros(len(f0))
     for i, f in enumerate(f0):
         if f > 0:
             midi = 69 + 12 * np.log2(f / 440.0)
-            cands = [round(midi) + d for d in range(-2, 3) if (round(midi) + d) % 12 in allowed]
+            cands = [round(midi) + d for d in range(-6, 7) if (round(midi) + d) % 12 in allowed]
             target[i] = (min(cands, key=lambda m: abs(m - midi)) - midi) / 12  # octaves to shift
     alpha = 0.0 if v["speed"] <= 0 else float(np.exp(-step / (v["speed"] / 1000.0)))
     shift, acc = np.zeros(len(target)), 0.0

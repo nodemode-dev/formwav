@@ -155,7 +155,12 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     show(body.querySelector(".fw-insp-empty"), !hit);
     show(body.querySelector(".fw-insp-clip"), !!hit);
     show(body.querySelector(".fw-insp-track"), !!hit);
-    show(body.querySelector(".fw-insp-effects"), !!hit);
+    // PT-10: several clips selected keep the effects, for Apply to the selected clips; the one-clip actions wait
+    show(body.querySelector(".fw-insp-effects"), !!hit || selected.length > 1);
+    for (const one of body.querySelectorAll<HTMLButtonElement>('[data-fx="apply"], [data-fx-preview]')) if (one.disabled === !!hit) one.disabled = !hit;
+    const batch = body.querySelector<HTMLButtonElement>('[data-fx="apply-all"]');
+    const batchLabel = !hit && selected.length > 1 ? `Apply to ${selected.length} selected clips` : "Apply to all clips";
+    if (batch && batch.textContent !== batchLabel) batch.textContent = batchLabel;
     show(body.querySelector(".fw-insp-analyze"), !!hit);
     show(body.querySelector(".fw-insp-quantize"), !!hit || selected.length > 0);
     const refPick = body.querySelector<HTMLSelectElement>('[data-debleed="ref"]');
@@ -672,7 +677,10 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if ((e.target as HTMLElement).closest<HTMLElement>("[data-fx]")?.dataset.fx !== "apply-all") return;
     const name = pick?.value;
     const doc = engine.get("document");
-    const clips = doc.tracks.flatMap((t) => t.clips.map((c) => ({ track: t, clip: c })));
+    // PT-10: several selected clips (a marquee) take the effect, otherwise every clip does
+    const every = doc.tracks.flatMap((t) => t.clips.map((c) => ({ track: t, clip: c })));
+    const chosen = !find(doc) && selected.length > 1 ? new Set(selected) : null;
+    const clips = chosen ? every.filter((x) => chosen.has(x.clip.id)) : every;
     if (!name || !clips.length) return;
     const label = pick?.selectedOptions[0]?.textContent ?? name;
     const buttons = [...body.querySelectorAll<HTMLButtonElement>("button[data-fx]")];
