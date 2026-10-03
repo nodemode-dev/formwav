@@ -298,7 +298,9 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
         lambda v: "anull",
     ),
     "dialogue-contour": (
-        {"range": ("Intonation range", 0, 200, 100, "%"), "start": ("Shift at start", -6, 6, 0, "st"), "end": ("Shift at end", -6, 6, 0, "st"), "smooth": ("Smoothing", 0, 500, 80, "ms"), "from": ("From", 0, 86400, 0, "s"), "to": ("To", 0, 86400, 0, "s")},
+        {"range": ("Intonation range", 0, 200, 100, "%"), "start": ("Shift at start", -6, 6, 0, "st"), "end": ("Shift at end", -6, 6, 0, "st"), "smooth": ("Smoothing", 0, 500, 80, "ms"), "from": ("From", 0, 86400, 0, "s"), "to": ("To", 0, 86400, 0, "s"),
+         **{f"x{k}": (f"Curve point {k} at", 0, 100, (k - 1) * 25, "%") for k in range(1, 6)},
+         **{f"c{k}": (f"Curve point {k}", -12, 12, 0, "st") for k in range(1, 6)}},
         lambda v: "anull",
     ),
     "pitch-correct": (
@@ -627,9 +629,13 @@ def _rubberband_pitch(x, rate: int, ratio, step: float, label: str, formants: bo
             f.write(_wav_bytes([x[:, c] for c in range(x.shape[1])], rate))
         with open(cmd, "w") as f:
             last = None
+            # RX-17: a command takes effect at the output about 3120 samples (65 ms at 48 kHz) before the moment it is
+            # sent for, rubberband's latency (a 7-semitone step asked for at 1.000 s crossed at 0.935 s), so each is
+            # sent that much later; the first is sent at once, so the opening pitch is right too
+            lead = 3120 / rate
             for i in range(0, len(ratio), 2):
                 if last is None or abs(1200 * np.log2(ratio[i] / last)) >= 0.5:
-                    f.write(f"{i * step:.4f} rubberband pitch {ratio[i]:.6f};\n")
+                    f.write(f"{0.0 if last is None else i * step + lead:.4f} rubberband pitch {ratio[i]:.6f};\n")
                     last = ratio[i]
         chain = f"asendcmd=f={cmd},rubberband=tempo=1:pitch=1:pitchq=consistency:transients=smooth" + (":formant=preserved" if formants else "")
         done = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", src, "-af", chain, "-c:a", "pcm_f32le", dst], capture_output=True, timeout=900)
@@ -651,7 +657,10 @@ def _dialogue_contour(x, rate: int, v: dict):
     returns the input untouched."""
     import numpy as np
 
-    if abs(v["range"] - 100) < 1e-9 and abs(v["start"]) < 1e-9 and abs(v["end"]) < 1e-9:
+    # RX-17: a drawn contour, five points of (place in the span %, semitones), joined linearly and added to the ramp
+    curve_pts = sorted((float(v.get(f"x{k}", (k - 1) * 25)), float(v.get(f"c{k}", 0.0))) for k in range(1, 6))
+    curve_on = any(abs(c) > 1e-9 for _, c in curve_pts)
+    if abs(v["range"] - 100) < 1e-9 and abs(v["start"]) < 1e-9 and abs(v["end"]) < 1e-9 and not curve_on:
         return x.astype(np.float32)
     step, f0 = _f0_track(x.mean(axis=1).astype(np.float64), rate)
     t = np.arange(len(f0)) * step
@@ -661,7 +670,10 @@ def _dialogue_contour(x, rate: int, v: dict):
     inside = (t >= t0) & (t < t1)
     voiced = (f0 > 0) & inside
     shift = np.zeros(len(f0))  # octaves
-    ramp = (v["start"] + (v["end"] - v["start"]) * np.clip((t - t0) / max(t1 - t0, 1e-9), 0, 1)) / 12
+    frac = np.clip((t - t0) / max(t1 - t0, 1e-9), 0, 1)
+    ramp = (v["start"] + (v["end"] - v["start"]) * frac) / 12
+    if curve_on:
+        ramp = ramp + np.interp(frac * 100, [p for p, _ in curve_pts], [c for _, c in curve_pts]) / 12
     shift[inside] = ramp[inside]
     if voiced.sum() >= 4 and abs(v["range"] - 100) > 1e-9:
         p = np.log2(np.where(voiced, f0, 1.0))
