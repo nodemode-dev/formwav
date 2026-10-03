@@ -322,6 +322,7 @@ export type Command =
   | { type: "set-bus-gain"; busId: string; gainDb: number }
   | { type: "set-bus-pan"; busId: string; pan: number }
   | { type: "split-clip"; trackId: string; clipId: string; at: number }
+  | { type: "insert-time"; trackIds: string[]; at: number; length: number }
   | { type: "set-clip-bounds"; trackId: string; clipId: string; start: number; sourceIn: number; length: number }
   | { type: "set-clip-gain"; trackId: string; clipId: string; gainDb: number }
   | { type: "batch"; commands: Command[] }
@@ -914,6 +915,24 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         });
         return changed ? { ...t, clips } : t;
       });
+    }
+    case "insert-time": {
+      // DS-11: time inserted at `at` on the listed tracks (a word gap lengthened): a clip across it is split there and
+      // every clip from `at` on moves right by `length`, opening silence, as one step
+      const at = Math.round(cmd.at);
+      const length = Math.round(cmd.length);
+      if (!(length > 0) || !(at >= 0)) return doc;
+      let next = doc;
+      for (const trackId of cmd.trackIds) {
+        for (const c of next.tracks.find((t) => t.id === trackId)?.clips ?? []) {
+          if (c.start < at && c.start + c.length > at) next = applyCommand(next, { type: "split-clip", trackId, clipId: c.id, at }, newId);
+        }
+      }
+      if (!next.tracks.some((t) => cmd.trackIds.includes(t.id) && t.clips.some((c) => c.start >= at))) return next;
+      return {
+        ...next,
+        tracks: next.tracks.map((t) => (!cmd.trackIds.includes(t.id) ? t : { ...t, clips: t.clips.map((c) => (c.start >= at ? { ...c, start: c.start + length } : c)) })),
+      };
     }
     case "split-clip":
       return mapTrack(doc, cmd.trackId, (t) => {

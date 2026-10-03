@@ -938,6 +938,61 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     },
     true,
   );
+  // DS-11: the transcript's one selected word drawn on its clip with an edge to drag at each end; a drag sends the
+  // edge's new place to the transcript pane, which applies it as a typed Start or End (kept between the neighbours)
+  let wordSpan: { mediaId: string; start: number; end: number } | null = null;
+  const wordBox = document.createElement("div");
+  wordBox.className = "fw-word-span";
+  wordBox.hidden = true;
+  wordBox.innerHTML = '<span class="fw-word-edge" data-edge="start" title="Drag to move where the word starts"></span><span class="fw-word-edge" data-edge="end" title="Drag to move where the word ends"></span>';
+  const placeWord = () => {
+    const doc = engine.get("document");
+    const w = wordSpan;
+    const lane = w
+      ? [...lanes.querySelectorAll<HTMLElement>(".fw-lane")].find((l) => doc.tracks.find((t) => t.id === l.dataset.key)?.clips.some((c) => c.mediaId === w.mediaId && c.start <= w.start && c.start + c.length >= w.end))
+      : undefined;
+    const laneBody = lane?.querySelector<HTMLElement>(".fw-lane-body");
+    if (!w || !laneBody) {
+      if (!wordBox.hidden) wordBox.hidden = true;
+      return;
+    }
+    if (wordBox.parentElement !== laneBody) laneBody.append(wordBox);
+    const spp = samplesPerPixel(doc);
+    wordBox.style.left = `${(w.start / spp).toFixed(2)}px`;
+    wordBox.style.width = `${Math.max(2, (w.end - w.start) / spp).toFixed(2)}px`;
+    if (wordBox.hidden) wordBox.hidden = false;
+  };
+  document.addEventListener("fw-word-span", (e) => {
+    wordSpan = (e as CustomEvent<{ mediaId: string; start: number; end: number } | null>).detail;
+    placeWord();
+  });
+  lanes.addEventListener("fw-lanes-rendered", placeWord);
+  wordBox.addEventListener("pointerdown", (e) => {
+    const handle = (e.target as HTMLElement).closest<HTMLElement>(".fw-word-edge");
+    const edge = handle?.dataset.edge === "start" || handle?.dataset.edge === "end" ? handle.dataset.edge : null;
+    if (!handle || !edge || !wordSpan || e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const spp = samplesPerPixel(engine.get("document"));
+    const base = { ...wordSpan };
+    const x0 = e.clientX;
+    let at = base[edge];
+    handle.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      at = Math.round(base[edge] + (ev.clientX - x0) * spp);
+      const s = edge === "start" ? Math.min(at, base.end - 1) : base.start;
+      const en = edge === "end" ? Math.max(at, base.start + 1) : base.end;
+      wordBox.style.left = `${(s / spp).toFixed(2)}px`;
+      wordBox.style.width = `${Math.max(2, (en - s) / spp).toFixed(2)}px`;
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      if (Math.abs(at - base[edge]) >= 1) document.dispatchEvent(new CustomEvent("fw-word-edge", { detail: { edge, at } }));
+      else placeWord();
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up, { once: true });
+  });
   const startRange = (e: PointerEvent, trackId: string, node: HTMLElement) => {
     const body = node.closest<HTMLElement>(".fw-lane-body");
     if (!body) return;

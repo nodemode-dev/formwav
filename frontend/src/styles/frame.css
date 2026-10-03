@@ -357,3 +357,9 @@
 
 /* DS-04: fillers hidden in the transcript only (the audio untouched) */
 .is-hiding-fillers .fw-word.is-filler { display: none; }
+
+/* DS-11: the selected transcript word on its clip, its edges dragged to move its boundaries */
+.fw-word-span { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent-color) 18%, transparent); pointer-events: none; }
+.fw-word-edge { position: absolute; top: 0; bottom: 0; inline-size: 6px; background: var(--accent-color); cursor: ew-resize; pointer-events: auto; touch-action: none; }
+.fw-word-edge[data-edge="start"] { inset-inline-start: -3px; }
+.fw-word-edge[data-edge="end"] { inset-inline-end: -3px; }

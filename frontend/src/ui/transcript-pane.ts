@@ -136,6 +136,15 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
 
   const timing = body.querySelector<HTMLElement>(".fw-word-timing");
   const field = (k: string) => body.querySelector<HTMLInputElement>(`[data-wt="${k}"]`);
+  // DS-11: an edge dragged in the lanes lands here as session samples; it fills Start or End and applies them through
+  // the timing action (kept between the neighbours there, as typed values are)
+  document.addEventListener("fw-word-edge", (e) => {
+    const { edge, at } = (e as CustomEvent<{ edge: "start" | "end"; at: number }>).detail;
+    const input = field(edge);
+    if (!input || selected.size !== 1) return;
+    input.value = (at / engine.get("document").sampleRate).toFixed(3);
+    body.querySelector<HTMLButtonElement>('[data-t="timing"]')?.click();
+  });
   const paintSelection = () => {
     for (const span of text?.querySelectorAll<HTMLElement>(".fw-word") ?? []) {
       const on = selected.has(span.dataset.key ?? "");
@@ -144,6 +153,13 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
     }
     const one = selected.size === 1 ? words.findIndex((w) => selected.has(w.key)) : -1;
     if (timing && timing.hidden === one >= 0) timing.hidden = one < 0;
+    // DS-11: the lanes draw the selected word's span with edges to drag (null clears it)
+    const span = one >= 0 ? { mediaId: words[one].mediaId, start: words[one].start, end: words[one].end } : null;
+    const key = JSON.stringify(span);
+    if (host.dataset.wordSpan !== key) {
+      host.dataset.wordSpan = key;
+      document.dispatchEvent(new CustomEvent("fw-word-span", { detail: span }));
+    }
     if (one < 0) return;
     const rate = engine.get("document").sampleRate;
     const w = words[one];
@@ -263,10 +279,18 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
         const next = words[one + 1];
         const want = Number(field("gap")?.value);
         const gap = next ? next.start - w.end : 0;
-        if (!next || !(want >= 0) || want * rate >= gap) {
-          setText(notice, next ? `Type a gap shorter than the ${(gap / rate).toFixed(3)} s there now` : "The last word has no gap after it");
+        if (!next || !(want >= 0)) {
+          setText(notice, next ? "Type the gap you want after this word, in seconds" : "The last word has no gap after it");
           return;
         }
+        if (Math.round(want * rate) > gap) {
+          // DS-11, lengthened: silence inserted at the gap's middle, inside the pause, on every track, one undo step
+          const doc = engine.get("document");
+          engine.dispatch({ type: "insert-time", trackIds: doc.tracks.map((t) => t.id), at: Math.round(w.end + gap / 2), length: Math.round(want * rate) - gap });
+          setText(notice, `Lengthened the gap after the word to ${want.toFixed(3)} s`);
+          return;
+        }
+        if (Math.round(want * rate) === gap) return;
         const keep = Math.round(want * rate);
         cut([{ start: w.end + Math.floor(keep / 2), end: next.start - Math.ceil(keep / 2) }], `part of the gap after "${w.text}", leaving ${want.toFixed(3)} s`);
         return;
