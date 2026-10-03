@@ -108,7 +108,7 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
-  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button><label class="fw-q-field">Length <input type="number" min="0.1" step="0.1" data-q="target" placeholder="s" aria-label="Target length in seconds"></label><button type="button" class="fw-ibtn" data-an="fit-length" title="Re-time this clip to the length typed, keeping pitch (half to double its length)">Fit to length</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button><label class="fw-q-field">Length <input type="number" min="0.1" step="0.1" data-q="target" placeholder="s" aria-label="Target length in seconds"></label><button type="button" class="fw-ibtn" data-an="fit-length" title="Re-time this clip to the length typed, keeping pitch (half to double its length)">Fit to length</button><button type="button" class="fw-ibtn" data-an="remix-length" title="Re-arrange this song on its beats to the length typed, cutting or repeating whole bars where they sound alike rather than stretching it (Audition's Remix)">Remix to length</button></div>
   <div class="fw-analyze-buttons"><label class="fw-q-field">Stretch <input type="number" min="50" max="200" step="1" value="100" data-q="stretch" aria-label="New length of the selected clips as a percentage"> %</label><button type="button" class="fw-ibtn" data-an="stretch-group" title="Re-time every selected clip to this percentage of its length, keeping pitch, and scale their positions from the first one so the tracks stay in sync">Stretch selected clips</button><button type="button" class="fw-ibtn" data-an="stretch-playhead" title="Stretch the selected clips so the last of them ends at the playhead, keeping pitch, positions scaled from the first">Stretch to playhead</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="detect-key" title="Find this clip's musical key and its Camelot code">Detect key</button><span class="fw-key-readout" data-key-out>Key not set</span></div>
 </div>`;
@@ -2245,6 +2245,26 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         setText(notice, `Stretched from ${own.toFixed(1)} to ${doc.tempo.bpm.toFixed(1)} BPM`);
       } catch (err) {
         setText(notice, `Could not stretch: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (action === "remix-length") {
+      // AA-09: re-arranged on its beats (whole bars cut or repeated where they sound alike), not stretched
+      const doc = engine.get("document");
+      const hit = find(doc);
+      const target = Number(body.querySelector<HTMLInputElement>('[data-q="target"]')?.value);
+      if (!hit || !(target > 0)) {
+        setText(notice, hit ? "Type the length in seconds to remix the clip to" : "Select one clip to remix");
+        return;
+      }
+      setText(notice, `Remixing ${(hit.clip.length / doc.sampleRate).toFixed(2)} s to ${target.toFixed(2)} s on its beats...`);
+      try {
+        const res = await fetch(`/api/media/${hit.clip.mediaId}/remix`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seconds: target }) });
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown; remix?: { bpm: number; pieces: number[][]; stretch: number } };
+        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef });
+        const jumps = (out.remix?.pieces.length ?? 1) - 1;
+        setText(notice, `Remixed to ${target.toFixed(2)} s at ${out.remix?.bpm ?? "?"} BPM: ${jumps} jump${jumps === 1 ? "" : "s"} on the beat${out.remix && Math.abs(out.remix.stretch - 1) > 1e-4 ? `, then a ${((out.remix.stretch - 1) * 100).toFixed(2)}% stretch` : ", no stretch"}`);
+      } catch (err) {
+        setText(notice, `Could not remix: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else if (action === "fit-length") {
       const doc = engine.get("document");

@@ -464,6 +464,19 @@ def share_video(payload: dict) -> Response:
     return Response(content=mp4, media_type="video/mp4", headers={"Content-Disposition": 'attachment; filename="formwav-share.mp4"'})
 
 
+@router.post("/media/{media_id}/remix", status_code=201)
+def media_remix(media_id: str, payload: dict) -> dict:
+    """AA-09: {"seconds"}: the media re-arranged on its beats to that length (services/remix.py)."""
+    from ..services import remix
+
+    try:
+        return remix.remix(media_id, float(payload.get("seconds")))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/notes")
 def media_notes(media_id: str) -> dict:
     """PT-10: the media's notes (start, end, median pitch) and its pitch curve, for the note editor."""
