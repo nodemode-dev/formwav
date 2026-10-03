@@ -793,6 +793,10 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   // instead of drawing a box; each dab covers BRUSH_PX either way, and the stroke goes to the Inspector on release
   const BRUSH_PX = 8;
   const brushDots: HTMLElement[] = [];
+  // A track shows a spectrogram when the session's view is the spectrogram or its own view is (AU-30); there a drag
+  // anywhere on a clip selects time and frequency (or paints, with the heal brush) rather than moving the clip
+  const spectralTrack = (trackId: string | undefined): boolean =>
+    lanes.classList.contains("is-spectral") || (!!trackId && engine.get("document").tracks.find((t) => t.id === trackId)?.view === "spectrogram");
   let hovered: HTMLElement | null = null;
   const rangeBox = document.createElement("div");
   rangeBox.className = "fw-range";
@@ -839,7 +843,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const clip = doc.tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === node.dataset.key);
     const rate = (clip && doc.media[clip.mediaId]?.sampleRate) || doc.sampleRate;
     const box = node.getBoundingClientRect();
-    rangeDrag = { trackId, body, x0: e.clientX, moved: false, y0: e.clientY, clipTop: box.top, clipHeight: box.height, bodyTop: body.getBoundingClientRect().top, nyquist: rate / 2, spectral: lanes.classList.contains("is-spectral") };
+    rangeDrag = { trackId, body, x0: e.clientX, moved: false, y0: e.clientY, clipTop: box.top, clipHeight: box.height, bodyTop: body.getBoundingClientRect().top, nyquist: rate / 2, spectral: spectralTrack(trackId) };
     body.setPointerCapture(e.pointerId);
     e.preventDefault();
   };
@@ -887,7 +891,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const r = clip.getBoundingClientRect();
     const x = e.clientX - r.left;
     const onHandle = !!(e.target as HTMLElement).closest(".fw-gain-line, .fw-fade-handle, .fw-take");
-    const zone = onHandle || x < EDGE_PX || x > r.width - EDGE_PX ? "" : lanes.classList.contains("is-spectral") || e.clientY - r.top < r.height / 2 ? "range" : "grab";
+    const zone = onHandle || x < EDGE_PX || x > r.width - EDGE_PX ? "" : spectralTrack(clip.closest<HTMLElement>(".fw-lane")?.dataset.key) || e.clientY - r.top < r.height / 2 ? "range" : "grab";
     if ((clip.dataset.zone ?? "") !== zone) {
       if (zone) clip.dataset.zone = zone;
       else delete clip.dataset.zone;
@@ -1139,7 +1143,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
             ? "trim-left"
             : x > rect.width - EDGE_PX
               ? "trim-right"
-              : lanes.classList.contains("is-spectral") || e.clientY - rect.top < rect.height / 2
+              : spectralTrack(trackId) || e.clientY - rect.top < rect.height / 2
                 ? "range"
                 : "move";
     if (spotEnabled() && (kind === "move" || kind === "range") && !e.shiftKey) {
