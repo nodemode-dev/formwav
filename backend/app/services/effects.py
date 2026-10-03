@@ -105,6 +105,12 @@ FORMWAV_CHAINS = {
     "peak-normalize": "",
     "paulstretch": "",
     "downmix-mono": "",
+    "azimuth-measured": "",
+    "dc-measured": "",
+    "breath-control": "",
+    "de-hum-adaptive": "",
+    "de-ess-spectral": "",
+    "spectral-recovery": "",
     "loudness-streaming": "loudnorm=I=-14:TP=-1:LRA=11",
     "loudness-broadcast": "loudnorm=I=-23:TP=-2:LRA=15",
     "exciter": "aexciter=amount=2",
@@ -132,7 +138,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("paulstretch", "Paulstretch..."), ("ramp", "Ramp tempo and pitch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour...")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour..."), ("azimuth-measured", "Azimuth (measured)"), ("dc-measured", "DC offset (measured)"), ("breath-control", "Breath control..."), ("de-hum-adaptive", "De-hum (adaptive)..."), ("de-ess-spectral", "De-ess (spectral)..."), ("spectral-recovery", "Spectral recovery...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("downmix-mono", "Downmix to mono"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -187,6 +193,10 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "extreme-stretch": ({"factor": ("Stretch", 1.5, 10, 4, "x")}, lambda v: f"rubberband=tempo={1 / v['factor']:.5f}"),
     "paulstretch": ({"factor": ("Stretch", 1, 100, 8, "x"), "resolution": ("Time resolution", 0.02, 2, 0.25, "s")}, None),
     "phase-rotate": ({"angle": ("Angle", -180, 180, 90, " degrees", 1), "auto": ("Find the angle (1 = on)", 0, 1, 0, "", 1)}, None),
+    "breath-control": ({"reduce": ("Reduction", 0, 40, 20, "dB")}, None),
+    "de-hum-adaptive": ({"mains": ("Mains", 50, 60, 50, " Hz", 10), "harmonics": ("Harmonics", 1, 8, 4, "", 1)}, None),
+    "de-ess-spectral": ({"threshold": ("Threshold", -50, 0, -30, "dB"), "reduce": ("Max reduction", 0, 30, 12, "dB")}, None),
+    "spectral-recovery": ({"cutoff": ("Lost above", 2000, 16000, 8000, "Hz"), "amount": ("Amount", 0, 100, 70, "%")}, None),
     # RX-18: dither to any depth from 8 to 24 bits. ffmpeg dithers (with Shibata noise shaping) only to its integer
     # formats, so the signal is scaled by an exact power of two around it: for N bits at 16 (N up to 16) or 32 (above),
     # 2^(N - 16) or 2^(N - 32), which lands the grid on 2^-(N - 1); 16 bits shaped is the chain this replaced, unchanged
@@ -655,6 +665,169 @@ def _paulstretch(x, rate: int, v: dict):
     return y.astype(np.float32)
 
 
+def _stft_map(x, rate: int, n: int, fn):
+    """Each channel through a short-time spectrum (periodic Hann windows at a quarter-frame hop, which overlap-add to
+    exactly 1.5), fn(spec, freqs, channel) returning the spectrum to resynthesise; an unchanged spectrum gives the
+    input back, so an effect built on it touches only the bins it changes."""
+    import numpy as np
+
+    hop = n // 4
+    w = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n)
+    out = np.zeros(x.shape, dtype=np.float64)
+    freqs = np.fft.rfftfreq(n, 1 / rate)
+    for c in range(x.shape[1]):
+        s = np.concatenate([np.zeros(n), x[:, c].astype(np.float64), np.zeros(n)])
+        frames = 1 + (len(s) - n) // hop
+        idx = np.arange(n)[None, :] + hop * np.arange(frames)[:, None]
+        spec = fn(np.fft.rfft(s[idx] * w, axis=1), freqs, c)
+        y = np.fft.irfft(spec, n=n, axis=1) * w
+        acc = np.zeros(len(s))
+        for i in range(frames):
+            acc[i * hop : i * hop + n] += y[i]
+        out[:, c] = (acc / 1.5)[n : n + len(x)]
+    return out.astype(np.float32)
+
+
+def _azimuth_measured(x, rate: int, v: dict):
+    """Azimuth, measured (RX-02): the right channel's delay against the left found by cross-correlation (within
+    5 ms) and its level by RMS, then shifted and scaled to match, so a misaligned stereo pair lines up."""
+    import numpy as np
+
+    if x.shape[1] != 2:
+        raise media.MediaError("azimuth alignment needs a stereo clip")
+    left, right = x[:, 0].astype(np.float64), x[:, 1].astype(np.float64)
+    size = 1 << int(np.ceil(np.log2(2 * len(left))))
+    corr = np.fft.irfft(np.conj(np.fft.rfft(left, size)) * np.fft.rfft(right, size), size)
+    reach = int(rate * 0.005)
+    lags = np.concatenate([np.arange(0, reach + 1), np.arange(-reach, 0)])
+    lag = int(lags[np.argmax(np.concatenate([corr[: reach + 1], corr[-reach:]]))])
+    shifted = np.zeros_like(right)
+    if lag >= 0:
+        shifted[: len(right) - lag] = right[lag:]
+    else:
+        shifted[-lag:] = right[: len(right) + lag]
+    rl, rr = np.sqrt(np.mean(left**2)), np.sqrt(np.mean(shifted**2))
+    if rr > 0:
+        shifted *= rl / rr
+    v["measured"] = lag
+    return np.stack([left, shifted], axis=1).astype(np.float32)
+
+
+def _dc_measured(x, rate: int, v: dict):
+    """DC offset, measured (AU-B14): each channel's mean subtracted exactly, so the offset goes and nothing else in
+    the signal changes, low frequencies included (a high-pass would take some of them)."""
+    import numpy as np
+
+    y = x.astype(np.float64)
+    return (y - y.mean(axis=0, keepdims=True)).astype(np.float32)
+
+
+def _breath_control(x, rate: int, v: dict):
+    """Breath control (RX-03): breaths found as noise-like frames (spectral flatness above 0.35) between 10 and 45 dB
+    under the phrases' level (their 95th percentile), and lowered by the Reduction amount with 10 ms ramps; the
+    phrases and quiet room tone below the window are left as they are."""
+    import numpy as np
+
+    mono = x.astype(np.float64).mean(axis=1)
+    hop = max(1, int(rate * 0.02))
+    frames = len(mono) // hop
+    if frames < 3:
+        return x
+    blocks = mono[: frames * hop].reshape(frames, hop)
+    level = 10 * np.log10(np.mean(blocks**2, axis=1) + 1e-12)
+    power = np.abs(np.fft.rfft(blocks * np.hanning(hop), axis=1)) ** 2 + 1e-20
+    flatness = np.exp(np.mean(np.log(power), axis=1)) / np.mean(power, axis=1)
+    phrase = np.percentile(level[level > -70], 95) if np.any(level > -70) else 0.0
+    breath = (level < phrase - 10) & (level > phrase - 45) & (flatness > 0.35)
+    gain = np.repeat(np.where(breath, 10 ** (-v["reduce"] / 20), 1.0), hop)
+    gain = np.concatenate([gain, np.full(len(mono) - len(gain), gain[-1])])
+    ramp = max(1, int(rate * 0.01))
+    gain = np.convolve(gain, np.ones(ramp) / ramp, "same")
+    return (x.astype(np.float64) * gain[:, None]).astype(np.float32)
+
+
+def _de_hum_adaptive(x, rate: int, v: dict):
+    """De-hum, adaptive (RX-10): in each third of a second the hum's fundamental is found within 3 Hz of the mains
+    frequency (the harmonics' summed magnitude at each candidate, 0.02 Hz apart), and narrow notches follow it and its
+    harmonics, so drifting hum is taken out where fixed notches miss it."""
+    import numpy as np
+
+    mains = 60.0 if v["mains"] >= 55 else 50.0
+    count = int(round(v["harmonics"]))
+
+    def fn(spec, f, c):
+        mag = np.abs(spec)
+        df = f[1]
+        cands = np.arange(mains - 3, mains + 3.0001, 0.02)
+        score = np.zeros((spec.shape[0], len(cands)))
+        for k in range(1, count + 1):
+            pos = k * cands / df
+            lo = np.floor(pos).astype(int)
+            frac = pos - lo
+            score += mag[:, lo] * (1 - frac) + mag[:, np.minimum(lo + 1, mag.shape[1] - 1)] * frac
+        best = cands[np.argmax(score, axis=1)]
+        gain = np.ones(spec.shape)
+        for k in range(1, count + 1):
+            # wide enough for the Hann window's leakage (about two bins either side), still far from any tone a few
+            # hertz away; narrower notches (0.8 bin) left the skirts and took only 14 dB
+            gain *= 1 - 0.9999 * np.exp(-0.5 * ((f[None, :] - k * best[:, None]) / (1.6 * df)) ** 2)
+        return spec * gain
+
+    return _stft_map(x, rate, 16384, fn)
+
+
+def _de_ess_spectral(x, rate: int, v: dict):
+    """De-ess, spectral (RX-09): in each short frame the sibilant band (4 to 10 kHz) is measured, and only those
+    frequencies, only in frames where they pass the Threshold, are lowered by the excess up to the Max reduction;
+    everything below 4 kHz, and the band whenever it is under the threshold, is untouched."""
+    import numpy as np
+
+    n = 1024
+    w2 = np.sum((0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n)) ** 2)
+
+    def fn(spec, f, c):
+        band = (f >= 4000) & (f <= 10000)
+        level = 10 * np.log10(2 * np.sum(np.abs(spec[:, band]) ** 2, axis=1) / (n * w2) + 1e-12)
+        cut = np.clip(level - v["threshold"], 0, v["reduce"])
+        cut = np.convolve(cut, np.ones(3) / 3, "same")
+        out = spec.copy()
+        out[:, band] *= (10 ** (-cut / 20))[:, None]
+        return out
+
+    return _stft_map(x, rate, n, fn)
+
+
+def _spectral_recovery(x, rate: int, v: dict):
+    """Spectral recovery (RX-41): where the band above the cutoff is lost (30 dB under the octave below it), it is
+    resynthesised from that octave, its magnitudes moved up an octave's width, lowered 6 dB and by the Amount, with
+    fresh phases; below the cutoff nothing changes, and a band that is present is left alone."""
+    import numpy as np
+
+    rng = np.random.default_rng(5)
+
+    def fn(spec, f, c):
+        cut = v["cutoff"]
+        nyq = f[-1]
+        src = (f >= cut / 2) & (f < cut)
+        dst = (f >= cut) & (f < min(2 * cut, nyq))
+        shift = int(np.argmax(f >= cut)) - int(np.argmax(f >= cut / 2))
+        out = spec.copy()
+        dst_idx = np.nonzero(dst)[0]
+        src_idx = dst_idx - shift
+        keep = src_idx >= 0
+        dst_idx, src_idx = dst_idx[keep], src_idx[keep]
+        e_src = np.sum(np.abs(spec[:, src]) ** 2, axis=1) + 1e-20
+        e_dst = np.sum(np.abs(spec[:, dst]) ** 2, axis=1)
+        lost = e_dst < e_src * 1e-3
+        mags = np.abs(spec[:, src_idx]) * 0.5 * (v["amount"] / 100)
+        phases = np.exp(2j * np.pi * rng.random(mags.shape))
+        fill = mags * phases
+        out[np.ix_(lost, dst_idx)] = fill[lost]
+        return out
+
+    return _stft_map(x, rate, 2048, fn)
+
+
 def _chain_array(x, rate: int, chain: str, label: str):
     """An ffmpeg filter chain run over an array (32-bit float WAV in and out), the result exactly the input's length."""
     import os
@@ -786,7 +959,9 @@ def _peak_normalize(x, rate: int, v: dict):
     return (y * gains).astype(np.float32)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind}
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
+                 "azimuth-measured": _azimuth_measured, "dc-measured": _dc_measured, "breath-control": _breath_control,
+                 "de-hum-adaptive": _de_hum_adaptive, "de-ess-spectral": _de_ess_spectral, "spectral-recovery": _spectral_recovery}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:

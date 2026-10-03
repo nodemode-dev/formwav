@@ -177,6 +177,37 @@ def stats(media_id: str) -> dict:
     return result
 
 
+def find_similar(media_id: str, start: int, length: int, threshold: float = 0.8) -> list[dict]:
+    """Find similar events (RX-22): the reference range's pattern, a log-magnitude spectrogram in 32 bands at about
+    11 ms a frame, correlated with every position in the clip (per-band sliding correlations and running sums, so
+    long clips stay quick); the best positions at or above `threshold`, at least a reference length apart, in order
+    of time, the reference itself among them."""
+    view, rate = _wav_view(media_id)
+    x = np.asarray(view, dtype=np.float64).mean(axis=1)
+    n, hop, bands = 1024, 512, 32
+    frames = 1 + (len(x) - n) // hop if len(x) >= n else 0
+    first, span = max(0, int(start) // hop), max(2, int(length) // hop)
+    if frames < span or first + span > frames:
+        raise media.MediaError("the reference range must lie inside the clip and last at least two frames")
+    idx = np.arange(n)[None, :] + hop * np.arange(frames)[:, None]
+    mag = np.abs(np.fft.rfft(x[idx] * np.hanning(n), axis=1))[:, : bands * 16]
+    feat = np.log1p(100 * mag.reshape(frames, bands, 16).mean(axis=2))
+    ref = feat[first : first + span] - feat[first : first + span].mean()
+    num = sum(np.correlate(feat[:, b], ref[:, b], "valid") for b in range(bands))
+    rows, sq = feat.sum(axis=1), (feat**2).sum(axis=1)
+    c1, c2 = np.concatenate([[0], np.cumsum(rows)]), np.concatenate([[0], np.cumsum(sq)])
+    s1, s2 = c1[span:] - c1[:-span], c2[span:] - c2[:-span]
+    var = np.maximum(s2 - s1**2 / (span * bands), 1e-12)
+    score = num / np.sqrt(var * np.sum(ref**2))
+    picks: list[int] = []
+    for p in np.argsort(-score):
+        if score[p] < threshold:
+            break
+        if all(abs(int(p) - q) >= span for q in picks):
+            picks.append(int(p))
+    return [{"at": p * hop, "score": round(float(score[p]), 3)} for p in sorted(picks)]
+
+
 def _wav_view(media_id: str):
     """A stored WAV's samples as a read-only (frames, channels) array mapped from disk, and its rate; float32 or 16-bit PCM."""
     import struct

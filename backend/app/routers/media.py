@@ -232,6 +232,19 @@ async def media_room_tone(media_id: str, request: Request) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.get("/media/{media_id}/similar")
+def media_similar(media_id: str, start: int, length: int, threshold: float = 0.8) -> list[dict]:
+    """Events like the reference range (RX-22): positions in the media's frames with their similarity."""
+    from ..services import tools
+
+    try:
+        return tools.find_similar(media_id, start, length, max(0.3, min(threshold, 0.99)))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/stats")
 def media_stats(media_id: str) -> dict:
     from ..services import tools

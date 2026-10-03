@@ -87,6 +87,30 @@ def _platform_gain(path: str, platform: str) -> tuple[float, float, float]:
     return gain, loudness, peak
 
 
+def _with_cues(wav: bytes, document: dict) -> bytes:
+    """RX-29: the session's markers and regions written into a WAV as the cue points other editors read (a `cue `
+    chunk, and a LIST adtl chunk with a `labl` per point and an `ltxt` giving each region its length), the RIFF size
+    updated; sample positions are the mix's frames."""
+    import struct
+
+    points = [(int(m.get("at", 0)), str(m.get("label") or ""), 0) for m in (document.get("markers") or [])]
+    points += [(int(r.get("start", 0)), str(r.get("label") or ""), max(0, int(r.get("end", 0)) - int(r.get("start", 0)))) for r in (document.get("regions") or [])]
+    if not points or wav[:4] != b"RIFF":
+        return wav
+    cue = struct.pack("<I", len(points)) + b"".join(struct.pack("<II4sIII", i + 1, at, b"data", 0, 0, at) for i, (at, _, _) in enumerate(points))
+    adtl = b"adtl"
+    for i, (_, label, length) in enumerate(points):
+        text = label.encode("utf-8") + b"\0"
+        body = struct.pack("<I", i + 1) + text + (b"\0" if len(text) % 2 else b"")
+        adtl += b"labl" + struct.pack("<I", 4 + len(text)) + body
+        if length:
+            adtl += b"ltxt" + struct.pack("<I", 20) + struct.pack("<II4sHHHH", i + 1, length, b"rgn ", 0, 0, 0, 0)
+    extra = b"cue " + struct.pack("<I", len(cue)) + cue + b"LIST" + struct.pack("<I", len(adtl)) + adtl
+    out = bytearray(wav + extra)
+    out[4:8] = struct.pack("<I", len(out) - 8)
+    return bytes(out)
+
+
 @router.post("/render")
 def render_session(document: dict = Body(...), format: str = "wav", what: str = "mix", platform: str = "") -> Response:
     try:
@@ -143,6 +167,8 @@ def render_session(document: dict = Body(...), format: str = "wav", what: str = 
                 out = media.import_wav(f"Streaming preview ({export.FORMATS[format][3]}, {name} {gain:+.1f} dB).wav", level.read_bytes())
                 return {**out, "platform": name, "loudness": round(loudness, 1), "truePeak": round(peak, 1), "gainDb": round(gain, 2)}
         data, ext, mime = export.encode(result["wav"], format)
+        if ext == "wav":
+            data = _with_cues(data, document)
     except KeyError as err:
         raise HTTPException(404, "the session uses media the engine does not have") from err
     except media.CoreMissing as err:
