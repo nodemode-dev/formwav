@@ -2130,3 +2130,10 @@ Recorded at v1.47.0 and fixed: the player's offline bounce sent no master effect
 - logged: v1.49.0 (in progress) · 2026-10-03
 
 COVERAGE still listed DS-05 as missing a chosen threshold and target, but the transcript pane has carried both (Gaps over, Keep) since an earlier batch, and Shorten gaps reads them. Measured through the pane (sidecar verification/verify_gap_choice.py): a 5.4 s recording of five tone words with gaps of 0.4, 0.9, 1.5 and 0.6 s, its transcript seeded in the engine's transcript cache (faster-whisper is not installed in this container; the cache is what a transcription writes), lost exactly 1.8 s at the default 0.75 and 0.3 s, came back to 5.4 s with one undo, and lost exactly 2.7 s at 0.5 and 0.1 s (the 0.6 s gap now caught too); no page errors.
+
+### live preview for effects and plugins (AU-29)
+- refers-to: src/ui/inspector-pane.ts :: Preview (`runPreview`, `stopPreview`)
+- kind: explainer
+- logged: v1.49.0 (in progress) · 2026-10-03
+
+Preview beside Apply plays the picked effect, built in or a plugin, at its current settings on 5 s of the selected clip from the playhead (or its start): the span is cut from the clip's file, processed by the engine and looped beside the session, which does not change; while it plays, a changed setting renders it again and the new render takes over; Preview again, picking another effect or changing the selection stops it. Plugin parameters are drawn in the same fields as built-in ones, so the same re-render follows them. Verified in Chromium with real playback calls: Amplify at +6 dB previewed a 0.2 tone at 0.399 and, changed to -6 dB while playing, re-rendered at 0.100 (play, pause, play); Preview again stopped it; the session's tracks were unchanged throughout; the CLAP test gain plugin (a fixed -6.02 dB, no parameters of its own) previewed at 0.1000 against 0.0998; no page errors; the audits clean.

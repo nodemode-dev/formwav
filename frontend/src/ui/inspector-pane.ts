@@ -39,7 +39,7 @@ const BODY = `
   <div class="fw-fx-params"></div>
   <div class="fw-analyze-buttons"><select data-preset="fx" aria-label="Preset for this effect"><option value="">Presets</option></select><button type="button" class="fw-ibtn" data-preset="fx-save">Save preset</button><button type="button" class="fw-ibtn" data-preset="fx-delete">Delete</button></div>
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx-preview aria-pressed="false" title="Hear the picked effect or plugin at its current settings on 5 s of the clip from the playhead, looped, without changing the session; while it plays, a changed setting is heard again">Preview</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges (RX's ambience match)">Fill with room tone</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="heal-brush" aria-pressed="false" title="Paint over a sound in the spectrogram view to heal it as you go: Spot heal under the stroke, one undo step per stroke">Heal brush</button><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select><button type="button" class="fw-ibtn" data-fx="chain-files" hidden title="Run this chain on audio files from the computer, outside the session, and download the results as a zip">Run chain on files...</button><input type="file" data-chain="files" accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff" multiple hidden><button type="button" class="fw-ibtn" data-fx="detect-silences" title="Mark this track's silences (over 0.3 s) as regions on the timeline, to see them before stripping or splitting">Detect silences</button><button type="button" class="fw-ibtn" data-fx="split-silences" title="Split this track's clips where sound starts and stops (silences over 0.3 s)">Split at silences</button><button type="button" class="fw-ibtn" data-fx="similar" title="Mark every event like the one in the selected range (draw a range over one event first)">Find similar</button><button type="button" class="fw-ibtn" data-fx="restore" title="Put the clip's original audio back in the selected range, or the whole clip without a range">Restore original</button></div>
   <ol class="fw-chain" hidden></ol>
@@ -324,6 +324,72 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     syncBand();
   });
   pick?.addEventListener("change", showControls);
+  // AU-29, live preview: the picked effect (built in or a plugin) at its current settings on 5 s of the selected clip
+  // from the playhead (or the clip's start), cut from its file and processed by the engine, looped beside the session,
+  // which is not changed; while it plays, a changed setting renders and plays it again. The button carries the
+  // previewed media's id for checking.
+  const previewButton = body.querySelector<HTMLButtonElement>("[data-fx-preview]");
+  let preview: { audio: HTMLAudioElement; url: string } | null = null;
+  let previewRun = 0;
+  const stopPreview = () => {
+    previewRun++;
+    if (preview) {
+      preview.audio.pause();
+      URL.revokeObjectURL(preview.url);
+      preview = null;
+    }
+    previewButton?.setAttribute("aria-pressed", "false");
+  };
+  const runPreview = async () => {
+    const doc = engine.get("document");
+    const hit = find(doc);
+    const name = pick?.value;
+    const media = hit ? doc.media[hit.clip.mediaId] : undefined;
+    if (!hit || !name || !media || !previewButton) return;
+    const run = ++previewRun;
+    const at = engine.get("transport").positionSamples;
+    const startAt = at >= hit.clip.start && at < hit.clip.start + hit.clip.length ? at : hit.clip.start;
+    const from = (startAt - hit.clip.start + hit.clip.sourceIn) / media.sampleRate;
+    const to = Math.min(from + 5, (hit.clip.sourceIn + hit.clip.length) / media.sampleRate);
+    try {
+      setText(notice, `Preparing a preview of ${pick?.selectedOptions[0]?.textContent?.trim() ?? name}...`);
+      const cut = await fetch(`/api/media/${hit.clip.mediaId}/excerpt?start=${from}&end=${to}`, { method: "POST" });
+      const piece = (await cut.json().catch(() => ({}))) as { id?: string; detail?: unknown };
+      if (!cut.ok || !piece.id) throw new Error(typeof piece.detail === "string" ? piece.detail : `the engine answered ${cut.status}`);
+      const res = await fetch(`/api/media/${piece.id}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(currentParams()))}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as { id?: string; detail?: unknown };
+      if (!res.ok || !out.id) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      const blob = await (await fetch(`/api/media/${out.id}/audio`)).blob();
+      if (run !== previewRun) return; // stopped or superseded meanwhile
+      if (preview) {
+        preview.audio.pause();
+        URL.revokeObjectURL(preview.url);
+      }
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.loop = true;
+      preview = { audio, url };
+      previewButton.dataset.media = out.id;
+      previewButton.setAttribute("aria-pressed", "true");
+      await audio.play().catch(() => undefined);
+      setText(notice, `Previewing ${(to - from).toFixed(1)} s; change a setting to hear it again, or press Preview to stop`);
+    } catch (err) {
+      if (run === previewRun) stopPreview();
+      setText(notice, `Could not preview: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  previewButton?.addEventListener("click", () => (previewButton.getAttribute("aria-pressed") === "true" ? stopPreview() : void runPreview()));
+  let previewTimer = 0;
+  body.addEventListener("change", (e) => {
+    const target = e.target as HTMLElement;
+    if (target === pick) stopPreview();
+    else if (preview && target.closest(".fw-fx-params")) {
+      window.clearTimeout(previewTimer);
+      previewTimer = window.setTimeout(() => void runPreview(), 200);
+    }
+  });
+  host.addEventListener("fw-selection", () => stopPreview());
+
   // A plugin's own parameters (generated controls, AU-29) are fetched the first time it is picked and drawn after its
   // Tail; a failed fetch is forgotten, so picking it again tries again.
   const fetchedPlugins = new Set<string>();
