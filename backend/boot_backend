@@ -9,4 +9,6 @@ if [ -f .env ]; then
   source .env
   set +a
 fi
-exec uvicorn app.main:app --reload --host "${HOST:-127.0.0.1}" --port "${FORMWAV_PORT:-8060}"
+# --reload-dir app: reload when the engine's source changes, not when pip or maturin write into venv/ (a reload during
+# an install could fail to import and leave the engine down until the next edit)
+exec uvicorn app.main:app --reload --reload-dir app --host "${HOST:-127.0.0.1}" --port "${FORMWAV_PORT:-8060}"
