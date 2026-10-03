@@ -999,3 +999,10 @@ Playback already took any number of time-track points (the worklet interpolates 
 - logged: v1.47.0 (in progress) · 2026-10-02
 
 The export answered 400 because the core returns its mix as interleaved float32 bytes, which the warp read as a list; it now reads and writes those bytes. Measured on a 4 s tone: no time track 4.000 s; 100 to 200% linear 2.773 s (4 ln 2 = 2.773); logarithmic 2.885 s (4 x 0.5 / ln 2 = 2.885); 100, 200, 100% over three points 2.773 s (2.773). Still to check before AU-36 counts: the curve drawn and applied in the browser (the run was cut short by the engine reloading).
+
+### the heal brush fills a dropout (AA-06)
+- refers-to: app/services/effects.py :: `heal_painted` (the dropout test and spectral repair's Replace)
+- kind: explainer
+- logged: v1.47.0 (in progress) · 2026-10-02
+
+A stroke over a dropout now fills it: when any 5 ms inside the stroke sits 30 dB below the 200 ms around it, the stroke's box is rebuilt by spectral repair's Replace (RX-42: magnitudes interpolated from both sides, each bin's phase carried at its own frequency); anything else is attenuated through the painted mask as before. A box's average would not do: the brush's margins make the stroke wider than the dropout, so the average barely dips. Verified in Chromium on a track's own spectrogram view: a stroke over a 20 ms dropout in a 440 Hz tone took the gap's RMS from 0.0000 to 0.2135 (the tone's 0.2121), 31.2 dB below the tone in error against the true tone, the audio 0.2 to 1.0 s unchanged to 2.7e-17, the media named as filled, no page errors; on the engine the whistle stroke still attenuated (3 kHz to -143.1 dB, 440 Hz at -10.5) and was not filled.

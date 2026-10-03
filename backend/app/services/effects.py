@@ -557,9 +557,25 @@ def heal_painted(media_id: str, boxes: list) -> dict:
     info = media.media_info(media_id)
     rate = int(info["sampleRate"])
     view, _ = _wav_view(media_id)
-    y = _spot_heal_mask(np.array(view, dtype=np.float32), rate, boxes)
+    x = np.array(view, dtype=np.float32)
+    # A stroke over a dropout fills it: when any 5 ms inside the stroke sits 30 dB below the 200 ms around it, the
+    # stroke's box is rebuilt by spectral repair's Replace (magnitudes interpolated from both sides, each bin's phase
+    # carried at its own frequency); otherwise the painted mask is attenuated to its surroundings.
+    t0, t1 = min(float(b["from"]) for b in boxes), max(float(b["to"]) for b in boxes)
+    lo, hi = min(float(b["low"]) for b in boxes), max(float(b["high"]) for b in boxes)
+    mono = x.mean(axis=1).astype(np.float64)
+    i0, i1 = max(0, int(t0 * rate)), min(len(mono), int(t1 * rate))
+    block = max(1, int(0.005 * rate))
+    inner = mono[i0:i1][: (i1 - i0) // block * block].reshape(-1, block) if i1 - i0 >= block else np.zeros((0, block))
+    around = np.concatenate([mono[max(0, i0 - int(0.2 * rate)) : i0], mono[i1 : i1 + int(0.2 * rate)]])
+    level = float(np.sqrt(np.mean(around**2))) if len(around) else 0.0
+    filled = len(inner) > 0 and level > 1e-6 and float(np.sqrt((inner**2).mean(axis=1)).min()) < level * 10 ** (-30 / 20)
+    if filled:
+        y = _spectral_repair(x, rate, {"from": t0, "to": t1, "low": max(0.0, lo), "high": hi, "mode": 1, "resolution": 0})
+    else:
+        y = _spot_heal_mask(x, rate, boxes)
     stem = str(info["name"]).rsplit(".", 1)[0]
-    return media.import_wav(f"{stem} (Heal brush).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
+    return media.import_wav(f"{stem} (Heal brush{', filled' if filled else ''}).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
 
 
 def _wow_flutter(x, rate: int, v: dict):
