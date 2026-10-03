@@ -2116,3 +2116,10 @@ Beside Log Hz, a menu picks how a drag selects in a spectrogram: a box (the marq
 - logged: v1.48.0 (in progress) · 2026-10-03
 
 A clip carries its own realtime effects (Pro Tools' clip effects), edited in the Inspector's Clip effects like a track's: filters and a compressor, ahead of the track's inserts. The core's clip chains became stages, so a compressor is one more stage in a clip's chain, after the clip's own filters and before its track's; every binding places it there. The core applies a clip's gain after its chain, so the planner lowers the compressor's threshold by the clip gain: compressing the clip at its clip gain is compressing the file at that threshold with the gain after, so louder clips compress harder and the track fader stays after. Verified: a core test (a 4:1 compressor after a lowpass takes a loud tone down and leaves a filtered tone below its threshold untouched; 14 core tests pass); engine exports of a -6.02 dBFS tone came down 9.73 dB with a -20 dB 4:1 clip compressor, rose only 1.56 dB for +6 dB of clip gain into it and fell exactly 6.00 dB for a -6 dB fader after it; in Chromium, Add in Clip effects put the compressor on the clip and the plan carried [0, -20, 4, 10, 150, 0], the realtime engine's bounce fell from -6.02 to -15.60 dBFS and 6.0 dB more with the fader at -6, its row showed and edited the threshold to -30, at which the realtime bounce and the engine's export both measured -23.00 dBFS; two undos removed it; no page errors; the audits clean (62 commands, all dispatched).
+
+### the offline bounce applies the master effects
+- refers-to: src/audio/player.ts :: `bounce`
+- kind: explainer
+- logged: v1.48.0 (in progress) · 2026-10-03
+
+Recorded at v1.47.0 and fixed: the player's offline bounce sent no master effects, unlike playback. It now sends them as playback does. Verified: with a 2 kHz high-pass on the master, a 440 Hz tone's bounce fell from -6.02 to -32.43 dBFS, the engine's export of the same document -32.43, a difference of 0.000 dB; no page errors.
