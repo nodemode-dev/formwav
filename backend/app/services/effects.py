@@ -112,6 +112,7 @@ FORMWAV_CHAINS = {
     "de-ess-spectral": "",
     "spectral-recovery": "",
     "spectral-repair": "",
+    "dialogue-leveler": "",
     "loudness-streaming": "loudnorm=I=-14:TP=-1:LRA=11",
     "loudness-broadcast": "loudnorm=I=-23:TP=-2:LRA=15",
     "exciter": "aexciter=amount=2",
@@ -139,7 +140,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("paulstretch", "Paulstretch..."), ("ramp", "Ramp tempo and pitch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour..."), ("azimuth-measured", "Azimuth (measured)"), ("dc-measured", "DC offset (measured)"), ("breath-control", "Breath control..."), ("de-hum-adaptive", "De-hum (adaptive)..."), ("de-ess-spectral", "De-ess (spectral)..."), ("spectral-recovery", "Spectral recovery..."), ("spectral-repair", "Spectral repair...")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour..."), ("azimuth-measured", "Azimuth (measured)"), ("dc-measured", "DC offset (measured)"), ("breath-control", "Breath control..."), ("de-hum-adaptive", "De-hum (adaptive)..."), ("de-ess-spectral", "De-ess (spectral)..."), ("spectral-recovery", "Spectral recovery..."), ("spectral-repair", "Spectral repair..."), ("dialogue-leveler", "Leveler (dialogue)...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("downmix-mono", "Downmix to mono"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -195,6 +196,7 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "paulstretch": ({"factor": ("Stretch", 1, 100, 8, "x"), "resolution": ("Time resolution", 0.02, 2, 0.25, "s")}, None),
     "phase-rotate": ({"angle": ("Angle", -180, 180, 90, " degrees", 1), "auto": ("Find the angle (1 = on)", 0, 1, 0, "", 1)}, None),
     "breath-control": ({"reduce": ("Reduction", 0, 40, 20, "dB")}, None),
+    "dialogue-leveler": ({"target": ("Target RMS", -40, -6, -20, "dB"), "max_gain": ("Max gain", 1, 24, 12, "dB")}, None),
     "spectral-repair": (
         {
             "from": ("From", 0, 3600, 0, "s"),
@@ -726,6 +728,41 @@ def _stft_map(x, rate: int, n: int, fn):
     return out.astype(np.float32)
 
 
+def _dialogue_leveler(x, rate: int, v: dict):
+    """Leveler for dialogue (RX-26): each 50 ms of speech brought toward the Target RMS (by up to Max gain either way,
+    smoothed over about 200 ms), while breaths (noise-like frames 10 to 45 dB under the speech) and sibilance (frames
+    whose energy sits mostly above 4 kHz) are held: they take the gain of the speech around them only when that gain
+    lowers them, never when it would raise them, so leveling does not lift the breaths and esses with the quiet words."""
+    import numpy as np
+
+    mono = x.astype(np.float64).mean(axis=1)
+    hop = max(1, int(rate * 0.05))
+    frames = len(mono) // hop
+    if frames < 3:
+        return x
+    blocks = mono[: frames * hop].reshape(frames, hop)
+    level = 10 * np.log10(np.mean(blocks**2, axis=1) + 1e-12)
+    power = np.abs(np.fft.rfft(blocks * np.hanning(hop), axis=1)) ** 2 + 1e-20
+    freqs = np.fft.rfftfreq(hop, 1 / rate)
+    flatness = np.exp(np.mean(np.log(power), axis=1)) / np.mean(power, axis=1)
+    high = power[:, freqs >= 4000].sum(axis=1) / power.sum(axis=1)
+    speech_level = np.percentile(level[level > -70], 90) if np.any(level > -70) else 0.0
+    sibilant = high > 0.6
+    breath = (~sibilant) & (flatness > 0.35) & (level < speech_level - 10) & (level > speech_level - 45)
+    voiced = (~sibilant) & (~breath) & (level > speech_level - 30)
+    want = np.clip(v["target"] - level, -v["max_gain"], v["max_gain"])
+    idx = np.nonzero(voiced)[0]
+    gain = np.interp(np.arange(frames), idx, want[idx]) if idx.size else np.zeros(frames)
+    gain = np.convolve(gain, np.ones(5) / 5, "same")
+    held = breath | sibilant | (level <= speech_level - 30)
+    gain = np.where(held, np.minimum(gain, 0.0), gain)
+    lin = np.repeat(10 ** (gain / 20), hop)
+    lin = np.concatenate([lin, np.full(len(mono) - len(lin), lin[-1])])
+    ramp = max(1, int(rate * 0.01))
+    lin = np.convolve(lin, np.ones(ramp) / ramp, "same")
+    return (x.astype(np.float64) * lin[:, None]).astype(np.float32)
+
+
 def _spectral_repair(x, rate: int, v: dict):
     """Spectral repair (RX-42) of a time and frequency region (from, to in the clip's seconds; low, high in Hz):
     Attenuate lowers it 60 dB; Replace and Fill gaps rebuild it, the region's magnitudes interpolated between the
@@ -1051,7 +1088,7 @@ def _peak_normalize(x, rate: int, v: dict):
 NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
                  "azimuth-measured": _azimuth_measured, "dc-measured": _dc_measured, "breath-control": _breath_control,
                  "de-hum-adaptive": _de_hum_adaptive, "de-ess-spectral": _de_ess_spectral, "spectral-recovery": _spectral_recovery,
-                 "spectral-repair": _spectral_repair}
+                 "spectral-repair": _spectral_repair, "dialogue-leveler": _dialogue_leveler}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:
