@@ -2025,3 +2025,10 @@ Both rows still listed a selection drawn on the spectrogram as missing, though t
 - logged: v1.45.0 (in progress) · 2026-10-02
 
 A track can show its clips as spectrograms whatever the session-wide view is (the Track section's Spectrogram view box, kept in the document), and every spectral clip carries a frequency ruler with dashed guides at 1, 5, 10, 15 and 20 kHz on the image's linear axis. Verified in Chromium at 1288 by 683: with the session-wide toggle off, the box on the second of two tracks made only its lane spectral (the first kept its waveform), its clip showing the spectrogram and guides at 95.83, 79.17, 58.33, 37.5 and 16.67% from the top for 1, 5, 10, 15 and 20 kHz of 24 kHz (the 5 kHz tone's band on the 5k guide in the screenshot); the document held view spectrogram on that track; undo restored the waveform; no page errors; the audits clean (60 commands, set-track-view dispatched).
+
+### the curve editor verified in the browser (AU-B06, AU-B07)
+- refers-to: src/ui/curve-editor.ts and the curve effects, unchanged
+- kind: explainer
+- logged: v1.45.0 (in progress) · 2026-10-02
+
+The test the previous entry left pending, with both servers started by a helper that checks their health first (processes do not survive between turns here, and the dev server has also been found gone mid-turn with nothing in its log; the kernel log shows no out-of-memory kill, so that cause is ruled out and the deaths stay unexplained): in Chromium, Filter curve EQ's editor showed its six points flat; dragging the 2.5 kHz point down wrote -12 into its gain field and drew the dip; applied, it took 2.5 kHz down 11.84 dB with 200 Hz and 12 kHz at 0.00; the Dynamics curve's editor wrote -20 into the -10 dB point's output field when that point was dragged down; no page errors.
