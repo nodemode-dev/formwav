@@ -7,6 +7,7 @@ import { loadPresets, savePresets, type Preset } from "../io/presets-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { inputDevices, inputSignature, onInputsChanged, refreshInputs, setTrackInput, setTrackMonitor, trackInput, trackMonitor } from "./inputs";
 import { setMonitorLevel } from "../audio/recorder";
+import { loadOutput } from "../audio/player";
 import { mountCurveEditor } from "./curve-editor";
 
 const BODY = `
@@ -68,7 +69,7 @@ const BODY = `
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
   <label class="fw-field"><span>Colour</span><select data-track-color aria-label="Track colour"><option value="">Green</option>${COLOURS.replace('<option value="green">Green</option>', "")}</select><span></span></label>
   <label class="fw-field"><span>Input</span><select data-track-input aria-label="Input device for recording on this track"><option value="">System default</option></select><span></span></label>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button><label class="fw-sam-opt" title="Hear this track's input through the speakers when it is armed, before and while it records (software playthrough; a headphone mix avoids feedback)"><input type="checkbox" data-track-monitor> Monitor input</label><label class="fw-field"><span>Monitor level</span><input type="range" min="-30" max="6" step="1" value="0" data-monitor-level aria-label="Monitor level, dB"><output data-monitor-level-out>0 dB</output></label><label class="fw-sam-opt" title="Show this track as a spectrogram, with a frequency ruler and guides, whatever the session's view is"><input type="checkbox" data-track-spectral> Spectrogram view</label></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button><label class="fw-sam-opt" title="Where the browser's playback goes, on this machine (the status bar's Output chooses between the browser and native output)"><span>Browser output</span><select data-play-out="device" aria-label="Browser playback output device"><option value="">System default</option></select></label><label class="fw-sam-opt" title="The output's sample rate; the session plays at the right pitch at any of them"><span>Rate</span><select data-play-out="rate" aria-label="Playback output rate"><option value="0">Session rate</option><option value="44100">44.1 kHz</option><option value="48000">48 kHz</option><option value="88200">88.2 kHz</option><option value="96000">96 kHz</option></select></label><label class="fw-sam-opt" title="The device channels playback's left and right go to"><span>Channels</span><select data-play-out="map" aria-label="Playback channel mapping"><option value="0,1">1 and 2</option><option value="1,0">2 and 1 (swapped)</option><option value="0,0">both to 1</option><option value="1,1">both to 2</option><option value="2,3">3 and 4</option><option value="4,5">5 and 6</option><option value="6,7">7 and 8</option></select></label><label class="fw-sam-opt" title="Hear this track's input through the speakers when it is armed, before and while it records (software playthrough; a headphone mix avoids feedback)"><input type="checkbox" data-track-monitor> Monitor input</label><label class="fw-field"><span>Monitor level</span><input type="range" min="-30" max="6" step="1" value="0" data-monitor-level aria-label="Monitor level, dB"><output data-monitor-level-out>0 dB</output></label><label class="fw-sam-opt" title="Show this track as a spectrogram, with a frequency ruler and guides, whatever the session's view is"><input type="checkbox" data-track-spectral> Spectrogram view</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="delete" title="Delete this track and its clips (undo brings it back)">Delete track</button></div>
   <label class="fw-field"><span>Volume</span><input type="range" min="-60" max="12" step="0.1" data-f="volume" data-default="0"><output data-o="volume"></output></label>
   <label class="fw-field"><span>Pan</span><input type="range" min="-1" max="1" step="0.01" data-f="pan" data-default="0"><output data-o="pan"></output></label>
@@ -330,6 +331,38 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     syncBand();
   });
   pick?.addEventListener("change", showControls);
+  // AU-22: playback's output device, rate and channel map, kept on this machine; the device list follows the system's
+  // devices, and a stored device that has gone shows as the default
+  const outDevice = body.querySelector<HTMLSelectElement>('[data-play-out="device"]');
+  const outRate = body.querySelector<HTMLSelectElement>('[data-play-out="rate"]');
+  const outMap = body.querySelector<HTMLSelectElement>('[data-play-out="map"]');
+  const fillOutputs = async () => {
+    if (!outDevice) return;
+    const chosen = loadOutput();
+    const all = (await navigator.mediaDevices?.enumerateDevices?.().catch(() => [] as MediaDeviceInfo[])) ?? [];
+    const devices = all.filter((d) => d.kind === "audiooutput" && d.deviceId && d.deviceId !== "default");
+    const options = [["", "System default"], ...devices.map((d, i) => [d.deviceId, d.label || `Output ${i + 1}`])];
+    const signature = JSON.stringify(options);
+    if (outDevice.dataset.options !== signature) {
+      outDevice.dataset.options = signature;
+      outDevice.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+    }
+    const device = options.some(([value]) => value === chosen.deviceId) ? chosen.deviceId : "";
+    if (outDevice.value !== device) outDevice.value = device;
+    if (outRate && outRate.value !== String(chosen.rate)) outRate.value = String(chosen.rate);
+    if (outMap && outMap.value !== chosen.map.join(",")) outMap.value = chosen.map.join(",");
+  };
+  void fillOutputs();
+  navigator.mediaDevices?.addEventListener?.("devicechange", () => void fillOutputs());
+  for (const select of [outDevice, outRate, outMap]) {
+    select?.addEventListener("change", () => {
+      const map = (outMap?.value ?? "0,1").split(",").map(Number) as [number, number];
+      const rate = Number(outRate?.value ?? 0);
+      document.dispatchEvent(new CustomEvent("fw-output", { detail: { deviceId: outDevice?.value ?? "", rate, map } }));
+      setText(notice, `Playback goes to ${outDevice?.selectedOptions[0]?.textContent ?? "the default output"} at ${rate ? `${rate / 1000} kHz` : "the session's rate"}, on channels ${map.map((c) => c + 1).join(" and ")}`);
+    });
+  }
+
   // AP-02: the selected clip's video (the media it was imported as, through its original after effects replaced its
   // audio) with the session's mix as its sound, aligned so the video's first frame falls where the clip's source starts
   body.addEventListener("click", async (e) => {

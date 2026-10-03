@@ -44,7 +44,7 @@ import { mountPianoRoll } from "./ui/piano-roll";
 import { mountSpectrum } from "./ui/spectrum";
 import { mountEnvelopeEdit } from "./ui/envelope-edit";
 import { mountProjects } from "./ui/projects";
-import { Player } from "./audio/player";
+import { Player, type OutputChoice } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
 import { applyTheme } from "./vendor/formvis/themes";
 
@@ -63,6 +63,8 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
 applyTheme();
 const engine = createEngine();
 const player = new Player(engine);
+// AU-22: the Inspector's output device, rate and channel map reach the player
+document.addEventListener("fw-output", (e) => void player.setOutput((e as CustomEvent<Partial<OutputChoice>>).detail));
 const host = document.getElementById("app");
 if (host) {
   mountShell(host, engine);

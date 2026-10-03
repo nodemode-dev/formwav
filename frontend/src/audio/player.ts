@@ -359,6 +359,34 @@ async function loadInto(node: AudioWorkletNode, sources: Map<string, number>, me
   sources.set(mediaId, id);
 }
 
+/** AU-22: where playback goes on this machine: the output device ("" the system default), its rate (0 the session's)
+ *  and the device channels the player's left and right go to (counted from 0). */
+export interface OutputChoice {
+  deviceId: string;
+  rate: number;
+  map: [number, number];
+}
+const OUTPUT_KEY = "formwav.output";
+const OUTPUT_RATES = new Set([0, 44100, 48000, 88200, 96000]);
+export function loadOutput(): OutputChoice {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OUTPUT_KEY) ?? "{}") as Partial<OutputChoice>;
+    const map: [number, number] = Array.isArray(raw.map) && raw.map.length === 2 && raw.map.every((c) => Number.isInteger(c) && c >= 0 && c < 32) ? [raw.map[0], raw.map[1]] : [0, 1];
+    return { deviceId: typeof raw.deviceId === "string" ? raw.deviceId : "", rate: OUTPUT_RATES.has(Number(raw.rate)) ? Number(raw.rate) : 0, map };
+  } catch {
+    return { deviceId: "", rate: 0, map: [0, 1] };
+  }
+}
+/** Sends a context to an output device; a device that has gone leaves it on the default rather than failing play. */
+async function setSink(ctx: AudioContext, deviceId: string): Promise<void> {
+  const sinkable = ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+  try {
+    await sinkable.setSinkId?.(deviceId);
+  } catch {
+    await sinkable.setSinkId?.("").catch(() => undefined);
+  }
+}
+
 async function makeNode(ctx: BaseAudioContext, core: ArrayBuffer): Promise<AudioWorkletNode> {
   const device = nativeChoice();
   if (device !== null) return (await NativeNode.open(ctx.sampleRate, device)) as unknown as AudioWorkletNode;
@@ -475,6 +503,71 @@ export class Player {
 
   private starting: Promise<AudioWorkletNode> | null = null;
 
+  // AU-22: the output device, rate and channel map chosen on this machine, the routing node they make, and the rate
+  // of the session the context serves
+  private output: OutputChoice = loadOutput();
+  private outputTap: AudioNode | null = null;
+  private sessionRate = 0;
+
+  /** The output as chosen: device id ("" the system default), rate (0 the session's) and channel map. */
+  get outputChoice(): OutputChoice {
+    return { ...this.output, map: [...this.output.map] as [number, number] };
+  }
+
+  /** The last node before the device (the channel map's merger, or the player itself), for meters and checks. */
+  get outputNode(): AudioNode | null {
+    return this.outputTap ?? this.node;
+  }
+
+  /** The player's two channels to the device's channels as mapped ([left's, right's], counted from 0). */
+  private route(): void {
+    const ctx = this.ctx;
+    const node = this.node;
+    if (!ctx || !node || !(node instanceof AudioWorkletNode)) return;
+    node.disconnect();
+    try {
+      this.outputTap?.disconnect();
+    } catch {
+      // the previous output's context has closed
+    }
+    this.outputTap = null;
+    const [l, r] = this.output.map;
+    if (l === 0 && r === 1) {
+      node.connect(ctx.destination);
+      return;
+    }
+    const channels = Math.max(2, Math.min(ctx.destination.maxChannelCount, Math.max(l, r) + 1));
+    ctx.destination.channelCount = channels;
+    ctx.destination.channelCountMode = "explicit";
+    ctx.destination.channelInterpretation = "discrete";
+    const split = ctx.createChannelSplitter(2);
+    const merge = ctx.createChannelMerger(channels);
+    node.connect(split);
+    split.connect(merge, 0, Math.min(l, channels - 1));
+    split.connect(merge, 1, Math.min(r, channels - 1));
+    merge.connect(ctx.destination);
+    this.outputTap = merge;
+  }
+
+  /** Sets the output device, rate or channel map, kept on this machine; the device and map apply at once, a new rate
+   *  rebuilds the output for the next play. */
+  async setOutput(next: Partial<OutputChoice>): Promise<void> {
+    const before = this.output;
+    this.output = { ...before, ...next, map: [...(next.map ?? before.map)] as [number, number] };
+    try {
+      localStorage.setItem(OUTPUT_KEY, JSON.stringify(this.output));
+    } catch {
+      // storage refused: the choice lasts for this visit
+    }
+    if (!this.ctx) return;
+    if (this.output.rate !== before.rate) {
+      await this.resetOutput();
+      return;
+    }
+    if (this.output.deviceId !== before.deviceId) await setSink(this.ctx, this.output.deviceId);
+    if (this.output.map.join() !== before.map.join()) this.route();
+  }
+
   /** Drops the current output (worklet or native) so the next play builds the one now chosen; the session is untouched. */
   async resetOutput(): Promise<void> {
     if (this.node) send(this.node, { type: "stop" });
@@ -488,7 +581,8 @@ export class Player {
 
   private ensure(): Promise<AudioWorkletNode> {
     const rate = this.engine.get("document").sampleRate;
-    if (this.ctx && this.node && this.ctx.sampleRate === rate) return Promise.resolve(this.node);
+    // AU-22: the context runs at the chosen output rate, or the session's; a session at another rate rebuilds it
+    if (this.ctx && this.node && this.ctx.sampleRate === (this.output.rate || rate) && this.sessionRate === rate) return Promise.resolve(this.node);
     if (!this.starting) {
       this.starting = this.start(rate).finally(() => {
         this.starting = null;
@@ -505,11 +599,16 @@ export class Player {
       this.sources.clear();
       this.pending.clear();
     }
-    const ctx = new AudioContext({ sampleRate: rate, latencyHint: "interactive" });
+    // AU-22: the output device and its rate as chosen on this machine (the session's rate unless one is chosen)
+    const ctx = new AudioContext({ sampleRate: this.output.rate || rate, latencyHint: "interactive" });
+    if (this.output.deviceId) await setSink(ctx, this.output.deviceId);
     const node = await makeNode(ctx, await this.core());
     node.port.addEventListener("message", this.onReply);
     this.ctx = ctx;
     this.node = node;
+    this.sessionRate = rate;
+    this.route();
+    if (ctx.sampleRate !== rate) send(node, { type: "rate-ratio", value: rate / ctx.sampleRate });
     if (this.speed !== 1) send(node, { type: "speed", value: this.speed });
     return node;
   }

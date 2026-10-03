@@ -80,6 +80,7 @@ export type WorkletMessage =
   | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[]; timeTrackLog?: boolean }
   | { type: "play" }
   | { type: "speed"; value: number }
+  | { type: "rate-ratio"; value: number }
   | { type: "stop" }
   | { type: "seek"; position: number }
   | { type: "loop"; start: number; end: number };
@@ -108,6 +109,8 @@ class PlayerProcessor extends AudioWorkletProcessor {
   // Play-at-speed (Audacity's varispeed, pitch following speed): a read buffer the core refills 128 samples at a
   // time, read at `speed` samples per output sample with linear interpolation; unused at 1x.
   private speed = 1;
+  // AU-22: session samples per output sample when the output device runs at another rate
+  private rateRatio = 1;
   // Audacity's time track: [at, speed, at, speed, ...] in session samples, linear between points, held outside them.
   private curve: number[] | null = null;
   // AU-36: between points the speed changes at a steady ratio (logarithmic) instead of a steady step (linear)
@@ -281,6 +284,17 @@ class PlayerProcessor extends AudioWorkletProcessor {
         }
         break;
       }
+      case "rate-ratio": {
+        // AU-22: the output device runs at another rate than the session; session samples are read this many per
+        // output sample, so the pitch stays true (48 kHz played at 44.1 kHz would otherwise be 8% flat)
+        const value = Math.min(4, Math.max(0.25, Number(msg.value) || 1));
+        if (value !== this.rateRatio) {
+          this.rateRatio = value;
+          this.readPos = 0;
+          this.bufLen = 0;
+        }
+        break;
+      }
       case "stop":
         this.playing = false;
         this.report();
@@ -334,8 +348,9 @@ class PlayerProcessor extends AudioWorkletProcessor {
     const out = outputs[0];
     if (!core || !this.playing || !out || out.length === 0) return true;
     const frames = Math.min(out[0].length, MAX_FRAMES);
-    if (this.speed !== 1 || this.curve) {
-      const step = this.curve ? Math.min(4, Math.max(0.25, this.speed * this.curveAt(core.fw_position(this.player)))) : this.speed;
+    const base = this.speed * this.rateRatio;
+    if (base !== 1 || this.curve) {
+      const step = this.curve ? Math.min(4, Math.max(0.25, base * this.curveAt(core.fw_position(this.player)))) : base;
       this.renderAtSpeed(core, out, frames, step);
     } else {
       core.fw_render(this.player, this.left, this.right, frames);
