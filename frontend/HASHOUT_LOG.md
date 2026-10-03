@@ -2032,3 +2032,10 @@ A track can show its clips as spectrograms whatever the session-wide view is (th
 - logged: v1.45.0 (in progress) · 2026-10-02
 
 The test the previous entry left pending, with both servers started by a helper that checks their health first (processes do not survive between turns here, and the dev server has also been found gone mid-turn with nothing in its log; the kernel log shows no out-of-memory kill, so that cause is ruled out and the deaths stay unexplained): in Chromium, Filter curve EQ's editor showed its six points flat; dragging the 2.5 kHz point down wrote -12 into its gain field and drew the dip; applied, it took 2.5 kHz down 11.84 dB with 200 Hz and 12 kHz at 0.00; the Dynamics curve's editor wrote -20 into the -10 dB point's output field when that point was dragged down; no page errors.
+
+### stretching to the playhead, and later clips moved off a lengthening stretch (AA-10)
+- refers-to: src/ui/inspector-pane.ts :: Stretch to playhead, the ripple in Stretch selected clips; src/ui/lanes.ts :: the ripple in `stretchGroup` (the Alt edge drag)
+- kind: explainer
+- logged: v1.45.0 (in progress) · 2026-10-02
+
+Stretch to playhead finds the percentage that makes the selection end at the playhead and runs Stretch selected clips with it; a stretch that lengthens clips, typed, to the playhead or by an Alt drag of a right edge (which already stretched; that part of the gap was stale), now moves the later clips on the track that it would overlap right by the overlap, spacing kept, in the same undo step. Verified in Chromium: two copies of a 3 s clip at 0 and 3.5 s; Stretch to playhead at 4.5 s took the first to 0 to 4.5 s and moved the second to 4.5 s in one undo step; after undo, an Alt drag of the first clip's right edge out by half did the same; no page errors; the audits clean.

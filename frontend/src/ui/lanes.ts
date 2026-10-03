@@ -1248,7 +1248,22 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
         rendered.set(m.clip.mediaId, out as unknown as MediaRef);
       }
-      engine.dispatch({ type: "batch", commands: group.map((m) => ({ type: "set-clip-media" as const, trackId: m.trackId, clipId: m.clip.id, media: rendered.get(m.clip.mediaId) as MediaRef })) });
+      const commands: Dispatchable[] = group.map((m) => ({ type: "set-clip-media" as const, trackId: m.trackId, clipId: m.clip.id, media: rendered.get(m.clip.mediaId) as MediaRef }));
+      // AA-10: later clips on the track that the lengthened clip now overlaps move right by the overlap, spacing kept,
+      // in the same undo step (as Stretch selected clips does)
+      if (ratio > 1) {
+        const doc = engine.get("document");
+        const ids = new Set(group.map((m) => m.clip.id));
+        for (const trackId of new Set(group.map((m) => m.trackId))) {
+          const mine = group.filter((m) => m.trackId === trackId);
+          const oldEnd = Math.max(...mine.map((m) => m.clip.start + m.clip.length));
+          const newEnd = Math.max(...mine.map((m) => m.clip.start + Math.round(m.clip.length * ratio)));
+          const later = (doc.tracks.find((t) => t.id === trackId)?.clips ?? []).filter((c) => !ids.has(c.id) && c.start >= oldEnd);
+          const shift = later.length ? newEnd - Math.min(...later.map((c) => c.start)) : 0;
+          if (shift > 0) for (const c of later) commands.push({ type: "move-clip", trackId, clipId: c.id, start: c.start + shift });
+        }
+      }
+      engine.dispatch({ type: "batch", commands });
       setText(notice, `Stretched ${group.length === 1 ? "the clip" : `${group.length} clips`} to ${percent}% of ${group.length === 1 ? "its" : "their"} length, pitch kept`);
     } catch (err) {
       setText(notice, `Could not stretch: ${err instanceof Error ? err.message : String(err)}`);
