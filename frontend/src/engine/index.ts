@@ -1,4 +1,4 @@
-import { applyCommand, emptyDocument, type Command, type Selection, type SessionDoc } from "./document";
+import { applyCommand, emptyDocument, followClips, type Command, type Selection, type SessionDoc } from "./document";
 import { History, type HistoryState } from "./history";
 
 export type { Clip, Command, FrequencyBand, MediaRef, Marker, Selection, SessionDoc, Track } from "./document";
@@ -70,7 +70,7 @@ export class Engine {
 
   dispatch(command: Command): boolean {
     const current = this.state.document;
-    const next = applyCommand(current, command, () => crypto.randomUUID());
+    const next = followClips(current, applyCommand(current, command, () => crypto.randomUUID()));
     if (next === current) return false;
     this.past.record(current);
     this.commit(next);

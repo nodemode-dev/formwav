@@ -607,7 +607,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
           const at = clip.start + (h.at - clip.sourceIn);
           if (at < clip.start || at >= clip.start + clip.length) continue;
           marked += 1;
-          engine.dispatch({ type: "add-marker", at, label: `Similar ${marked} (${Math.round(h.score * 100)}%)` });
+          engine.dispatch({ type: "add-marker", at, label: `Similar ${marked} (${Math.round(h.score * 100)}%)`, clipId: clip.id });
         }
         setText(notice, `Marked ${marked} event${marked === 1 ? "" : "s"} like the selection`);
         return;

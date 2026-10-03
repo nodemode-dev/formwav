@@ -157,6 +157,34 @@ export interface Marker {
   id: string;
   at: number;
   label: string;
+  /** A clip marker (AA-13): it moves with this clip, and is left in place, unattached, if the clip goes. */
+  clipId?: string;
+}
+
+/** AA-13: after any change, a marker attached to a clip moves by however far its clip did (a move, a move to another
+ * track, a group move alike); one whose clip is gone (split, deleted) stays where it was, unattached. The same document
+ * comes back when nothing moved. */
+export function followClips<T extends SessionDoc | null | undefined>(before: SessionDoc, after: T): T {
+  // a command may return nothing (no change); dispatch checks for that after this, so it passes straight through
+  if (!after || after === before || !after.markers.some((m) => m.clipId)) return after;
+  const starts = (doc: SessionDoc) => new Map(doc.tracks.flatMap((t) => t.clips.map((c) => [c.id, c.start] as const)));
+  const was = starts(before);
+  const now = starts(after);
+  let changed = false;
+  const markers = after.markers.map((m) => {
+    if (!m.clipId) return m;
+    const a = was.get(m.clipId);
+    const b = now.get(m.clipId);
+    if (b === undefined) {
+      changed = true;
+      const { clipId: _gone, ...free } = m;
+      return free;
+    }
+    if (a === undefined || a === b) return m;
+    changed = true;
+    return { ...m, at: Math.max(0, m.at + (b - a)) };
+  });
+  return (changed ? { ...after, markers: [...markers].sort((x, y) => x.at - y.at) } : after) as T;
 }
 
 export interface Region {
@@ -286,7 +314,7 @@ export type Command =
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "move-clip-to-track"; trackId: string; clipId: string; toTrackId: string; start: number }
   | { type: "set-clip-pitch"; trackId: string; clipId: string; semitones: number; media: MediaRef | null }
-  | { type: "add-marker"; at: number; label: string };
+  | { type: "add-marker"; at: number; label: string; clipId?: string };
 
 export function emptyDocument(sampleRate: number): SessionDoc {
   return { sampleRate, tracks: [], media: {}, markers: [] };
@@ -983,7 +1011,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       return changed ? { ...doc, regions: [...regions].sort((a, b) => a.start - b.start) } : doc;
     }
     case "add-marker": {
-      const marker: Marker = { id: newId(), at: Math.max(0, Math.round(cmd.at)), label: cmd.label };
+      const marker: Marker = { id: newId(), at: Math.max(0, Math.round(cmd.at)), label: cmd.label, ...(cmd.clipId ? { clipId: cmd.clipId } : {}) };
       return { ...doc, markers: [...doc.markers, marker].sort((a, b) => a.at - b.at) };
     }
   }
