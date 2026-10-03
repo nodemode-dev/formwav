@@ -2039,3 +2039,10 @@ The test the previous entry left pending, with both servers started by a helper 
 - logged: v1.45.0 (in progress) · 2026-10-02
 
 Stretch to playhead finds the percentage that makes the selection end at the playhead and runs Stretch selected clips with it; a stretch that lengthens clips, typed, to the playhead or by an Alt drag of a right edge (which already stretched; that part of the gap was stale), now moves the later clips on the track that it would overlap right by the overlap, spacing kept, in the same undo step. Verified in Chromium: two copies of a 3 s clip at 0 and 3.5 s; Stretch to playhead at 4.5 s took the first to 0 to 4.5 s and moved the second to 4.5 s in one undo step; after undo, an Alt drag of the first clip's right edge out by half did the same; no page errors; the audits clean.
+
+### sample chop, stretch, transpose and reverse in the editor (PT-12): the gap found already closed, measured
+- refers-to: Split at transients, Stretch selected clips (and its edge drag), Change pitch's semitone control and Reverse, all in the Inspector
+- kind: explainer
+- logged: v1.45.0 (in progress) · 2026-10-02
+
+The row listed chop and in-editor controls as missing, though all four sample edits have controls in the editor's Inspector. Measured now: Split at transients cut a clip with clicks at 1, 2 and 3 s into four pieces there (in Chromium); Change pitch at +12 semitones took a 440 Hz tone to 880 Hz and Reverse matched the input backwards within 1.5e-08 (through the engine); stretching as verified for AA-10 above.
