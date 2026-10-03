@@ -334,7 +334,7 @@ async def media_transcript_word(media_id: str, request: Request) -> dict:
     except (KeyError, TypeError, ValueError) as err:
         raise HTTPException(422, "send index, start and end (the media file's seconds)") from err
     try:
-        return transcript.set_word(media_id, index, start, end, str(b.get("model", "")))
+        return transcript.set_word(media_id, index, start, end, str(b.get("model", "")), b.get("text") if isinstance(b.get("text"), str) else None)
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err
     except media.MediaError as err:

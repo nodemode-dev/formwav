@@ -111,7 +111,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
 <div class="fw-transcript-tools"><button type="button" class="fw-ibtn fw-btn-export fw-voice-go" data-t="transcribe">Transcribe session</button></div>
 <p class="fw-empty-note fw-transcript-state">Transcribe the session, then edit its audio by editing the text.</p>
 <div class="fw-transcript-actions" hidden>
-  <button type="button" class="fw-ibtn" data-t="delete">Delete selected words</button>
+  <button type="button" class="fw-ibtn" data-t="delete">Delete selected words</button><button type="button" class="fw-ibtn" data-t="move" title="Move the selected words, and their audio on every track, to the text cursor (click between words to place it; double-click a word to correct its text)">Move to cursor</button>
   <select data-t-fill="mode" aria-label="What Remove filler words does" title="Cut fillers out of the audio, silence them where they are (timing kept, for picture), or hide them in the transcript only (audio untouched)"><option value="cut">Cut them out</option><option value="silence">Silence them in place</option><option value="hide">Hide them in the transcript only</option></select>
   <label class="fw-sam-opt" title="Fade 10 ms either side of every cut so the joins do not click"><input type="checkbox" data-t-fill="smooth" checked> Smooth cuts</label>
   <button type="button" class="fw-ibtn" data-t="fillers">Remove filler words</button>
@@ -129,6 +129,80 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
   const text = body.querySelector<HTMLElement>(".fw-transcript-text");
   const transcripts = new Map<string, MediaWord[]>();
   let words: SessionWord[] = [];
+  // DS-01: a text cursor between words, as the index of the word it stands before (words.length: after the last)
+  let caret: number | null = null;
+  const caretEl = document.createElement("span");
+  caretEl.className = "fw-caret";
+  caretEl.setAttribute("aria-hidden", "true");
+  const placeCaret = () => {
+    const box = text;
+    if (caret === null || caret < 0 || caret > words.length || !box) {
+      caret = null;
+      caretEl.remove();
+      return;
+    }
+    const before = caret < words.length ? box.querySelector<HTMLElement>(`.fw-word[data-key="${CSS.escape(words[caret].key)}"]`) : null;
+    if (caretEl.parentElement !== box || caretEl.nextSibling !== before) box.insertBefore(caretEl, before);
+  };
+  // DS-01: Left and Right move the cursor a word at a time while the transcript has focus
+  if (text && !text.hasAttribute("tabindex")) text.setAttribute("tabindex", "0");
+  text?.addEventListener("keydown", (e) => {
+    if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || !words.length) return;
+    e.preventDefault();
+    caret = Math.max(0, Math.min(words.length, (caret ?? words.length) + (e.key === "ArrowLeft" ? -1 : 1)));
+    placeCaret();
+  });
+  // DS-01, typed corrections: double-click a word to correct its text in the engine's transcript (the audio untouched);
+  // Enter or leaving the field keeps it, Escape cancels
+  body.addEventListener("dblclick", (e) => {
+    // the word double-clicked, or the one selected (the double-click's first click selects it)
+    const hit = (e.target as HTMLElement).closest<HTMLElement>(".fw-word");
+    const key = hit?.dataset.key ?? (selected.size === 1 ? [...selected][0] : undefined);
+    const span = key && text ? (hit ?? text.querySelector<HTMLElement>(`.fw-word[data-key="${CSS.escape(key)}"]`)) : null;
+    const w = words.find((x) => x.key === span?.dataset.key);
+    if (!span || !w) return;
+    const input = document.createElement("input");
+    input.className = "fw-word-edit";
+    input.value = w.text;
+    input.size = Math.max(3, w.text.length + 1);
+    input.setAttribute("aria-label", "Corrected word: Enter keeps it, Escape cancels");
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = async (keep: boolean) => {
+      if (done) return;
+      done = true;
+      input.replaceWith(span);
+      const value = input.value.trim();
+      if (!keep || !value || value === w.text) return;
+      const res = await fetch(`/api/media/${w.mediaId}/transcript/word`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index: Number(w.key.split(":").pop()), start: w.mediaStart, end: w.mediaEnd, text: value }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; words?: MediaWord[] };
+      if (!res.ok || !out.words) {
+        setText(notice, `Could not correct the word: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+        return;
+      }
+      transcripts.set(w.mediaId, out.words);
+      render();
+      setText(notice, `Corrected "${w.text}" to "${value}"; the audio is unchanged`);
+    };
+    input.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter") void finish(true);
+      else if (ev.key === "Escape") void finish(false);
+    });
+    // the double-click's first click selected the word and moved the playhead, which can take focus away at once; a
+    // blur in the field's first 300 ms is that, not the user leaving it
+    const opened = performance.now();
+    input.addEventListener("blur", () => {
+      if (performance.now() - opened < 300) input.focus();
+      else void finish(true);
+    });
+  });
   let signature = "";
   let selected = new Set<string>();
   let anchor: string | null = null;
@@ -173,7 +247,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
 
   const render = () => {
     words = sessionWords(engine.get("document"), transcripts);
-    const next = words.map((w) => `${w.key}@${w.start}@${w.speaker}`).join("|");
+    const next = words.map((w) => `${w.key}@${w.start}@${w.speaker}@${w.text}`).join("|");
     if (next !== signature && text) {
       signature = next;
       current = null;
@@ -198,6 +272,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
       selected = new Set([...selected].filter((k) => live.has(k)));
     }
     paintSelection();
+    placeCaret();
     const has = transcripts.size > 0;
     if (actions && actions.hidden === has) actions.hidden = !has;
     if (has) setText(stateLine, `${words.length} words · ${words.filter((w) => w.filler).length} fillers · click a word to go there, shift-click to select a run`);
@@ -245,6 +320,21 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
 
   body.addEventListener("click", async (e) => {
     const target = e.target as HTMLElement;
+    if (target === text && words.length) {
+      // DS-01: a click between words places the text cursor before the first word after the click (reading order)
+      const me = e as MouseEvent;
+      const spans = [...text.querySelectorAll<HTMLElement>(".fw-word")];
+      const k = spans.findIndex((s) => {
+        const r = s.getBoundingClientRect();
+        return r.top > me.clientY || (r.bottom >= me.clientY && r.left + r.width / 2 > me.clientX);
+      });
+      caret = k < 0 ? words.length : k;
+      selected.clear();
+      paintSelection();
+      placeCaret();
+      setText(notice, `Cursor ${caret < words.length ? `before "${words[caret].text}"` : "after the last word"}: select words and Move to cursor to put them here`);
+      return;
+    }
     const word = target.closest<HTMLElement>(".fw-word");
     if (word?.dataset.key) {
       const key = word.dataset.key;
@@ -315,6 +405,27 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
       transcripts.set(w.mediaId, out.words);
       render();
       setText(notice, `"${w.text}" now runs from ${start.toFixed(3)} to ${end.toFixed(3)} s`);
+      return;
+    }
+    if (action === "move") {
+      // DS-01, moving words: the selected run (first to last selected word) to the cursor, audio on every track
+      const picked = words.map((w, i) => i).filter((i) => selected.has(words[i].key));
+      if (!picked.length || caret === null) {
+        setText(notice, "Select the words to move, then click between words to place the cursor");
+        return;
+      }
+      const first = picked[0];
+      const last = picked[picked.length - 1];
+      if (caret > first && caret <= last + 1) {
+        setText(notice, "Put the cursor outside the selected words");
+        return;
+      }
+      const doc = engine.get("document");
+      const to = caret < words.length ? words[caret].start : words[words.length - 1].end;
+      engine.dispatch({ type: "move-range", trackIds: doc.tracks.map((t) => t.id), start: words[first].start, end: words[last].end, to });
+      selected.clear();
+      caret = null;
+      setText(notice, `Moved ${last - first + 1} word${last === first ? "" : "s"} to the cursor`);
       return;
     }
     if (action === "delete") cut(rangesOf(words, (w) => selected.has(w.key)), "the selected words");

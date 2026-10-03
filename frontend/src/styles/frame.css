@@ -363,3 +363,10 @@
 .fw-word-edge { position: absolute; top: 0; bottom: 0; inline-size: 6px; background: var(--accent-color); cursor: ew-resize; pointer-events: auto; touch-action: none; }
 .fw-word-edge[data-edge="start"] { inset-inline-start: -3px; }
 .fw-word-edge[data-edge="end"] { inset-inline-end: -3px; }
+
+/* DS-01: the transcript's text cursor between words, and a word being corrected */
+.fw-caret { display: inline-block; inline-size: 2px; block-size: 1.1em; margin-inline: 1px; vertical-align: text-bottom; background: var(--accent-color); }
+.fw-word-edit { font: inherit; padding: 0 2px; }
+/* the word timing row keeps its place while hidden, so selecting a word does not push the transcript down under the
+   pointer (a double-click's second click landed on the row instead of the word) */
+.fw-word-timing[hidden] { display: flex; visibility: hidden; }

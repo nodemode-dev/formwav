@@ -323,6 +323,7 @@ export type Command =
   | { type: "set-bus-pan"; busId: string; pan: number }
   | { type: "split-clip"; trackId: string; clipId: string; at: number }
   | { type: "insert-time"; trackIds: string[]; at: number; length: number }
+  | { type: "move-range"; trackIds: string[]; start: number; end: number; to: number }
   | { type: "set-clip-bounds"; trackId: string; clipId: string; start: number; sourceIn: number; length: number }
   | { type: "set-clip-gain"; trackId: string; clipId: string; gainDb: number }
   | { type: "batch"; commands: Command[] }
@@ -915,6 +916,43 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         });
         return changed ? { ...t, clips } : t;
       });
+    }
+    case "move-range": {
+      // DS-01, moving words: the audio between start and end on the listed tracks moved to `to` (a place outside the
+      // range, in the session as it stands) in one step: split at both ends, the pieces lifted out and the gap closed,
+      // time opened at the destination and the pieces set in it
+      const start = Math.round(Math.min(cmd.start, cmd.end));
+      const end = Math.round(Math.max(cmd.start, cmd.end));
+      const len = end - start;
+      const to = Math.round(cmd.to);
+      if (len <= 0 || (to > start && to < end) || to === start || to === end) return doc;
+      let next = doc;
+      for (const trackId of cmd.trackIds) {
+        for (const at of [start, end]) {
+          for (const c of next.tracks.find((t) => t.id === trackId)?.clips ?? []) {
+            if (c.start < at && c.start + c.length > at) next = applyCommand(next, { type: "split-clip", trackId, clipId: c.id, at }, newId);
+          }
+        }
+      }
+      const moving = new Map<string, Clip[]>();
+      const inside = (c: Clip) => c.start >= start && c.start + c.length <= end;
+      next = {
+        ...next,
+        tracks: next.tracks.map((t) => {
+          if (!cmd.trackIds.includes(t.id)) return t;
+          moving.set(t.id, t.clips.filter(inside));
+          return { ...t, clips: t.clips.filter((c) => !inside(c)).map((c) => (c.start >= end ? { ...c, start: c.start - len } : c)) };
+        }),
+      };
+      if (![...moving.values()].some((list) => list.length)) return doc;
+      const dest = to >= end ? to - len : to;
+      next = applyCommand(next, { type: "insert-time", trackIds: cmd.trackIds, at: dest, length: len }, newId);
+      return {
+        ...next,
+        tracks: next.tracks.map((t) =>
+          !cmd.trackIds.includes(t.id) ? t : { ...t, clips: [...t.clips, ...(moving.get(t.id) ?? []).map((c) => ({ ...c, start: c.start - start + dest }))].sort((a, b) => a.start - b.start) },
+        ),
+      };
     }
     case "insert-time": {
       // DS-11: time inserted at `at` on the listed tracks (a word gap lengthened): a clip across it is split there and
