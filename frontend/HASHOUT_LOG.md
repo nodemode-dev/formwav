@@ -2004,3 +2004,10 @@ A moved clip's start or end within 6 px of another clip's edge on any track, or 
 - logged: v1.45.0 (in progress) · 2026-10-02
 
 A stereo clip pasted or dragged onto a mono track gets the engine's Downmix as its media (a second undo step after the paste or move; Audacity converts in one). The interface builds and the audits are clean. Not verified: the browser test's drag of a stereo clip from its lane onto the mono lane did not move it to that track at all (both tracks unchanged after the drop), so the adaptation was never exercised; the gesture the cross-track drop needs must be found first. AU-06 stays partial. Also seen this turn: the development engine was found down twice between steps, cause not yet looked into.
+
+### stereo clips mixed down on mono tracks (AU-06), verified
+- refers-to: the previous entry's code, unchanged
+- kind: explainer
+- logged: v1.45.0 (in progress) · 2026-10-02
+
+The test the previous entry left pending, with the gesture the cross-track drop needs (a move counts only once it has travelled sideways, so the earlier purely vertical drag never became a move): in Chromium at 1288 by 683 a stereo clip carrying 500 Hz in its mid and 3 kHz in its side, dragged onto a mono track, landed there at 3.3 s with one-channel media holding the 500 Hz at full level and the 3 kHz at -240 dB (the side cancelled exactly); one undo took back the mixdown and left the move, the two steps as stated; no page errors.
