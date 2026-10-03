@@ -318,3 +318,8 @@
 /* AU-07's alignment guide: a line through each lane where a moved clip's edge meets another clip's edge or the playhead */
 .fw-align-guide { position: absolute; inset-block: 0; inline-size: 1px; background: var(--text-primary); opacity: 0.75; pointer-events: none; z-index: var(--z-raised); }
 .fw-align-guide[hidden] { display: none; }
+
+/* AU-30: the frequency ruler and guides over a spectral clip, labelled lines at fixed frequencies on its linear axis */
+.fw-freq-scale { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.fw-freq-scale[hidden] { display: none; }
+.fw-freq-guide { position: absolute; inset-inline: 0; block-size: 0; border-block-start: 1px dashed color-mix(in srgb, var(--text-primary) 35%, transparent); font-size: 9px; line-height: 1; color: color-mix(in srgb, var(--text-primary) 75%, transparent); padding-inline-start: 3px; }

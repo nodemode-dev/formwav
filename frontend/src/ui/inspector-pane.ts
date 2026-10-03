@@ -61,7 +61,7 @@ const BODY = `
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
   <label class="fw-field"><span>Colour</span><select data-track-color aria-label="Track colour"><option value="">Green</option>${COLOURS.replace('<option value="green">Green</option>', "")}</select><span></span></label>
   <label class="fw-field"><span>Input</span><select data-track-input aria-label="Input device for recording on this track"><option value="">System default</option></select><span></span></label>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button><label class="fw-sam-opt" title="Hear this track's input through the speakers when it is armed, before and while it records (software playthrough; a headphone mix avoids feedback)"><input type="checkbox" data-track-monitor> Monitor input</label><label class="fw-field"><span>Monitor level</span><input type="range" min="-30" max="6" step="1" value="0" data-monitor-level aria-label="Monitor level, dB"><output data-monitor-level-out>0 dB</output></label></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button><label class="fw-sam-opt" title="Hear this track's input through the speakers when it is armed, before and while it records (software playthrough; a headphone mix avoids feedback)"><input type="checkbox" data-track-monitor> Monitor input</label><label class="fw-field"><span>Monitor level</span><input type="range" min="-30" max="6" step="1" value="0" data-monitor-level aria-label="Monitor level, dB"><output data-monitor-level-out>0 dB</output></label><label class="fw-sam-opt" title="Show this track as a spectrogram, with a frequency ruler and guides, whatever the session's view is"><input type="checkbox" data-track-spectral> Spectrogram view</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="delete" title="Delete this track and its clips (undo brings it back)">Delete track</button></div>
   <label class="fw-field"><span>Volume</span><input type="range" min="-60" max="12" step="0.1" data-f="volume" data-default="0"><output data-o="volume"></output></label>
   <label class="fw-field"><span>Pan</span><input type="range" min="-1" max="1" step="0.01" data-f="pan" data-default="0"><output data-o="pan"></output></label>
@@ -953,7 +953,15 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (inputSelect.value !== want) inputSelect.value = want;
     const on = hit ? trackMonitor(hit.track.id) : false;
     if (monitorBox && monitorBox.checked !== on) monitorBox.checked = on;
+    const spectralBox = body.querySelector<HTMLInputElement>("[data-track-spectral]");
+    const spectral = hit?.track.view === "spectrogram";
+    if (spectralBox && spectralBox.checked !== spectral) spectralBox.checked = spectral;
   };
+  // AU-30: the selected track's own view
+  body.querySelector<HTMLInputElement>("[data-track-spectral]")?.addEventListener("change", (e) => {
+    const hit = find(engine.get("document"));
+    if (hit) engine.dispatch({ type: "set-track-view", trackId: hit.track.id, spectrogram: (e.target as HTMLInputElement).checked });
+  });
   // AU-21: the monitor level, before and during takes
   const monitorLevel = body.querySelector<HTMLInputElement>("[data-monitor-level]");
   monitorLevel?.addEventListener("input", () => {

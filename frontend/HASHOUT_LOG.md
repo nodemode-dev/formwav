@@ -2018,3 +2018,10 @@ The test the previous entry left pending, with the gesture the cross-track drop 
 - logged: v1.45.0 (in progress) · 2026-10-02
 
 Both rows still listed a selection drawn on the spectrogram as missing, though the marquee in the Spectrogram view has drawn one since v1.2.0. Re-verified now in Chromium at 1288 by 683: a box drawn over 0.5 to 1.5 s and about 3 to 7 kHz on a clip of 500 Hz and 5 kHz selected 0.5 to 1.5 s with a 3207 to 7115 Hz band, which filled Band gain's band; -30 dB applied left three pieces, the 5 kHz inside the box down 30.0 dB, the 500 Hz there at -0.00 dB, and the 5 kHz before the box unchanged; no page errors.
+
+### per-track spectrogram view with a frequency ruler and guides (AU-30)
+- refers-to: src/engine/document.ts :: `Track.view`, `set-track-view`; src/ui/spectrogram-view.ts :: per-lane spectral state, `scale` (the ruler and guides); src/ui/inspector-pane.ts :: Spectrogram view in the Track section; src/styles/frame.css :: `.fw-freq-scale`, `.fw-freq-guide`
+- kind: explainer
+- logged: v1.45.0 (in progress) · 2026-10-02
+
+A track can show its clips as spectrograms whatever the session-wide view is (the Track section's Spectrogram view box, kept in the document), and every spectral clip carries a frequency ruler with dashed guides at 1, 5, 10, 15 and 20 kHz on the image's linear axis. Verified in Chromium at 1288 by 683: with the session-wide toggle off, the box on the second of two tracks made only its lane spectral (the first kept its waveform), its clip showing the spectrogram and guides at 95.83, 79.17, 58.33, 37.5 and 16.67% from the top for 1, 5, 10, 15 and 20 kHz of 24 kHz (the 5 kHz tone's band on the 5k guide in the screenshot); the document held view spectrogram on that track; undo restored the waveform; no page errors; the audits clean (60 commands, set-track-view dispatched).

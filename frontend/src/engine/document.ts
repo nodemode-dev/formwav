@@ -145,6 +145,8 @@ export interface Track {
   busId?: string;
   /** The VCA whose gain and mute also apply to this track (its own fader stays where it is). */
   vcaId?: string;
+  /** AU-30's per-track view: this track shown as a spectrogram whatever the session-wide view is. */
+  view?: "spectrogram";
   clips: readonly Clip[];
 }
 
@@ -317,7 +319,8 @@ export type Command =
   | { type: "move-clip-to-track"; trackId: string; clipId: string; toTrackId: string; start: number }
   | { type: "set-clip-pitch"; trackId: string; clipId: string; semitones: number; media: MediaRef | null }
   | { type: "add-marker"; at: number; label: string; clipId?: string }
-  | { type: "set-snap"; grid: boolean; bars: boolean };
+  | { type: "set-snap"; grid: boolean; bars: boolean }
+  | { type: "set-track-view"; trackId: string; spectrogram: boolean };
 
 export function emptyDocument(sampleRate: number): SessionDoc {
   return { sampleRate, tracks: [], media: {}, markers: [] };
@@ -1012,6 +1015,13 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         return next;
       });
       return changed ? { ...doc, regions: [...regions].sort((a, b) => a.start - b.start) } : doc;
+    }
+    case "set-track-view": {
+      return mapTrack(doc, cmd.trackId, (t) => {
+        if ((t.view === "spectrogram") === cmd.spectrogram) return t;
+        const { view: _old, ...rest } = t;
+        return cmd.spectrogram ? { ...rest, view: "spectrogram" } : rest;
+      });
     }
     case "set-snap": {
       if (doc.snap?.grid === cmd.grid && doc.snap?.bars === cmd.bars) return doc;
