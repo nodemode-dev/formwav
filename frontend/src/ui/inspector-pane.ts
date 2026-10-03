@@ -27,6 +27,8 @@ const BODY = `
   <p class="fw-empty-note fw-env-readout" data-env-out>No gain envelope</p>
   <div class="fw-insp-head">De-bleed</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
+  <div class="fw-insp-head" title="Pin a point in the clip's audio, then drag its marker on the clip to re-time the audio on either side (Pro Tools' warp markers)">Warp markers</div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-warp="add" title="Put a warp marker on the selected clip at the playhead">Add warp marker at playhead</button><button type="button" class="fw-ibtn" data-warp="clear" title="Remove the clip's warp markers and play its original timing">Clear warp</button></div>
   <div class="fw-insp-head">Draw samples</div>
   <canvas class="fw-draw-canvas" data-draw width="512" height="128" aria-label="256 samples of the clip around the playhead, each a point; drag to redraw them"></canvas>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-draw-act="load" title="Show 256 samples of this clip around the playhead at single-sample zoom">Show samples at playhead</button><button type="button" class="fw-ibtn" data-draw-act="apply" disabled title="Write the drawn samples into the clip's audio as one undo step">Apply drawing</button><button type="button" class="fw-ibtn" data-draw-act="revert" disabled>Revert</button></div>
@@ -324,6 +326,40 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     syncBand();
   });
   pick?.addEventListener("change", showControls);
+  // PT-09: a warp marker at the playhead pins that point of the clip's audio where it plays now (no audio changes until
+  // a marker is dragged on the clip); a clip's first marker records its original (media and span) to render from
+  body.addEventListener("click", (e) => {
+    const action = (e.target as HTMLElement).closest<HTMLElement>("[data-warp]")?.dataset.warp;
+    if (!action) return;
+    const doc = engine.get("document");
+    const hit = find(doc);
+    if (!hit) {
+      setText(notice, "Select a clip first");
+      return;
+    }
+    const { track, clip } = hit;
+    if (action === "clear") {
+      if (clip.warp) engine.dispatch({ type: "set-clip-warp", trackId: track.id, clipId: clip.id, warp: null });
+      setText(notice, clip.warp ? "Cleared the warp: the clip plays its original timing" : "This clip has no warp markers");
+      return;
+    }
+    const at = engine.get("transport").positionSamples - clip.start;
+    if (at <= 0 || at >= clip.length) {
+      setText(notice, "Put the playhead inside the clip to add a warp marker there");
+      return;
+    }
+    const w = clip.warp ?? { source: clip.mediaId, sourceIn: clip.sourceIn, sourceLength: clip.length, markers: [] };
+    // where the playhead's point of the clip came from in the original: between the surrounding markers, linearly
+    const pts = [{ src: 0, dst: 0 }, ...w.markers, { src: w.sourceLength, dst: clip.length }];
+    const k = pts.findIndex((p) => p.dst >= at);
+    const a = pts[Math.max(0, k - 1)];
+    const b = pts[Math.max(0, k)];
+    const src = b.dst > a.dst ? a.src + ((at - a.dst) * (b.src - a.src)) / (b.dst - a.dst) : a.src;
+    if (w.markers.some((m) => Math.abs(m.dst - at) < 1)) return;
+    engine.dispatch({ type: "set-clip-warp", trackId: track.id, clipId: clip.id, warp: { ...w, markers: [...w.markers, { src, dst: at }] } });
+    setText(notice, "Added a warp marker: drag it on the clip to re-time the audio around it");
+  });
+
   // AU-29, live preview: the picked effect (built in or a plugin) at its current settings on 5 s of the selected clip
   // from the playhead (or the clip's start), cut from its file and processed by the engine, looped beside the session,
   // which is not changed; while it plays, a changed setting renders and plays it again. The button carries the

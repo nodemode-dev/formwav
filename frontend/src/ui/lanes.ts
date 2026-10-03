@@ -203,7 +203,28 @@ function clipNode(): HTMLElement {
   return node;
 }
 
+/** PT-09: a clip's warp markers as handles at their places in the clip, reused across renders. */
+function syncWarpMarkers(node: HTMLElement, clip: Clip, spp: number): void {
+  const markers = clip.warp?.markers ?? [];
+  const els = [...node.querySelectorAll<HTMLElement>(":scope > .fw-warp-marker")];
+  while (els.length > markers.length) els.pop()?.remove();
+  while (els.length < markers.length) {
+    const el = document.createElement("div");
+    el.className = "fw-warp-marker";
+    el.title = "Warp marker: drag to re-time the audio on either side of it; double-click to remove it";
+    node.append(el);
+    els.push(el);
+  }
+  markers.forEach((m, i) => {
+    const el = els[i];
+    if (el.dataset.index !== String(i)) el.dataset.index = String(i);
+    const left = `${(m.dst / spp).toFixed(2)}px`;
+    if (el.style.left !== left) el.style.left = left;
+  });
+}
+
 function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number): void {
+  syncWarpMarkers(node, clip, spp);
   const clipColor = clip.color ? `var(--fw-color-${clip.color})` : "";
   if (node.style.getPropertyValue("--fw-clip-color") !== clipColor) node.style.setProperty("--fw-clip-color", clipColor);
   const left = `${(clip.start / spp).toFixed(2)}px`;
@@ -838,6 +859,85 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   };
   lanes.addEventListener("fw-lanes-rendered", drawRange);
   lanes.addEventListener("pointerdown", () => clearRange(), true);
+  // PT-09: warp markers. Dragging one re-times the audio on either side of it, each side kept within half to twice its
+  // speed (as the engine allows); on release the clip is rendered again from its original and the new media and
+  // markers land as one undo step. Double-clicking one removes it; removing the last restores the original.
+  const renderWarp = async (trackId: string, clipId: string, markers: { src: number; dst: number }[]) => {
+    const doc = engine.get("document");
+    const clip = doc.tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === clipId);
+    const w = clip?.warp;
+    if (!clip || !w) return;
+    if (!markers.length) {
+      engine.dispatch({ type: "set-clip-warp", trackId, clipId, warp: null });
+      return;
+    }
+    const notice = host.querySelector<HTMLElement>(".fw-notice");
+    const rate = doc.media[w.source]?.sampleRate ?? doc.sampleRate;
+    const sorted = [...markers].sort((a, b) => a.src - b.src);
+    const pts = [{ src: 0, dst: 0 }, ...sorted, { src: w.sourceLength, dst: clip.length }];
+    const segments = pts.slice(1).map((b, k) => ({ from: (w.sourceIn + pts[k].src) / rate, to: (w.sourceIn + b.src) / rate, length: (b.dst - pts[k].dst) / rate }));
+    setText(notice, "Warping...");
+    try {
+      const res = await fetch(`/api/media/${w.source}/warp`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ segments }) });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "set-clip-warp", trackId, clipId, warp: { ...w, markers: sorted }, media: out as unknown as MediaRef });
+      setText(notice, `Warped the clip at ${sorted.length} marker${sorted.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      setText(notice, `Could not warp: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  const warpTarget = (el: HTMLElement) => {
+    const node = el.closest<HTMLElement>(".fw-clip");
+    const trackId = node?.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    const clip = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === node?.dataset.key);
+    const index = Number(el.dataset.index);
+    return trackId && clip?.warp && clip.warp.markers[index] ? { trackId, clip, warp: clip.warp, index } : null;
+  };
+  lanes.addEventListener(
+    "pointerdown",
+    (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>(".fw-warp-marker");
+      if (!el || e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+      const t = warpTarget(el);
+      if (!t) return;
+      const { trackId, clip, warp: w, index } = t;
+      const spp = samplesPerPixel(engine.get("document"));
+      const m = w.markers[index];
+      const prev = index > 0 ? w.markers[index - 1] : { src: 0, dst: 0 };
+      const next = index < w.markers.length - 1 ? w.markers[index + 1] : { src: w.sourceLength, dst: clip.length };
+      const lo = Math.max(prev.dst + (m.src - prev.src) / 2, next.dst - 2 * (next.src - m.src));
+      const hi = Math.min(prev.dst + 2 * (m.src - prev.src), next.dst - (next.src - m.src) / 2);
+      if (lo > hi) return;
+      const x0 = e.clientX;
+      let dst = m.dst;
+      el.setPointerCapture(e.pointerId);
+      const move = (ev: PointerEvent) => {
+        dst = Math.round(Math.min(hi, Math.max(lo, m.dst + (ev.clientX - x0) * spp)));
+        el.style.left = `${(dst / spp).toFixed(2)}px`;
+      };
+      const up = () => {
+        el.removeEventListener("pointermove", move);
+        if (Math.abs(dst - m.dst) >= 1) void renderWarp(trackId, clip.id, w.markers.map((k, i) => (i === index ? { ...k, dst } : k)));
+      };
+      el.addEventListener("pointermove", move);
+      el.addEventListener("pointerup", up, { once: true });
+    },
+    true,
+  );
+  lanes.addEventListener(
+    "dblclick",
+    (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>(".fw-warp-marker");
+      if (!el) return;
+      e.stopPropagation();
+      const t = warpTarget(el);
+      if (t) void renderWarp(t.trackId, t.clip.id, t.warp.markers.filter((_, i) => i !== t.index));
+    },
+    true,
+  );
   const startRange = (e: PointerEvent, trackId: string, node: HTMLElement) => {
     const body = node.closest<HTMLElement>(".fw-lane-body");
     if (!body) return;

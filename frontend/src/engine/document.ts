@@ -47,6 +47,9 @@ export interface NoteEvent {
 export interface Clip {
   id: string;
   mediaId: string;
+  /** PT-09, warp markers: the original the clip is rendered from (its media and the span it covered, in samples) and
+   *  each marker as a source position in that span (src) and where it now sits in the clip (dst). */
+  warp?: { source: string; sourceIn: number; sourceLength: number; markers: { src: number; dst: number }[] };
   /** PT-33: the clip's own realtime effects (Pro Tools' clip effects), its EQ and a compressor, ahead of its track's
    *  inserts; the compressor sees the clip after its clip gain, not its track's fader. */
   fx?: TrackFx[];
@@ -329,7 +332,8 @@ export type Command =
   | { type: "set-snap"; grid: boolean; bars: boolean }
   | { type: "set-track-view"; trackId: string; spectrogram: boolean }
   | { type: "set-track-send"; trackId: string; busId: string; gainDb: number | null }
-  | { type: "set-clip-fx"; trackId: string; clipId: string; fx: TrackFx[] };
+  | { type: "set-clip-fx"; trackId: string; clipId: string; fx: TrackFx[] }
+  | { type: "set-clip-warp"; trackId: string; clipId: string; warp: NonNullable<Clip["warp"]> | null; media?: MediaRef };
 
 export function emptyDocument(sampleRate: number): SessionDoc {
   return { sampleRate, tracks: [], media: {}, markers: [] };
@@ -1026,6 +1030,31 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         return next;
       });
       return changed ? { ...doc, regions: [...regions].sort((a, b) => a.start - b.start) } : doc;
+    }
+    case "set-clip-warp": {
+      let changed = false;
+      const next = mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.map((c) => {
+          if (c.id !== cmd.clipId) return c;
+          const { warp: old, ...base } = c;
+          if (!cmd.warp) {
+            if (!old) return c;
+            changed = true;
+            return { ...base, mediaId: old.source, sourceIn: old.sourceIn, length: old.sourceLength };
+          }
+          const w = cmd.warp;
+          const markers = w.markers
+            .filter((m) => Number.isFinite(m.src) && Number.isFinite(m.dst) && m.src > 0 && m.src < w.sourceLength && m.dst > 0)
+            .map((m) => ({ src: Math.round(m.src), dst: Math.round(m.dst) }))
+            .sort((a, b) => a.src - b.src);
+          changed = true;
+          const warp = { source: w.source, sourceIn: Math.round(w.sourceIn), sourceLength: Math.round(w.sourceLength), markers };
+          return cmd.media ? { ...base, warp, mediaId: cmd.media.id, sourceIn: 0, length: cmd.media.frames } : { ...base, warp };
+        }),
+      }));
+      if (!changed) return doc;
+      return cmd.media ? { ...next, media: { ...doc.media, [cmd.media.id]: cmd.media } } : next;
     }
     case "set-clip-fx":
       return mapTrack(doc, cmd.trackId, (t) => {

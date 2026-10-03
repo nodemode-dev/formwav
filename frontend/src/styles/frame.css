@@ -351,3 +351,6 @@
    no presses there; a selection or a brush stroke drawn across its height reaches the clip (it took the press and
    started a gain drag) */
 .fw-lanes.is-spectral .fw-gain-line, .fw-lane.is-spectral .fw-gain-line { pointer-events: none; }
+
+/* PT-09: a clip's warp markers, dragged sideways to re-time the audio around them */
+.fw-warp-marker { position: absolute; top: 0; bottom: 0; inline-size: 3px; margin-inline-start: -1px; background: var(--accent-color); cursor: ew-resize; touch-action: none; }
