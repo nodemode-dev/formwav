@@ -86,16 +86,61 @@ def _summary(path: Path, manifest: dict, doc: dict) -> dict:
 THUMBNAIL_MAX_SECONDS = 300
 
 
+def _overview_png(doc: dict, rate: int, end: int) -> bytes | None:
+    """AU-32, sessions longer than THUMBNAIL_MAX_SECONDS: the same 320x64 picture showwavespic draws (bars about the
+    centre on a square-root scale, 0xf97316 on transparent), from the clips' own files read at a stride, about 64 samples
+    a column, each clip's and track's gain applied, muted and unsoloed tracks left out, the loudest across tracks per
+    column. Rendering an hour's mix on every save would make saving slow; this reads a few thousand samples a clip."""
+    import numpy as np
+
+    from .tools import _wav_view
+
+    width, height = 320, 64
+    cols = np.zeros(width)
+    span = end / width
+    step = max(1, int(span // 64))
+    tracks = doc.get("tracks", [])
+    soloed = any(t.get("solo") for t in tracks)
+    for t in tracks:
+        if t.get("mute") or (soloed and not t.get("solo")):
+            continue
+        for c in t.get("clips", []):
+            if c.get("mediaId") not in (doc.get("media") or {}):
+                continue
+            view, _ = _wav_view(c["mediaId"])
+            x = np.asarray(view)
+            start, length, src = int(c.get("start", 0)), int(c.get("length", 0)), int(c.get("sourceIn", 0))
+            pos = np.arange(start, start + length, step)
+            if not len(pos) or not len(x):
+                continue
+            v = np.abs(x[np.clip(src + pos - start, 0, len(x) - 1)].astype(np.float64)).max(axis=1)
+            if x.dtype == np.int16:
+                v /= 32768.0
+            v *= 10 ** ((float(t.get("gainDb") or 0) + float(c.get("gainDb") or 0)) / 20)
+            np.maximum.at(cols, np.minimum(width - 1, (pos / span).astype(int)), v)
+    half = np.round(np.sqrt(np.clip(cols, 0, 1)) * height / 2).astype(int)
+    img = np.zeros((height, width, 4), dtype=np.uint8)
+    for k in range(width):
+        if half[k] > 0:
+            img[height // 2 - half[k] : height // 2 + half[k], k] = (0xF9, 0x73, 0x16, 255)
+    done = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{width}x{height}",
+                           "-i", "-", "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"], input=img.tobytes(), capture_output=True, timeout=60)
+    return done.stdout if done.returncode == 0 and done.stdout else None
+
+
 def _thumbnail(doc: object) -> bytes | None:
-    """A 320x64 PNG of the session's mix (ffmpeg's showwavespic over the engine's own render), or None when the session
-    is empty, longer than THUMBNAIL_MAX_SECONDS, or cannot be rendered; a save never fails for want of a picture."""
+    """A 320x64 PNG of the session's mix (ffmpeg's showwavespic over the engine's own render); a session longer than
+    THUMBNAIL_MAX_SECONDS gets _overview_png's picture from its clips' files instead. None when the session is empty or
+    nothing can be drawn; a save never fails for want of a picture."""
     from . import render
 
     try:
         rate = int(doc.get("sampleRate") or 0) if isinstance(doc, dict) else 0
         end = max((c.get("start", 0) + c.get("length", 0) for t in doc.get("tracks", []) for c in t.get("clips", [])), default=0) if isinstance(doc, dict) else 0
-        if rate <= 0 or end <= 0 or end > THUMBNAIL_MAX_SECONDS * rate:
+        if rate <= 0 or end <= 0:
             return None
+        if end > THUMBNAIL_MAX_SECONDS * rate:
+            return _overview_png(doc, rate, end)
         wav = render.render(doc)["wav"]
         with tempfile.TemporaryDirectory() as tmp:
             src, out = Path(tmp) / "mix.wav", Path(tmp) / "thumb.png"

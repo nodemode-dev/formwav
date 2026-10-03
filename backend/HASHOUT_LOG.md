@@ -1006,3 +1006,10 @@ The export answered 400 because the core returns its mix as interleaved float32 
 - logged: v1.47.0 (in progress) · 2026-10-02
 
 A stroke over a dropout now fills it: when any 5 ms inside the stroke sits 30 dB below the 200 ms around it, the stroke's box is rebuilt by spectral repair's Replace (RX-42: magnitudes interpolated from both sides, each bin's phase carried at its own frequency); anything else is attenuated through the painted mask as before. A box's average would not do: the brush's margins make the stroke wider than the dropout, so the average barely dips. Verified in Chromium on a track's own spectrogram view: a stroke over a 20 ms dropout in a 440 Hz tone took the gap's RMS from 0.0000 to 0.2135 (the tone's 0.2121), 31.2 dB below the tone in error against the true tone, the audio 0.2 to 1.0 s unchanged to 2.7e-17, the media named as filled, no page errors; on the engine the whistle stroke still attenuated (3 kHz to -143.1 dB, 440 Hz at -10.5) and was not filled.
+
+### thumbnails for sessions over five minutes (AU-32)
+- refers-to: app/services/projects.py :: `_overview_png`, `_thumbnail`
+- kind: explainer
+- logged: v1.49.0 (in progress) · 2026-10-03
+
+A save drew no thumbnail for a session over five minutes, because the picture came from rendering the whole mix, too slow to repeat on every save of a long session. Such sessions now get the same 320x64 picture (bars about the centre on a square-root scale, 0xf97316 on transparent, as showwavespic draws) from their clips' own files read at a stride, about 64 samples a column, clip and track gains applied, muted and unsoloed tracks left out, the loudest across tracks per column. Verified: a 6-minute session with tone only in its first and last 30 s saved in 626 ms (the six minutes of audio packed with it), was listed with a thumbnail, lit 26 of 26 columns at each end and none of the 260 between, bars 46 px high (45 for the tone's level), and showed it at 320 by 64 in the start screen's Recent sessions; no page errors. Sessions up to five minutes keep the rendered picture.
