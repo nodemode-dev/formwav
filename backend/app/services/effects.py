@@ -211,8 +211,8 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "de-clip": ({"threshold": ("Threshold", 1, 100, 10, ""), "window": ("Window", 10, 100, 55, "ms")}, lambda v: f"adeclip=w={v['window']:.0f}:t={v['threshold']:.1f}"),
     "de-crackle": ({"threshold": ("Threshold", 1, 20, 5, ""), "window": ("Window", 10, 100, 20, "ms")}, lambda v: f"adeclick=w={v['window']:.0f}:o=75:t={v['threshold']:.1f}"),
     "mouth-declick": ({"threshold": ("Threshold", 1, 20, 2, ""), "window": ("Window", 10, 100, 10, "ms")}, lambda v: f"highpass=f=60,adeclick=w={v['window']:.0f}:o=75:t={v['threshold']:.1f}"),
-    "de-plosive": ({"cutoff": ("Cutoff", 40, 300, 100, "Hz")}, lambda v: f"highpass=f={v['cutoff']:.0f}:poles=2"),
-    "de-wind": ({"cutoff": ("Cutoff", 60, 400, 150, "Hz"), "floor": ("Noise floor", -80, -20, -30, "dB")}, lambda v: f"highpass=f={v['cutoff']:.0f}:poles=2,afftdn=nf={v['floor']:.1f}"),
+    "de-plosive": ({"cutoff": ("Cutoff", 40, 300, 100, "Hz"), "detect": ("Only on bursts (1 = on)", 0, 1, 0, "", 1)}, lambda v: f"highpass=f={v['cutoff']:.0f}:poles=2"),
+    "de-wind": ({"cutoff": ("Cutoff", 60, 400, 150, "Hz"), "floor": ("Noise floor", -80, -20, -30, "dB"), "detect": ("Only on gusts (1 = on)", 0, 1, 0, "", 1)}, lambda v: f"highpass=f={v['cutoff']:.0f}:poles=2,afftdn=nf={v['floor']:.1f}"),
     "hum-remover": (
         {"harmonics": ("Harmonics", 1, 6, 2, ""), "width": ("Notch width", 1, 30, 4, "Q")},
         lambda v: ",".join(f"bandreject=f={f * k}:width_type=q:w={v['width']:.1f}" for k in range(1, int(round(v["harmonics"])) + 1) for f in (50, 60)),
@@ -655,6 +655,74 @@ def _paulstretch(x, rate: int, v: dict):
     return y.astype(np.float32)
 
 
+def _chain_array(x, rate: int, chain: str, label: str):
+    """An ffmpeg filter chain run over an array (32-bit float WAV in and out), the result exactly the input's length."""
+    import os
+    import tempfile as _tf
+
+    import numpy as np
+
+    from .audacity import _wav_bytes
+
+    with _tf.TemporaryDirectory() as tmp:
+        src, dst = os.path.join(tmp, "in.wav"), os.path.join(tmp, "out.wav")
+        with open(src, "wb") as f:
+            f.write(_wav_bytes([x[:, c] for c in range(x.shape[1])], rate))
+        done = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", src, "-af", chain, "-c:a", "pcm_f32le", dst], capture_output=True, timeout=900)
+        if done.returncode != 0:
+            raise media.MediaError(f"{label} failed: {done.stderr.decode(errors='replace').strip()[-300:]}")
+        raw = np.frombuffer(subprocess.run([media._tool("ffmpeg"), "-v", "error", "-i", dst, "-f", "f32le", "-"], capture_output=True).stdout, dtype="<f4")
+    y = raw.reshape(-1, x.shape[1])[: len(x)]
+    if len(y) < len(x):
+        y = np.concatenate([y, np.zeros((len(x) - len(y), x.shape[1]), dtype=np.float32)])
+    return y.astype(np.float32)
+
+
+def _low_burst_gate(x, rate: int, band: float, rise_db: float, hold_s: float):
+    """Where the low band (below `band` Hz) bursts: its energy in 10 ms frames against its running one-second median,
+    open where it rises `rise_db` above it (and above -60 dBFS), held `hold_s` either side, with 10 ms ramps; a gain
+    from 0 to 1 per sample. The band is taken through the FFT, so no filter library is needed."""
+    import numpy as np
+    from numpy.lib.stride_tricks import sliding_window_view
+
+    mono = x.astype(np.float64).mean(axis=1)
+    f = np.fft.rfftfreq(len(mono), 1 / rate)
+    low = np.fft.irfft(np.fft.rfft(mono) * (f < band), n=len(mono))
+    hop = max(1, int(rate * 0.01))
+    frames = len(low) // hop
+    if frames < 3:
+        return np.zeros(len(mono))
+    energy = 10 * np.log10(np.mean(low[: frames * hop].reshape(frames, hop) ** 2, axis=1) + 1e-12)
+    half = 50
+    median = np.median(sliding_window_view(np.pad(energy, half, mode="edge"), 2 * half + 1), axis=1)[:frames]
+    hot = (energy > median + rise_db) & (energy > -60)
+    hold = max(0, int(round(hold_s / 0.01)))
+    open_ = np.convolve(hot.astype(np.float64), np.ones(2 * hold + 1), "same") > 0
+    gate = np.repeat(open_.astype(np.float64), hop)
+    gate = np.concatenate([gate, np.full(len(mono) - len(gate), gate[-1] if len(gate) else 0.0)])
+    return np.clip(np.convolve(gate, np.ones(hop) / hop, "same"), 0.0, 1.0)
+
+
+def _de_plosive(x, rate: int, v: dict):
+    """De-plosive (RX-11): its low cut, over the whole clip as before, or with Only on bursts where the band below
+    the cutoff bursts 15 dB over its running level (held 30 ms), the clean audio around them untouched."""
+    wet = _chain_array(x, rate, PARAMS["de-plosive"][1](v), "De-plosive")
+    if v.get("detect", 0) < 0.5:
+        return wet
+    gate = _low_burst_gate(x, rate, max(150.0, v["cutoff"] * 1.5), 15.0, 0.03)[:, None]
+    return (x + gate * (wet - x)).astype("float32")
+
+
+def _de_wind(x, rate: int, v: dict):
+    """De-wind (RX-14): its low cut and noise floor, over the whole clip as before, or with Only on gusts where the
+    band below the cutoff rises 10 dB over its running level (held 150 ms), the audio between gusts untouched."""
+    wet = _chain_array(x, rate, PARAMS["de-wind"][1](v), "De-wind")
+    if v.get("detect", 0) < 0.5:
+        return wet
+    gate = _low_burst_gate(x, rate, max(200.0, v["cutoff"] * 1.5), 10.0, 0.15)[:, None]
+    return (x + gate * (wet - x)).astype("float32")
+
+
 def _phase_rotate(x, rate: int, v: dict):
     """Phase rotation (RX-34): every frequency's phase turned by the same angle, x cos(a) - H(x) sin(a) with H the
     Hilbert transform computed exactly through the FFT, so the magnitude spectrum, and the sound, is unchanged while an
@@ -718,7 +786,7 @@ def _peak_normalize(x, rate: int, v: dict):
     return (y * gains).astype(np.float32)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate}
+NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:
