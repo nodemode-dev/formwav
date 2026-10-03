@@ -91,6 +91,31 @@ function clipEnvelope(clipPoints: [number, number][], trackFlat: number[] | unde
   return out;
 }
 
+/** AU-36: how many output samples `end` samples of session take under a time track: the integral of 1 / speed, exact
+ *  for each linear or logarithmic segment, the speed held before the first point and after the last (as the worklet
+ *  and the export renderer play it). */
+export function timeTrackLength(end: number, points: readonly { at: number; speed: number }[] | undefined, log: boolean): number {
+  if (!points || points.length < 2) return end;
+  const first = points[0];
+  const last = points[points.length - 1];
+  if (end <= first.at) return end / first.speed;
+  let total = first.at / first.speed;
+  for (let i = 1; i < points.length && points[i - 1].at < end; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const span = b.at - a.at;
+    if (span <= 0) continue;
+    const len = Math.min(b.at, end) - a.at;
+    const f = len / span;
+    const s0 = a.speed;
+    const s1 = log ? s0 * (b.speed / s0) ** f : s0 + (b.speed - s0) * f;
+    if (Math.abs(s1 - s0) < 1e-12) total += len / s0;
+    else total += log ? (len * (1 / s0 - 1 / s1)) / Math.log(s1 / s0) : (len * Math.log(s1 / s0)) / (s1 - s0);
+  }
+  if (end > last.at) total += (end - last.at) / last.speed;
+  return total;
+}
+
 export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPlan {
   const soloed = doc.tracks.some((t) => t.solo);
   const busIndex = new Map<string, number>();
@@ -547,12 +572,16 @@ export class Player {
     const doc = this.engine.get("document");
     const sources = new Map<string, number>();
     let counter = 0;
-    const length = Math.max(1, planClips(doc, new Map(Object.keys(doc.media).map((id) => [id, 0]))).end);
+    const end = planClips(doc, new Map(Object.keys(doc.media).map((id) => [id, 0]))).end;
+    // AU-36: under a time track the session plays for the integral of 1 / speed, so the offline render is that long
+    // (a slowed session would otherwise be cut off at its unwarped length)
+    const timeTrack = doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined;
+    const length = Math.max(1, Math.ceil(timeTrackLength(end, timeTrack ? doc.timeTrack : undefined, doc.timeTrackLog === true)) + (timeTrack ? 128 : 0));
     const ctx = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate: doc.sampleRate });
     const node = await makeNode(ctx, await this.core());
     await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter, streamInfo(doc, id, 0), true)));
     const plan = planClips(doc, sources);
-    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb });
+    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, timeTrack, timeTrackLog: doc.timeTrackLog === true });
     send(node, { type: "play" });
     await request(node, { type: "seek", position: 0 }, (r) => r.type === "position");
     const rendered = await ctx.startRendering();
