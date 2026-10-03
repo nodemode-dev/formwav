@@ -309,13 +309,15 @@ def media_spectrum(media_id: str, fft: int = 4096, start: float = 0.0, end: floa
 
 
 @router.get("/media/{media_id}/spectrogram.png")
-def media_spectrogram(media_id: str, w: int = 640, h: int = 240, legend: bool = True, channel: str = "both") -> Response:
+def media_spectrogram(media_id: str, w: int = 640, h: int = 240, legend: bool = True, channel: str = "both", fscale: str = "lin") -> Response:
     from ..services import tools
 
     if channel not in ("both", "mid", "side"):
         raise HTTPException(422, "channel is both, mid or side")
+    if fscale not in ("lin", "log"):
+        raise HTTPException(422, "fscale is lin or log")
     try:
-        return Response(content=tools.spectrogram_png(media_id, w, h, legend, channel), media_type="image/png")
+        return Response(content=tools.spectrogram_png(media_id, w, h, legend, channel, fscale), media_type="image/png")
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err
     except media.MediaError as err:

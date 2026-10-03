@@ -346,3 +346,8 @@
 
 /* AA-06: the heal brush's dabs while a stroke is painted (cleared on release) */
 .fw-brush-dot { position: absolute; inline-size: 16px; block-size: 16px; border-radius: 50%; pointer-events: none; background: color-mix(in srgb, var(--accent-color) 35%, transparent); }
+
+/* AA-05, AA-06: in a spectrogram view (the session's or a track's own) a clip shows frequency, so the gain line takes
+   no presses there; a selection or a brush stroke drawn across its height reaches the clip (it took the press and
+   started a gain drag) */
+.fw-lanes.is-spectral .fw-gain-line, .fw-lane.is-spectral .fw-gain-line { pointer-events: none; }

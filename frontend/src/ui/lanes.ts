@@ -4,6 +4,7 @@ import { icon as fcIcon } from "../vendor/formcut/icons";
 import { fetchPeaks, type PeakData } from "../io/media-client";
 import { gridEnabled, shuffleEnabled, snapSamples, spotEnabled } from "./grid";
 import { armedTracks, isArmed, onArm, setArmedTrack, toggleArmed } from "./arm";
+import { spectralHz } from "./spectrogram-view";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
 const PEAK_SPP = 256;
@@ -788,7 +789,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   /** Smart Tool range (interface state): a time range on one track, made by dragging in a clip's upper half. */
   let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number } } | null = null;
   let rangeBand: { top: number; height: number } | null = null;
-  let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean; y0: number; clipTop: number; clipHeight: number; bodyTop: number; nyquist: number; spectral: boolean; dabs?: { at: number; hz: number }[] } | null = null;
+  let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean; y0: number; clipTop: number; clipHeight: number; bodyTop: number; nyquist: number; spectral: boolean; dabs?: { at: number; hz: number; low: number; high: number }[] } | null = null;
   // AA-06: with the heal brush on (the Inspector sets body[data-heal-brush]), a drag in the spectrogram view paints dabs
   // instead of drawing a box; each dab covers BRUSH_PX either way, and the stroke goes to the Inspector on release
   const BRUSH_PX = 8;
@@ -854,7 +855,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         // AA-06: a dab where the pointer is, in session samples and Hz, drawn as a dot over the clip
         d.moved = true;
         const y = Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, e.clientY));
-        (d.dabs ??= []).push({ at: rangeAt(d.body, e.clientX), hz: d.nyquist * (1 - (y - d.clipTop) / d.clipHeight) });
+        const hzAt = (py: number) => spectralHz(1 - (Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, py)) - d.clipTop) / d.clipHeight, d.nyquist);
+        (d.dabs ??= []).push({ at: rangeAt(d.body, e.clientX), hz: hzAt(y), low: hzAt(y + BRUSH_PX), high: hzAt(y - BRUSH_PX) });
         const dot = document.createElement("div");
         dot.className = "fw-brush-dot";
         dot.style.left = `${e.clientX - d.body.getBoundingClientRect().left - BRUSH_PX}px`;
@@ -873,7 +875,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         const clampY = (y: number) => Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, y));
         const y1 = clampY(Math.min(d.y0, e.clientY));
         const y2 = clampY(Math.max(d.y0, e.clientY));
-        const hz = (y: number) => Math.round(d.nyquist * (1 - (y - d.clipTop) / d.clipHeight));
+        const hz = (y: number) => Math.round(spectralHz(1 - (y - d.clipTop) / d.clipHeight, d.nyquist));
         range.band = { lowHz: hz(y2), highHz: hz(y1) };
         rangeBand = { top: y1 - d.bodyTop, height: y2 - y1 };
       }

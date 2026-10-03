@@ -804,7 +804,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     setText(notice, on ? "Heal brush: paint over a sound in the spectrogram view to heal it" : "Heal brush off");
   });
   document.addEventListener("fw-heal-stroke", async (e) => {
-    const { trackId, dabs, radiusSamples, radiusHz } = (e as CustomEvent<{ trackId: string; dabs: { at: number; hz: number }[]; radiusSamples: number; radiusHz: number }>).detail;
+    const { trackId, dabs, radiusSamples } = (e as CustomEvent<{ trackId: string; dabs: { at: number; hz: number; low: number; high: number }[]; radiusSamples: number }>).detail;
     const doc = engine.get("document");
     const track = doc.tracks.find((t) => t.id === trackId);
     const clip = track?.clips.find((c) => dabs[0].at >= c.start && dabs[0].at < c.start + c.length);
@@ -816,12 +816,12 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const cur = boxes[boxes.length - 1];
       if (cur && d.at - cur.from <= 0.04 * rate) {
         cur.to = Math.max(cur.to, d.at);
-        cur.low = Math.min(cur.low, d.hz);
-        cur.high = Math.max(cur.high, d.hz);
-      } else boxes.push({ from: d.at, to: d.at, low: d.hz, high: d.hz });
+        cur.low = Math.min(cur.low, d.low);
+        cur.high = Math.max(cur.high, d.high);
+      } else boxes.push({ from: d.at, to: d.at, low: d.low, high: d.high });
     }
     const seconds = (at: number) => Math.max(0, (at - clip.start + clip.sourceIn) / rate);
-    const steps = boxes.map((b) => ({ from: seconds(b.from - radiusSamples), to: seconds(b.to + radiusSamples), low: Math.max(20, b.low - radiusHz), high: Math.min(rate / 2, b.high + radiusHz) }));
+    const steps = boxes.map((b) => ({ from: seconds(b.from - radiusSamples), to: seconds(b.to + radiusSamples), low: Math.max(20, b.low), high: Math.min(rate / 2, b.high) }));
     try {
       // the whole stroke in one pass, each bin predicted from the frames outside the stroke
       setText(notice, "Healing the stroke...");

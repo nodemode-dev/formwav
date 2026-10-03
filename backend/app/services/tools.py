@@ -477,12 +477,59 @@ def spectrum(media_id: str, fft: int = 4096, start: float = 0.0, end: float = 0.
     return {"fft": fft, "rate": rate, "frames": int(frames), "binHz": rate / fft, "db": [round(float(v), 2) for v in db]}
 
 
-def spectrogram_png(media_id: str, width: int = 640, height: int = 240, legend: bool = True, channel: str = "both") -> bytes:
+LOG_AXIS_LOW_HZ = 20.0
+
+
+def _log_spectrogram_png(media_id: str, width: int, height: int, channel: str) -> bytes:
+    """AA-05: the bare spectrogram on a logarithmic frequency axis, drawn here so its mapping is exact and shared with the
+    interface's ruler and selections: row y (0 at the top) of `height` shows f = 20 Hz x (nyquist / 20) ^ ((height - 0.5
+    - y) / height). (ffmpeg's own log scale strayed from any pure log curve below 2 kHz, 69 px at 125 Hz on a 1024-row
+    image, too far for selections drawn on it.) An 8192-point STFT per column keeps the low octaves resolved; each row
+    shows the strongest bin in its band, or interpolates where its band is narrower than a bin; -120 to 0 dB."""
+    if channel in ("mid", "side"):
+        x, rate = _view_channel(media_id, channel)
+        mono = np.asarray(x[:, 0], dtype=np.float64)
+    else:
+        view, rate = _wav_view(media_id)
+        mono = np.asarray(view, dtype=np.float64).mean(axis=1)
+    n = 8192 if rate > 32000 else 4096
+    win = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n)
+    padded = np.concatenate([np.zeros(n // 2), mono, np.zeros(n // 2)])
+    starts = ((np.arange(width) + 0.5) * len(mono) / width).astype(int)
+    mag = np.abs(np.fft.rfft(padded[starts[:, None] + np.arange(n)[None, :]] * win, axis=1)) / (n / 4)
+    nyq, bins = rate / 2, n // 2 + 1
+    edges = LOG_AXIS_LOW_HZ * (nyq / LOG_AXIS_LOW_HZ) ** (np.arange(height + 1) / height)  # bottom row first
+    centres = LOG_AXIS_LOW_HZ * (nyq / LOG_AXIS_LOW_HZ) ** ((np.arange(height) + 0.5) / height)
+    lo = np.clip(np.floor(edges[:-1] * n / rate).astype(int), 0, bins - 1)
+    hi = np.clip(np.ceil(edges[1:] * n / rate).astype(int), lo + 1, bins)
+    rows = np.empty((height, width))
+    pos = centres * n / rate
+    for r in range(height):
+        if hi[r] - lo[r] <= 2:
+            k = min(int(pos[r]), bins - 2)
+            rows[r] = mag[:, k] + (mag[:, k + 1] - mag[:, k]) * (pos[r] - k)
+        else:
+            rows[r] = mag[:, lo[r]:hi[r]].max(axis=1)
+    level = np.clip((20 * np.log10(rows[::-1] + 1e-12) + 120) / 120, 0, 1)  # top row first
+    stops = np.array([[0, 0, 0], [30, 0, 70], [120, 0, 140], [220, 40, 60], [255, 160, 0], [255, 240, 120], [255, 255, 255]], dtype=float)
+    at = np.linspace(0, 1, len(stops))
+    rgb = np.stack([np.interp(level, at, stops[:, c]) for c in range(3)], axis=-1).astype(np.uint8)
+    res = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}",
+                          "-i", "-", "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"], input=rgb.tobytes(), capture_output=True, check=False)
+    if res.returncode != 0 or not res.stdout:
+        raise media.MediaError(f"the spectrogram could not be drawn: {res.stderr.decode(errors='replace')[:200]}")
+    return res.stdout
+
+
+def spectrogram_png(media_id: str, width: int = 640, height: int = 240, legend: bool = True, channel: str = "both", fscale: str = "lin") -> bytes:
     """A spectrogram of the whole file, time left to right and frequency upwards (ffmpeg showspectrumpic); without the
     legend the image is the bare plot, so its width maps to the file's length exactly. With `channel` mid or side
-    (RX-54) it shows that view of a stereo clip."""
+    (RX-54) it shows that view of a stereo clip. With `fscale` log (AA-05) the bare plot is drawn on a logarithmic
+    frequency axis by _log_spectrogram_png."""
     media.media_info(media_id)
     width, height = max(64, min(int(width), 8192)), max(32, min(int(height), 1024))
+    if fscale == "log" and not legend:
+        return _log_spectrogram_png(media_id, width, height, channel)
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "spectrogram.png"
         source = media_dir() / f"{media_id}.wav"

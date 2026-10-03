@@ -8,6 +8,19 @@ import type { Engine } from "../engine";
 const IMAGE_W = 2048;
 const IMAGE_H = 256;
 
+/** AA-05: the spectrogram's frequency axis, linear or logarithmic; the engine draws log images with exactly this mapping
+ *  (services/tools.py: _log_spectrogram_png), so rulers and selections line up with what is drawn. */
+export const LOG_AXIS_LOW_HZ = 20;
+export const logAxis = (): boolean => document.body.dataset.spectralScale === "log";
+/** Height fraction (0 at the bottom, 1 at the top) of frequency `f` on the current axis. */
+export function spectralFraction(f: number, nyquist: number): number {
+  return logAxis() ? Math.log(Math.max(f, LOG_AXIS_LOW_HZ) / LOG_AXIS_LOW_HZ) / Math.log(nyquist / LOG_AXIS_LOW_HZ) : f / nyquist;
+}
+/** Frequency at height fraction `frac` (0 at the bottom) on the current axis. */
+export function spectralHz(frac: number, nyquist: number): number {
+  return logAxis() ? LOG_AXIS_LOW_HZ * (nyquist / LOG_AXIS_LOW_HZ) ** frac : nyquist * frac;
+}
+
 export function mountSpectrogramView(host: HTMLElement, engine: Engine): void {
   const tray = host.querySelector<HTMLElement>('.fw-tool-tray [data-group="view"]') ?? host.querySelector<HTMLElement>(".fw-tool-tray");
   const lanes = host.querySelector<HTMLElement>(".fw-lanes");
@@ -19,6 +32,14 @@ export function mountSpectrogramView(host: HTMLElement, engine: Engine): void {
   button.title = "Show clips as spectrograms (frequency over time)";
   button.textContent = "Spectrogram";
   tray.append(button);
+  // AA-05: the logarithmic frequency axis for every spectrogram, its ruler and its selections
+  const logButton = document.createElement("button");
+  logButton.type = "button";
+  logButton.className = "fw-mode fw-spectral-log";
+  logButton.setAttribute("aria-pressed", "false");
+  logButton.title = "Spectrograms on a logarithmic frequency axis (20 Hz at the bottom), for detail in the low octaves";
+  logButton.textContent = "Log Hz";
+  tray.append(logButton);
   let on = false;
   const urls = new Map<string, string>();
 
@@ -33,7 +54,8 @@ export function mountSpectrogramView(host: HTMLElement, engine: Engine): void {
       if (el && !el.hidden) el.hidden = true;
       return;
     }
-    const key = String(Math.round(nyquist));
+    const log = logAxis();
+    const key = `${Math.round(nyquist)}${log ? ":log" : ""}`;
     if (!el) {
       el = document.createElement("div");
       el.className = "fw-freq-scale";
@@ -43,14 +65,14 @@ export function mountSpectrogramView(host: HTMLElement, engine: Engine): void {
     if (el.dataset.nyquist !== key) {
       el.dataset.nyquist = key;
       el.replaceChildren(
-        ...[1000, 5000, 10000, 15000, 20000]
+        ...(log ? [50, 100, 500, 1000, 5000, 10000] : [1000, 5000, 10000, 15000, 20000])
           .filter((f) => f < nyquist)
           .map((f) => {
             const line = document.createElement("span");
             line.className = "fw-freq-guide";
-            line.style.top = `${((1 - f / nyquist) * 100).toFixed(2)}%`;
+            line.style.top = `${((1 - spectralFraction(f, nyquist)) * 100).toFixed(2)}%`;
             line.dataset.hz = String(f);
-            line.textContent = `${f / 1000}k`;
+            line.textContent = f >= 1000 ? `${f / 1000}k` : String(f);
             return line;
           }),
       );
@@ -77,11 +99,12 @@ export function mountSpectrogramView(host: HTMLElement, engine: Engine): void {
       if (clip && doc.media[clip.mediaId]) scale(node, doc.media[clip.mediaId].sampleRate / 2, true);
       const media = clip ? doc.media[clip.mediaId] : undefined;
       if (!clip || !media || !media.frames) continue;
-      if (!urls.has(media.id)) urls.set(media.id, `/api/media/${media.id}/spectrogram.png?w=${IMAGE_W}&h=${IMAGE_H}&legend=false`);
+      const cacheKey = `${media.id}${logAxis() ? ":log" : ""}`;
+      if (!urls.has(cacheKey)) urls.set(cacheKey, `/api/media/${media.id}/spectrogram.png?w=${IMAGE_W}&h=${logAxis() ? 512 : IMAGE_H}&legend=false${logAxis() ? "&fscale=log" : ""}`);
       const width = node.getBoundingClientRect().width;
       const clipFrames = (clip.length * media.sampleRate) / doc.sampleRate;
       const fileWidth = (width * media.frames) / clipFrames;
-      set(node, "background-image", `url("${urls.get(media.id)}")`);
+      set(node, "background-image", `url("${urls.get(cacheKey)}")`);
       set(node, "background-size", `${fileWidth.toFixed(2)}px 100%`);
       set(node, "background-position", `${(-(clip.sourceIn / media.frames) * fileWidth).toFixed(2)}px 0`);
     }
@@ -89,6 +112,13 @@ export function mountSpectrogramView(host: HTMLElement, engine: Engine): void {
   button.addEventListener("click", () => {
     on = !on;
     button.setAttribute("aria-pressed", String(on));
+    apply();
+  });
+  logButton.addEventListener("click", () => {
+    const log = !logAxis();
+    logButton.setAttribute("aria-pressed", String(log));
+    if (log) document.body.dataset.spectralScale = "log";
+    else delete document.body.dataset.spectralScale;
     apply();
   });
   lanes.addEventListener("fw-lanes-rendered", apply);
