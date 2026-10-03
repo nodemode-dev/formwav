@@ -665,6 +665,32 @@ def _paulstretch(x, rate: int, v: dict):
     return y.astype(np.float32)
 
 
+def limit_to_band(dry_id: str, wet: dict, low: float, high: float) -> dict:
+    """AU-31: an effect's result kept only inside a frequency band: out = dry + band(wet - dry), the band taken
+    through the FFT with 20 Hz cosine edges, so below and above it the audio is the dry clip's exactly. An effect that
+    changes timing cannot be limited to a band (its output no longer lines up)."""
+    import numpy as np
+
+    from .audacity import _wav_bytes
+    from .tools import _wav_view
+
+    lo, hi = sorted((max(0.0, low), max(0.0, high)))
+    dv, rate = _wav_view(dry_id)
+    wv, wrate = _wav_view(wet["id"])
+    dry, out = np.asarray(dv, dtype=np.float64), np.asarray(wv, dtype=np.float64)
+    if dry.shape != out.shape or rate != wrate:
+        raise media.MediaError("this effect changes timing or channels, so it cannot be limited to a band")
+    f = np.fft.rfftfreq(dry.shape[0], 1 / rate)
+    edge = 20.0
+    rise = np.clip((f - (lo - edge)) / edge, 0, 1)
+    fall = np.clip(((hi + edge) - f) / edge, 0, 1)
+    mask = (0.5 - 0.5 * np.cos(np.pi * rise)) * (0.5 - 0.5 * np.cos(np.pi * fall))
+    diff = np.fft.irfft(np.fft.rfft(out - dry, axis=0) * mask[:, None], n=dry.shape[0], axis=0)
+    y = (dry + diff).astype(np.float32)
+    stem = wet.get("name", "audio").rsplit(".", 1)[0]
+    return media.import_wav(f"{stem} ({lo:g} to {hi:g} Hz).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
+
+
 def _stft_map(x, rate: int, n: int, fn):
     """Each channel through a short-time spectrum (periodic Hann windows at a quarter-frame hop, which overlap-add to
     exactly 1.5), fn(spec, freqs, channel) returning the spectrum to resynthesise; an unchanged spectrum gives the

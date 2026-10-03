@@ -113,7 +113,9 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
 <div class="fw-transcript-actions" hidden>
   <button type="button" class="fw-ibtn" data-t="delete">Delete selected words</button>
   <button type="button" class="fw-ibtn" data-t="fillers">Remove filler words</button>
-  <button type="button" class="fw-ibtn" data-t="gaps">Shorten gaps over ${GAP_OVER} s</button>
+  <label class="fw-field"><span>Gaps over</span><input type="number" data-t-gap="over" value="${GAP_OVER}" min="0.1" max="10" step="0.05" aria-label="Shorten gaps longer than, seconds"><span>s</span></label>
+  <label class="fw-field"><span>Keep</span><input type="number" data-t-gap="keep" value="${GAP_KEEP}" min="0" max="5" step="0.05" aria-label="Length each shortened gap keeps, seconds"><span>s</span></label>
+  <button type="button" class="fw-ibtn" data-t="gaps">Shorten gaps</button>
   <button type="button" class="fw-ibtn" data-t="retakes">Remove retakes</button>
   <button type="button" class="fw-ibtn" data-t="clip">Make a clip from selected words</button>
   <div class="fw-word-timing" hidden><label class="fw-sam-opt"><span>Start</span><input type="number" data-wt="start" step="0.01" min="0" aria-label="The selected word's start in seconds"> s</label><label class="fw-sam-opt"><span>End</span><input type="number" data-wt="end" step="0.01" min="0" aria-label="The selected word's end in seconds"> s</label><button type="button" class="fw-ibtn" data-t="timing" title="Move the selected word's start and end; deleting the word then removes exactly that span">Set word timing</button><label class="fw-sam-opt"><span>Gap after</span><input type="number" data-wt="gap" step="0.05" min="0" aria-label="The gap after the selected word in seconds"> s</label><button type="button" class="fw-ibtn" data-t="gap" title="Shorten the gap to the next word to this length, closing up everything after it">Set gap</button></div>
@@ -308,11 +310,18 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
       setText(notice, `Made a ${(end - start).toFixed(2)} s clip of ${picked.length} words on a new track at the playhead`);
     }
     else if (action === "gaps") {
+      // DS-05: the threshold and the length kept are chosen (the old fixed 0.75 s and 0.3 s their defaults)
+      const field = (key: string, fallback: number) => {
+        const v = Number(host.querySelector<HTMLInputElement>(`[data-t-gap="${key}"]`)?.value);
+        return Number.isFinite(v) && v >= 0 ? v : fallback;
+      };
+      const over = Math.max(0.05, field("over", GAP_OVER));
+      const keep = Math.min(field("keep", GAP_KEEP), over);
       const rate = engine.get("document").sampleRate;
       const ranges: { start: number; end: number }[] = [];
       for (let i = 0; i + 1 < words.length; i++) {
         const gap = words[i + 1].start - words[i].end;
-        if (gap > GAP_OVER * rate) ranges.push({ start: words[i].end + Math.round((GAP_KEEP * rate) / 2), end: words[i + 1].start - Math.round((GAP_KEEP * rate) / 2) });
+        if (gap > over * rate) ranges.push({ start: words[i].end + Math.round((keep * rate) / 2), end: words[i + 1].start - Math.round((keep * rate) / 2) });
       }
       cut(ranges, "long gaps");
     } else if (action === "transcribe") {

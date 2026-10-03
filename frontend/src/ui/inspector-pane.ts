@@ -39,7 +39,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges (RX's ambience match)">Fill with room tone</button></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select><button type="button" class="fw-ibtn" data-fx="similar" title="Mark every event like the one in the selected range (draw a range over one event first)">Find similar</button><button type="button" class="fw-ibtn" data-fx="restore" title="Put the clip's original audio back in the selected range, or the whole clip without a range">Restore original</button></div>
   <ol class="fw-chain" hidden></ol>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
   <div class="fw-analyze-buttons"><input type="text" class="fw-sam-desc" data-sam="desc" maxlength="80" placeholder="Describe a sound" title="What to isolate, for example: man speaking, car horn" aria-label="Sound to isolate"><button type="button" class="fw-ibtn" data-sam="go" title="Put the described sound and everything else on new tracks (SAM-Audio); a selected range marks where the sound occurs">Isolate sound</button></div>
@@ -66,6 +66,9 @@ const BODY = `
   <label class="fw-field"><span>Pan</span><input type="range" min="-1" max="1" step="0.01" data-f="pan" data-default="0"><output data-o="pan"></output></label>
   <label class="fw-field"><span>Duck under</span><select data-duck="control"></select><span></span></label>
   <label class="fw-field"><span>By</span><input type="range" min="3" max="30" step="1" value="12" data-duck="amount" data-default="12"><output data-duck-out>12 dB</output></label>
+  <label class="fw-field"><span>Fade down</span><input type="number" min="0" max="5" step="0.05" value="0.15" data-duck="attack" aria-label="Fade down, seconds"><span>s</span></label>
+  <label class="fw-field"><span>Fade up</span><input type="number" min="0" max="10" step="0.05" value="0.4" data-duck="release" aria-label="Fade up, seconds"><span>s</span></label>
+  <label class="fw-field"><span>Sensitivity</span><input type="number" min="3" max="50" step="1" value="20" data-duck="sensitivity" title="How far under the other track's loud level still counts as active (dB); more catches quieter speech" aria-label="Sensitivity, dB under the loud level"><span>dB</span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
   <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
   <div class="fw-rtfx-list" data-scope="track"></div>
@@ -427,7 +430,11 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const noise = noiseParams(target.clip.mediaId, name);
       const params = { ...(action === "apply" ? currentParams() : {}), ...noise };
       const withNoise = Object.keys(noise).length ? " with the learned noise profile" : "";
-      const res = await fetch(`/api/media/${target.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}`, { method: "POST" });
+      // AU-31: a range drawn with a frequency band limits any effect to that band (the effects made for a band set
+      // their own limits from it)
+      const ownBand = name === "band-gain" || name === "spot-heal" || name === "dialogue-contour";
+      const bandQuery = inRange?.band && !ownBand ? `&band_low=${inRange.band.lowHz}&band_high=${inRange.band.highHz}` : "";
+      const res = await fetch(`/api/media/${target.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}${bandQuery}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       if (inRange) {
@@ -572,6 +579,50 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       return;
     }
     const action = t.closest<HTMLElement>("[data-fx]")?.dataset.fx;
+    if (action === "similar" || action === "restore") {
+      const doc = engine.get("document");
+      const r = range;
+      const track = r ? doc.tracks.find((tr) => tr.id === r.trackId) : find(doc)?.track;
+      const clip = r && track ? track.clips.find((c) => c.start < r.end && r.start < c.start + c.length) : find(doc)?.clip;
+      if (!track || !clip) {
+        setText(notice, action === "similar" ? "Draw a range over one event first" : "Select a clip");
+        return;
+      }
+      if (action === "similar") {
+        // RX-22: events like the one in the range, marked where they sit on the timeline
+        if (!r) {
+          setText(notice, "Draw a range over one event first");
+          return;
+        }
+        const from = Math.max(r.start, clip.start);
+        const to = Math.min(r.end, clip.start + clip.length);
+        const res = await fetch(`/api/media/${clip.mediaId}/similar?start=${clip.sourceIn + from - clip.start}&length=${to - from}`);
+        const hits = (await res.json().catch(() => ({}))) as { at: number; score: number }[] | { detail?: unknown };
+        if (!res.ok || !Array.isArray(hits)) {
+          setText(notice, `Could not search: ${!Array.isArray(hits) && typeof hits.detail === "string" ? hits.detail : `the engine answered ${res.status}`}`);
+          return;
+        }
+        let marked = 0;
+        for (const h of hits) {
+          const at = clip.start + (h.at - clip.sourceIn);
+          if (at < clip.start || at >= clip.start + clip.length) continue;
+          marked += 1;
+          engine.dispatch({ type: "add-marker", at, label: `Similar ${marked} (${Math.round(h.score * 100)}%)` });
+        }
+        setText(notice, `Marked ${marked} event${marked === 1 ? "" : "s"} like the selection`);
+        return;
+      }
+      // RX-61: the clip's original audio back over the range (or the whole clip), one undo step
+      const original = clip.original ? doc.media[clip.original] : undefined;
+      if (!original) {
+        setText(notice, "This clip still has its original audio");
+        return;
+      }
+      if (r) engine.dispatch({ type: "set-range-media", trackId: track.id, clipId: clip.id, start: r.start, end: r.end, media: original });
+      else engine.dispatch({ type: "set-clip-media", trackId: track.id, clipId: clip.id, media: original });
+      setText(notice, r ? "Restored the original audio in the range" : "Restored the clip's original audio");
+      return;
+    }
     if (action === "chain-save" && chain.length) {
       // RX-55: the chain saved as a preset, its effects and their settings in order
       const name = window.prompt("Chain name", "")?.trim();
@@ -715,8 +766,12 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const duckControl = body.querySelector<HTMLSelectElement>('[data-duck="control"]');
   const duckAmount = body.querySelector<HTMLInputElement>('[data-duck="amount"]');
   const duckOut = body.querySelector<HTMLElement>("[data-duck-out]");
-  const DUCK_ATTACK = 0.15;
-  const DUCK_RELEASE = 0.4;
+  let DUCK_ATTACK = 0.15;
+  let DUCK_RELEASE = 0.4;
+  const duckNumber = (key: string, fallback: number, lo: number, hi: number) => {
+    const v = Number(body.querySelector<HTMLInputElement>(`[data-duck="${key}"]`)?.value);
+    return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
+  };
   const fillDuck = () => {
     if (!duckControl) return;
     const doc = engine.get("document");
@@ -747,7 +802,10 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const amount = Number(duckAmount?.value ?? 12);
     setText(notice, `Finding where ${controlName} is active...`);
     try {
-      const res = await fetch(`/api/render/activity?trackId=${encodeURIComponent(control)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) });
+      DUCK_ATTACK = duckNumber("attack", 0.15, 0, 5);
+      DUCK_RELEASE = duckNumber("release", 0.4, 0, 10);
+      const sensitivity = duckNumber("sensitivity", 20, 3, 50);
+      const res = await fetch(`/api/render/activity?trackId=${encodeURIComponent(control)}&sensitivity=${sensitivity}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown; regions?: [number, number][] };
       if (!res.ok || !out.regions) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       const merged: [number, number][] = [];

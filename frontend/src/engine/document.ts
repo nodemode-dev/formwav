@@ -51,6 +51,8 @@ export interface Clip {
   notes?: readonly NoteEvent[];
   /** A palette key for this clip alone, over its track's colour; absent follows the track. */
   color?: string;
+  /** The media this clip held before any effect replaced it (RX-61's Restore original); absent until one does. */
+  original?: string;
   start: number;
   length: number;
   sourceIn: number;
@@ -342,6 +344,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
               ...c,
               id,
               mediaId,
+              original: c.original ?? c.mediaId,
               start: a,
               length: b - a,
               sourceIn: c.sourceIn + offset,
@@ -394,7 +397,8 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           // A pitch render was made from the old media, so new media leaves the clip unpitched (set the pitch again).
           const { pitch: _p, pitchMediaId: _pm, ...base } = c;
           const r = before && before.frames > 0 && cmd.media.frames > 0 ? cmd.media.frames / before.frames : 1;
-          if (Math.abs(r - 1) < 1e-9) return { ...base, mediaId: cmd.media.id };
+          if (Math.abs(r - 1) < 1e-9) return { ...base, original: c.original ?? c.mediaId, mediaId: cmd.media.id };
+          delete (base as { original?: string }).original; // re-timed media no longer lines up with the original
           const scale = (n: number | undefined) => (n === undefined ? undefined : Math.max(0, Math.round(n * r)));
           return { ...base, mediaId: cmd.media.id, sourceIn: scale(c.sourceIn) ?? 0, length: Math.max(1, scale(c.length) ?? c.length), fadeIn: scale(c.fadeIn), fadeOut: scale(c.fadeOut), ...(c.envelope ? { envelope: c.envelope.map((p) => ({ at: scale(p.at) ?? 0, db: p.db })) } : {}) };
         }),

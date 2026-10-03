@@ -10,7 +10,7 @@ def _safe(name: str) -> str:
 
 
 @router.post("/render/activity")
-def track_activity(document: dict = Body(...), trackId: str = "", threshold: float | None = None, gap: float = 0.3) -> dict:
+def track_activity(document: dict = Body(...), trackId: str = "", threshold: float | None = None, gap: float = 0.3, sensitivity: float = 20.0) -> dict:
     """Where a track is active: rendered alone (others muted, solos cleared), silences over `gap` seconds below the
     threshold found by ffmpeg's silencedetect and inverted. The threshold defaults to the track's loud level (the 90th
     percentile of 50 ms RMS windows) minus 20 dB, within -60 to -20 dBFS: a fixed -40 dBFS missed the JFK recording's
@@ -39,7 +39,7 @@ def track_activity(document: dict = Body(...), trackId: str = "", threshold: flo
                                input=result["wav"], capture_output=True, timeout=900)
         levels = sorted(float(v) for v in re.findall(r"RMS_level=(-?[0-9.]+)", probe.stderr.decode(errors="replace")))
         loud = levels[int(0.9 * (len(levels) - 1))] if levels else -20.0
-        threshold = max(-60.0, min(-20.0, loud - 20.0))
+        threshold = max(-60.0, min(-10.0, loud - max(3.0, min(sensitivity, 50.0))))
     done = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-i", "pipe:0", "-af", f"silencedetect=noise={threshold}dB:d={gap}", "-f", "null", "-"],
                           input=result["wav"], capture_output=True, timeout=900)
     starts = [float(v) for v in re.findall(r"silence_start: (-?[0-9.]+)", done.stderr.decode(errors="replace"))]

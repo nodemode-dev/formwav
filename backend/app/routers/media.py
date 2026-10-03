@@ -397,10 +397,20 @@ def eq_match(media_id: str, reference: str, start: float | None = None, end: flo
 
 
 @router.post("/media/{media_id}/effect", status_code=201)
-def apply_effect(media_id: str, name: str, params: str = "") -> dict:
+def apply_effect(media_id: str, name: str, params: str = "", band_low: float | None = None, band_high: float | None = None) -> dict:
     import json
 
     from ..services import effects
+
+    if band_low is not None and band_high is not None:
+        # AU-31: any effect limited to a frequency band, the effect's change kept only inside it
+        try:
+            values = json.loads(params) if params else None
+            return effects.limit_to_band(media_id, effects.apply(media_id, name, values), float(band_low), float(band_high))
+        except KeyError as err:
+            raise HTTPException(404, "no media with that id") from err
+        except (media.MediaError, ValueError) as err:
+            raise HTTPException(422, str(err)) from err
 
     try:
         values = json.loads(params) if params else None
