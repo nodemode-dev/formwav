@@ -294,7 +294,8 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
         lambda v: "anull",
     ),
     "wow-flutter": (
-        {"low": ("Track from", 30, 12000, 500, "Hz"), "high": ("Track to", 30, 12000, 4000, "Hz"), "amount": ("Amount", 0, 100, 100, "%")},
+        {"low": ("Track from", 30, 12000, 500, "Hz"), "high": ("Track to", 30, 12000, 4000, "Hz"), "amount": ("Amount", 0, 100, 100, "%"),
+         "mode": ("Track (0 a steady tone in the band, 1 the whole spectrum)", 0, 1, 0, "", 1), "per_channel": ("Per channel (0 off, 1 on)", 0, 1, 0, "", 1)},
         lambda v: "anull",
     ),
     "dialogue-contour": (
@@ -578,41 +579,140 @@ def heal_painted(media_id: str, boxes: list) -> dict:
     return media.import_wav(f"{stem} (Heal brush{', filled' if filled else ''}).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
 
 
-def _wow_flutter(x, rate: int, v: dict):
-    """Wow and flutter removal (RX's Wow & Flutter): a steady component between Low and High Hz (a held note, a hum, a
-    tape's bias or test tone) is tracked every 5 ms (the strongest STFT peak, refined by a parabola through its log
-    magnitudes); its frequency over its median is the speed the recording drifted by, which shifts every component
-    alike, so resampling the audio by the inverse of that speed curve (cubic interpolation) undoes it. Amount scales the
-    correction. Positions are kept at frame resolution and the output is rendered a million samples at a time."""
+def _speed_from_peak(mono, rate: int, lo: float, hi: float, hop: int):
+    """RX-51, a steady component (a held note, a hum, a tape's bias or test tone) between lo and hi Hz: the strongest
+    peak each 5 ms, its frequency from the phase advance at that bin between frames (precise even in a short window),
+    over its median. The window is 4 periods of lo, at least 1024 points: short enough to follow flutter well past 6 Hz
+    (2048 points and more, as before, averaged a 15 Hz flutter away). None when the band holds too little."""
     import numpy as np
 
-    lo, hi = sorted((float(v["low"]), float(v["high"])))
-    # the window spans about 20 periods of the lowest frequency tracked and no more: a long window averages flutter
-    # away (8192 points at 48 kHz is one whole period of 6 Hz flutter), so a higher reference tracks faster drift
-    n = int(min(16384, max(2048, 2 ** np.ceil(np.log2(20 * rate / max(lo, 1.0))))))
-    hop = max(1, rate // 200)
+    n = int(min(16384, max(512, 2 ** np.ceil(np.log2(4 * rate / max(lo, 1.0))))))
     win = np.hanning(n)
-    mono = x.mean(axis=1).astype(np.float64)
     padded = np.concatenate([np.zeros(n // 2), mono, np.zeros(n // 2)])
     frames = np.lib.stride_tricks.sliding_window_view(padded, n)[::hop][: len(mono) // hop + 1]
     b0, b1 = max(1, int(lo * n / rate)), min(n // 2 - 1, int(hi * n / rate) + 1)
     if b1 - b0 < 3 or len(frames) < 8:
-        return x.astype(np.float32)
-    freq = np.empty(len(frames))
+        return None
+    # the component followed is the most persistent in the band over the whole recording, then its peak within 3% of
+    # it each frame (each frame's strongest flipped between two equal tones, and the jumps left holes in the curve)
+    power = np.zeros(b1 - b0)
     for s in range(0, len(frames), 512):
-        mag = np.log(np.abs(np.fft.rfft(frames[s : s + 512] * win, axis=1))[:, b0 - 1 : b1 + 1] + 1e-12)
-        k = np.argmax(mag[:, 1:-1], axis=1) + 1
-        a, b, c = mag[np.arange(len(k)), k - 1], mag[np.arange(len(k)), k], mag[np.arange(len(k)), k + 1]
+        power += (np.abs(np.fft.rfft(frames[s : s + 512] * win, axis=1)[:, b0:b1]) ** 2).sum(axis=0)
+    kc = b0 + int(np.argmax(power))
+    w0, w1 = max(b0, int(kc * 0.97) - 1), min(b1, int(np.ceil(kc * 1.03)) + 2)
+    freq = np.empty(len(frames))
+    prev = None
+    for s in range(0, len(frames), 512):
+        spec = np.fft.rfft(frames[s : s + 512] * win, axis=1)
+        before = np.vstack([prev[None, :] if prev is not None else spec[:1], spec[:-1]])
+        k = np.argmax(np.abs(spec[:, w0:w1]), axis=1) + w0
+        rows = np.arange(len(k))
+        dphi = np.angle(spec[rows, k]) - np.angle(before[rows, k]) - 2 * np.pi * k * hop / n
+        dphi = (dphi + np.pi) % (2 * np.pi) - np.pi
+        freq[s : s + len(k)] = (k + dphi * n / (2 * np.pi * hop)) * rate / n
+        prev = spec[-1]
+    freq[0] = freq[1]
+    # a phase advance measures the stretch between two frames: moved half a hop, onto the frames' centres
+    freq = np.concatenate([0.5 * (freq[1:] + freq[:-1]), freq[-1:]])
+    ratio = freq / np.median(freq)
+    return np.where(np.abs(ratio - 1) > 0.05, 1.0, ratio)  # a jump to another component is not a speed change
+
+
+def _speed_from_spectrum(mono, rate: int, hop: int):
+    """RX-51, no steady component needed: a change of speed scales every frequency alike, a shift along a log-frequency
+    axis, so each 5 ms frame's log spectrum (80 Hz to 8 kHz, 300 bins an octave, levelled) is aligned against the
+    average of the frames within a second either side, the best shift up to 3% found by correlation and a parabola.
+    A second pass aligns against an average of the first pass's corrected spectra, which is sharper. Quiet frames keep
+    speed 1. Notes, chords and harmonics all take part, so music or speech without a held tone can be corrected."""
+    import numpy as np
+
+    # 8192 points: 6 Hz bins, against 23 Hz at 2048, which at 220 Hz were 10% wide and could not see a 0.4% shift; the
+    # upper harmonics then resolve about 0.2%; its 171 ms is short beside wow's periods
+    n, bpo = (8192 if rate > 32000 else 4096), 300
+    top = min(8000.0, 0.4 * rate)
+    grid = 80.0 * 2 ** (np.arange(int(bpo * np.log2(top / 80.0))) / bpo)
+    padded = np.concatenate([np.zeros(n // 2), mono, np.zeros(n // 2)])
+    frames = np.lib.stride_tricks.sliding_window_view(padded, n)[::hop][: len(mono) // hop + 1]
+    if len(frames) < 16:
+        return None
+    win = np.hanning(n)
+    bins = np.fft.rfftfreq(n, 1 / rate)
+    logs = np.empty((len(frames), len(grid)))
+    energy = np.empty(len(frames))
+    for s in range(0, len(frames), 256):
+        mag = np.abs(np.fft.rfft(frames[s : s + 256] * win, axis=1))
+        energy[s : s + len(mag)] = (mag**2).sum(axis=1)
+        logs[s : s + len(mag)] = np.sqrt(np.stack([np.interp(grid, bins, m) for m in mag]))
+    logs -= logs.mean(axis=1, keepdims=True)
+    logs /= logs.std(axis=1, keepdims=True) + 1e-9
+    reach = int(np.ceil(bpo * np.log2(1.03)))
+    span = max(1, int(round(1.0 * rate / hop)))
+    kernel = np.ones(2 * span + 1) / (2 * span + 1)
+
+    def align(reference):
+        corr = np.empty((len(frames), 2 * reach + 1))
+        core = logs[:, reach:-reach]
+        for j, shift in enumerate(range(-reach, reach + 1)):
+            corr[:, j] = (core * reference[:, reach - shift : reference.shape[1] - reach - shift]).mean(axis=1)
+        k = np.clip(np.argmax(corr, axis=1), 1, 2 * reach - 1)
+        rows = np.arange(len(k))
+        a, b, c = corr[rows, k - 1], corr[rows, k], corr[rows, k + 1]
         den = a - 2 * b + c
         off = np.where(np.abs(den) > 1e-12, 0.5 * (a - c) / np.where(np.abs(den) > 1e-12, den, 1), 0.0)
-        freq[s : s + len(k)] = (b0 - 1 + k + off) * rate / n
-    ratio = freq / np.median(freq)
-    ratio = np.where(np.abs(ratio - 1) > 0.08, 1.0, ratio)  # a jump to another component is not a speed change
-    ratio = np.convolve(np.pad(ratio, 2, mode="edge"), np.ones(5) / 5, mode="valid")
-    ratio = 1 + (v["amount"] / 100.0) * (ratio - 1)
+        # a parabola's peak lies within a bin of the best shift; a nearly flat correlation (a quiet frame) can put it
+        # anywhere, and once put a ratio at 1e24
+        return k - reach + np.clip(off, -1.0, 1.0)
+
+    def smear(values):
+        return np.stack([np.convolve(np.pad(values[:, i], span, mode="edge"), kernel, mode="valid") for i in range(values.shape[1])], axis=1)
+
+    # each pass aligns against a reference straightened by the last estimate: the first reference still carries the
+    # wow and pulls the estimate short (measured 26% short after two passes), so the passes converge on the full speed
+    shift = align(smear(logs))
+    for _ in range(3):
+        straight = np.stack([np.interp(np.arange(logs.shape[1]) + s, np.arange(logs.shape[1]), row) for row, s in zip(logs, shift)])
+        shift = align(smear(straight))
+    ratio = 2 ** (shift / bpo)
+    ratio = np.where(energy < 1e-4 * energy.max(), 1.0, ratio)
+    return np.clip(ratio / np.median(ratio), 0.97, 1.03)
+
+
+def _wow_flutter(x, rate: int, v: dict):
+    """Wow and flutter removal (RX's Wow & Flutter): the recording's speed is tracked every 5 ms, from a steady
+    component between Low and High Hz (mode 0, _speed_from_peak) or from the whole spectrum with no steady tone needed
+    (mode 1, _speed_from_spectrum), for the mix or, with Per channel, for each channel apart (tracks of a tape can
+    drift differently); resampling by the inverse of that speed curve (cubic interpolation) undoes it. Amount scales
+    the correction. Positions are kept at frame resolution and the output is rendered a million samples at a time."""
+    import numpy as np
+
+    lo, hi = sorted((float(v["low"]), float(v["high"])))
+    hop = max(1, rate // 200)
+    mode, per_channel = int(round(float(v.get("mode", 0)))), int(round(float(v.get("per_channel", 0))))
+    sources = [x[:, c].astype(np.float64) for c in range(x.shape[1])] if per_channel and x.shape[1] > 1 else [x.mean(axis=1).astype(np.float64)]
+    outs = []
+    for c, mono in enumerate(sources):
+        ratio = _speed_from_spectrum(mono, rate, hop) if mode == 1 else _speed_from_peak(mono, rate, lo, hi, hop)
+        part = x[:, c : c + 1] if len(sources) > 1 else x
+        if ratio is None:
+            outs.append(part.astype(np.float32))
+            continue
+        ratio = np.convolve(np.pad(ratio, 1, mode="edge"), np.ones(3) / 3, mode="valid")
+        ratio = 1 + (v["amount"] / 100.0) * (ratio - 1)
+        outs.append(_resample_by_speed(part, ratio, hop))
+    if len(outs) == 1:
+        return outs[0]
+    shortest = min(len(o) for o in outs)
+    return np.hstack([o[:shortest] for o in outs])
+
+
+def _resample_by_speed(x, ratio, hop: int):
+    """The audio read at the speed curve `ratio` (one value a hop), cubic interpolation, a million samples at a time."""
+    import numpy as np
+
+    mono_len = len(x)
     centres = np.arange(len(ratio)) * float(hop)
     tau = np.concatenate([[0.0], np.cumsum(ratio[:-1] * hop)])  # source time at each frame centre, in samples
-    last = len(mono) - 1
+    last = mono_len - 1
     if centres[-1] < last:  # the table runs to the last sample, so interpolation never extrapolates
         tau = np.append(tau, tau[-1] + ratio[-1] * (last - centres[-1]))
         centres = np.append(centres, float(last))
