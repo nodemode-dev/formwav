@@ -47,6 +47,9 @@ export interface NoteEvent {
 export interface Clip {
   id: string;
   mediaId: string;
+  /** PT-33: the clip's own realtime effects (Pro Tools' clip effects), its EQ and a compressor, ahead of its track's
+   *  inserts; the compressor sees the clip after its clip gain, not its track's fader. */
+  fx?: TrackFx[];
   /** A note clip's notes, the truth its media renders (the built-in instrument); absent on audio clips. */
   notes?: readonly NoteEvent[];
   /** A palette key for this clip alone, over its track's colour; absent follows the track. */
@@ -325,7 +328,8 @@ export type Command =
   | { type: "add-marker"; at: number; label: string; clipId?: string }
   | { type: "set-snap"; grid: boolean; bars: boolean }
   | { type: "set-track-view"; trackId: string; spectrogram: boolean }
-  | { type: "set-track-send"; trackId: string; busId: string; gainDb: number | null };
+  | { type: "set-track-send"; trackId: string; busId: string; gainDb: number | null }
+  | { type: "set-clip-fx"; trackId: string; clipId: string; fx: TrackFx[] };
 
 export function emptyDocument(sampleRate: number): SessionDoc {
   return { sampleRate, tracks: [], media: {}, markers: [] };
@@ -1023,6 +1027,21 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       });
       return changed ? { ...doc, regions: [...regions].sort((a, b) => a.start - b.start) } : doc;
     }
+    case "set-clip-fx":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const target = t.clips.find((c) => c.id === cmd.clipId);
+        if (!target) return t;
+        const fx = cleanFx(cmd.fx);
+        if (JSON.stringify(fx) === JSON.stringify(target.fx ?? [])) return t;
+        return {
+          ...t,
+          clips: t.clips.map((c) => {
+            if (c.id !== cmd.clipId) return c;
+            const { fx: _old, ...rest } = c;
+            return fx.length ? { ...rest, fx } : rest;
+          }),
+        };
+      });
     case "set-track-send": {
       if (!(doc.buses ?? []).some((b) => b.id === cmd.busId)) return doc;
       return mapTrack(doc, cmd.trackId, (t) => {

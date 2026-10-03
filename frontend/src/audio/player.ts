@@ -116,6 +116,27 @@ export function timeTrackLength(end: number, points: readonly { at: number; spee
   return total;
 }
 
+/** PT-33: a clip's chain in the core: its own filters, then its own compressor, then its track's filters (Pro Tools'
+ *  clip effects ahead of the track's inserts). The core applies a clip's gain after its chain, so the compressor's
+ *  threshold is lowered by the clip gain: compressing the clip at its clip gain is the same as compressing the file at
+ *  that threshold and applying the gain after. The track's automation stage numbers move past the clip's stages. */
+export function clipChain(
+  clip: { fx?: readonly TrackFx[]; gainDb: number },
+  trackFx: number[],
+  trackAuto: { stage: number; param: number; points: number[] }[],
+): { fx?: number[]; fxAuto?: { stage: number; param: number; points: number[] }[]; comp?: number[] } {
+  const own = flatFx(clip.fx);
+  const comp = clip.fx?.find((f): f is Extract<TrackFx, { kind: "compressor" }> => f.kind === "compressor" && !f.bypass);
+  const ahead = own.length / 4 + (comp ? 1 : 0);
+  const fx = [...own, ...trackFx];
+  const fxAuto = trackAuto.map((a) => ({ ...a, stage: a.stage + ahead }));
+  return {
+    ...(fx.length ? { fx } : {}),
+    ...(fxAuto.length ? { fxAuto } : {}),
+    ...(comp ? { comp: [own.length / 4, comp.thresholdDb - clip.gainDb, comp.ratio, comp.attackMs, comp.releaseMs, comp.makeupDb] } : {}),
+  };
+}
+
 export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPlan {
   const soloed = doc.tracks.some((t) => t.solo);
   const busIndex = new Map<string, number>();
@@ -170,8 +191,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         pan: panPoints ? 0 : track.pan ?? 0,
         gainPoints: envPoints,
         panPoints,
-        fx: fxFlat.length ? fxFlat : undefined,
-        fxAuto: fxAuto.length ? fxAuto : undefined,
+        ...clipChain(clip, fxFlat, fxAuto),
         fadeIn: clip.fadeIn ?? 0,
         fadeOut: clip.fadeOut ?? 0,
         fadeShape: FADE_SHAPES[clip.fadeShape ?? "linear"] ?? 0,

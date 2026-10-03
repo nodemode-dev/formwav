@@ -22,6 +22,7 @@ interface CoreExports {
   fw_add_bus(player: number, id: number, gain: number, pan: number): void;
   fw_set_rate(player: number, rate: number): void;
   fw_add_clip_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
+  fw_add_clip_comp(player: number, thresholdDb: number, ratio: number, attackMs: number, releaseMs: number, makeupDb: number): number;
   fw_add_clip_fx_auto(player: number, stage: number, param: number, envelope: number): number;
   fw_clear_master_fx(player: number): void;
   fw_add_master_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
@@ -59,6 +60,8 @@ export interface WorkletClip {
   fx?: number[];
   /** Those filters' parameter automation (PT-19): stage, parameter (0 frequency, 1 gain, 2 Q), flat [time, value, ...]. */
   fxAuto?: { stage: number; param: number; points: number[] }[];
+  /** PT-33: the clip's own compressor, [filters ahead of it, threshold dB, ratio, attack ms, release ms, makeup dB]. */
+  comp?: number[];
 }
 
 export interface WorkletBus {
@@ -229,7 +232,13 @@ class PlayerProcessor extends AudioWorkletProcessor {
           const gainEnv = envelope(c.gainPoints, true);
           const panEnv = envelope(c.panPoints, false);
           core.fw_add_clip(this.player, c.source, c.start, c.sourceIn, c.length, c.gain, c.pan, c.fadeIn, c.fadeOut, c.fadeShape, c.bus, c.track, gainEnv, panEnv);
-          if (c.fx) for (let k = 0; k + 3 < c.fx.length; k += 4) core.fw_add_clip_fx(this.player, c.fx[k], c.fx[k + 1], c.fx[k + 2], c.fx[k + 3]);
+          // PT-33: the clip's own compressor goes in after `at` of its filters (its own EQ, ahead of its track's)
+          const n = c.fx ? Math.floor(c.fx.length / 4) : 0;
+          const at = c.comp && c.comp.length === 6 ? Math.min(n, Math.max(0, Math.floor(c.comp[0]))) : -1;
+          for (let i = 0; i <= n; i++) {
+            if (i === at && c.comp) core.fw_add_clip_comp(this.player, c.comp[1], c.comp[2], c.comp[3], c.comp[4], c.comp[5]);
+            if (i < n && c.fx) core.fw_add_clip_fx(this.player, c.fx[4 * i], c.fx[4 * i + 1], c.fx[4 * i + 2], c.fx[4 * i + 3]);
+          }
           for (const a of c.fxAuto ?? []) {
             const env = envelope(a.points, false);
             if (env) core.fw_add_clip_fx_auto(this.player, a.stage, a.param, env);

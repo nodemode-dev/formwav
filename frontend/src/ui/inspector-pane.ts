@@ -76,6 +76,11 @@ const BODY = `
   <div class="fw-rtfx-list" data-scope="track"></div>
   <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
+<div class="fw-insp-section fw-insp-clipfx">
+  <div class="fw-insp-head" title="Realtime EQ and dynamics on the selected clip alone, ahead of its track's effects; the compressor follows the clip gain, not the fader">Clip effects</div>
+  <div class="fw-rtfx-list" data-scope="clip"></div>
+  <div class="fw-analyze-buttons" data-scope="clip"><select data-rtfx="kind" aria-label="Realtime effect to add to the clip"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+</div>
 <div class="fw-insp-section fw-insp-bus" hidden>
   <div class="fw-insp-head fw-bus-head">Bus effects</div>
   <div class="fw-rtfx-list" data-scope="bus"></div>
@@ -1394,9 +1399,10 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
 
   // Realtime effects (Audacity's realtime stacks): filters the core runs live, in playback and export alike, on the
   // selected track (run per clip) or on the master (the summed mix, before the master fader); rows can be reordered.
-  type FxScope = "track" | "master" | "bus";
+  type FxScope = "track" | "master" | "bus" | "clip";
   const fxLists: { scope: FxScope; list: HTMLElement | null; sig: string }[] = [
     { scope: "track", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="track"]'), sig: "" },
+    { scope: "clip", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="clip"]'), sig: "" },
     { scope: "bus", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="bus"]'), sig: "" },
     { scope: "master", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="master"]'), sig: "" },
   ];
@@ -1579,6 +1585,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   };
   const getFx = (scope: FxScope): readonly TrackFx[] => {
     const doc = engine.get("document");
+    if (scope === "clip") return find(doc)?.clip.fx ?? [];
     return scope === "master" ? doc.masterFx ?? [] : scope === "bus" ? currentBus()?.fx ?? [] : find(doc)?.track.fx ?? [];
   };
   const renderFxList = (entry: (typeof fxLists)[number], force: boolean) => {
@@ -1644,11 +1651,16 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       return;
     }
     const hit = find(engine.get("document"));
+    if (hit && scope === "clip") {
+      // PT-33: the selected clip's own realtime effects
+      engine.dispatch({ type: "set-clip-fx", trackId: hit.track.id, clipId: hit.clip.id, fx: mutate([...(hit.clip.fx ?? [])]) });
+      return;
+    }
     if (hit) engine.dispatch({ type: "set-track-fx", trackId: hit.track.id, fx: mutate([...(hit.track.fx ?? [])]) });
   };
   const scopeOf = (el: HTMLElement): FxScope | null => {
     const s = el.closest<HTMLElement>("[data-scope]")?.dataset.scope;
-    return s === "track" || s === "master" || s === "bus" ? s : null;
+    return s === "track" || s === "master" || s === "bus" || s === "clip" ? s : null;
   };
   body.addEventListener("change", (e) => {
     const input = e.target as HTMLInputElement;

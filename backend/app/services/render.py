@@ -72,6 +72,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     envelopes: list[tuple] = []
     fx: list[tuple] = []
     fx_auto: list[tuple] = []
+    comps: list[tuple] = []  # PT-33: (clip index, filters ahead of it, threshold dB, ratio, attack ms, release ms, makeup dB)
     chains: list[tuple] = list(bus_chains)
     end = 0
     skipped = 0
@@ -134,8 +135,23 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
                 envelopes.append((_clip_envelope(own, track_pts), True))
                 clip_env = len(envelopes)
             clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, track_pan, int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index, clip_env, pan_env))
-            fx.extend((len(clips) - 1, *stage) for stage in stages)
-            fx_auto.extend((len(clips) - 1, si, param, env) for si, param, env in auto_envs)
+            # PT-33, as the player's clipChain: the clip's own filters, then its own compressor (its threshold lowered by
+            # the clip gain, which the core applies after the chain), then the track's filters, whose automation moves
+            # past the clip's stages
+            own = [s for s in (_stage(f) for f in (clip.get("fx") or [])) if s]
+            own_filters = [s[:4] for s in own if s[0] != 6]
+            own_comp = next((s for s in own if s[0] == 6), None)
+            ahead = len(own_filters) + (1 if own_comp else 0)
+            chain = own_filters + stages
+            comp = (len(own_filters), own_comp[1] - float(clip.get("gainDb") or 0), *own_comp[2:6]) if own_comp else None
+
+            def add_chain(index: int) -> None:
+                fx.extend((index, *stage) for stage in chain)
+                fx_auto.extend((index, si + ahead, param, env) for si, param, env in auto_envs)
+                if comp:
+                    comps.append((index, *comp))
+
+            add_chain(len(clips) - 1)
             # PT-18, post-fader sends (as the player plans them): the clip again into the send's bus at the send level,
             # with its own copy of the inserts and their automation
             main = clips[-1]
@@ -144,10 +160,9 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
                     continue
                 level = 10 ** (float(send.get("gainDb", 0.0)) / 20)
                 clips.append((*main[:4], main[4] * level, *main[5:9], buses[send["busId"]][0], *main[10:]))
-                fx.extend((len(clips) - 1, *stage) for stage in stages)
-                fx_auto.extend((len(clips) - 1, si, param, env) for si, param, env in auto_envs)
+                add_chain(len(clips) - 1)
             end = max(end, start + length)
-    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains, fx_auto
+    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains, fx_auto, comps
 
 
 def wav_float32_stereo(interleaved: bytes, rate: int) -> bytes:
@@ -164,7 +179,7 @@ def dbfs(peak: float) -> str:
 
 def render(doc: object) -> dict:
     native = media._require_core()
-    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto = plan(doc)
+    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps = plan(doc)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -173,7 +188,7 @@ def render(doc: object) -> dict:
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
     chains = chains + [(2, 0, *s) for s in (_stage(f) for f in (doc.get("masterFx") or [])) if s]
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps)
     frames = max(1, end)
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:
