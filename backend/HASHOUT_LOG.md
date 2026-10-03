@@ -943,3 +943,10 @@ Both were fixed filters over the whole clip, so clean low end between plosives o
 - logged: v1.41.0 (in progress) · 2026-10-02
 
 A module chain is saved as a preset with effect "chain" and its steps in order, each an effect, a label and named numbers (1 to 16 steps, the same rules as a preset's settings); Save chain asks for a name as an effect preset does, and the Saved chains menu loads one into the chain, replacing it. Verified through the engine: a two-step chain preset (Amplify at 6 dB, Invert) stored and read back with its steps; steps on an ordinary effect refused with 422. Not yet verified: the interface's save, clear and load in the browser (the dev server had stopped when the test ran); RX-55 stays partial until that passes. The interface builds and type-checks.
+
+### module chains saved as presets, the interface verified (RX-55)
+- refers-to: frontend src/ui/inspector-pane.ts :: Save chain, the Saved chains menu, loading; app/routers/presets.py :: `_clean`
+- kind: explainer
+- logged: v1.41.0 (in progress) · 2026-10-02
+
+The browser test the previous entry left pending, run with the dev server up: in Chromium at 1288 by 683 a chain of Amplify (6 dB) and Invert was saved as "Voice cleanup" through the name prompt, cleared (no steps), found in the Saved chains menu and loaded back with both steps; applied, the loaded chain gave output over input of -1.9953 (+6.00 dB, inverted) with a residual of 2.77e-08, so the steps kept their settings; no page errors.
