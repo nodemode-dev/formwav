@@ -1,6 +1,6 @@
 [package]
 name = "formwav-dsp"
-version = "1.44.0"
+version = "1.45.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "formwav audio core: graph, DSP and plugin hosting, built native, as a Python module and to wasm32"
