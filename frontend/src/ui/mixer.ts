@@ -20,6 +20,7 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
     `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute"><span class="fw-glyph-off">${fcIcon("speaker")}</span><span class="fw-glyph-on">${fcIcon("mute")}</span></button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo"${kind !== "track" ? " hidden" : ""}>${fcIcon("headphones")}</button></div>` +
     `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>` +
     `<select class="fw-strip-vca" aria-label="VCA"${kind !== "track" ? " hidden" : ""}></select>` +
+    `<select class="fw-strip-auto" aria-label="Automation mode" title="Read plays the volume automation; Write, Touch, Latch and Trim record the fader into it while playing"${kind !== "track" ? " hidden" : ""}><option value="read">Read</option><option value="write">Write</option><option value="touch">Touch</option><option value="latch">Latch</option><option value="trim">Trim</option></select>` +
     `<button type="button" class="fw-ibtn fw-strip-remove"${kind === "bus" || kind === "vca" ? "" : " hidden"} title="Remove; its tracks go back to the master or leave the VCA">Remove</button>`;
   return node;
 }
@@ -159,11 +160,72 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     const id = node?.dataset.key;
     return node && id ? { node, id, bus: node.dataset.kind === "bus" } : null;
   };
+  // PT-43, automation modes on a track's fader while playing: Write records it from the start of play, Touch while it
+  // is held, Latch from the first touch until stop (holding the last value), Trim offsets the existing automation by the
+  // fader's move; at stop each pass replaces the automation in the span it covered, one undo step for all tracks
+  type Pass = { mode: string; points: { time: number; value: number }[]; from: number; to: number | null; touching: boolean; touchedOnce: boolean; trimFrom: number; base: { time: number; value: number }[]; staticDb: number };
+  const passes = new Map<string, Pass>();
+  const modeOf = (id: string) => panel.querySelector<HTMLSelectElement>(`.fw-strip[data-key="${id}"] .fw-strip-auto`)?.value ?? "read";
+  const faderOf = (id: string) => Number(panel.querySelector<HTMLInputElement>(`.fw-strip[data-key="${id}"] .fw-strip-fader`)?.value ?? 0);
+  const valueAt = (pts: { time: number; value: number }[], t: number, fallback: number) => {
+    if (!pts.length) return fallback;
+    if (t <= pts[0].time) return pts[0].value;
+    for (let i = 1; i < pts.length; i++) if (t <= pts[i].time) return pts[i - 1].value + ((pts[i].value - pts[i - 1].value) * (t - pts[i - 1].time)) / Math.max(1, pts[i].time - pts[i - 1].time);
+    return pts[pts.length - 1].value;
+  };
+  const passFor = (id: string, mode: string, at: number) => {
+    let p = passes.get(id);
+    if (!p) {
+      const track = engine.get("document").tracks.find((t) => t.id === id);
+      p = { mode, points: [], from: at, to: null, touching: false, touchedOnce: false, trimFrom: faderOf(id), base: [...(track?.automation?.volume ?? [])], staticDb: track?.gainDb ?? 0 };
+      passes.set(id, p);
+    }
+    return p;
+  };
+  const record = (id: string, p: Pass, at: number) => {
+    const last = p.points[p.points.length - 1];
+    if (last && at - last.time < engine.get("document").sampleRate * 0.02) return;
+    const fader = faderOf(id);
+    const value = p.mode === "trim" ? valueAt(p.base, at, p.staticDb) + (fader - p.trimFrom) : fader;
+    p.points.push({ time: Math.round(at), value: Math.round(value * 100) / 100 });
+  };
   panel.addEventListener("input", (e) => {
     const s = stripOf(e.target);
     if (!s || !(e.target as HTMLElement).classList.contains("fw-strip-fader")) return;
     s.node.dataset.dragging = "fader";
     setText(s.node.querySelector(".fw-strip-db"), dbText(Number((e.target as HTMLInputElement).value)));
+    const mode = s.node.dataset.kind === "track" ? modeOf(s.id) : "read";
+    const transport = engine.get("transport");
+    if (mode === "read" || !transport.playing) return;
+    const p = passFor(s.id, mode, transport.positionSamples);
+    if (!p.touching) {
+      p.touching = true;
+      p.to = null;
+      if (mode === "trim") p.trimFrom = faderOf(s.id) - (Number((e.target as HTMLInputElement).value) - faderOf(s.id));
+      if (!p.touchedOnce && mode !== "write") p.from = transport.positionSamples;
+      p.touchedOnce = true;
+    }
+    record(s.id, p, transport.positionSamples);
+  });
+  let wasPlaying = false;
+  engine.subscribe("transport", () => {
+    const transport = engine.get("transport");
+    const doc = engine.get("document");
+    if (transport.playing) {
+      if (!wasPlaying) for (const t of doc.tracks) if (modeOf(t.id) === "write") passFor(t.id, "write", transport.positionSamples);
+      for (const [id, p] of passes) if (p.mode === "write" || (p.mode === "latch" && p.touchedOnce) || p.touching) record(id, p, transport.positionSamples);
+    } else if (wasPlaying && passes.size) {
+      const commands = [...passes.entries()].flatMap(([id, p]) => {
+        const end = p.to ?? transport.positionSamples;
+        const kept = p.base.filter((q) => q.time < p.from || q.time > end);
+        const written = p.points.filter((q) => q.time >= p.from && q.time <= end);
+        if (!written.length) return [];
+        return [{ type: "set-automation" as const, trackId: id, param: "volume" as const, points: [...kept, ...written].sort((a, b) => a.time - b.time) }];
+      });
+      passes.clear();
+      if (commands.length) engine.dispatch({ type: "batch", commands });
+    }
+    wasPlaying = transport.playing;
   });
   panel.addEventListener("change", (e) => {
     const s = stripOf(e.target);
@@ -171,6 +233,13 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     if (!s) return;
     if (el.classList.contains("fw-strip-fader")) {
       delete s.node.dataset.dragging;
+      const pass = s.node.dataset.kind === "track" ? passes.get(s.id) : undefined;
+      if (pass) {
+        // PT-43: the fader was recording: Touch and Trim stop writing at release, Latch keeps the last value until stop
+        pass.touching = false;
+        if (pass.mode === "touch" || pass.mode === "trim") pass.to = engine.get("transport").positionSamples;
+        return;
+      }
       const gainDb = Number(el.value);
       if (s.node.dataset.kind === "master") engine.dispatch({ type: "set-master-gain", gainDb });
       else if (s.node.dataset.kind === "vca") engine.dispatch({ type: "set-vca-gain", vcaId: s.id, gainDb });

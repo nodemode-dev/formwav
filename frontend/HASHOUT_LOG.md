@@ -2053,3 +2053,10 @@ The row listed chop and in-editor controls as missing, though all four sample ed
 - logged: v1.46.0 (in progress) · 2026-10-02
 
 The dock's Float button moves the shown panel into its own window, dragged by its title bar and resized from its corner, several at once; a floating panel is left out of the dock's one-at-a-time rule, its window follows the panel's own toggle, and its Dock button returns it. The floating set and places are kept between visits (restored closed until opened), and a saved layout captures them and restores them exactly. Verified in Chromium at 1288 by 800: Spectrum floated (its tab hidden); Notes opened in the dock beside it with both open; the window dragged from 364, 96 to 164, 206; a layout saved; Dock returned Spectrum to its tab; choosing the saved layout floated it again at 164, 206; no page errors; the audits clean.
+
+### automation write modes on the mixer fader (PT-43): Touch, Latch and Write verified, Trim faulty
+- refers-to: src/ui/mixer.ts :: the strip's automation mode menu, `passes`, `record`, the commit at stop, the release handling
+- kind: warning-context
+- logged: v1.46.0 (in progress) · 2026-10-02
+
+While playing, a track strip's fader in Write, Touch, Latch or Trim records into the volume automation, each pass replacing the automation in its span at stop, one undo step. Verified with real playback in Chromium on an 8 s tone: Touch wrote 39 points from the first touch at 0.98 s to the release at 1.79 s, stepping -3 to -12, and one undo removed them; Latch wrote from 0.99 s through the release to the stop at 2.99 s, holding -12; Write wrote from the start of play (0 s) to the stop, -12 then -6 after the move; no page errors. Fault, not yet fixed: Trim changed nothing, because its offset is taken from the fader's value before the touch, read in the input event after the fader has already moved, so the offset is always zero; the fix is to remember each fader's last committed value and offset from it. PT-43 stays partial until Trim is fixed and verified.
