@@ -464,6 +464,21 @@ def share_video(payload: dict) -> Response:
     return Response(content=mp4, media_type="video/mp4", headers={"Content-Disposition": 'attachment; filename="formwav-share.mp4"'})
 
 
+@router.post("/share/into-video")
+def share_into_video(payload: dict) -> Response:
+    """AP-02: {"document", "mediaId" (the audio a video was imported as), "at" (session seconds of the video's first
+    frame)}: the video with the session's mix as its audio, the picture copied."""
+    from ..services import share
+
+    try:
+        mp4 = share.into_video(payload.get("document"), str(payload.get("mediaId", "")), float(payload.get("at") or 0.0))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
+    return Response(content=mp4, media_type="video/mp4", headers={"Content-Disposition": 'attachment; filename="formwav-video.mp4"'})
+
+
 @router.post("/media/{media_id}/warp", status_code=201)
 def warp_media(media_id: str, payload: dict) -> dict:
     """PT-09: {"segments": [{"from", "to", "length"}, ...]} in seconds, the media re-timed piecewise between warp

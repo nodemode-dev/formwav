@@ -58,6 +58,34 @@ def _ass(lines: list[tuple[float, float, str]], width: int, height: int) -> str:
     return head + "".join(f"Dialogue: 0,{_clock(a)},{_clock(b)},Caption,,0,0,0,,{clean(t)}\n" for a, b, t in lines if b > a)
 
 
+def into_video(doc: object, media_id: str, at: float = 0.0) -> bytes:
+    """AP-02: the session's mix written back into the video `media_id`'s audio came from: the picture copied untouched
+    (re-encoded only if its codec cannot go into MP4), the audio replaced by the mix from `at` seconds (where the video's
+    first frame falls in the session; before 0 the mix is delayed instead), padded with silence to the video's end."""
+    from ..core.paths import media_dir
+
+    info = media.media_info(media_id)
+    suffix = info.get("video")
+    source = media_dir() / f"{media_id}.video{suffix}" if suffix else None
+    if not source or not source.exists():
+        raise media.MediaError("this audio did not come from a video, or its video is no longer stored")
+    mix = render.render(doc)
+    with tempfile.TemporaryDirectory() as tmp:
+        src, out = Path(tmp) / "mix.wav", Path(tmp) / "out.mp4"
+        src.write_bytes(mix["wav"])
+        lead = ["-ss", f"{at:.3f}"] if at > 0 else []
+        pad = f"adelay={round(-at * 1000)}:all=1,apad" if at < 0 else "apad"
+        for video_codec in (["-c:v", "copy"], ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"]):
+            done = subprocess.run(
+                [media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(source), *lead, "-i", str(src),
+                 "-map", "0:v:0", "-map", "1:a:0", *video_codec, "-af", pad, "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(out)],
+                capture_output=True, timeout=1800,
+            )
+            if done.returncode == 0 and out.exists():
+                return out.read_bytes()
+        raise media.MediaError(f"the audio could not be written into the video: {done.stderr.decode(errors='replace').strip()[-300:]}")
+
+
 def video(doc: object, words: list, layout: str = "square", title: str = "", start: float | None = None, end: float | None = None) -> bytes:
     """The session (or [start, end] seconds of it) as a captioned waveform MP4 in `layout`."""
     if layout not in LAYOUTS:

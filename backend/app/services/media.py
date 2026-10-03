@@ -100,6 +100,18 @@ def _probe_stream(path: Path) -> tuple[int, int]:
         raise MediaError("no audio stream found in this file") from err
 
 
+def _has_video(path: Path) -> bool:
+    """AP-02: whether a file carries a picture stream (an album cover attached to an audio file does not count)."""
+    import subprocess
+
+    done = subprocess.run(
+        [_tool("ffprobe"), "-v", "error", "-select_streams", "v", "-show_entries", "stream=codec_type:stream_disposition=attached_pic", "-of", "json", str(path)],
+        capture_output=True, text=True, timeout=120,
+    )
+    streams = json.loads(done.stdout or "{}").get("streams", [])
+    return any(not (s.get("disposition") or {}).get("attached_pic") for s in streams)
+
+
 def _transcode(src: Path, out: Path, rate: int, channels: int) -> bytes:
     """Decodes `src` to 32-bit float WAV at `rate`: resampled with soxr (ffmpeg's own resampler if soxr is missing),
     mono kept mono, more than two channels downmixed to stereo. Output goes to a file, as a WAV header needs a seekable target."""
@@ -130,13 +142,21 @@ def import_audio(name: str, data: bytes, rate: int | None = None) -> dict:
             return import_wav(name, data)
     except ValueError:
         pass
+    suffix = "".join(c for c in Path(name).suffix[:12].lower() if c.isalnum() or c == ".") or ".mp4"
     with tempfile.TemporaryDirectory() as tmp:
-        src = Path(tmp) / ("source" + Path(name).suffix[:12])
+        src = Path(tmp) / ("source" + suffix)
         src.write_bytes(data)
         native_rate, channels = _probe_stream(src)
         target = rate or (native_rate if native_rate in STANDARD_RATES else 48000)
         wav = _transcode(src, Path(tmp) / "decoded.wav", target, channels)
-    return import_wav(name, wav)
+        picture = _has_video(src)
+    info = import_wav(name, wav)
+    if picture:
+        # AP-02: the video kept beside its audio and named in the record, so the edited audio can be written back
+        _write_atomic(media_dir() / f"{info['id']}.video{suffix}", data)
+        info = {**info, "video": suffix}
+        _write_atomic(media_dir() / f"{info['id']}.json", json.dumps(info).encode())
+    return info
 
 
 def resample_media(media_id: str, rate: int) -> dict:

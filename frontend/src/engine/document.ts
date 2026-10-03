@@ -5,6 +5,8 @@ export interface MediaRef {
   channels: number;
   frames: number;
   format: string;
+  /** AP-02: present when this audio was imported from a video, the kept video's file suffix, to write audio back. */
+  video?: string;
 }
 
 /** Fade shape names and the core's codes for them (native/formwav-dsp/src/render.rs `fade_curve`). */
