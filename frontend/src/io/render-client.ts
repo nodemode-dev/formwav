@@ -16,6 +16,8 @@ export interface Mix {
 export interface ExportOptions {
   format?: string;
   what?: "mix" | "stems" | "multichannel";
+  /** A multichannel export's channels by track number, in order, such as "2,1,3" (AU-50); empty is track order. */
+  channels?: string;
 }
 
 function decibels(value: string | null): number {
@@ -25,6 +27,7 @@ function decibels(value: string | null): number {
 
 export async function renderMix(doc: SessionDoc, options: ExportOptions = {}): Promise<Mix> {
   const query = new URLSearchParams({ format: options.format ?? "wav", what: options.what ?? "mix" });
+  if (options.what === "multichannel" && options.channels?.trim()) query.set("channels", options.channels.trim());
   const res = await fetch(`/api/render?${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

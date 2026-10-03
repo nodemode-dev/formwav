@@ -1,6 +1,6 @@
 from urllib.parse import unquote
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Body, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 
 from ..core.paths import media_dir
@@ -230,6 +230,42 @@ async def media_room_tone(media_id: str, request: Request) -> dict:
         raise HTTPException(404, "no media with that id") from err
     except media.MediaError as err:
         raise HTTPException(422, str(err)) from err
+
+
+@router.post("/batch")
+def batch_process(body: dict = Body(...)) -> Response:
+    """A queue of files processed outside a session (AP-03, RX-52): each uploaded file run through the chain's steps
+    in order and the results returned together as a zip, named after the files, the session untouched."""
+    import io
+    import zipfile
+
+    from ..core.paths import media_dir
+    from ..services import effects
+
+    ids, steps = body.get("media") or [], body.get("steps") or []
+    if not isinstance(ids, list) or not 1 <= len(ids) <= 50 or not isinstance(steps, list) or not 1 <= len(steps) <= 16:
+        raise HTTPException(422, "a batch is 1 to 50 files and a chain of 1 to 16 steps")
+    buffer = io.BytesIO()
+    names: set[str] = set()
+    try:
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for mid in ids:
+                stem = str(media.media_info(mid).get("name") or mid).rsplit(".", 1)[0]
+                current = mid
+                for step in steps:
+                    if not isinstance(step, dict) or not isinstance(step.get("name"), str):
+                        raise HTTPException(422, "each step names an effect")
+                    current = effects.apply(current, step["name"], step.get("params") or None)["id"]
+                name, n = f"{stem} (processed).wav", 2
+                while name in names:
+                    name, n = f"{stem} (processed {n}).wav", n + 1
+                names.add(name)
+                archive.write(media_dir() / f"{current}.wav", arcname=name)
+    except KeyError as err:
+        raise HTTPException(404, "a file in the batch is not in the engine") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+    return Response(content=buffer.getvalue(), media_type="application/zip", headers={"X-Files": str(len(ids)), "Content-Disposition": 'attachment; filename="batch.zip"'})
 
 
 @router.get("/media/{media_id}/similar")

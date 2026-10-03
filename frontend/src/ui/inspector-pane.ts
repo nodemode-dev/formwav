@@ -39,7 +39,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges (RX's ambience match)">Fill with room tone</button></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select><button type="button" class="fw-ibtn" data-fx="similar" title="Mark every event like the one in the selected range (draw a range over one event first)">Find similar</button><button type="button" class="fw-ibtn" data-fx="restore" title="Put the clip's original audio back in the selected range, or the whole clip without a range">Restore original</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select><button type="button" class="fw-ibtn" data-fx="chain-files" hidden title="Run this chain on audio files from the computer, outside the session, and download the results as a zip">Run chain on files...</button><input type="file" data-chain="files" accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff" multiple hidden><button type="button" class="fw-ibtn" data-fx="similar" title="Mark every event like the one in the selected range (draw a range over one event first)">Find similar</button><button type="button" class="fw-ibtn" data-fx="restore" title="Put the clip's original audio back in the selected range, or the whole clip without a range">Restore original</button></div>
   <ol class="fw-chain" hidden></ol>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
   <div class="fw-analyze-buttons"><input type="text" class="fw-sam-desc" data-sam="desc" maxlength="80" placeholder="Describe a sound" title="What to isolate, for example: man speaking, car horn" aria-label="Sound to isolate"><button type="button" class="fw-ibtn" data-sam="go" title="Put the described sound and everything else on new tracks (SAM-Audio); a selected range marks where the sound occurs">Isolate sound</button></div>
@@ -284,9 +284,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const syncBand = () => {
     const band = range?.band;
     const contour = pick?.value === "dialogue-contour"; // a time span only, from any range selection
-    if (!range || (!contour && (!band || (pick?.value !== "band-gain" && pick?.value !== "spot-heal")))) return;
+    if (!range || (!contour && (!band || (pick?.value !== "band-gain" && pick?.value !== "spot-heal" && pick?.value !== "spectral-repair")))) return;
     const fills: [string, number][] = band && !contour ? [["low", band.lowHz], ["high", band.highHz]] : [];
-    if (pick?.value === "spot-heal" || contour) {
+    if (pick?.value === "spot-heal" || pick?.value === "spectral-repair" || contour) {
       // the box's time in the media's own seconds, from the clip the marquee was drawn on
       const doc = engine.get("document");
       const r = range;
@@ -432,7 +432,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const withNoise = Object.keys(noise).length ? " with the learned noise profile" : "";
       // AU-31: a range drawn with a frequency band limits any effect to that band (the effects made for a band set
       // their own limits from it)
-      const ownBand = name === "band-gain" || name === "spot-heal" || name === "dialogue-contour";
+      const ownBand = name === "band-gain" || name === "spot-heal" || name === "dialogue-contour" || name === "spectral-repair";
       const bandQuery = inRange?.band && !ownBand ? `&band_low=${inRange.band.lowHz}&band_high=${inRange.band.highHz}` : "";
       const res = await fetch(`/api/media/${target.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}${bandQuery}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
@@ -543,11 +543,65 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     );
     const has = chain.length > 0;
     if (chainList.hidden === has) chainList.hidden = !has;
-    for (const key of ["chain-apply", "chain-clear", "chain-save"]) {
+    for (const key of ["chain-apply", "chain-clear", "chain-save", "chain-files"]) {
       const b = body.querySelector<HTMLElement>(`[data-fx="${key}"]`);
       if (b && b.hidden === has) b.hidden = !has;
     }
   };
+  // PT-21: built-in multi-step commands, ready-made chains of formwav's own effects, listed before the saved ones
+  const BUILT_IN_CHAINS: { name: string; steps: ChainStep[] }[] = [
+    { name: "Dialogue cleanup", steps: [
+      { name: "de-hum-adaptive", label: "De-hum (adaptive)", params: { mains: 50, harmonics: 4 } },
+      { name: "breath-control", label: "Breath control 12dB", params: { reduce: 12 } },
+      { name: "de-ess-spectral", label: "De-ess (spectral)", params: { threshold: -30, reduce: 8 } },
+      { name: "peak-normalize", label: "Peak normalize -1dBFS", params: { target: -1 } },
+    ] },
+    { name: "Podcast voice", steps: [
+      { name: "voice-clean", label: "Enhance speech", params: {} },
+      { name: "de-ess-spectral", label: "De-ess (spectral)", params: { threshold: -30, reduce: 10 } },
+      { name: "peak-normalize", label: "Peak normalize -1dBFS", params: { target: -1 } },
+    ] },
+    { name: "Restore an old recording", steps: [
+      { name: "de-crackle", label: "De-crackle", params: {} },
+      { name: "de-hum-adaptive", label: "De-hum (adaptive)", params: { mains: 50, harmonics: 6 } },
+      { name: "spectral-recovery", label: "Spectral recovery 8000Hz", params: { cutoff: 8000, amount: 60 } },
+    ] },
+    { name: "Tidy a master", steps: [
+      { name: "dc-measured", label: "DC offset (measured)", params: {} },
+      { name: "peak-normalize", label: "Peak normalize -1dBFS", params: { target: -1 } },
+    ] },
+  ];
+  // AP-03, RX-52: the chain run on files from the computer, outside the session, the results downloaded as a zip
+  const batchFiles = body.querySelector<HTMLInputElement>('[data-chain="files"]');
+  body.querySelector('[data-fx="chain-files"]')?.addEventListener("click", () => batchFiles?.click());
+  batchFiles?.addEventListener("change", async () => {
+    const files = [...(batchFiles.files ?? [])];
+    batchFiles.value = "";
+    if (!files.length || !chain.length) return;
+    try {
+      const ids: string[] = [];
+      for (const [i, file] of files.entries()) {
+        setText(notice, `Uploading ${i + 1} of ${files.length}: ${file.name}`);
+        const up = await fetch("/api/media", { method: "POST", body: file, headers: { "X-Filename": file.name } });
+        const info = (await up.json().catch(() => ({}))) as { id?: string; detail?: unknown };
+        if (!up.ok || !info.id) throw new Error(typeof info.detail === "string" ? info.detail : `${file.name}: the engine answered ${up.status}`);
+        ids.push(info.id);
+      }
+      setText(notice, `Running the chain on ${files.length} file${files.length === 1 ? "" : "s"}...`);
+      const res = await fetch("/api/batch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ media: ids, steps: chain.map((s) => ({ name: s.name, params: s.params })) }) });
+      if (!res.ok) {
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const link = Object.assign(document.createElement("a"), { href: url, download: "batch.zip" });
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      setText(notice, `Processed ${files.length} file${files.length === 1 ? "" : "s"} through the chain into batch.zip`);
+    } catch (err) {
+      setText(notice, `Could not run the batch: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
   // RX-55: the Saved chains menu fills from the presets when opened; choosing one loads its steps into the chain
   const savedChains = body.querySelector<HTMLSelectElement>('[data-chain="saved"]');
   const fillSavedChains = () => {
@@ -558,12 +612,17 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const first = document.createElement("option");
     first.value = "";
     first.textContent = "Saved chains";
-    savedChains.replaceChildren(first, ...names.map((n) => Object.assign(document.createElement("option"), { value: n, textContent: n })));
+    const builtIn = Object.assign(document.createElement("optgroup"), { label: "Built-in" });
+    builtIn.append(...BUILT_IN_CHAINS.map((c) => Object.assign(document.createElement("option"), { value: `builtin:${c.name}`, textContent: c.name })));
+    const yours = Object.assign(document.createElement("optgroup"), { label: "Yours" });
+    yours.append(...names.map((n) => Object.assign(document.createElement("option"), { value: n, textContent: n })));
+    savedChains.replaceChildren(first, builtIn, ...(names.length ? [yours] : []));
   };
   savedChains?.addEventListener("focus", fillSavedChains);
   savedChains?.addEventListener("pointerdown", fillSavedChains);
   savedChains?.addEventListener("change", () => {
-    const saved = presets.find((p) => p.effect === "chain" && p.name === savedChains.value);
+    const value = savedChains.value;
+    const saved = value.startsWith("builtin:") ? BUILT_IN_CHAINS.find((c) => `builtin:${c.name}` === value) : presets.find((p) => p.effect === "chain" && p.name === value);
     if (saved?.steps) {
       chain = saved.steps.map((s) => ({ name: s.name, label: s.label, params: { ...s.params } }));
       renderChain();

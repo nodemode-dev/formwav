@@ -13,6 +13,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
   let busy = false;
   let choice: { format: string; what: "mix" | "stems" | "multichannel" | "preview" } = { format: "wav", what: "mix" };
   let platform = "";
+  let channelOrder = "";
   const dialog = document.createElement("dialog");
   dialog.className = "fw-export-dialog";
   dialog.innerHTML = `<form method="dialog">
@@ -23,15 +24,20 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     <option value="ogg">OGG Vorbis</option><option value="m4a">M4A, AAC 256 kbps</option></select></label>
   <label class="fw-field fw-field-stack"><span>What</span><select data-x="what">
     <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option><option value="preview">Streaming preview: add a track that sounds like the encoded file (MP3, OGG or M4A)</option></select></label>
+  <label class="fw-field fw-field-stack" data-x="channels-row" hidden><span>Channel order</span><input type="text" data-x="channels" placeholder="Track order" title="Track numbers in channel order, such as 2,1,3 (a track may fill several channels); empty keeps track order" aria-label="Channel order, track numbers separated by commas"></label>
   <label class="fw-field fw-field-stack" data-x="platform-row" hidden><span>Platform loudness</span><select data-x="platform">
     <option value="">None: the codec only</option><option value="spotify">Spotify: -14 LUFS, lifts quiet mixes only to -1 dB true peak</option><option value="youtube">YouTube: -14 LUFS, turns loud mixes down only</option><option value="apple">Apple Music: -16 LUFS, modelled as turning down only (sources disagree on lifting)</option></select></label>
   <div class="fw-dialog-actions"><button type="submit" class="fw-ibtn" value="cancel">Cancel</button><button type="submit" class="fw-ibtn fw-btn-export" value="export">Export</button></div>
 </form>`;
   host.append(dialog);
   const platformRow = dialog.querySelector<HTMLElement>('[data-x="platform-row"]');
+  const channelsRow = dialog.querySelector<HTMLElement>('[data-x="channels-row"]');
   const showPlatform = () => {
-    const preview = dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value === "preview";
+    const what = dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value;
+    const preview = what === "preview";
     if (platformRow && platformRow.hidden === preview) platformRow.hidden = !preview;
+    const multi = what === "multichannel";
+    if (channelsRow && channelsRow.hidden === multi) channelsRow.hidden = !multi;
   };
   dialog.querySelector('[data-x="what"]')?.addEventListener("change", showPlatform);
 
@@ -72,7 +78,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
           : `Added ${media.name}: solo it against the mix to hear the codec`;
         return;
       }
-      const mix = await renderMix(doc, { format: choice.format, what: choice.what });
+      const mix = await renderMix(doc, { format: choice.format, what: choice.what, channels: channelOrder });
       name = choice.what === "mix" ? `${base}.${mix.ext}` : `${base} ${choice.what}.${mix.ext}`;
       const url = URL.createObjectURL(mix.blob);
       const link = document.createElement("a");
@@ -113,6 +119,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     const what = (dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value ?? "mix") as "mix" | "stems" | "multichannel" | "preview";
     choice = { format, what };
     platform = what === "preview" ? (dialog.querySelector<HTMLSelectElement>('[data-x="platform"]')?.value ?? "") : "";
+    channelOrder = what === "multichannel" ? (dialog.querySelector<HTMLInputElement>('[data-x="channels"]')?.value ?? "") : "";
     void run();
   });
   window.addEventListener("keydown", (e) => {

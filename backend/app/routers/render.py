@@ -112,7 +112,7 @@ def _with_cues(wav: bytes, document: dict) -> bytes:
 
 
 @router.post("/render")
-def render_session(document: dict = Body(...), format: str = "wav", what: str = "mix", platform: str = "") -> Response:
+def render_session(document: dict = Body(...), format: str = "wav", what: str = "mix", platform: str = "", channels: str = "") -> Response:
     try:
         if what in ("stems", "multichannel"):
             import io
@@ -127,6 +127,16 @@ def render_session(document: dict = Body(...), format: str = "wav", what: str = 
             ]
             stems = [s["wav"] for s in stems_out]
             if what == "multichannel":
+                if channels.strip():
+                    # AU-50: the output's channels by track number (1 is the first track), in order; a track may
+                    # fill several channels
+                    try:
+                        order = [int(c) for c in channels.split(",") if c.strip()]
+                    except ValueError as err:
+                        raise HTTPException(422, "the channel order is a comma list of track numbers") from err
+                    if not order or len(order) > 32 or any(i < 1 or i > len(stems) for i in order):
+                        raise HTTPException(422, f"each channel names a track from 1 to {len(stems)} (32 channels at most)")
+                    stems = [stems[i - 1] for i in order]
                 data, ext, mime = export.multichannel(stems, format, max(s["frames"] for s in stems_out))
                 headers = {"X-Stems": str(len(stems)), "Content-Disposition": f'attachment; filename="multichannel.{ext}"'}
                 return Response(content=data, media_type=mime, headers=headers)
