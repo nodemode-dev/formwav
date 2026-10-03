@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new()))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new()))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -26,6 +26,7 @@ fn render<'py>(
     master_fx: Vec<(u8, f32, f32, f32)>,
     chains: Vec<(u8, usize, u8, f32, f32, f32, f32, f32)>,
     fx_auto: Vec<(usize, usize, u8, u32)>,
+    comps: Vec<(usize, usize, f32, f32, f32, f32, f32)>,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let mut player = Player::new();
     player.set_master_db(master_db);
@@ -42,8 +43,22 @@ fn render<'py>(
     }
     for (index, (source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, gain_env, pan_env)) in clips.into_iter().enumerate() {
         player.add_clip(PlayClip { source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, track: 0, gain_env, pan_env });
+        // PT-33: the clip's own compressor, if any, after `at` of its filters (its own EQ, ahead of its track's)
+        let comp = comps.iter().find(|c| c.0 == index);
+        let mut added = 0usize;
         for &(_, kind, freq, gain_db, q) in fx.iter().filter(|f| f.0 == index) {
+            if let Some(&(_, at, t, r, a, rel, m)) = comp {
+                if added == at {
+                    player.add_clip_comp(t, r, a, rel, m);
+                }
+            }
             player.add_clip_fx(kind, freq, gain_db, q);
+            added += 1;
+        }
+        if let Some(&(_, at, t, r, a, rel, m)) = comp {
+            if at >= added {
+                player.add_clip_comp(t, r, a, rel, m);
+            }
         }
         for &(_, stage, param, envelope) in fx_auto.iter().filter(|a| a.0 == index) {
             player.add_clip_fx_auto(stage, param, envelope);

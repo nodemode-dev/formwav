@@ -109,8 +109,8 @@ pub struct Player {
     rate: f32,
     /// Each clip's track effect chain, parallel to `clips`: one copy advanced by the audio mix, one by the meter
     /// pass, since `meter_tracks` mixes every clip again and a shared state would advance twice a block.
-    clip_fx: Vec<Vec<crate::fx::Biquad>>,
-    meter_fx: Vec<Vec<crate::fx::Biquad>>,
+    clip_fx: Vec<Vec<crate::fx::Stage>>,
+    meter_fx: Vec<Vec<crate::fx::Stage>>,
     /// Each clip stage's design (kind, frequency, gain dB, Q), parallel to `clip_fx`, for automation to redesign it.
     clip_fx_spec: Vec<Vec<(u8, f32, f32, f32)>>,
     /// Effect parameter automation (PT-19), per clip: (stage, envelope ids for frequency, gain and Q; 0 is none).
@@ -213,10 +213,26 @@ impl Player {
         let (Some(chain), Some(meter), Some(f)) = (self.clip_fx.last_mut(), self.meter_fx.last_mut(), crate::fx::Biquad::design(kind, freq, gain_db, q, rate)) else {
             return false;
         };
-        chain.push(f);
-        meter.push(f);
+        chain.push(crate::fx::Stage::Filter(f));
+        meter.push(crate::fx::Stage::Filter(f));
         if let Some(specs) = self.clip_fx_spec.last_mut() {
             specs.push((kind, freq, gain_db, q));
+        }
+        true
+    }
+
+    /// PT-33: appends a compressor stage to the most recently added clip's chain (a clip's own dynamics, ahead of its
+    /// track's inserts); false when there is no clip or the design is refused. Its spec slot holds kind 6 so automation's
+    /// stage numbers stay parallel to the chain (automation redesigns only filters).
+    pub fn add_clip_comp(&mut self, threshold_db: f32, ratio: f32, attack_ms: f32, release_ms: f32, makeup_db: f32) -> bool {
+        let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
+        let (Some(chain), Some(meter), Some(c)) = (self.clip_fx.last_mut(), self.meter_fx.last_mut(), crate::fx::Compressor::design(threshold_db, ratio, attack_ms, release_ms, makeup_db, rate)) else {
+            return false;
+        };
+        chain.push(crate::fx::Stage::Comp(c));
+        meter.push(crate::fx::Stage::Comp(c));
+        if let Some(specs) = self.clip_fx_spec.last_mut() {
+            specs.push((crate::fx::COMPRESSOR, threshold_db, ratio, attack_ms));
         }
         true
     }
@@ -371,7 +387,7 @@ impl Player {
         self.bus_fx.push(Vec::new());
     }
 
-    fn mix_buses(&mut self, fx: &mut [Vec<crate::fx::Biquad>], left: &mut [f32], right: &mut [f32], from: u64) {
+    fn mix_buses(&mut self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64) {
         if self.buses.is_empty() {
             return;
         }
@@ -421,7 +437,7 @@ impl Player {
         self.scratch_right = scratch_right;
     }
 
-    fn mix(&self, fx: &mut [Vec<crate::fx::Biquad>], left: &mut [f32], right: &mut [f32], from: u64, select: impl Fn(&PlayClip) -> bool) {
+    fn mix(&self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64, select: impl Fn(&PlayClip) -> bool) {
         let n = left.len().min(right.len());
         let to = from + n as u64;
         for (index, clip) in self.clips.iter().enumerate() {
@@ -432,7 +448,7 @@ impl Player {
         }
     }
 
-    fn mix_one(&self, fx: &mut [Vec<crate::fx::Biquad>], left: &mut [f32], right: &mut [f32], from: u64, to: u64, index: usize) {
+    fn mix_one(&self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64, to: u64, index: usize) {
         let clip = &self.clips[index];
         if clip.start >= to || clip.start + clip.length <= from {
             return;
@@ -472,7 +488,7 @@ impl Player {
                         for &(stage, envs) in autos {
                             let Some(&(kind, f0, g0, q0)) = specs.get(stage) else { continue };
                             let value = |id: u32, base: f32| self.envelope(id).map_or(base, |e| e.value_at(t));
-                            if let (Some(f), Some(next)) = (stages.get_mut(stage), crate::fx::Biquad::design(kind, value(envs[0], f0), value(envs[1], g0), value(envs[2], q0), rate)) {
+                            if let (Some(crate::fx::Stage::Filter(f)), Some(next)) = (stages.get_mut(stage), crate::fx::Biquad::design(kind, value(envs[0], f0), value(envs[1], g0), value(envs[2], q0), rate)) {
                                 f.retune(&next);
                             }
                         }
@@ -481,8 +497,7 @@ impl Player {
                 let (mut xl, mut xr) = (l[s], r[s]);
                 if let Some(stages) = chain.as_deref_mut() {
                     for f in stages.iter_mut() {
-                        xl = f.process(0, xl);
-                        xr = f.process(1, xr);
+                        (xl, xr) = f.process(xl, xr);
                     }
                 }
                 if clip.gain_env == 0 && clip.pan_env == 0 {
@@ -698,6 +713,39 @@ mod tests {
         assert!(late > 5.0 * early, "automated: early {early}, late {late}");
         // the same filter without automation stays at 200 Hz and keeps the tone cut throughout
         assert!(still_late < 0.02 && still_early < 0.02, "fixed: {still_early} {still_late}");
+    }
+
+    /// PT-33: a clip's own compressor stage, after a filter in the same chain, brings a loud clip down by about what
+    /// its threshold and ratio predict, and a 4 kHz lowpass ahead of it still cuts a 10 kHz tone.
+    fn clip_level(freq: f32, filter: bool, comp: bool) -> f32 {
+        let mut p = Player::new();
+        p.set_rate(48000.0);
+        p.alloc_source(1, 48000, 1, 48000);
+        let tone: Vec<f32> = (0..48000).map(|i| 0.5 * (2.0 * std::f32::consts::PI * freq * i as f32 / 48000.0).sin()).collect();
+        p.write_source(1, 0, &tone);
+        p.add_clip(PlayClip { source: 1, start: 0, source_in: 0, length: 48000, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 1, gain_env: 0, pan_env: 0 });
+        if filter {
+            assert!(p.add_clip_fx(crate::fx::LOWPASS, 4000.0, 0.0, 0.707));
+        }
+        if comp {
+            assert!(p.add_clip_comp(-20.0, 4.0, 5.0, 100.0, 0.0));
+        }
+        let (mut l, mut r) = (vec![0f32; 48000], vec![0f32; 48000]);
+        p.render(&mut l, &mut r);
+        let s = &l[24000..48000];
+        (s.iter().map(|v| v * v).sum::<f32>() / s.len() as f32).sqrt()
+    }
+
+    #[test]
+    fn a_clip_compressor_brings_a_loud_clip_down_after_its_filters() {
+        let drop = 20.0 * (clip_level(440.0, true, false) / clip_level(440.0, true, true)).log10();
+        // a -9 dBFS RMS tone over a -20 dB threshold at 4:1 comes down by several dB (8.25 for an RMS detector)
+        assert!(drop > 4.0 && drop < 12.0, "the clip compressor took {drop} dB");
+        // the lowpass comes first: it cuts a 10 kHz tone below the threshold, so the compressor after it changes nothing
+        // (run first, the compressor would have taken the full-level tone down too)
+        let (filtered, both, open) = (clip_level(10000.0, true, false), clip_level(10000.0, true, true), clip_level(10000.0, false, false));
+        assert!(filtered < 0.25 * open, "the lowpass did not cut: {filtered} against {open}");
+        assert!((20.0 * (both / filtered).log10()).abs() < 0.5, "the compressor acted on the filtered tone: {both} against {filtered}");
         // an automation for a stage or parameter that does not exist is refused
         let mut p = Player::new();
         let env = p.add_envelope(&[(0, 1.0)], false);

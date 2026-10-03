@@ -58,6 +58,9 @@ struct MixClip {
     /// The filters' parameter automation (PT-19), as the browser worklet receives it.
     #[serde(default)]
     fx_auto: Option<Vec<FxAuto>>,
+    /// PT-33: the clip's own compressor, [filters ahead of it, threshold dB, ratio, attack ms, release ms, makeup dB].
+    #[serde(default)]
+    comp: Option<Vec<f32>>,
 }
 
 #[derive(Deserialize)]
@@ -219,8 +222,18 @@ impl NativeOutput {
                     gain_env,
                     pan_env,
                 });
-                for k in c.fx.as_deref().unwrap_or(&[]).chunks_exact(4) {
-                    p.add_clip_fx(k[0] as u8, k[1], k[2], k[3]);
+                // PT-33: the clip's own compressor after `at` of its filters
+                let comp = c.comp.as_deref().filter(|v| v.len() == 6);
+                let filters: Vec<&[f32]> = c.fx.as_deref().unwrap_or(&[]).chunks_exact(4).collect();
+                for i in 0..=filters.len() {
+                    if let Some(v) = comp {
+                        if i == (v[0].max(0.0) as usize).min(filters.len()) {
+                            p.add_clip_comp(v[1], v[2], v[3], v[4], v[5]);
+                        }
+                    }
+                    if let Some(k) = filters.get(i) {
+                        p.add_clip_fx(k[0] as u8, k[1], k[2], k[3]);
+                    }
                 }
                 for a in c.fx_auto.as_deref().unwrap_or(&[]) {
                     let env = envelope(p, &Some(a.points.clone()), false);

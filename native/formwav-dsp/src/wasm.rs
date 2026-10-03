@@ -137,6 +137,14 @@ pub unsafe extern "C" fn fw_add_clip_fx(player: *mut Player, kind: u32, freq: f3
     (*player).add_clip_fx(kind as u8, freq, gain_db, q) as u32
 }
 
+/// PT-33: a compressor stage on the latest clip's chain, in the order stages are added.
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_add_clip_comp(player: *mut Player, threshold_db: f32, ratio: f32, attack_ms: f32, release_ms: f32, makeup_db: f32) -> u32 {
+    (*player).add_clip_comp(threshold_db, ratio, attack_ms, release_ms, makeup_db) as u32
+}
+
 /// Effect parameter automation (PT-19): `param` (0 frequency, 1 gain, 2 Q) of stage `stage` of the latest clip
 /// follows envelope `envelope`; 1 when attached.
 ///
