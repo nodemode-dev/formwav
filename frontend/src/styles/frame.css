@@ -354,3 +354,6 @@
 
 /* PT-09: a clip's warp markers, dragged sideways to re-time the audio around them */
 .fw-warp-marker { position: absolute; top: 0; bottom: 0; inline-size: 3px; margin-inline-start: -1px; background: var(--accent-color); cursor: ew-resize; touch-action: none; }
+
+/* DS-04: fillers hidden in the transcript only (the audio untouched) */
+.is-hiding-fillers .fw-word.is-filler { display: none; }

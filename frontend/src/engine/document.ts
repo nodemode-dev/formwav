@@ -287,7 +287,7 @@ export type Command =
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
   /** A note clip's edited notes and the instrument's new rendering of them, replaced together (one undo step). */
   | { type: "set-clip-notes"; trackId: string; clipId: string; notes: readonly NoteEvent[]; media: MediaRef }
-  | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean }
+  | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean; smooth?: number }
   | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef; feather?: number }
   | { type: "remove-marker"; markerId: string }
   | { type: "set-marker"; markerId: string; at?: number; label?: string }
@@ -370,7 +370,40 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       let next = doc;
       for (const r of ranges)
         for (const trackId of cmd.trackIds) next = applyCommand(next, { type: "clear-range", trackId, start: r.start, end: r.end, ripple: cmd.ripple }, newId);
-      return next;
+      const smooth = Math.round(cmd.smooth ?? 0);
+      if (smooth <= 0 || next === doc) return next;
+      // DS-04, harsh-cut avoidance: where audio now meets a cut (or, without ripple, the edges of a cleared gap), the clip
+      // ending there fades out and the clip starting there fades in over `smooth` samples, at most half the clip
+      const ends: number[] = [];
+      const starts: number[] = [];
+      let removed = 0;
+      for (const r of [...ranges].sort((a, b) => a.start - b.start)) {
+        if (cmd.ripple) {
+          ends.push(r.start - removed);
+          starts.push(r.start - removed);
+          removed += r.end - r.start;
+        } else {
+          ends.push(r.start);
+          starts.push(r.end);
+        }
+      }
+      const at = (list: number[], x: number) => list.some((p) => Math.abs(p - x) <= 1);
+      const ease = (c: Clip, f: number | undefined) => Math.max(f ?? 0, Math.min(smooth, Math.floor(c.length / 2)));
+      return {
+        ...next,
+        tracks: next.tracks.map((t) =>
+          !cmd.trackIds.includes(t.id)
+            ? t
+            : {
+                ...t,
+                clips: t.clips.map((c) => {
+                  const fadeOut = at(ends, c.start + c.length) ? ease(c, c.fadeOut) : c.fadeOut;
+                  const fadeIn = at(starts, c.start) ? ease(c, c.fadeIn) : c.fadeIn;
+                  return fadeOut === c.fadeOut && fadeIn === c.fadeIn ? c : { ...c, fadeIn, fadeOut };
+                }),
+              },
+        ),
+      };
     }
     case "set-range-media": {
       let changed = false;

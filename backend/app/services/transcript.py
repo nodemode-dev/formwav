@@ -34,15 +34,30 @@ class TranscriptUnavailable(RuntimeError):
 
 
 def _norm(word: str) -> str:
-    return re.sub(r"[^a-z']", "", word.lower())
+    # letters of any language kept (an a-z filter turned "Äh" into "h" and "hã" into "h", so no filler outside English
+    # could ever match)
+    return re.sub(r"[^\w']", "", word.lower()).replace("_", "")
 
 
-def mark_fillers(words: list[dict]) -> list[dict]:
-    """Flags filler words and filler phrases in place and returns the list."""
+# DS-04: hesitation sounds and filler phrases for the other languages faster-whisper names, kept conservative (words
+# that also carry meaning, such as "pues", "en fait" or "tipo", are left out); English's apply in every language
+FILLERS_BY_LANGUAGE: dict[str, tuple[set[str], list[tuple[str, ...]]]] = {
+    "es": ({"eh", "em", "ehm", "mmm"}, [("o", "sea")]),
+    "fr": ({"euh", "heu", "hum", "bah", "ben"}, [("tu", "vois")]),
+    "de": ({"äh", "ähm", "öh", "öhm", "hmm"}, []),
+    "it": ({"ehm", "eh", "uhm", "mmm"}, []),
+    "pt": ({"hã", "ahn", "hum", "éé"}, []),
+}
+
+
+def mark_fillers(words: list[dict], language: str = "en") -> list[dict]:
+    """Flags filler words and filler phrases in place (English's and the transcript language's) and returns the list."""
+    extra_words, extra_phrases = FILLERS_BY_LANGUAGE.get((language or "en")[:2].lower(), (set(), []))
+    fillers = FILLERS | extra_words
     for w in words:
-        w["filler"] = _norm(w["text"]) in FILLERS
+        w["filler"] = _norm(w["text"]) in fillers
     norms = [_norm(w["text"]) for w in words]
-    for phrase in FILLER_PHRASES:
+    for phrase in FILLER_PHRASES + extra_phrases:
         for i in range(len(words) - len(phrase) + 1):
             if tuple(norms[i : i + len(phrase)]) == phrase:
                 for w in words[i : i + len(phrase)]:
@@ -89,7 +104,10 @@ def transcript(media_id: str, model: str = "") -> dict:
     media.media_info(media_id)
     cache = media_dir().parent / "transcripts" / f"{media_id}.{name}.json"
     if cache.exists():
-        return json.loads(cache.read_text())
+        # marked again on every read, so a cached transcript follows the current filler lists for its language
+        cached = json.loads(cache.read_text())
+        cached["words"] = mark_fillers(cached.get("words", []), cached.get("language", "en"))
+        return cached
     import numpy as np
 
     pcm = subprocess.run([media._tool("ffmpeg"), "-v", "error", "-nostdin", "-i", str(media_dir() / f"{media_id}.wav"), "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],
@@ -99,7 +117,7 @@ def transcript(media_id: str, model: str = "") -> dict:
     audio = np.frombuffer(pcm.stdout, dtype="<f4").copy()
     segments, info = _model(name).transcribe(audio, word_timestamps=True, initial_prompt=VERBATIM_PROMPT)
     words = [{"text": w.word.strip(), "start": round(float(w.start), 3), "end": round(float(w.end), 3)} for s in segments for w in (s.words or []) if w.word.strip()]
-    result = {"mediaId": media_id, "model": name, "language": info.language, "words": mark_fillers(words)}
+    result = {"mediaId": media_id, "model": name, "language": info.language, "words": mark_fillers(words, info.language)}
     cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text(json.dumps(result))
     return result

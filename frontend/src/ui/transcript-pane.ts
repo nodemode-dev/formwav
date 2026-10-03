@@ -112,6 +112,8 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
 <p class="fw-empty-note fw-transcript-state">Transcribe the session, then edit its audio by editing the text.</p>
 <div class="fw-transcript-actions" hidden>
   <button type="button" class="fw-ibtn" data-t="delete">Delete selected words</button>
+  <select data-t-fill="mode" aria-label="What Remove filler words does" title="Cut fillers out of the audio, silence them where they are (timing kept, for picture), or hide them in the transcript only (audio untouched)"><option value="cut">Cut them out</option><option value="silence">Silence them in place</option><option value="hide">Hide them in the transcript only</option></select>
+  <label class="fw-sam-opt" title="Fade 10 ms either side of every cut so the joins do not click"><input type="checkbox" data-t-fill="smooth" checked> Smooth cuts</label>
   <button type="button" class="fw-ibtn" data-t="fillers">Remove filler words</button>
   <label class="fw-field"><span>Gaps over</span><input type="number" data-t-gap="over" value="${GAP_OVER}" min="0.1" max="10" step="0.05" aria-label="Shorten gaps longer than, seconds"><span>s</span></label>
   <label class="fw-field"><span>Keep</span><input type="number" data-t-gap="keep" value="${GAP_KEEP}" min="0" max="5" step="0.05" aria-label="Length each shortened gap keeps, seconds"><span>s</span></label>
@@ -206,13 +208,20 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
     current = span;
   };
 
-  const cut = (ranges: { start: number; end: number }[], what: string) => {
+  const cut = (ranges: { start: number; end: number }[], what: string, silence = false) => {
     if (!ranges.length) {
       setText(notice, `No ${what} to remove`);
       return;
     }
     const doc = engine.get("document");
-    engine.dispatch({ type: "clear-ranges", trackIds: doc.tracks.map((t) => t.id), ranges, ripple: true });
+    // DS-04: silencing keeps the timeline (no ripple); Smooth cuts fades 10 ms either side of every join
+    const smooth = host.querySelector<HTMLInputElement>('[data-t-fill="smooth"]')?.checked !== false ? Math.round(0.01 * doc.sampleRate) : 0;
+    engine.dispatch({ type: "clear-ranges", trackIds: doc.tracks.map((t) => t.id), ranges, ripple: !silence, ...(smooth ? { smooth } : {}) });
+    if (silence) {
+      selected.clear();
+      setText(notice, `Silenced ${what} in place: ${(ranges.reduce((sum, r) => sum + r.end - r.start, 0) / doc.sampleRate).toFixed(2)} s, timing kept`);
+      return;
+    }
     selected.clear();
     const seconds = ranges.reduce((sum, r) => sum + r.end - r.start, 0) / doc.sampleRate;
     setText(notice, `Removed ${what}: ${seconds.toFixed(2)} s`);
@@ -285,7 +294,15 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
       return;
     }
     if (action === "delete") cut(rangesOf(words, (w) => selected.has(w.key)), "the selected words");
-    else if (action === "fillers") cut(rangesOf(words, (w) => w.filler), "filler words");
+    else if (action === "fillers") {
+      const mode = host.querySelector<HTMLSelectElement>('[data-t-fill="mode"]')?.value ?? "cut";
+      if (mode === "hide") {
+        // transcript only: the fillers leave the text, the audio and the session are untouched
+        const hide = !text?.classList.contains("is-hiding-fillers");
+        text?.classList.toggle("is-hiding-fillers", hide);
+        setText(notice, hide ? "Filler words hidden in the transcript; the audio is untouched" : "Filler words shown in the transcript again");
+      } else cut(rangesOf(words, (w) => w.filler), "filler words", mode === "silence");
+    }
     else if (action === "retakes") cut(retakeRanges(words), "earlier takes");
     else if (action === "clip") {
       const picked = words.filter((w) => selected.has(w.key));
