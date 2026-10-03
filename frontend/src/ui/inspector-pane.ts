@@ -47,7 +47,7 @@ const BODY = `
   <ol class="fw-chain" hidden></ol>
   <details class="fw-macro"><summary title="Write a chain as text: one effect per line, its name (as in the Effects menu's ids) and any setting=value; # starts a comment">Macro script</summary>
     <textarea class="fw-macro-text" data-macro rows="4" spellcheck="false" aria-label="Macro script: one effect per line, its name and any setting=value pairs; # starts a comment" placeholder="amplify-up db=-3&#10;# comments start with #"></textarea>
-    <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-macro-act="load" title="Check the script and make it the chain, ready to apply to this clip, save, or run on files">Load into chain</button><button type="button" class="fw-ibtn" data-macro-act="from" title="Write the current chain as a script">Write chain as script</button></div>
+    <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-macro-act="load" title="Check the script and make it the chain, ready to apply to this clip, save, or run on files">Load into chain</button><button type="button" class="fw-ibtn" data-macro-act="from" title="Write the current chain as a script">Write chain as script</button><button type="button" class="fw-ibtn" data-macro-act="record" aria-pressed="false" title="While on, each effect you apply is written into the script with the settings you used, so doing a task once records it as a macro">Record</button></div>
   </details>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
   <div class="fw-analyze-buttons"><input type="text" class="fw-sam-desc" data-sam="desc" maxlength="80" placeholder="Describe a sound" title="What to isolate, for example: man speaking, car horn" aria-label="Sound to isolate"><button type="button" class="fw-ibtn" data-sam="go" title="Put the described sound and everything else on new tracks (SAM-Audio); a selected range marks where the sound occurs">Isolate sound</button></div>
@@ -561,6 +561,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         : await fetch(`/api/media/${target.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}${bandQuery}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      recordMacroStep(name, params);
       if (inRange) {
         const rate = engine.get("document").sampleRate;
         const featherMs = Math.max(0, Math.min(500, Number(body.querySelector<HTMLInputElement>("[data-feather]")?.value) || 0));
@@ -651,6 +652,14 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   // AU-39, AA-14: a macro script, one effect per line ("name setting=value ..."; # starts a comment), checked against
   // the Effects menu and each effect's settings (unknown names or settings are reported by line, settings not given take
   // their defaults) and loaded as the chain, so Apply chain, Save chain and Run chain on files all take it
+  // AA-14, a macro recorder: while Record is on, each effect applied to a clip is written into the script as its line
+  let macroRecording = false;
+  const recordMacroStep = (name: string, params: Record<string, unknown>) => {
+    const area = body.querySelector<HTMLTextAreaElement>("[data-macro]");
+    if (!macroRecording || !area) return;
+    const line = [name, ...Object.entries(params).filter(([, v]) => typeof v === "number" && Number.isFinite(v)).map(([k, v]) => `${k}=${v}`)].join(" ");
+    area.value = area.value.trim() ? `${area.value.replace(/\s+$/, "")}\n${line}` : line;
+  };
   const parseMacro = (text: string): ChainStep[] | string => {
     const names = new Map([...(pick?.options ?? [])].map((o) => [o.value, (o.textContent ?? o.value).replace(/\.+$/, "").trim()]));
     const steps: ChainStep[] = [];
@@ -678,6 +687,12 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const act = (e.target as HTMLElement).closest<HTMLElement>("[data-macro-act]")?.dataset.macroAct;
     const area = body.querySelector<HTMLTextAreaElement>("[data-macro]");
     if (!act || !area) return;
+    if (act === "record") {
+      macroRecording = !macroRecording;
+      body.querySelector('[data-macro-act="record"]')?.setAttribute("aria-pressed", String(macroRecording));
+      setText(notice, macroRecording ? "Recording: each effect you apply is written into the macro script" : "Stopped recording the macro");
+      return;
+    }
     if (act === "from") {
       area.value = chain.map((s) => [s.name, ...Object.entries(s.params).map(([k, v]) => `${k}=${v}`)].join(" ")).join("\n");
       setText(notice, chain.length ? `Wrote the chain's ${chain.length} step${chain.length === 1 ? "" : "s"} as a script` : "The chain is empty");

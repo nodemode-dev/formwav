@@ -2151,3 +2151,10 @@ Add warp marker at playhead pins that point of the selected clip's audio where i
 - logged: v1.50.0 (in progress) · 2026-10-03
 
 Under the chain, Macro script takes one effect per line, its name and any setting=value pairs, # starting a comment; each name and setting is checked against the Effects menu and the effect's own settings, errors reported by line, settings not given taking their defaults, and Load into chain makes it the chain, so Apply chain runs it on the clip in one undo step, Save chain keeps it as a named macro and Run chain on files runs it over files; Write chain as script turns any chain back into text. Verified in Chromium: "nosuch x=1" reported Line 1: no effect named "nosuch", a misspelt setting reported Line 2: amplify-up has no setting "dbb"; a commented script of Amplify +6 then -12 dB loaded as two steps and applied took a 0.2 tone to 0.1002 (0.1002 expected); the chain written back read "amplify-up db=6" and "amplify-up db=-12"; no page errors; the audits clean.
+
+### a macro recorder (AA-14)
+- refers-to: src/ui/inspector-pane.ts :: Record (`macroRecording`, `recordMacroStep`), the apply path
+- kind: explainer
+- logged: v1.50.0 (in progress) · 2026-10-03
+
+Record, beside the macro script, writes each effect applied to a clip into the script with the settings used, so a task done once becomes a macro (Audition's Favorites recorded by doing), which Load into chain, Save chain and Run chain on files then take. Verified in Chromium: with Record on, Amplify +6 then -12 dB applied by hand took a 0.2 tone to 0.1002 and recorded "amplify-up db=6" and "amplify-up db=-12"; both undone, the recorded macro loaded and applied gave 0.1002 again; no page errors; the audits clean.
