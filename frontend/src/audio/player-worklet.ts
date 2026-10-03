@@ -74,7 +74,7 @@ export type WorkletMessage =
   | { type: "load"; id: number; bytes: ArrayBuffer }
   | { type: "alloc"; id: number; rate: number; channels: number; frames: number }
   | { type: "write"; id: number; offset: number; data: Float32Array }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[] }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[]; timeTrackLog?: boolean }
   | { type: "play" }
   | { type: "speed"; value: number }
   | { type: "stop" }
@@ -107,12 +107,17 @@ class PlayerProcessor extends AudioWorkletProcessor {
   private speed = 1;
   // Audacity's time track: [at, speed, at, speed, ...] in session samples, linear between points, held outside them.
   private curve: number[] | null = null;
+  // AU-36: between points the speed changes at a steady ratio (logarithmic) instead of a steady step (linear)
+  private curveLog = false;
   private curveAt(position: number): number {
     const c = this.curve;
     if (!c) return 1;
     if (position <= c[0]) return c[1];
     for (let i = 2; i < c.length; i += 2) {
-      if (position <= c[i]) return c[i - 1] + ((c[i + 1] - c[i - 1]) * (position - c[i - 2])) / Math.max(1, c[i] - c[i - 2]);
+      if (position <= c[i]) {
+        const f = (position - c[i - 2]) / Math.max(1, c[i] - c[i - 2]);
+        return this.curveLog ? c[i - 1] * (c[i + 1] / c[i - 1]) ** f : c[i - 1] + (c[i + 1] - c[i - 1]) * f;
+      }
     }
     return c[c.length - 1];
   }
@@ -208,6 +213,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
           this.bufLen = 0;
         }
         this.curve = next;
+        this.curveLog = msg.timeTrackLog === true;
         core.fw_clear_clips(this.player);
         core.fw_clear_envelopes(this.player);
         const envelope = (flat: number[] | undefined, db: boolean): number => {

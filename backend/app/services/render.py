@@ -174,10 +174,30 @@ def render(doc: object) -> dict:
         loaded.append((source, path.read_bytes()))
     chains = chains + [(2, 0, *s) for s in (_stage(f) for f in (doc.get("masterFx") or [])) if s]
     interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto)
+    frames = max(1, end)
+    curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
+    if len(curve) >= 2:
+        # AU-36: the time track in exports, as playback plays it: the session read at speed(position) samples per output
+        # sample (linear, or a steady ratio with timeTrackLog, held outside the points), pitch following; output time to
+        # position p is the integral of 1 / speed, inverted by interpolation
+        import numpy as np
+
+        mix = np.asarray(interleaved, dtype=np.float64).reshape(-1, 2)
+        pos = np.arange(mix.shape[0], dtype=np.float64)
+        at = np.array([a for a, _ in curve])
+        sp = np.clip(np.array([s for _, s in curve]), 0.25, 4.0)
+        speed = np.exp(np.interp(pos, at, np.log(sp))) if doc.get("timeTrackLog") else np.interp(pos, at, sp)
+        out_time = np.concatenate([[0.0], np.cumsum(1.0 / speed)])[:-1]
+        n_out = int(out_time[-1]) + 1
+        src = np.interp(np.arange(n_out, dtype=np.float64), out_time, pos)
+        warped = np.stack([np.interp(src, pos, mix[:, c]) for c in range(2)], axis=1).astype(np.float32)
+        interleaved = warped.reshape(-1).tolist()
+        peak_left, peak_right = float(np.abs(warped[:, 0]).max()), float(np.abs(warped[:, 1]).max())
+        frames = n_out
     loudness = native.loudness(interleaved, 2, rate)
     return {
         "wav": wav_float32_stereo(interleaved, rate),
-        "frames": max(1, end),
+        "frames": frames,
         "peakLeft": dbfs(peak_left),
         "peakRight": dbfs(peak_right),
         "loudness": f"{loudness:.2f}" if loudness is not None else "-inf",

@@ -19,6 +19,7 @@ const KINDS: Record<string, CurveKind> = {
   "filter-curve": { xs: ["f1", "f2", "f3", "f4", "f5", "f6"], ys: ["g1", "g2", "g3", "g4", "g5", "g6"], x: [20, 20000], y: [-24, 24], logX: true, diagonal: false, name: "EQ curve: frequency across, gain up" },
   "dynamics-curve": { xs: ["i1", "i2", "i3", "i4", "i5"], ys: ["o1", "o2", "o3", "o4", "o5"], x: [-80, 0], y: [-80, 0], logX: false, diagonal: true, name: "Transfer curve: input level across, output level up" },
   "dialogue-contour": { xs: ["x1", "x2", "x3", "x4", "x5"], ys: ["c1", "c2", "c3", "c4", "c5"], x: [0, 100], y: [-12, 12], logX: false, diagonal: false, name: "Contour: place in the span across, semitones up" },
+  "time-track": { xs: ["t1", "t2", "t3", "t4", "t5"], ys: ["s1", "s2", "s3", "s4", "s5"], x: [0, 100], y: [25, 400], logX: false, diagonal: false, name: "Time track: place in the session across, speed in percent up" },
 };
 
 export function mountCurveEditor(box: HTMLElement, effect: string): void {

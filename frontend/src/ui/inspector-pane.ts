@@ -87,7 +87,9 @@ const BODY = `
   <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
   <div class="fw-insp-head">Time track</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Playback speed at the session's start, in percent"><span>Start</span><input type="number" data-tt="from" min="25" max="400" step="1" value="100" aria-label="Time track speed at the start in percent"> %</label><label class="fw-sam-opt" title="Playback speed at the end of the session's audio, in percent"><span>End</span><input type="number" data-tt="to" min="25" max="400" step="1" value="100" aria-label="Time track speed at the end in percent"> %</label></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-tt="apply" title="Playback speed moves from Start to End across the session's audio, pitch following speed (Audacity's time track); playback only, exports are not affected">Set time track</button><button type="button" class="fw-ibtn" data-tt="clear" title="Play at the transport's speed again">Clear</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-tt="apply" title="Playback speed moves from Start to End across the session's audio, pitch following speed (Audacity's time track), in playback and exports">Set time track</button>
+  <div class="fw-tt-curve" data-tt-curve>${[1, 2, 3, 4, 5].map((k) => `<input type="range" hidden data-param="t${k}" min="0" max="100" step="0.5" value="${(k - 1) * 25}"><input type="range" hidden data-param="s${k}" min="25" max="400" step="1" value="100">`).join("")}</div>
+  <label class="fw-sam-opt" title="Speed changes at a steady ratio between points instead of a steady step"><input type="checkbox" data-tt="log"> Logarithmic</label><button type="button" class="fw-ibtn" data-tt="apply-curve" title="Set the time track to the curve drawn above (place in the session across, speed up)">Apply curve</button><button type="button" class="fw-ibtn" data-tt="clear" title="Play at the transport's speed again">Clear</button></div>
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
@@ -1484,6 +1486,22 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const to = Math.min(400, Math.max(25, Number(ttTo?.value) || 100)) / 100;
     engine.dispatch({ type: "set-time-track", points: [{ at: 0, speed: from }, { at: end, speed: to }] });
     setText(notice, `Time track: playback from ${Math.round(from * 100)}% at the start to ${Math.round(to * 100)}% at ${(end / doc.sampleRate).toFixed(2)} s, pitch following; exports are not affected`);
+  });
+  // AU-36: a drawn time track, five points of (place in the session %, speed %), linear or logarithmic between them
+  const ttCurve = body.querySelector<HTMLElement>("[data-tt-curve]");
+  if (ttCurve) mountCurveEditor(ttCurve, "time-track");
+  body.querySelector<HTMLButtonElement>('[data-tt="apply-curve"]')?.addEventListener("click", () => {
+    const doc = engine.get("document");
+    const end = doc.tracks.reduce((m, t) => t.clips.reduce((n, c) => Math.max(n, c.start + c.length), m), 0);
+    if (end <= 0 || !ttCurve) {
+      setText(notice, "Add audio before setting a time track");
+      return;
+    }
+    const value = (key: string) => Number(ttCurve.querySelector<HTMLInputElement>(`[data-param=${key}]`)?.value);
+    const points = [1, 2, 3, 4, 5].map((k) => ({ at: Math.round((value(`t${k}`) / 100) * end), speed: value(`s${k}`) / 100 }));
+    const log = body.querySelector<HTMLInputElement>('[data-tt="log"]')?.checked === true;
+    engine.dispatch({ type: "set-time-track", points, log });
+    setText(notice, `Time track: ${points.length} drawn points, ${log ? "logarithmic" : "linear"} between them, in playback and exports`);
   });
   body.querySelector<HTMLButtonElement>('[data-tt="clear"]')?.addEventListener("click", () => {
     if (!engine.get("document").timeTrack) {

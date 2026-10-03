@@ -218,6 +218,8 @@ export interface SessionDoc {
   key?: { name: string; camelot: string };
   /** Audacity's time track: playback speed over session time, linear between points, held outside them (sample position, factor 0.25 to 4). */
   timeTrack?: readonly TimePoint[];
+  /** AU-36: speed interpolated logarithmically between the time track's points (a steady ratio), not linearly. */
+  timeTrackLog?: boolean;
   tracks: readonly Track[];
   media: Readonly<Record<string, MediaRef>>;
   markers: readonly Marker[];
@@ -271,7 +273,7 @@ export type Command =
   | { type: "set-master-fx"; fx: TrackFx[] }
   | { type: "set-bus-fx"; busId: string; fx: TrackFx[] }
   | { type: "set-tempo"; bpm: number; beatsPerBar: number }
-  | { type: "set-time-track"; points: TimePoint[] }
+  | { type: "set-time-track"; points: TimePoint[]; log?: boolean }
   | { type: "set-clip-envelope"; trackId: string; clipId: string; points: { at: number; db: number }[] }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
@@ -609,10 +611,12 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         .sort((a, b) => a.at - b.at);
       if (!points.length) {
         if (!doc.timeTrack) return doc;
-        const { timeTrack: _cleared, ...rest } = doc;
+        const { timeTrack: _cleared, timeTrackLog: _log, ...rest } = doc;
         return rest;
       }
-      return { ...doc, timeTrack: points };
+      // AU-36: logarithmic interpolation between points (speed changing at a steady ratio, as Audacity offers)
+      const { timeTrackLog: _was, ...base } = doc;
+      return cmd.log ? { ...base, timeTrack: points, timeTrackLog: true } : { ...base, timeTrack: points };
     }
     case "set-tempo": {
       if (!Number.isFinite(cmd.bpm) || !Number.isFinite(cmd.beatsPerBar)) return doc;
