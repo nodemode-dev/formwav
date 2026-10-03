@@ -2123,3 +2123,10 @@ A clip carries its own realtime effects (Pro Tools' clip effects), edited in the
 - logged: v1.48.0 (in progress) · 2026-10-03
 
 Recorded at v1.47.0 and fixed: the player's offline bounce sent no master effects, unlike playback. It now sends them as playback does. Verified: with a 2 kHz high-pass on the master, a 440 Hz tone's bounce fell from -6.02 to -32.43 dBFS, the engine's export of the same document -32.43, a difference of 0.000 dB; no page errors.
+
+### DS-05 found already closed: the gap threshold and the length kept are the user's to choose
+- refers-to: src/ui/transcript-pane.ts :: Gaps over, Keep, Shorten gaps
+- kind: explainer
+- logged: v1.49.0 (in progress) · 2026-10-03
+
+COVERAGE still listed DS-05 as missing a chosen threshold and target, but the transcript pane has carried both (Gaps over, Keep) since an earlier batch, and Shorten gaps reads them. Measured through the pane (sidecar verification/verify_gap_choice.py): a 5.4 s recording of five tone words with gaps of 0.4, 0.9, 1.5 and 0.6 s, its transcript seeded in the engine's transcript cache (faster-whisper is not installed in this container; the cache is what a transcription writes), lost exactly 1.8 s at the default 0.75 and 0.3 s, came back to 5.4 s with one undo, and lost exactly 2.7 s at 0.5 and 0.1 s (the 0.6 s gap now caught too); no page errors.
