@@ -208,6 +208,8 @@ export interface SessionDoc {
   masterFx?: TrackFx[];
   /** The session tempo, for the bars ruler, beat snapping and Quantize (set by hand or detected). */
   tempo?: { bpm: number; beatsPerBar: number };
+  /** AU-07: this project's snap settings, saved with it: snapping to the grid, and the grid in bars and beats. */
+  snap?: { grid: boolean; bars: boolean };
   /** The session's musical key and Camelot code, as detected (services/key.py). */
   key?: { name: string; camelot: string };
   /** Audacity's time track: playback speed over session time, linear between points, held outside them (sample position, factor 0.25 to 4). */
@@ -314,7 +316,8 @@ export type Command =
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "move-clip-to-track"; trackId: string; clipId: string; toTrackId: string; start: number }
   | { type: "set-clip-pitch"; trackId: string; clipId: string; semitones: number; media: MediaRef | null }
-  | { type: "add-marker"; at: number; label: string; clipId?: string };
+  | { type: "add-marker"; at: number; label: string; clipId?: string }
+  | { type: "set-snap"; grid: boolean; bars: boolean };
 
 export function emptyDocument(sampleRate: number): SessionDoc {
   return { sampleRate, tracks: [], media: {}, markers: [] };
@@ -1009,6 +1012,10 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         return next;
       });
       return changed ? { ...doc, regions: [...regions].sort((a, b) => a.start - b.start) } : doc;
+    }
+    case "set-snap": {
+      if (doc.snap?.grid === cmd.grid && doc.snap?.bars === cmd.bars) return doc;
+      return { ...doc, snap: { grid: cmd.grid, bars: cmd.bars } };
     }
     case "add-marker": {
       const marker: Marker = { id: newId(), at: Math.max(0, Math.round(cmd.at)), label: cmd.label, ...(cmd.clipId ? { clipId: cmd.clipId } : {}) };

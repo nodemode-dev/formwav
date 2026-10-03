@@ -100,7 +100,7 @@ if (host) {
   mountTerminal(host);
   mountAgent(host, engine);
   mountRuler(host, engine, player);
-  mountGrid(host);
+  mountGrid(host, engine);
   mountOutputMeter(host, player);
   mountTrackMeters(host, engine, player);
   mountMixer(host, engine, player);

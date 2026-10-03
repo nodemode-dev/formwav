@@ -1,4 +1,5 @@
 import { icon as fcIcon } from "../vendor/formcut/icons";
+import type { Engine } from "../engine";
 
 const LABEL_SPACING_PX = 80;
 const STEPS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
@@ -55,7 +56,7 @@ export function snapSamples(position: number, sampleRate: number, pxPerSecond: n
   return Math.max(0, Math.round(Math.round(position / step) * step));
 }
 
-export function mountGrid(host: HTMLElement): void {
+export function mountGrid(host: HTMLElement, engine?: Engine): void {
   const transport = host.querySelector<HTMLElement>('.fw-tool-tray [data-group="edit"]') ?? host.querySelector<HTMLElement>(".fw-tool-tray") ?? host.querySelector<HTMLElement>(".fw-transport");
   const makeButton = (label: string, title: string, glyph: string) => {
     const button = document.createElement("button");
@@ -72,16 +73,30 @@ export function mountGrid(host: HTMLElement): void {
   const spotButton = makeButton("Spot", "Click a clip to type its exact start time (T)", "crosshair");
   const punchButton = makeButton("Punch", "Recording on the armed track replaces only the loop range, then stops (P)", "punch");
   const barsButton = makeButton("Bars", "Show bars and beats at the session tempo on the ruler; with Grid on, snap to beats", "activity");
-  barsButton.addEventListener("click", () => {
-    bars = !bars;
-    barsButton.setAttribute("aria-pressed", String(bars));
-    document.dispatchEvent(new CustomEvent("fw-bars-changed"));
-  });
-
-  const toggleGrid = () => {
-    enabled = !enabled;
-    gridButton.setAttribute("aria-pressed", String(enabled));
+  // AU-07: Grid and Bars are this project's snap settings, kept in the document (saved with the session, restored when
+  // it opens or an undo reaches back past a change); without an engine they stay local as before
+  const applySnap = (grid: boolean, beats: boolean) => {
+    if (enabled !== grid) {
+      enabled = grid;
+      gridButton.setAttribute("aria-pressed", String(enabled));
+    }
+    if (bars !== beats) {
+      bars = beats;
+      barsButton.setAttribute("aria-pressed", String(bars));
+      document.dispatchEvent(new CustomEvent("fw-bars-changed"));
+    }
   };
+  const setSnap = (grid: boolean, beats: boolean) => {
+    if (engine) engine.dispatch({ type: "set-snap", grid, bars: beats });
+    else applySnap(grid, beats);
+  };
+  engine?.subscribe("document", () => {
+    const snap = engine.get("document").snap;
+    applySnap(snap?.grid ?? false, snap?.bars ?? false);
+  });
+  barsButton.addEventListener("click", () => setSnap(enabled, !bars));
+
+  const toggleGrid = () => setSnap(!enabled, bars);
   const toggleShuffle = () => {
     shuffle = !shuffle;
     shuffleButton.setAttribute("aria-pressed", String(shuffle));

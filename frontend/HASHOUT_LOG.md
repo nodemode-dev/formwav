@@ -1990,3 +1990,10 @@ On a range: split-cut puts the range's audio on the clip clipboard and leaves a 
 - logged: v1.44.0 (in progress) · 2026-10-02
 
 The browser test the previous entry left pending, in Chromium at 1288 by 683 with a fake microphone: a range drawn over 0.75 to 1.5 s of a 3 s clip; Ctrl+Alt+I left [0, 0.75] and [1.5, 3] on the track and [0.75, 1.5] on a new track, one undo restoring [0, 3]; Ctrl+Alt+K left the gap; Ctrl+Alt+X left the gap and Ctrl+V pasted the cut 0.75 s at 0 s; Split at silences cut a tone, a second of silence and a tone at 1.0 and 2.0 s; Monitor input on the armed track with no take running passed the input at 0.483 RMS, 0.0483 at -20 dB (a ratio of exactly 0.100), and unchecking stopped it; no page errors. Two of the test's own faults on the way: the servers were down at first, and a drag at a quarter of the clip's height landed on its gain line (a gain drag, no range), so the shortcuts saw no range and each undo took back the import; drags above the gain line drew the range.
+
+### alignment guides and per-project snap settings (AU-07)
+- refers-to: src/ui/lanes.ts :: the move's edge alignment and `showGuide`; src/styles/frame.css :: `.fw-align-guide`; src/engine/document.ts :: `SessionDoc.snap`, `set-snap`; src/ui/grid.ts :: Grid and Bars through set-snap and the document; src/main.ts :: mountGrid gets the engine
+- kind: explainer
+- logged: v1.44.0 (in progress) · 2026-10-02
+
+A moved clip's start or end within 6 px of another clip's edge on any track, or of the playhead, snaps to it, with a guide line drawn through the lanes there while dragging; Grid and Bars are now the project's snap settings, kept in the document (saved with the session, restored when it opens, and by undo). Verified in Chromium at 1288 by 683: Grid wrote snap {grid: true, bars: false} into the document with the button pressed, and undo took both back; a clip dragged until its start passed near another clip's end at 3 s showed a guide in both lanes at 300 px mid-drag and landed at exactly 3.000 s, the guides gone after; no page errors; the audits clean (the reach audit counts set-snap as dispatched).

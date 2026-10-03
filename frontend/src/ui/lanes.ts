@@ -1333,9 +1333,48 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       const snapped = snapSamples(anchor + next * spp, doc.sampleRate, doc.sampleRate / spp);
       next = Math.min(drag.high, Math.max(drag.low, (snapped - anchor) / spp));
     }
+    // AU-07: alignment guides: a moved clip's start or end within 6 px of another clip's edge (any track) or the
+    // playhead snaps to it, and a guide line marks where they align
+    let guideAt: number | null = null;
+    if (drag.kind === "move") {
+      const moving = drag.clip;
+      const start = moving.start + next * spp;
+      let best = 6 * spp;
+      const edges = [engine.get("transport").positionSamples, ...doc.tracks.flatMap((t) => t.clips.filter((c) => c.id !== moving.id).flatMap((c) => [c.start, c.start + c.length]))];
+      for (const edge of edges) {
+        for (const offset of [0, moving.length]) {
+          const gap = Math.abs(start + offset - edge);
+          if (gap < best) {
+            best = gap;
+            guideAt = edge;
+            next = Math.min(drag.high, Math.max(drag.low, (edge - offset - moving.start) / spp));
+          }
+        }
+      }
+    }
+    showGuide(guideAt, spp);
     drag.dx = next;
     preview(drag, spp);
   });
+  const showGuide = (at: number | null, spp: number) => {
+    for (const body of lanes.querySelectorAll<HTMLElement>(".fw-lane-body")) {
+      let guide = body.querySelector<HTMLElement>(":scope > .fw-align-guide");
+      if (at === null) {
+        if (guide && !guide.hidden) guide.hidden = true;
+        continue;
+      }
+      if (!guide) {
+        guide = document.createElement("div");
+        guide.className = "fw-align-guide";
+        guide.setAttribute("aria-hidden", "true");
+        body.append(guide);
+      }
+      const left = `${(at / spp).toFixed(1)}px`;
+      if (guide.style.left !== left) guide.style.left = left;
+      if (guide.hidden) guide.hidden = false;
+    }
+  };
+  lanes.addEventListener("pointerup", () => showGuide(null, 1));
 
   // Audacity's free clip placement: a single moved clip released over another lane goes to that track, mono or stereo,
   // replacing what it overlaps there; the lane under the pointer is marked while dragging.

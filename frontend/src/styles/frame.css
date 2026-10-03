@@ -314,3 +314,7 @@
 .fw-spectrum { display: flex; flex-direction: column; gap: 6px; min-block-size: 0; }
 .fw-spectrum[hidden] { display: none; }
 .fw-spectrum-canvas { display: block; inline-size: 100%; block-size: 160px; flex: 1 1 auto; border-radius: var(--radius-sm); }
+
+/* AU-07's alignment guide: a line through each lane where a moved clip's edge meets another clip's edge or the playhead */
+.fw-align-guide { position: absolute; inset-block: 0; inline-size: 1px; background: var(--text-primary); opacity: 0.75; pointer-events: none; z-index: var(--z-raised); }
+.fw-align-guide[hidden] { display: none; }
