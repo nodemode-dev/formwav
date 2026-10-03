@@ -88,6 +88,44 @@ function closeInput(deviceId: string): void {
   inputs.delete(deviceId);
 }
 
+/** AU-21's monitor level, linear (1 is unity), for monitoring before and during takes. */
+let monitorGain = 1;
+const monitorNodes = new Set<AudioWorkletNode>();
+export function setMonitorLevel(gain: number): void {
+  monitorGain = Math.max(0, Math.min(4, gain));
+  for (const node of monitorNodes) node.port.postMessage({ type: "monitor", on: true, level: monitorGain } satisfies RecorderMessage);
+}
+
+/** AU-21: the input heard before a take starts: the same input and recorder worklet a take uses, its pass-through on at
+ * the monitor level and no take started, until stop(). */
+export async function startMonitoring(player: Player, deviceId = ""): Promise<{ stop: () => void; node: AudioWorkletNode }> {
+  const stream = await openInput(deviceId);
+  const ctx = await player.context();
+  await ctx.audioWorklet.addModule(recorderUrl);
+  const channels = Math.min(2, Math.max(1, stream.getAudioTracks()[0]?.getSettings().channelCount ?? 1));
+  const shared = inputs.get(deviceId);
+  const source = shared?.source ?? ctx.createMediaStreamSource(stream);
+  if (shared && !shared.source) shared.source = source;
+  const node = new AudioWorkletNode(ctx, "formwav-recorder", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: channels, channelCountMode: "explicit", channelInterpretation: "speakers" });
+  source.connect(node);
+  node.connect(ctx.destination);
+  node.port.postMessage({ type: "monitor", on: true, level: monitorGain } satisfies RecorderMessage);
+  monitorNodes.add(node);
+  return {
+    node,
+    stop: () => {
+      monitorNodes.delete(node);
+      node.port.postMessage({ type: "monitor", on: false } satisfies RecorderMessage);
+      try {
+        source.disconnect(node);
+      } catch {
+        // already disconnected
+      }
+      node.disconnect();
+    },
+  };
+}
+
 export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = "", monitor = false, playAlong = true): Promise<Recording> {
   const stream = await openInput(deviceId);
   try {
@@ -120,11 +158,11 @@ export async function startRecording(player: Player, startPosition: number, onLe
       }
     };
     if (playAlong) await player.play(true);
-    node.port.postMessage({ type: "monitor", on: monitor } satisfies RecorderMessage);
+    node.port.postMessage({ type: "monitor", on: monitor, level: monitorGain } satisfies RecorderMessage);
     node.port.postMessage({ type: "start" } satisfies RecorderMessage);
     return {
       startPosition,
-      setMonitor: (on: boolean) => node.port.postMessage({ type: "monitor", on } satisfies RecorderMessage),
+      setMonitor: (on: boolean) => node.port.postMessage({ type: "monitor", on, level: monitorGain } satisfies RecorderMessage),
       stop: () =>
         new Promise<Take>((resolve) => {
           onStopped = () => {

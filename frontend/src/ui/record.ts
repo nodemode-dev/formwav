@@ -1,6 +1,6 @@
 import type { Engine, TransportState } from "../engine";
 import type { Player } from "../audio/player";
-import { encodeWav, startRecording, type Recording, type Take } from "../audio/recorder";
+import { encodeWav, startMonitoring, startRecording, type Recording, type Take } from "../audio/recorder";
 import { onMonitorChanged, trackInput, trackMonitor } from "./inputs";
 import { importFile } from "../io/media-client";
 import { setText } from "../vendor/nodemode/dom-stable";
@@ -108,9 +108,27 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
   };
   let active: Recording | null = null;
   let extras: { trackId: string; rec: Recording }[] = [];
+  // AU-21: before a take, Monitor input on the armed track passes its input through on its own (no take), stopped
+  // when monitoring is turned off or a take starts (the take then monitors through its own input)
+  let preview: { stop: () => void; node: AudioWorkletNode } | null = null;
+  const debug = window as unknown as { __formwav?: Record<string, unknown> };
+  const stopPreview = () => {
+    preview?.stop();
+    preview = null;
+    if (debug.__formwav) debug.__formwav.monitor = null;
+  };
   onMonitorChanged((trackId, on) => {
     if (active && trackId === armedTrack()) active.setMonitor(on);
     for (const x of extras) if (x.trackId === trackId) x.rec.setMonitor(on);
+    if (active || trackId !== armedTrack()) return;
+    stopPreview();
+    if (!on) return;
+    void startMonitoring(player, trackInput(trackId))
+      .then((p) => {
+        preview = p;
+        if (debug.__formwav) debug.__formwav.monitor = p;
+      })
+      .catch(() => undefined);
   });
   let punchRange: { start: number; end: number } | null = null;
   /** With a pre-roll and no punch or loop range: the frame where the kept take begins (the playhead at Record). */
@@ -161,6 +179,7 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       // the player must be at the roll point first, or the label and the audio disagree
       if (rollFrom !== position) player.seek(rollFrom);
       lastPosition = rollFrom;
+      stopPreview();
       active = await startRecording(player, rollFrom, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false);
       const missed: string[] = [];
       for (const id of armedTracks().slice(1)) {

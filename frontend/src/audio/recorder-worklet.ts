@@ -4,7 +4,7 @@ declare class AudioWorkletProcessor {
 }
 declare function registerProcessor(name: string, ctor: new () => AudioWorkletProcessor): void;
 
-export type RecorderMessage = { type: "start" } | { type: "stop" } | { type: "monitor"; on: boolean };
+export type RecorderMessage = { type: "start" } | { type: "stop" } | { type: "monitor"; on: boolean; level?: number };
 
 export type RecorderReply =
   | { type: "chunk"; channels: Float32Array[] }
@@ -20,6 +20,7 @@ const LEVEL_EVERY = 8;
 class RecorderProcessor extends AudioWorkletProcessor {
   private recording = false;
   private monitor = false;
+  private level = 1;
   private firstFrame = -1;
   private buffers: Float32Array[] = [];
   private filled = 0;
@@ -31,6 +32,7 @@ class RecorderProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (e: MessageEvent<RecorderMessage>) => {
       if (e.data.type === "monitor") {
         this.monitor = e.data.on;
+        if (typeof e.data.level === "number" && Number.isFinite(e.data.level)) this.level = Math.max(0, Math.min(4, e.data.level));
         return;
       }
       if (e.data.type === "start") {
@@ -62,6 +64,8 @@ class RecorderProcessor extends AudioWorkletProcessor {
       const out = outputs[0][0];
       out.set(input[0]);
       if (input.length > 1) for (let i = 0; i < out.length; i++) out[i] = (out[i] + (input[1]?.[i] ?? 0)) * 0.5;
+      // AU-21's monitor level (linear), 1 by default
+      if (this.level !== 1) for (let i = 0; i < out.length; i++) out[i] *= this.level;
     }
     if (!this.recording || !input || input.length === 0) return true;
     if (this.firstFrame < 0) this.firstFrame = currentFrame;

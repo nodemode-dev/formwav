@@ -1467,6 +1467,31 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       markSelected();
       return;
     }
+    // AU-05, Audacity's split variants on a range, each one undo step: Ctrl+Alt+X split-cut (the range to the clip
+    // clipboard, a gap left), Ctrl+Alt+K split-delete (a gap left, whatever Shuffle says), Ctrl+Alt+I split to a new
+    // track (the range's audio moved to a new track at the same time, a gap left)
+    if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey && range && ["x", "k", "i"].includes(e.key.toLowerCase())) {
+      e.preventDefault();
+      const key = e.key.toLowerCase();
+      const r = range;
+      const doc = engine.get("document");
+      const track = doc.tracks.find((t) => t.id === r.trackId);
+      const pieces = (track?.clips ?? [])
+        .filter((c) => c.start < r.end && r.start < c.start + c.length)
+        .map((c) => ({ clip: c, a: Math.max(r.start, c.start), b: Math.min(r.end, c.start + c.length) }));
+      if (!track || !pieces.length) return;
+      clearRange();
+      const commands: Dispatchable[] = [{ type: "clear-range", trackId: track.id, start: r.start, end: r.end, ripple: false }];
+      if (key === "x") clipboard = pieces.map(({ clip, a, b }) => ({ trackId: track.id, clip: { ...clip, start: a, length: b - a, sourceIn: clip.sourceIn + (a - clip.start), fadeIn: 0, fadeOut: 0 } }));
+      if (key === "i") {
+        for (const { clip, a, b } of pieces) {
+          const media = doc.media[clip.mediaId];
+          if (media) commands.push({ type: "import-media", media, at: a, clip: { sourceIn: clip.sourceIn + (a - clip.start), length: b - a } });
+        }
+      }
+      engine.dispatch({ type: "batch", commands });
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
       const key = e.key.toLowerCase();
       if (key === "a") {
