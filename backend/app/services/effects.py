@@ -821,6 +821,54 @@ def _paulstretch(x, rate: int, v: dict):
     return y.astype(np.float32)
 
 
+def warp(media_id: str, segments: list) -> dict:
+    """PT-09, warp markers: the media re-timed piecewise, each segment {"from", "to", "length"} (the source span in its
+    own seconds and the seconds it should last) stretched by rubberband as Stretch does (tempo = span / length, 0.5x to
+    2x), the pieces joined in order. Each piece but the last is rendered 5 ms longer from the source and crossfaded into
+    the next (equal gain over those 5 ms), so the joins do not click and the total is exactly the sum of the lengths."""
+    import numpy as np
+
+    from . import tools
+    from .audacity import _wav_bytes
+
+    if not isinstance(segments, list) or not 1 <= len(segments) <= 256:
+        raise media.MediaError("warp needs 1 to 256 segments")
+    info = media.media_info(media_id)
+    rate, frames = int(info["sampleRate"]), int(info["frames"])
+    fade = int(0.005 * rate)
+    out, pieces = [], []
+    for k, seg in enumerate(segments):
+        start, end, length = float(seg["from"]), float(seg["to"]), float(seg["length"])
+        if not (0 <= start < end <= frames / rate + 1e-6) or length <= 0:
+            raise media.MediaError("each warp segment needs 0 <= from < to within the file and a positive length")
+        tempo = (end - start) / length
+        if not 0.5 - 1e-6 <= tempo <= 2.0 + 1e-6:
+            raise media.MediaError("a warp segment can stretch from half to twice its speed")
+        last = k == len(segments) - 1
+        extra = 0 if last else fade
+        piece = tools.excerpt(media_id, start, min(frames / rate, end + extra * tempo / rate))
+        if abs(tempo - 1) > 1e-4:
+            piece = apply(piece["id"], "stretch-rhythmic", {"percent": (tempo - 1) * 100})
+        view, _ = tools._wav_view(piece["id"])
+        x = np.asarray(view, dtype=np.float64)
+        if x.dtype == np.int16:
+            x = x / 32768.0
+        want = int(round(length * rate)) + extra
+        x = x[:want] if len(x) >= want else np.vstack([x, np.zeros((want - len(x), x.shape[1]))])
+        pieces.append(x)
+    for k, x in enumerate(pieces):
+        if out and fade and k > 0:
+            tail = out[-1][-fade:]
+            ramp = np.linspace(0, 1, fade)[:, None]
+            x = x.copy()
+            x[:fade] = tail * (1 - ramp) + x[:fade] * ramp
+            out[-1] = out[-1][:-fade]
+        out.append(x)
+    y = np.vstack(out).astype(np.float32)
+    stem = str(info["name"]).rsplit(".", 1)[0]
+    return media.import_wav(f"{stem} (warped).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
+
+
 def _match_channels(dry, out):
     """RX-35: a plugin commonly returns stereo for a mono clip (the CLAP test plugin does); when only the channel count
     differs and one side is mono, that side is copied to the other's channels, so the result can still be limited to a

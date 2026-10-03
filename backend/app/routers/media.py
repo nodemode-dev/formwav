@@ -451,6 +451,20 @@ def eq_match(media_id: str, reference: str, start: float | None = None, end: flo
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/warp", status_code=201)
+def warp_media(media_id: str, payload: dict) -> dict:
+    """PT-09: {"segments": [{"from", "to", "length"}, ...]} in seconds, the media re-timed piecewise between warp
+    markers (services/effects.py: warp)."""
+    from ..services import effects
+
+    try:
+        return effects.warp(media_id, payload.get("segments"))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/effect-masked", status_code=201)
 def apply_effect_masked(media_id: str, payload: dict) -> dict:
     """AA-05: {"name", "params", "boxes": [{"from", "to", "low", "high"}, ...]}: the effect applied and its change kept

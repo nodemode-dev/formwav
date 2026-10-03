@@ -1020,3 +1020,10 @@ A save drew no thumbnail for a session over five minutes, because the picture ca
 - logged: v1.49.0 (in progress) · 2026-10-03
 
 A plugin applied to a lasso, paint or box selection was refused as changing "timing or channels": the CLAP test plugin, like many, returns stereo for a mono clip (144000 frames, 1 channel in, 144000 frames, 2 out). When only the channel count differs and one side is mono, the band and drawn-selection limits now copy that side to the other's channels and limit as before; a real timing change is still refused. Verified through the interface (sidecar verification/verify_plugin_selection.py), measured on session renders of a 440 Hz plus 3 kHz phrase: through a lasso around 3 kHz from 1 to 2 s (33 boxes) and through a box marquee of 1.5 to 4.5 kHz, the plugin took 3 kHz inside from -10.46 to -16.48 dB (its -6.02), left 3 kHz before the selection and 440 Hz inside at -10.46; no page errors. With Preview (AU-29), plugins preview too.
+
+### warp markers, the engine half (PT-09)
+- refers-to: app/services/effects.py :: `warp`; app/routers/media.py :: POST /media/{id}/warp
+- kind: explainer
+- logged: v1.50.0 (in progress) · 2026-10-03
+
+The engine re-times a media file piecewise between warp markers: each segment (a source span and the length it should last) is stretched by rubberband as Stretch does (0.5x to 2x), each piece but the last rendered 5 ms longer from the source and crossfaded into the next, so the joins do not click and the total is exactly the sum of the lengths. Rendering always from the original keeps repeated edits from compounding. Verified on the engine: a 4 s train of clicks every 0.5 s, its marker at 1.0 s moved to 1.2 s (before it 1.2x longer, after it compressed to fit), came out exactly 4.0000 s with every click within 2.7 ms of where the warp puts it (0.75 s to 0.897 against 0.900, 2.25 s to 2.368 against 2.367). PT-09's other gap, a stretch handle on the clip, is Alt-drag on a clip's right edge, already in place. Still to do before PT-09 counts: the markers on the clip in the interface (adding, dragging, rendering from the original, one undo step), verified in the browser.
