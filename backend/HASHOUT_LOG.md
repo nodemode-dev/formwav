@@ -992,3 +992,10 @@ Dialogue contour takes a drawn curve, five points of place in the span and semit
 - logged: v1.47.0 (in progress) · 2026-10-02
 
 Playback already took any number of time-track points (the worklet interpolates them); the Inspector now draws five on the curve editor with a Logarithmic choice, the worklet interpolates in the log domain when asked, and the renderer warps the mix as playback reads it (output time the integral of 1 / speed, inverted by interpolation). Not working yet: an export with a time track answered 400 (the error the engine gives is recorded beside this entry's commit), most likely because the core's render returns its samples in a form the warp does not read as numbers. AU-36 stays partial until exports match the integrals (4 ln 2 = 2.773 s for 100 to 200% linear over 4 s, 2.885 s logarithmic) and the drawn curve is checked in the browser.
+
+### the time track's export fixed (AU-36)
+- refers-to: app/services/render.py :: the export's warp
+- kind: explainer
+- logged: v1.47.0 (in progress) · 2026-10-02
+
+The export answered 400 because the core returns its mix as interleaved float32 bytes, which the warp read as a list; it now reads and writes those bytes. Measured on a 4 s tone: no time track 4.000 s; 100 to 200% linear 2.773 s (4 ln 2 = 2.773); logarithmic 2.885 s (4 x 0.5 / ln 2 = 2.885); 100, 200, 100% over three points 2.773 s (2.773). Still to check before AU-36 counts: the curve drawn and applied in the browser (the run was cut short by the engine reloading).

@@ -182,7 +182,8 @@ def render(doc: object) -> dict:
         # position p is the integral of 1 / speed, inverted by interpolation
         import numpy as np
 
-        mix = np.asarray(interleaved, dtype=np.float64).reshape(-1, 2)
+        # the core returns the mix as interleaved float32 bytes
+        mix = np.frombuffer(bytes(interleaved), dtype="<f4").astype(np.float64).reshape(-1, 2)
         pos = np.arange(mix.shape[0], dtype=np.float64)
         at = np.array([a for a, _ in curve])
         sp = np.clip(np.array([s for _, s in curve]), 0.25, 4.0)
@@ -191,7 +192,7 @@ def render(doc: object) -> dict:
         n_out = int(out_time[-1]) + 1
         src = np.interp(np.arange(n_out, dtype=np.float64), out_time, pos)
         warped = np.stack([np.interp(src, pos, mix[:, c]) for c in range(2)], axis=1).astype(np.float32)
-        interleaved = warped.reshape(-1).tolist()
+        interleaved = warped.reshape(-1).astype("<f4").tobytes()
         peak_left, peak_right = float(np.abs(warped[:, 0]).max()), float(np.abs(warped[:, 1]).max())
         frames = n_out
     loudness = native.loudness(interleaved, 2, rate)
