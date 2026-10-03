@@ -39,7 +39,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges (RX's ambience match)">Fill with room tone</button></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select></div>
   <ol class="fw-chain" hidden></ol>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
   <div class="fw-analyze-buttons"><input type="text" class="fw-sam-desc" data-sam="desc" maxlength="80" placeholder="Describe a sound" title="What to isolate, for example: man speaking, car horn" aria-label="Sound to isolate"><button type="button" class="fw-ibtn" data-sam="go" title="Put the described sound and everything else on new tracks (SAM-Audio); a selected range marks where the sound occurs">Isolate sound</button></div>
@@ -536,11 +536,33 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     );
     const has = chain.length > 0;
     if (chainList.hidden === has) chainList.hidden = !has;
-    for (const key of ["chain-apply", "chain-clear"]) {
+    for (const key of ["chain-apply", "chain-clear", "chain-save"]) {
       const b = body.querySelector<HTMLElement>(`[data-fx="${key}"]`);
       if (b && b.hidden === has) b.hidden = !has;
     }
   };
+  // RX-55: the Saved chains menu fills from the presets when opened; choosing one loads its steps into the chain
+  const savedChains = body.querySelector<HTMLSelectElement>('[data-chain="saved"]');
+  const fillSavedChains = () => {
+    if (!savedChains) return;
+    const names = presets.filter((p) => p.effect === "chain" && p.steps?.length).map((p) => p.name);
+    if (savedChains.dataset.names === names.join("\n")) return;
+    savedChains.dataset.names = names.join("\n");
+    const first = document.createElement("option");
+    first.value = "";
+    first.textContent = "Saved chains";
+    savedChains.replaceChildren(first, ...names.map((n) => Object.assign(document.createElement("option"), { value: n, textContent: n })));
+  };
+  savedChains?.addEventListener("focus", fillSavedChains);
+  savedChains?.addEventListener("pointerdown", fillSavedChains);
+  savedChains?.addEventListener("change", () => {
+    const saved = presets.find((p) => p.effect === "chain" && p.name === savedChains.value);
+    if (saved?.steps) {
+      chain = saved.steps.map((s) => ({ name: s.name, label: s.label, params: { ...s.params } }));
+      renderChain();
+    }
+    savedChains.value = "";
+  });
   body.addEventListener("click", async (e) => {
     const t = e.target as HTMLElement;
     const remove = t.closest<HTMLElement>("[data-chain-remove]")?.dataset.chainRemove;
@@ -550,6 +572,14 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       return;
     }
     const action = t.closest<HTMLElement>("[data-fx]")?.dataset.fx;
+    if (action === "chain-save" && chain.length) {
+      // RX-55: the chain saved as a preset, its effects and their settings in order
+      const name = window.prompt("Chain name", "")?.trim();
+      if (!name) return;
+      const steps = chain.map((s) => ({ name: s.name, label: s.label, params: s.params }));
+      void storePresets([...presets.filter((p) => !(p.effect === "chain" && p.name === name)), { name, effect: "chain", params: {}, steps }], `Saved chain ${name}`);
+      return;
+    }
     if (action === "chain-add" && pick?.value) {
       const params = currentParams() as Record<string, number>;
       const base = (pick.selectedOptions[0]?.textContent ?? pick.value).replace(/\.+$/, "");

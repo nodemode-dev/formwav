@@ -3,6 +3,8 @@ export interface Preset {
   name: string;
   effect: string;
   params: Record<string, number>;
+  /** A module chain saved as a preset (effect "chain", RX-55): its steps in order. */
+  steps?: { name: string; label: string; params: Record<string, number> }[];
 }
 
 export async function loadPresets(): Promise<Preset[]> {

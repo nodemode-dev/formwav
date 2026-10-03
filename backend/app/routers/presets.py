@@ -43,7 +43,25 @@ def _clean(items: object) -> list[dict]:
             if not isinstance(key, str) or len(key) > 40 or isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                 raise HTTPException(422, "a preset's settings are named numbers")
             clean[key] = float(value)
-        out.append({"name": name.strip(), "effect": effect, "params": clean})
+        entry = {"name": name.strip(), "effect": effect, "params": clean}
+        # RX-55: a module chain saved as a preset (effect "chain"): its steps in order, each an effect with its settings
+        steps = item.get("steps")
+        if steps is not None:
+            if effect != "chain" or not isinstance(steps, list) or not steps or len(steps) > 16:
+                raise HTTPException(422, "a module chain preset holds 1 to 16 steps")
+            entry["steps"] = []
+            for step in steps:
+                if not isinstance(step, dict) or not isinstance(step.get("name"), str) or not step["name"] or len(step["name"]) > 60:
+                    raise HTTPException(422, "each chain step names its effect")
+                step_params = step.get("params") or {}
+                if not isinstance(step_params, dict) or len(step_params) > MAX_PARAMS:
+                    raise HTTPException(422, f"a chain step holds at most {MAX_PARAMS} settings")
+                for key, value in step_params.items():
+                    if not isinstance(key, str) or len(key) > 40 or isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                        raise HTTPException(422, "a chain step's settings are named numbers")
+                label = step.get("label") if isinstance(step.get("label"), str) else step["name"]
+                entry["steps"].append({"name": step["name"], "label": label[:120], "params": {k: float(v) for k, v in step_params.items()}})
+        out.append(entry)
     return out
 
 
