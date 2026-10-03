@@ -297,7 +297,10 @@ class PlayerProcessor extends AudioWorkletProcessor {
   }
 
   private refill(core: CoreExports): void {
-    const keep = Math.floor(this.readPos);
+    // Above 2x a step can carry readPos past everything buffered; then all of it is spent and readPos, less the
+    // buffered length, points into the chunk rendered next, which starts where the buffer ended. (Discarding
+    // floor(readPos) whatever the buffer held drove bufLen negative and the processor threw, stalling playback.)
+    const keep = Math.min(Math.floor(this.readPos), this.bufLen);
     if (keep > 0) {
       this.bufL.copyWithin(0, keep, this.bufLen);
       this.bufR.copyWithin(0, keep, this.bufLen);
