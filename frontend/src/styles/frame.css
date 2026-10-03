@@ -370,3 +370,6 @@
 /* the word timing row keeps its place while hidden, so selecting a word does not push the transcript down under the
    pointer (a double-click's second click landed on the row instead of the word) */
 .fw-word-timing[hidden] { display: flex; visibility: hidden; }
+
+/* DS-08: Share as video's layout, title and button in one row */
+.fw-share { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }

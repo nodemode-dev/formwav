@@ -451,6 +451,19 @@ def eq_match(media_id: str, reference: str, start: float | None = None, end: flo
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/share/video")
+def share_video(payload: dict) -> Response:
+    """DS-08: {"document", "words": [{"text", "start", "end"}] (session seconds), "layout" (square, portrait or
+    landscape), "title", "start", "end"}: the session, or that span of it, as a captioned waveform MP4."""
+    from ..services import share
+
+    try:
+        mp4 = share.video(payload.get("document"), payload.get("words") or [], str(payload.get("layout") or "square"), str(payload.get("title") or ""), payload.get("start"), payload.get("end"))
+    except (media.MediaError, ValueError, TypeError, KeyError) as err:
+        raise HTTPException(422, str(err)) from err
+    return Response(content=mp4, media_type="video/mp4", headers={"Content-Disposition": 'attachment; filename="formwav-share.mp4"'})
+
+
 @router.post("/media/{media_id}/warp", status_code=201)
 def warp_media(media_id: str, payload: dict) -> dict:
     """PT-09: {"segments": [{"from", "to", "length"}, ...]} in seconds, the media re-timed piecewise between warp

@@ -203,6 +203,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
 <p class="fw-empty-note fw-transcript-state">Transcribe the session, then edit its audio by editing the text.</p>
 <div class="fw-transcript-actions" hidden>
   <button type="button" class="fw-ibtn" data-t="delete">Delete selected words</button><button type="button" class="fw-ibtn" data-t="move" title="Move the selected words, and their audio on every track, to the text cursor (click between words to place it; double-click a word to correct its text)">Move to cursor</button>
+  <span class="fw-share"><select data-share="layout" aria-label="Video layout"><option value="square">Square 1:1</option><option value="portrait">Portrait 9:16</option><option value="landscape">Landscape 16:9</option></select><input type="text" data-share="title" maxlength="80" placeholder="Title" aria-label="Title on the video"><button type="button" class="fw-ibtn" data-t="share" title="A video of the selected words (or the whole session) with its waveform, the title and the words as captions, to post or send">Share as video</button></span>
   <select data-t-fill="mode" aria-label="What Remove filler words does" title="Cut fillers out of the audio, silence them where they are (timing kept, for picture), or hide them in the transcript only (audio untouched)"><option value="cut">Cut them out</option><option value="silence">Silence them in place</option><option value="hide">Hide them in the transcript only</option></select>
   <label class="fw-sam-opt" title="Fade 10 ms either side of every cut so the joins do not click"><input type="checkbox" data-t-fill="smooth" checked> Smooth cuts</label>
   <button type="button" class="fw-ibtn" data-t="fillers">Remove filler words</button>
@@ -496,6 +497,35 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
       transcripts.set(w.mediaId, out.words);
       render();
       setText(notice, `"${w.text}" now runs from ${start.toFixed(3)} to ${end.toFixed(3)} s`);
+      return;
+    }
+    if (action === "share") {
+      // DS-08: the selected words' span (0.2 s either side) or the whole session as a captioned waveform video
+      const doc = engine.get("document");
+      const rate = doc.sampleRate;
+      const picked = words.filter((w) => selected.has(w.key));
+      const length = Math.max(0, ...doc.tracks.flatMap((t) => t.clips.map((c) => c.start + c.length)));
+      const span = picked.length ? { start: Math.max(0, picked[0].start - 0.2 * rate), end: Math.min(length, picked[picked.length - 1].end + 0.2 * rate) } : { start: 0, end: length };
+      const layout = host.querySelector<HTMLSelectElement>('[data-share="layout"]')?.value ?? "square";
+      const title = host.querySelector<HTMLInputElement>('[data-share="title"]')?.value ?? "";
+      setText(notice, "Making the video...");
+      const res = await fetch("/api/share/video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document: doc, words: words.map((w) => ({ text: w.text, start: w.start / rate, end: w.end / rate })), layout, title, start: span.start / rate, end: span.end / rate }),
+      });
+      if (!res.ok) {
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+        setText(notice, `Could not make the video: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `formwav-${layout}.mp4`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setText(notice, `Video ready: ${layout}, ${((span.end - span.start) / rate).toFixed(1)} s with captions`);
       return;
     }
     if (action === "move") {
