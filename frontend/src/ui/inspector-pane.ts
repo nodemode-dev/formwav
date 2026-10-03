@@ -48,7 +48,7 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-analyze" hidden>
   <div class="fw-insp-head">Analyze</div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="stats">Statistics</button><button type="button" class="fw-ibtn" data-an="spectrogram">Spectrogram</button><button type="button" class="fw-ibtn" data-an="mic">Mic check</button><button type="button" class="fw-ibtn" data-an="transients" title="Put a marker at each transient in this clip">Transients</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="stats">Statistics</button><button type="button" class="fw-ibtn" data-an="spectrogram">Spectrogram</button><select data-an-view aria-label="Spectrogram view" title="Spectrogram of both channels, or of a stereo clip's mid or side"><option value="both">L+R</option><option value="mid">Mid</option><option value="side">Side</option></select><button type="button" class="fw-ibtn" data-an="mic">Mic check</button><button type="button" class="fw-ibtn" data-an="transients" title="Put a marker at each transient in this clip">Transients</button></div>
   <label class="fw-field"><span>Sensitivity</span><input type="number" min="0" max="1" step="0.05" value="0.5" data-an-sens aria-label="Transient sensitivity, 0 strong attacks only to 1 subtle ones"><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="split-transients" title="Cut this clip at each transient">Split at transients</button></div>
   <ul class="fw-mic-findings" hidden></ul>
@@ -508,7 +508,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
           statsList?.append(dt, dd);
         }
       } else if (action === "spectrogram" && spectrogram) {
-        const res = await fetch(`/api/media/${hit.clip.mediaId}/spectrogram.png`);
+        const specView = body.querySelector<HTMLSelectElement>("[data-an-view]")?.value ?? "both";
+        const res = await fetch(`/api/media/${hit.clip.mediaId}/spectrogram.png?channel=${encodeURIComponent(specView)}`);
         if (!res.ok) throw new Error(`the engine answered ${res.status}`);
         if (spectrogram.src.startsWith("blob:")) URL.revokeObjectURL(spectrogram.src);
         spectrogram.src = URL.createObjectURL(await res.blob());

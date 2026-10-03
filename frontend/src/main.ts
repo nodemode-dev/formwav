@@ -41,6 +41,7 @@ import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
 import { mountPianoRoll } from "./ui/piano-roll";
+import { mountSpectrum } from "./ui/spectrum";
 import { mountEnvelopeEdit } from "./ui/envelope-edit";
 import { mountProjects } from "./ui/projects";
 import { Player } from "./audio/player";
@@ -104,6 +105,7 @@ if (host) {
   mountTrackMeters(host, engine, player);
   mountMixer(host, engine, player);
   mountPianoRoll(host, engine);
+  mountSpectrum(host, engine, player);
   mountEnvelopeEdit(host, engine);
   mountMediaPane(host, engine);
   mountModelsPane(host, engine);

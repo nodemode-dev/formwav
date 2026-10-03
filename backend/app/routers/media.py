@@ -293,12 +293,29 @@ def media_stats(media_id: str) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
-@router.get("/media/{media_id}/spectrogram.png")
-def media_spectrogram(media_id: str, w: int = 640, h: int = 240, legend: bool = True) -> Response:
+@router.get("/media/{media_id}/spectrum")
+def media_spectrum(media_id: str, fft: int = 4096, start: float = 0.0, end: float = 0.0, channel: str = "both") -> dict:
+    """An averaged spectrum at a chosen FFT size over a range (RX-43, AA-03); channel both, mid or side (RX-54)."""
     from ..services import tools
 
+    if channel not in ("both", "mid", "side"):
+        raise HTTPException(422, "channel is both, mid or side")
     try:
-        return Response(content=tools.spectrogram_png(media_id, w, h, legend), media_type="image/png")
+        return tools.spectrum(media_id, fft, start, end, channel)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
+@router.get("/media/{media_id}/spectrogram.png")
+def media_spectrogram(media_id: str, w: int = 640, h: int = 240, legend: bool = True, channel: str = "both") -> Response:
+    from ..services import tools
+
+    if channel not in ("both", "mid", "side"):
+        raise HTTPException(422, "channel is both, mid or side")
+    try:
+        return Response(content=tools.spectrogram_png(media_id, w, h, legend, channel), media_type="image/png")
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err
     except media.MediaError as err:

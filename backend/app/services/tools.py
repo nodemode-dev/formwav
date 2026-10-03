@@ -442,14 +442,57 @@ def stats_filtered(src: str, chain: str) -> float | None:
     return _num(r"RMS level dB:\s+(-?[0-9.]+)", text)
 
 
-def spectrogram_png(media_id: str, width: int = 640, height: int = 240, legend: bool = True) -> bytes:
+def _view_channel(media_id: str, channel: str):
+    """The media's samples as one view: both channels as they are, or (RX-54) the mid, (L + R) / 2, or the side,
+    (L - R) / 2, of a stereo clip (a mono clip's side is silence)."""
+    view, rate = _wav_view(media_id)
+    x = np.asarray(view, dtype=np.float64)
+    if channel in ("mid", "side"):
+        left, right = x[:, 0], x[:, -1]
+        x = ((left + right) / 2 if channel == "mid" else (left - right) / 2)[:, None]
+    return x, rate
+
+
+def spectrum(media_id: str, fft: int = 4096, start: float = 0.0, end: float = 0.0, channel: str = "both") -> dict:
+    """An averaged spectrum (RX-43's averaged view, AA-03's frequency analysis): Hann windows of `fft` samples at half
+    overlap over the range (the whole clip when `end` is 0), their power averaged (Welch) and given in dB relative to a
+    full-scale sine; `channel` is both (their average power), mid or side."""
+    fft = int(2 ** round(np.log2(max(512, min(int(fft), 32768)))))
+    x, rate = _view_channel(media_id, channel)
+    a = max(0, int(start * rate))
+    b = int(end * rate) if end > 0 else x.shape[0]
+    x = x[a:b]
+    if x.shape[0] < fft:
+        raise media.MediaError(f"the range is shorter than the FFT size ({fft} samples)")
+    w = np.hanning(fft)
+    hop = fft // 2
+    frames = 1 + (x.shape[0] - fft) // hop
+    power = np.zeros(fft // 2 + 1)
+    for c in range(x.shape[1]):
+        seg = x[np.arange(fft)[None, :] + hop * np.arange(frames)[:, None], c] * w
+        power += np.mean(np.abs(np.fft.rfft(seg, axis=1)) ** 2, axis=0)
+    power /= x.shape[1]
+    ref = (np.sum(w) / 2) ** 2
+    db = 10 * np.log10(power / ref + 1e-20)
+    return {"fft": fft, "rate": rate, "frames": int(frames), "binHz": rate / fft, "db": [round(float(v), 2) for v in db]}
+
+
+def spectrogram_png(media_id: str, width: int = 640, height: int = 240, legend: bool = True, channel: str = "both") -> bytes:
     """A spectrogram of the whole file, time left to right and frequency upwards (ffmpeg showspectrumpic); without the
-    legend the image is the bare plot, so its width maps to the file's length exactly."""
+    legend the image is the bare plot, so its width maps to the file's length exactly. With `channel` mid or side
+    (RX-54) it shows that view of a stereo clip."""
     media.media_info(media_id)
     width, height = max(64, min(int(width), 8192)), max(32, min(int(height), 1024))
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "spectrogram.png"
-        return _run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(media_dir() / f"{media_id}.wav"),
+        source = media_dir() / f"{media_id}.wav"
+        if channel in ("mid", "side"):
+            from .audacity import _wav_bytes
+
+            x, rate = _view_channel(media_id, channel)
+            source = Path(tmp) / "view.wav"
+            source.write_bytes(_wav_bytes([x[:, 0].astype(np.float32)], rate))
+        return _run([media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(source),
                      "-lavfi", f"showspectrumpic=s={width}x{height}:legend={1 if legend else 0}:color=intensity:scale=log", "-frames:v", "1", str(out)], out)
 
 

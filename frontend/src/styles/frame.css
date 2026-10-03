@@ -309,3 +309,8 @@
    default width (the bars' width comes from the meter's grid column, 84 px before) */
 .fw-transport .fw-out-meter { grid-template-columns: auto 52px auto; }
 .fw-transport .fw-phase-track { inline-size: 48px; }
+
+/* The Spectrum panel (RX-43, AA-03): its canvas fills the dock below the head */
+.fw-spectrum { display: flex; flex-direction: column; gap: 6px; min-block-size: 0; }
+.fw-spectrum[hidden] { display: none; }
+.fw-spectrum-canvas { display: block; inline-size: 100%; block-size: 160px; flex: 1 1 auto; border-radius: var(--radius-sm); }

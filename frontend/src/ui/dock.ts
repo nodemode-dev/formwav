@@ -38,6 +38,7 @@ export function mountDock(host: HTMLElement): void {
     ["terminal", "Terminal", ".fw-term:not(.fw-agent)", '[data-action="terminal"]'],
     ["agent", "Agent", ".fw-agent", '[data-action="agent"]'],
     ["notes", "Notes", ".fw-piano", ".fw-tool-tray .fw-mode[data-piano]"],
+    ["spectrum", "Spectrum", ".fw-spectrum", ".fw-tool-tray .fw-mode[data-spectrum]"],
   ];
   const docked: Docked[] = [];
   for (const [id, label, panelSel, toggleSel] of wanted) {

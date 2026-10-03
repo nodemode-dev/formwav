@@ -499,6 +499,21 @@ export class Player {
     this.engine.setTransport({ playing: false });
   }
 
+  private tapNode: AnalyserNode | null = null;
+  /** RX-43's live view: an analyser on the player's output, made on the current audio context and fed by the current
+   * node (a fresh one whenever the context has been rebuilt); null before the player opens, or when the output is
+   * native (no browser node to tap). */
+  analyser(): AnalyserNode | null {
+    const node = this.node as unknown as AudioNode | null;
+    if (!this.ctx || !node || typeof node.connect !== "function") return null;
+    if (!this.tapNode || this.tapNode.context !== this.ctx) {
+      this.tapNode = this.ctx.createAnalyser();
+      this.tapNode.smoothingTimeConstant = 0.6;
+      node.connect(this.tapNode);
+    }
+    return this.tapNode;
+  }
+
   async context(): Promise<AudioContext> {
     await this.ensure();
     if (!this.ctx) throw new Error("the audio context did not start");
