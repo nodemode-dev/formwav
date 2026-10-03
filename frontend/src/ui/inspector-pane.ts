@@ -45,6 +45,10 @@ const BODY = `
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges (RX's ambience match)">Fill with room tone</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="heal-brush" aria-pressed="false" title="Paint over a sound in the spectrogram view to heal it as you go: Spot heal under the stroke, one undo step per stroke">Heal brush</button><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select><button type="button" class="fw-ibtn" data-fx="chain-files" hidden title="Run this chain on audio files from the computer, outside the session, and download the results as a zip">Run chain on files...</button><input type="file" data-chain="files" accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff" multiple hidden><button type="button" class="fw-ibtn" data-fx="detect-silences" title="Mark this track's silences (over 0.3 s) as regions on the timeline, to see them before stripping or splitting">Detect silences</button><button type="button" class="fw-ibtn" data-fx="split-silences" title="Split this track's clips where sound starts and stops (silences over 0.3 s)">Split at silences</button><button type="button" class="fw-ibtn" data-fx="similar" title="Mark every event like the one in the selected range (draw a range over one event first)">Find similar</button><button type="button" class="fw-ibtn" data-fx="restore" title="Put the clip's original audio back in the selected range, or the whole clip without a range">Restore original</button></div>
   <ol class="fw-chain" hidden></ol>
+  <details class="fw-macro"><summary title="Write a chain as text: one effect per line, its name (as in the Effects menu's ids) and any setting=value; # starts a comment">Macro script</summary>
+    <textarea class="fw-macro-text" data-macro rows="4" spellcheck="false" aria-label="Macro script: one effect per line, its name and any setting=value pairs; # starts a comment" placeholder="amplify-up db=-3&#10;# comments start with #"></textarea>
+    <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-macro-act="load" title="Check the script and make it the chain, ready to apply to this clip, save, or run on files">Load into chain</button><button type="button" class="fw-ibtn" data-macro-act="from" title="Write the current chain as a script">Write chain as script</button></div>
+  </details>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
   <div class="fw-analyze-buttons"><input type="text" class="fw-sam-desc" data-sam="desc" maxlength="80" placeholder="Describe a sound" title="What to isolate, for example: man speaking, car horn" aria-label="Sound to isolate"><button type="button" class="fw-ibtn" data-sam="go" title="Put the described sound and everything else on new tracks (SAM-Audio); a selected range marks where the sound occurs">Isolate sound</button></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Let the model find where the described sound occurs from the text alone; a selected range is used instead when there is one"><input type="checkbox" data-sam="predict"> Find where it occurs</label><label class="fw-sam-opt" title="Separate this many candidates and keep the one the model's judge ranks best; slower with more"><span>Candidates</span><select data-sam="candidates" aria-label="Candidate separations to re-rank"><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option></select></label></div>
@@ -644,6 +648,50 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   // changes once, so the whole chain is one undo step.
   type ChainStep = { name: string; label: string; params: Record<string, number> };
   let chain: ChainStep[] = [];
+  // AU-39, AA-14: a macro script, one effect per line ("name setting=value ..."; # starts a comment), checked against
+  // the Effects menu and each effect's settings (unknown names or settings are reported by line, settings not given take
+  // their defaults) and loaded as the chain, so Apply chain, Save chain and Run chain on files all take it
+  const parseMacro = (text: string): ChainStep[] | string => {
+    const names = new Map([...(pick?.options ?? [])].map((o) => [o.value, (o.textContent ?? o.value).replace(/\.+$/, "").trim()]));
+    const steps: ChainStep[] = [];
+    for (const [n, raw] of text.split("\n").entries()) {
+      const line = raw.replace(/#.*$/, "").trim();
+      if (!line) continue;
+      const [name, ...rest] = line.split(/\s+/);
+      const label = names.get(name);
+      if (!label) return `Line ${n + 1}: no effect named "${name}"`;
+      const known = controls.get(name) ?? [];
+      const params: Record<string, number> = {};
+      for (const pair of rest) {
+        const m = /^([A-Za-z_][\w-]*)=(-?\d+(?:\.\d+)?)$/.exec(pair);
+        if (!m) return `Line ${n + 1}: "${pair}" is not setting=value`;
+        if (known.length && !known.some((c) => c.id === m[1])) return `Line ${n + 1}: ${name} has no setting "${m[1]}"`;
+        params[m[1]] = Number(m[2]);
+      }
+      for (const c of known) if (!(c.id in params)) params[c.id] = c.default;
+      const detail = known.map((c) => `${params[c.id]}${c.unit}`).join(" ");
+      steps.push({ name, label: detail ? `${label} ${detail}` : label, params });
+    }
+    return steps.length ? steps : "The script has no steps";
+  };
+  body.addEventListener("click", (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>("[data-macro-act]")?.dataset.macroAct;
+    const area = body.querySelector<HTMLTextAreaElement>("[data-macro]");
+    if (!act || !area) return;
+    if (act === "from") {
+      area.value = chain.map((s) => [s.name, ...Object.entries(s.params).map(([k, v]) => `${k}=${v}`)].join(" ")).join("\n");
+      setText(notice, chain.length ? `Wrote the chain's ${chain.length} step${chain.length === 1 ? "" : "s"} as a script` : "The chain is empty");
+      return;
+    }
+    const parsed = parseMacro(area.value);
+    if (typeof parsed === "string") {
+      setText(notice, parsed);
+      return;
+    }
+    chain = parsed;
+    renderChain();
+    setText(notice, `Loaded ${parsed.length} step${parsed.length === 1 ? "" : "s"} into the chain: apply it to this clip, save it, or run it on files`);
+  });
   const chainList = body.querySelector<HTMLElement>(".fw-chain");
   const renderChain = () => {
     if (!chainList) return;
