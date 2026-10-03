@@ -449,6 +449,20 @@ def eq_match(media_id: str, reference: str, start: float | None = None, end: flo
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/heal-painted", status_code=201)
+def heal_painted(media_id: str, payload: dict) -> dict:
+    """AA-06, the heal brush: {"boxes": [{"from", "to", "low", "high"}, ...]} in the media's seconds and Hz, healed in
+    one pass (services/effects.py: heal_painted)."""
+    from ..services import effects
+
+    try:
+        return effects.heal_painted(media_id, payload.get("boxes"))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/effect", status_code=201)
 def apply_effect(media_id: str, name: str, params: str = "", band_low: float | None = None, band_high: float | None = None) -> dict:
     import json

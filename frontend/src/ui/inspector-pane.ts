@@ -822,18 +822,13 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
     const seconds = (at: number) => Math.max(0, (at - clip.start + clip.sourceIn) / rate);
     const steps = boxes.map((b) => ({ from: seconds(b.from - radiusSamples), to: seconds(b.to + radiusSamples), low: Math.max(20, b.low - radiusHz), high: Math.min(rate / 2, b.high + radiusHz) }));
-    let mediaId = clip.mediaId;
-    let last: MediaRef | null = null;
     try {
-      for (const [i, s] of steps.entries()) {
-        setText(notice, `Healing ${i + 1} of ${steps.length}...`);
-        const res = await fetch(`/api/media/${mediaId}/effect?name=spot-heal&params=${encodeURIComponent(JSON.stringify(s))}`, { method: "POST" });
-        const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
-        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
-        last = out as unknown as MediaRef;
-        mediaId = last.id;
-      }
-      if (last) engine.dispatch({ type: "set-clip-media", trackId, clipId: clip.id, media: last });
+      // the whole stroke in one pass, each bin predicted from the frames outside the stroke
+      setText(notice, "Healing the stroke...");
+      const res = await fetch(`/api/media/${clip.mediaId}/heal-painted`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ boxes: steps }) });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "set-clip-media", trackId, clipId: clip.id, media: out as unknown as MediaRef });
       setText(notice, `Healed the stroke: ${steps.length} patch${steps.length === 1 ? "" : "es"} under the brush`);
     } catch (err) {
       setText(notice, `Could not heal the stroke: ${err instanceof Error ? err.message : String(err)}`);

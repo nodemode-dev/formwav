@@ -484,6 +484,84 @@ def _spot_heal(x, rate: int, v: dict):
     return y
 
 
+def _spot_heal_mask(x, rate: int, boxes: list):
+    """AA-06, a painted heal: Spot heal over the union of `boxes` (each `from` and `to` seconds, `low` and `high` Hz) in
+    one pass. The boxes become one mask over the STFT's frames and bins; in each bin every run of masked frames is
+    capped at the level the four unmasked frames before and after that run predict (interpolated in dB across it), the
+    phase kept, so a stroke painted over a whistle is predicted from the frames outside the stroke. (Healing the boxes
+    one at a time let each predict from neighbours that still held the whistle: it came down 18 dB, not to the
+    surroundings.) Frames outside the mask reconstruct exactly, as in Spot heal."""
+    import numpy as np
+
+    n = 2048 if rate > 32000 else 1024
+    hop = n // 4
+    win = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n)
+    ola = float((win**2).sum()) / hop
+    bins = n // 2 + 1
+    spans = []
+    for box in boxes:
+        lo, hi = sorted((float(box["low"]), float(box["high"])))
+        t0, t1 = sorted((float(box["from"]), float(box["to"])))
+        b0, b1 = max(0, int(lo * n / rate)), min(bins, int(np.ceil(hi * n / rate)) + 1)
+        if b1 > b0 and t1 > t0:
+            spans.append((t0, t1, b0, b1))
+    if not spans:
+        return x.astype(np.float32)
+    s0 = max(0, int(min(s[0] for s in spans) * rate) - 6 * n)
+    s1 = min(len(x), int(max(s[1] for s in spans) * rate) + 6 * n)
+    if s1 - s0 < 2 * n:
+        return x.astype(np.float32)
+    y = x.astype(np.float32).copy()
+    half = n / 2 / rate
+    for c in range(x.shape[1]):
+        seg = np.concatenate([np.zeros(n), x[s0:s1, c].astype(np.float64), np.zeros(n)])
+        frames = np.lib.stride_tricks.sliding_window_view(seg, n)[::hop]
+        spec = np.fft.rfft(frames * win, axis=1)
+        centre = (np.arange(len(spec)) * hop - n / 2 + s0) / rate
+        mask = np.zeros(spec.shape, dtype=bool)
+        for t0, t1, b0, b1 in spans:
+            mask[(centre + half >= t0) & (centre - half <= t1), b0:b1] = True
+        mag = np.abs(spec)
+        for b in np.nonzero(mask.any(axis=0))[0]:
+            col = mask[:, b]
+            edges = np.diff(np.concatenate([[0], col.astype(np.int8), [0]]))
+            for f0, f1 in zip(np.nonzero(edges == 1)[0], np.nonzero(edges == -1)[0] - 1):
+                left = [k for k in range(max(0, f0 - 4), f0) if not col[k]]
+                right = [k for k in range(f1 + 1, min(len(col), f1 + 5)) if not col[k]]
+                if not left and not right:
+                    continue
+                ref_l = np.log(mag[left, b].mean() + 1e-12) if left else None
+                ref_r = np.log(mag[right, b].mean() + 1e-12) if right else None
+                ref_l = ref_r if ref_l is None else ref_l
+                ref_r = ref_l if ref_r is None else ref_r
+                w = (np.arange(f0, f1 + 1) - f0 + 1) / (f1 - f0 + 2)
+                ref = np.exp((1 - w) * ref_l + w * ref_r)
+                spec[f0 : f1 + 1, b] *= np.minimum(1.0, ref / (mag[f0 : f1 + 1, b] + 1e-12))
+        back = np.fft.irfft(spec, n, axis=1) * win
+        out = np.zeros(len(seg))
+        for k in range(len(back)):
+            out[k * hop : k * hop + n] += back[k]
+        y[s0:s1, c] = (out[n : n + (s1 - s0)] / ola).astype(np.float32)
+    return y
+
+
+def heal_painted(media_id: str, boxes: list) -> dict:
+    """AA-06: the heal brush's stroke (its boxes in the media's seconds and Hz) healed in one pass, as new media."""
+    import numpy as np
+
+    from .audacity import _wav_bytes
+    from .tools import _wav_view
+
+    if not isinstance(boxes, list) or not 1 <= len(boxes) <= 2000 or not all(isinstance(b, dict) and {"from", "to", "low", "high"} <= set(b) for b in boxes):
+        raise media.MediaError("a painted heal needs 1 to 2000 boxes, each with from, to, low and high")
+    info = media.media_info(media_id)
+    rate = int(info["sampleRate"])
+    view, _ = _wav_view(media_id)
+    y = _spot_heal_mask(np.array(view, dtype=np.float32), rate, boxes)
+    stem = str(info["name"]).rsplit(".", 1)[0]
+    return media.import_wav(f"{stem} (Heal brush).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
+
+
 def _wow_flutter(x, rate: int, v: dict):
     """Wow and flutter removal (RX's Wow & Flutter): a steady component between Low and High Hz (a held note, a hum, a
     tape's bias or test tone) is tracked every 5 ms (the strongest STFT peak, refined by a parabola through its log
