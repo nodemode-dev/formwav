@@ -2046,3 +2046,10 @@ Stretch to playhead finds the percentage that makes the selection end at the pla
 - logged: v1.45.0 (in progress) · 2026-10-02
 
 The row listed chop and in-editor controls as missing, though all four sample edits have controls in the editor's Inspector. Measured now: Split at transients cut a clip with clicks at 1, 2 and 3 s into four pieces there (in Chromium); Change pitch at +12 semitones took a 440 Hz tone to 880 Hz and Reverse matched the input backwards within 1.5e-08 (through the engine); stretching as verified for AA-10 above.
+
+### floating panels (AU-08) carried by saved layouts (AU-09)
+- refers-to: src/ui/dock.ts :: Float, `float`, `dockBack`, `FloatState`, `dockFloating`, `applyDockFloating`; src/ui/workspace-layout.ts :: saved layouts' `floating`; src/styles/frame.css :: `.fw-float`
+- kind: explainer
+- logged: v1.46.0 (in progress) · 2026-10-02
+
+The dock's Float button moves the shown panel into its own window, dragged by its title bar and resized from its corner, several at once; a floating panel is left out of the dock's one-at-a-time rule, its window follows the panel's own toggle, and its Dock button returns it. The floating set and places are kept between visits (restored closed until opened), and a saved layout captures them and restores them exactly. Verified in Chromium at 1288 by 800: Spectrum floated (its tab hidden); Notes opened in the dock beside it with both open; the window dragged from 364, 96 to 164, 206; a layout saved; Dock returned Spectrum to its tab; choosing the saved layout floated it again at 164, 206; no page errors; the audits clean.

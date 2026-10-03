@@ -8,11 +8,15 @@ const MIN_SIDE = 200;
 const MIN_TIMELINE = 360;
 const STEP = 16;
 
+import { applyDockFloating, dockFloating, type FloatState } from "./dock";
+
 interface Layout {
   media: number;
   inspector: number;
   showMedia: boolean;
   showInspector: boolean;
+  /** AU-09: the panels a saved layout floats, and where. */
+  floating?: FloatState[];
 }
 type Side = "media" | "inspector";
 
@@ -138,7 +142,7 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
       const label = window.prompt("Name this layout")?.trim();
       if (label) {
         try {
-          localStorage.setItem(SAVED, JSON.stringify({ ...readSaved(), [label]: layout }));
+          localStorage.setItem(SAVED, JSON.stringify({ ...readSaved(), [label]: { ...layout, floating: dockFloating() } }));
         } catch {
           /* storage refused */
         }
@@ -150,9 +154,11 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
     } else if (kind === "saved") {
       const chosen = readSaved()[name];
       if (chosen) {
-        layout = { ...DEFAULTS, ...chosen };
+        const { floating, ...panes } = chosen;
+        layout = { ...DEFAULTS, ...panes };
         apply();
         save();
+        applyDockFloating(floating ?? []);
       }
     }
     fill();

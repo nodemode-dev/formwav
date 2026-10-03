@@ -326,3 +326,11 @@
 
 /* AU-B06, AU-B07: the curve editor over the curve effects' point fields */
 .fw-curve { display: block; inline-size: 100%; block-size: 150px; border-radius: var(--radius-sm); touch-action: none; cursor: crosshair; margin-block-end: 6px; }
+
+/* AU-08: a panel floated out of the dock, in its own window: dragged by its title bar, resized from its corner */
+.fw-float { position: fixed; z-index: var(--z-companion); display: flex; flex-direction: column; min-inline-size: 280px; min-block-size: 160px; resize: both; overflow: hidden; background: var(--surface-raised); border: 1px solid var(--line-2); border-radius: 10px; }
+.fw-float[hidden] { display: none; }
+.fw-float-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: grab; user-select: none; border-block-end: 1px solid var(--line-1); }
+.fw-float-title { font-size: 12px; color: var(--text-primary); }
+.fw-float-body { flex: 1 1 auto; min-block-size: 0; overflow: auto; padding: 6px; }
+.fw-float-body > [hidden] { display: none; }
