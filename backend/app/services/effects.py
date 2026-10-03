@@ -847,6 +847,39 @@ def limit_to_band(dry_id: str, wet: dict, low: float, high: float) -> dict:
     return media.import_wav(f"{stem} ({lo:g} to {hi:g} Hz).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
 
 
+def limit_to_boxes(dry_id: str, wet: dict, boxes: list) -> dict:
+    """AA-05: an effect's result kept only inside a drawn time-frequency selection (a lasso's columns or a paint stroke's
+    patches, each `from` and `to` in the media's seconds, `low` and `high` in Hz): out = dry + mask(wet - dry) through
+    the STFT, the mask 1 on the frames whose centres and the bins whose frequencies fall in a box, so away from the
+    selection the audio is the dry clip's exactly (at its edges the windows overlap by up to half a window)."""
+    import numpy as np
+
+    from .audacity import _wav_bytes
+    from .tools import _wav_view
+
+    if not isinstance(boxes, list) or not 1 <= len(boxes) <= 4000 or not all(isinstance(b, dict) and {"from", "to", "low", "high"} <= set(b) for b in boxes):
+        raise media.MediaError("a drawn selection needs 1 to 4000 boxes, each with from, to, low and high")
+    dv, rate = _wav_view(dry_id)
+    wv, wrate = _wav_view(wet["id"])
+    dry, out = np.asarray(dv, dtype=np.float64), np.asarray(wv, dtype=np.float64)
+    if dry.shape != out.shape or rate != wrate:
+        raise media.MediaError("this effect changes timing or channels, so it cannot be limited to a drawn selection")
+    n = 2048 if rate > 32000 else 1024
+    hop = n // 4
+    spans = [(*sorted((float(b["from"]), float(b["to"]))), *sorted((float(b["low"]), float(b["high"])))) for b in boxes]
+
+    def keep(spec, freqs, _channel):
+        centre = (np.arange(spec.shape[0]) * hop - n / 2) / rate
+        mask = np.zeros(spec.shape, dtype=bool)
+        for t0, t1, lo, hi in spans:
+            mask[np.ix_((centre >= t0) & (centre <= t1), (freqs >= lo) & (freqs <= hi))] = True
+        return spec * mask
+
+    y = (dry + _stft_map((out - dry).astype(np.float32), rate, n, keep)).astype(np.float32)
+    stem = wet.get("name", "audio").rsplit(".", 1)[0]
+    return media.import_wav(f"{stem} (drawn selection).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
+
+
 def _stft_map(x, rate: int, n: int, fn):
     """Each channel through a short-time spectrum (periodic Hann windows at a quarter-frame hop, which overlap-add to
     exactly 1.5), fn(spec, freqs, channel) returning the spectrum to resynthesise; an unchanged spectrum gives the

@@ -110,7 +110,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const field = <T extends HTMLElement>(name: string) => body.querySelector<T>(`[data-f="${name}"]`);
   const out = (name: string) => body.querySelector<HTMLElement>(`[data-o="${name}"]`);
   let selected: string[] = [];
-  let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number } } | null = null;
+  let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number }; mask?: { from: number; to: number; low: number; high: number }[] } | null = null;
 
   const find = (doc: SessionDoc): { track: Track; clip: Clip } | null => {
     if (selected.length !== 1) {
@@ -314,7 +314,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   };
   host.addEventListener("fw-range", (e) => {
-    range = (e as CustomEvent<{ trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number } } | null>).detail;
+    range = (e as CustomEvent<{ trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number }; mask?: { from: number; to: number; low: number; high: number }[] } | null>).detail;
     render();
     syncBand();
   });
@@ -440,7 +440,14 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       // their own limits from it)
       const ownBand = name === "band-gain" || name === "spot-heal" || name === "dialogue-contour" || name === "spectral-repair";
       const bandQuery = inRange?.band && !ownBand ? `&band_low=${inRange.band.lowHz}&band_high=${inRange.band.highHz}` : "";
-      const res = await fetch(`/api/media/${target.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}${bandQuery}`, { method: "POST" });
+      // AA-05: a lasso or paint selection keeps the effect's change inside its drawn shape (boxes in the media's seconds)
+      const mediaRate = engine.get("document").media[target.clip.mediaId]?.sampleRate ?? engine.get("document").sampleRate;
+      const drawn = inRange?.mask && !ownBand
+        ? inRange.mask.map((m) => ({ from: Math.max(0, (m.from - target.clip.start + target.clip.sourceIn) / mediaRate), to: Math.max(0, (m.to - target.clip.start + target.clip.sourceIn) / mediaRate), low: m.low, high: m.high }))
+        : null;
+      const res = drawn
+        ? await fetch(`/api/media/${target.clip.mediaId}/effect-masked`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, params, boxes: drawn }) })
+        : await fetch(`/api/media/${target.clip.mediaId}/effect?name=${encodeURIComponent(name)}&params=${encodeURIComponent(JSON.stringify(params))}${bandQuery}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       if (inRange) {

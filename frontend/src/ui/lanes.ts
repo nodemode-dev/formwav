@@ -787,9 +787,9 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   });
 
   /** Smart Tool range (interface state): a time range on one track, made by dragging in a clip's upper half. */
-  let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number } } | null = null;
+  let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number }; mask?: { from: number; to: number; low: number; high: number }[] } | null = null;
   let rangeBand: { top: number; height: number } | null = null;
-  let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean; y0: number; clipTop: number; clipHeight: number; bodyTop: number; nyquist: number; spectral: boolean; dabs?: { at: number; hz: number; low: number; high: number }[] } | null = null;
+  let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean; y0: number; clipTop: number; clipHeight: number; bodyTop: number; nyquist: number; spectral: boolean; dabs?: { at: number; hz: number; low: number; high: number; x: number; y: number }[] } | null = null;
   // AA-06: with the heal brush on (the Inspector sets body[data-heal-brush]), a drag in the spectrogram view paints dabs
   // instead of drawing a box; each dab covers BRUSH_PX either way, and the stroke goes to the Inspector on release
   const BRUSH_PX = 8;
@@ -829,6 +829,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (rangeBox.hidden) rangeBox.hidden = false;
   };
   const clearRange = () => {
+    for (const dot of brushDots.splice(0)) dot.remove();
     if (!range) return;
     range = null;
     rangeBand = null;
@@ -851,12 +852,14 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   lanes.addEventListener("pointermove", (e) => {
     const d = rangeDrag;
     if (d) {
-      if (d.spectral && document.body.dataset.healBrush === "on") {
-        // AA-06: a dab where the pointer is, in session samples and Hz, drawn as a dot over the clip
+      const tool = document.body.dataset.healBrush === "on" ? "heal" : document.body.dataset.spectralTool;
+      if (d.spectral && (tool === "heal" || tool === "paint" || tool === "lasso")) {
+        // AA-06 and AA-05: a dab where the pointer is, in session samples and Hz (with the brush's reach), drawn as a dot
+        // over the clip; a lasso keeps the same points as its outline
         d.moved = true;
         const y = Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, e.clientY));
         const hzAt = (py: number) => spectralHz(1 - (Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, py)) - d.clipTop) / d.clipHeight, d.nyquist);
-        (d.dabs ??= []).push({ at: rangeAt(d.body, e.clientX), hz: hzAt(y), low: hzAt(y + BRUSH_PX), high: hzAt(y - BRUSH_PX) });
+        (d.dabs ??= []).push({ at: rangeAt(d.body, e.clientX), hz: hzAt(y), low: hzAt(y + BRUSH_PX), high: hzAt(y - BRUSH_PX), x: e.clientX, y });
         const dot = document.createElement("div");
         dot.className = "fw-brush-dot";
         dot.style.left = `${e.clientX - d.body.getBoundingClientRect().left - BRUSH_PX}px`;
@@ -905,12 +908,42 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     rangeDrag = null;
     if (!d) return;
     if (d.dabs) {
-      for (const dot of brushDots.splice(0)) dot.remove();
-      if (apply && d.dabs.length) {
-        const radiusSamples = Math.abs(rangeAt(d.body, d.x0 + BRUSH_PX) - rangeAt(d.body, d.x0));
-        const radiusHz = (BRUSH_PX * d.nyquist) / d.clipHeight;
-        lanes.dispatchEvent(new CustomEvent("fw-heal-stroke", { bubbles: true, detail: { trackId: d.trackId, dabs: d.dabs, radiusSamples, radiusHz } }));
+      const tool = document.body.dataset.healBrush === "on" ? "heal" : document.body.dataset.spectralTool;
+      const radiusSamples = Math.abs(rangeAt(d.body, d.x0 + BRUSH_PX) - rangeAt(d.body, d.x0));
+      if (tool === "heal" || !apply || !d.dabs.length) {
+        for (const dot of brushDots.splice(0)) dot.remove();
+        if (apply && d.dabs.length && tool === "heal") lanes.dispatchEvent(new CustomEvent("fw-heal-stroke", { bubbles: true, detail: { trackId: d.trackId, dabs: d.dabs, radiusSamples } }));
+        return;
       }
+      // AA-05: a paint selection is its dabs' patches; a lasso is its outline cut into 3 px columns, each column's spans
+      // inside the outline (even-odd) a box; either is a range with this mask, and effects change only inside it. The
+      // dots stay as the selection's mark until it is cleared.
+      const hzAt = (py: number) => spectralHz(1 - (Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, py)) - d.clipTop) / d.clipHeight, d.nyquist);
+      const mask: { from: number; to: number; low: number; high: number }[] = [];
+      const pts = d.dabs;
+      if (tool === "paint") {
+        for (const p of pts) mask.push({ from: Math.max(0, p.at - radiusSamples), to: p.at + radiusSamples, low: p.low, high: p.high });
+      } else {
+        const xs = pts.map((p) => p.x);
+        for (let cx = Math.min(...xs) + 1.5; cx < Math.max(...xs); cx += 3) {
+          const ys: number[] = [];
+          for (let i = 0; i < pts.length; i++) {
+            const a = pts[i];
+            const b = pts[(i + 1) % pts.length];
+            if ((a.x <= cx && b.x > cx) || (b.x <= cx && a.x > cx)) ys.push(a.y + ((cx - a.x) * (b.y - a.y)) / (b.x - a.x));
+          }
+          ys.sort((p, q) => p - q);
+          for (let k = 0; k + 1 < ys.length; k += 2) mask.push({ from: Math.max(0, rangeAt(d.body, cx - 1.5)), to: rangeAt(d.body, cx + 1.5), low: hzAt(ys[k + 1]), high: hzAt(ys[k]) });
+        }
+      }
+      if (!mask.length) {
+        clearRange();
+        return;
+      }
+      range = { trackId: d.trackId, start: Math.min(...mask.map((m) => m.from)), end: Math.max(...mask.map((m) => m.to)), mask };
+      rangeBand = null;
+      lanes.dispatchEvent(new CustomEvent("fw-range", { bubbles: true, detail: range }));
+      drawRange();
       return;
     }
     if (!apply || !d.moved || (range && range.end <= range.start)) clearRange();

@@ -451,6 +451,21 @@ def eq_match(media_id: str, reference: str, start: float | None = None, end: flo
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/effect-masked", status_code=201)
+def apply_effect_masked(media_id: str, payload: dict) -> dict:
+    """AA-05: {"name", "params", "boxes": [{"from", "to", "low", "high"}, ...]}: the effect applied and its change kept
+    only inside the drawn selection (services/effects.py: limit_to_boxes)."""
+    from ..services import effects
+
+    try:
+        name = str(payload.get("name", ""))
+        return effects.limit_to_boxes(media_id, effects.apply(media_id, name, payload.get("params") or None), payload.get("boxes"))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/heal-painted", status_code=201)
 def heal_painted(media_id: str, payload: dict) -> dict:
     """AA-06, the heal brush: {"boxes": [{"from", "to", "low", "high"}, ...]} in the media's seconds and Hz, healed in

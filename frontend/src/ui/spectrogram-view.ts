@@ -40,6 +40,17 @@ export function mountSpectrogramView(host: HTMLElement, engine: Engine): void {
   logButton.title = "Spectrograms on a logarithmic frequency axis (20 Hz at the bottom), for detail in the low octaves";
   logButton.textContent = "Log Hz";
   tray.append(logButton);
+  // AA-05: how a drag selects in a spectrogram: a box (the marquee), a lasso drawn around a sound, or a paintbrush
+  const toolSelect = document.createElement("select");
+  toolSelect.className = "fw-spectral-tool";
+  toolSelect.setAttribute("aria-label", "Spectral selection tool");
+  toolSelect.title = "How a drag selects in a spectrogram: a box, a lasso drawn around a sound, or a paintbrush; effects then change only what is selected";
+  toolSelect.replaceChildren(new Option("Box select", ""), new Option("Lasso select", "lasso"), new Option("Paint select", "paint"));
+  tray.append(toolSelect);
+  toolSelect.addEventListener("change", () => {
+    if (toolSelect.value) document.body.dataset.spectralTool = toolSelect.value;
+    else delete document.body.dataset.spectralTool;
+  });
   let on = false;
   const urls = new Map<string, string>();
 
