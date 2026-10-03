@@ -1997,3 +1997,10 @@ The browser test the previous entry left pending, in Chromium at 1288 by 683 wit
 - logged: v1.44.0 (in progress) · 2026-10-02
 
 A moved clip's start or end within 6 px of another clip's edge on any track, or of the playhead, snaps to it, with a guide line drawn through the lanes there while dragging; Grid and Bars are now the project's snap settings, kept in the document (saved with the session, restored when it opens, and by undo). Verified in Chromium at 1288 by 683: Grid wrote snap {grid: true, bars: false} into the document with the button pressed, and undo took both back; a clip dragged until its start passed near another clip's end at 3 s showed a guide in both lanes at 300 px mid-drag and landed at exactly 3.000 s, the guides gone after; no page errors; the audits clean (the reach audit counts set-snap as dispatched).
+
+### stereo clips mixed down when they land on a mono track (AU-06): built, not yet verified
+- refers-to: src/ui/lanes.ts :: `adaptToTrack`, called after paste and after a drag to another track
+- kind: warning-context
+- logged: v1.45.0 (in progress) · 2026-10-02
+
+A stereo clip pasted or dragged onto a mono track gets the engine's Downmix as its media (a second undo step after the paste or move; Audacity converts in one). The interface builds and the audits are clean. Not verified: the browser test's drag of a stereo clip from its lane onto the mono lane did not move it to that track at all (both tracks unchanged after the drop), so the adaptation was never exercised; the gesture the cross-track drop needs must be found first. AU-06 stays partial. Also seen this turn: the development engine was found down twice between steps, cause not yet looked into.

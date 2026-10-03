@@ -1401,6 +1401,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         restore(d);
         const start = Math.max(0, Math.round(only.clip.start + d.dx * samplesPerPixel(engine.get("document"))));
         engine.dispatch({ type: "move-clip-to-track", trackId: only.trackId, clipId: only.clip.id, toTrackId: target, start });
+        void adaptToTrack(target, [only.clip.id]);
         return;
       }
     }
@@ -1455,6 +1456,22 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     return commands;
   };
 
+  // AU-06: a stereo clip that lands on a mono track, pasted or dragged there, is mixed down to mono, as Audacity does on
+  // paste (a mono clip on a stereo track already plays on both sides); the engine's Downmix makes the mono media, set as
+  // the clip's media (a second undo step, after the paste or move)
+  const adaptToTrack = async (trackId: string, clipIds: Iterable<string>) => {
+    const ids = new Set(clipIds);
+    const doc = engine.get("document");
+    const track = doc.tracks.find((t) => t.id === trackId);
+    if (!track || track.channels !== 1) return;
+    for (const clip of track.clips.filter((c) => ids.has(c.id))) {
+      if ((doc.media[clip.mediaId]?.channels ?? 1) < 2) continue;
+      const res = await fetch(`/api/media/${clip.mediaId}/effect?name=downmix-mono`, { method: "POST" });
+      if (!res.ok) continue;
+      engine.dispatch({ type: "set-clip-media", trackId, clipId: clip.id, media: (await res.json()) as SessionDoc["media"][string] });
+    }
+  };
+
   const paste = () => {
     const doc = engine.get("document");
     const targets = clipboard.filter((c) => doc.tracks.some((t) => t.id === c.trackId));
@@ -1492,6 +1509,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     selectedClipIds.clear();
     for (const track of engine.get("document").tracks) for (const clip of track.clips) if (!before.has(clip.id)) selectedClipIds.add(clip.id);
     markSelected();
+    for (const track of engine.get("document").tracks) void adaptToTrack(track.id, [...selectedClipIds]);
   };
 
   window.addEventListener("keydown", (e) => {
