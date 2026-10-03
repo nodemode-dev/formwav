@@ -7,6 +7,7 @@ import { loadPresets, savePresets, type Preset } from "../io/presets-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { inputDevices, inputSignature, onInputsChanged, refreshInputs, setTrackInput, setTrackMonitor, trackInput, trackMonitor } from "./inputs";
 import { setMonitorLevel } from "../audio/recorder";
+import { mountCurveEditor } from "./curve-editor";
 
 const BODY = `
 <p class="fw-empty-note fw-insp-empty"></p>
@@ -268,6 +269,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         return row;
       }),
     );
+    // AU-B06, AU-B07: the curve effects get a curve editor drawn over their point fields
+    if (paramsBox && pick?.value) mountCurveEditor(paramsBox, pick.value);
   };
   // A plugin's own parameter (p<id>) goes only once moved: a slider rounds its default to its step, and sending that
   // rounded value would change a sound the user never touched.

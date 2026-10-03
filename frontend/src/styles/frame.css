@@ -323,3 +323,6 @@
 .fw-freq-scale { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .fw-freq-scale[hidden] { display: none; }
 .fw-freq-guide { position: absolute; inset-inline: 0; block-size: 0; border-block-start: 1px dashed color-mix(in srgb, var(--text-primary) 35%, transparent); font-size: 9px; line-height: 1; color: color-mix(in srgb, var(--text-primary) 75%, transparent); padding-inline-start: 3px; }
+
+/* AU-B06, AU-B07: the curve editor over the curve effects' point fields */
+.fw-curve { display: block; inline-size: 100%; block-size: 150px; border-radius: var(--radius-sm); touch-action: none; cursor: crosshair; margin-block-end: 6px; }

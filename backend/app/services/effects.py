@@ -113,6 +113,9 @@ FORMWAV_CHAINS = {
     "spectral-recovery": "",
     "spectral-repair": "",
     "dialogue-leveler": "",
+    "graphic-eq": "firequalizer=gain_entry='entry(31,0);entry(16000,0)'",
+    "filter-curve": "firequalizer=gain_entry='entry(50,0);entry(15000,0)'",
+    "dynamics-curve": "",
     "loudness-streaming": "loudnorm=I=-14:TP=-1:LRA=11",
     "loudness-broadcast": "loudnorm=I=-23:TP=-2:LRA=15",
     "exciter": "aexciter=amount=2",
@@ -133,8 +136,8 @@ ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 #: Menu groups for formwav's Inspector; every chain appears exactly once.
 GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Clean up", [("voice-clean", "Enhance speech"), ("denoise", "Denoise"), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess"), ("dialogue-isolate", "Dialogue isolate (neural)...")]),
-    ("Dynamics", [("compress", "Compress"), ("normalize", "Normalize to -16 LUFS"), ("level-rider", "Level rider"), ("peak-limiter", "Peak limiter")]),
-    ("Tone", [("bass", "Bass boost"), ("treble", "Treble boost"), ("warm-lows", "Warm lows"), ("presence-lift", "Presence lift"), ("mid-scoop", "Mid scoop"), ("crisp-detail", "Crisp detail"), ("eq-3band", "Parametric EQ, 3 bands..."), ("graphic-eq-5", "Graphic EQ, 5 bands...")]),
+    ("Dynamics", [("compress", "Compress"), ("normalize", "Normalize to -16 LUFS"), ("level-rider", "Level rider"), ("peak-limiter", "Peak limiter"), ("dynamics-curve", "Dynamics curve...")]),
+    ("Tone", [("bass", "Bass boost"), ("treble", "Treble boost"), ("warm-lows", "Warm lows"), ("presence-lift", "Presence lift"), ("mid-scoop", "Mid scoop"), ("crisp-detail", "Crisp detail"), ("eq-3band", "Parametric EQ, 3 bands..."), ("graphic-eq-5", "Graphic EQ, 5 bands..."), ("graphic-eq", "Graphic EQ, 10 bands..."), ("filter-curve", "Filter curve EQ...")]),
     ("Space", [("reverb", "Reverb..."), ("room", "Room echo"), ("hall", "Hall echo"), ("cathedral", "Cathedral echo"), ("plate", "Plate echo"), ("echo", "Echo"), ("slapback", "Slapback"), ("long-tail", "Long tail"), ("tunnel", "Tunnel"), ("small-booth", "Small booth"), ("far-away", "Far away"), ("wide-stage", "Wide stage"), ("stereo-bloom", "Stereo bloom")]),
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
@@ -176,6 +179,25 @@ def _rnnoise_model() -> str:
     return str(path)
 
 
+GRAPHIC_BANDS = (31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
+
+
+def _graphic_eq_chain(v: dict) -> str:
+    """Graphic EQ (AU-B07's band sliders): ten octave bands from 31 Hz to 16 kHz, each -12 to +12 dB, joined smoothly
+    by ffmpeg's FIR equalizer, each band's gain exact at its own frequency. Defined above PARAMS, which calls its builders
+    when loaded. (scale=loglog, tried first for log-frequency joins, made the equalizer apply no gain at all.)"""
+    entries = ";".join(f"entry({f},{v[f'b{f}']:.2f})" for f in GRAPHIC_BANDS)
+    return f"firequalizer=gain_entry='{entries}'"
+
+
+def _filter_curve_chain(v: dict) -> str:
+    """Filter curve EQ (AU-B07's drawn curve): six points of frequency and gain, drawn in the Inspector's curve editor or
+    typed, joined on a log-frequency scale (flat beyond the outermost points) by ffmpeg's FIR equalizer."""
+    points = sorted((max(10.0, v[f"f{k}"]), v[f"g{k}"]) for k in range(1, 7))
+    entries = ";".join(f"entry({f:.1f},{g:.2f})" for f, g in points)
+    return f"firequalizer=gain_entry='{entries}'"
+
+
 #: Adjustable effects: each parameter is (label, min, max, default, unit); the builder makes the chain from clamped values.
 #: Enhance speech's strength follows formcut's own voice-clean strength control (noise floor and ratio scale with it).
 PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]] = {
@@ -197,6 +219,20 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "phase-rotate": ({"angle": ("Angle", -180, 180, 90, " degrees", 1), "auto": ("Find the angle (1 = on)", 0, 1, 0, "", 1)}, None),
     "breath-control": ({"reduce": ("Reduction", 0, 40, 20, "dB")}, None),
     "dialogue-leveler": ({"target": ("Target RMS", -40, -6, -20, "dB"), "max_gain": ("Max gain", 1, 24, 12, "dB")}, None),
+    "graphic-eq": (
+        {f"b{f}": (name, -12, 12, 0, "dB") for f, name in ((31, "31 Hz"), (63, "63 Hz"), (125, "125 Hz"), (250, "250 Hz"), (500, "500 Hz"), (1000, "1 kHz"), (2000, "2 kHz"), (4000, "4 kHz"), (8000, "8 kHz"), (16000, "16 kHz"))},
+        lambda v: _graphic_eq_chain(v),
+    ),
+    "filter-curve": (
+        {**{f"f{k}": (f"Point {k} frequency", 20, 20000, d, "Hz") for k, d in zip(range(1, 7), (50, 200, 800, 2500, 6000, 15000))},
+         **{f"g{k}": (f"Point {k} gain", -24, 24, 0, "dB") for k in range(1, 7)}},
+        lambda v: _filter_curve_chain(v),
+    ),
+    "dynamics-curve": (
+        {**{f"i{k}": (f"Point {k} in", -80, 0, d, "dB") for k, d in zip(range(1, 6), (-60, -40, -20, -10, 0))},
+         **{f"o{k}": (f"Point {k} out", -80, 0, d, "dB") for k, d in zip(range(1, 6), (-60, -40, -20, -10, 0))}},
+        None,
+    ),
     "spectral-repair": (
         {
             "from": ("From", 0, 3600, 0, "s"),
@@ -728,6 +764,36 @@ def _stft_map(x, rate: int, n: int, fn):
     return out.astype(np.float32)
 
 
+def _dynamics_curve(x, rate: int, v: dict):
+    """Dynamics with a drawn transfer curve (AU-B06): five points mapping input level to output level (RMS dBFS, in 5 ms
+    blocks, linked across channels), drawn in the Inspector's curve editor or typed; each block's gain is its output
+    level less its input level, smoothed over 20 ms. Below the first point the curve continues at unity slope and above
+    the last at the last segment's slope, so it never jumps at its ends."""
+    import numpy as np
+
+    pts = sorted((v[f"i{k}"], v[f"o{k}"]) for k in range(1, 6))
+    ins = np.array([p[0] for p in pts], dtype=np.float64)
+    outs = np.array([p[1] for p in pts], dtype=np.float64)
+    xs = x.astype(np.float64)
+    power = np.mean(xs**2, axis=1)
+    hop = max(1, int(rate * 0.005))
+    frames = int(np.ceil(len(power) / hop))
+    padded = np.pad(power, (0, frames * hop - len(power)))
+    level = 10 * np.log10(np.mean(padded.reshape(frames, hop), axis=1) + 1e-12)
+    out = np.interp(level, ins, outs)
+    below = level < ins[0]
+    out[below] = outs[0] + (level[below] - ins[0])
+    if len(ins) > 1 and ins[-1] > ins[-2]:
+        slope = (outs[-1] - outs[-2]) / (ins[-1] - ins[-2])
+        above = level > ins[-1]
+        out[above] = outs[-1] + (level[above] - ins[-1]) * slope
+    gain = np.convolve(out - level, np.ones(4) / 4, "same")
+    lin = np.repeat(10 ** (gain / 20), hop)[: len(power)]
+    ramp = max(1, hop)
+    lin = np.convolve(lin, np.ones(ramp) / ramp, "same")
+    return (xs * lin[:, None]).astype(np.float32)
+
+
 def _dialogue_leveler(x, rate: int, v: dict):
     """Leveler for dialogue (RX-26): each 50 ms of speech brought toward the Target RMS (by up to Max gain either way,
     smoothed over about 200 ms), while breaths (noise-like frames 10 to 45 dB under the speech) and sibilance (frames
@@ -1088,7 +1154,7 @@ def _peak_normalize(x, rate: int, v: dict):
 NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
                  "azimuth-measured": _azimuth_measured, "dc-measured": _dc_measured, "breath-control": _breath_control,
                  "de-hum-adaptive": _de_hum_adaptive, "de-ess-spectral": _de_ess_spectral, "spectral-recovery": _spectral_recovery,
-                 "spectral-repair": _spectral_repair, "dialogue-leveler": _dialogue_leveler}
+                 "spectral-repair": _spectral_repair, "dialogue-leveler": _dialogue_leveler, "dynamics-curve": _dynamics_curve}
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:
