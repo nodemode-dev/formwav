@@ -821,6 +821,20 @@ def _paulstretch(x, rate: int, v: dict):
     return y.astype(np.float32)
 
 
+def _match_channels(dry, out):
+    """RX-35: a plugin commonly returns stereo for a mono clip (the CLAP test plugin does); when only the channel count
+    differs and one side is mono, that side is copied to the other's channels, so the result can still be limited to a
+    band or a drawn selection. Other mismatches are left for the caller to refuse."""
+    import numpy as np
+
+    if dry.shape[0] == out.shape[0] and dry.shape[1] != out.shape[1]:
+        if dry.shape[1] == 1:
+            dry = np.repeat(dry, out.shape[1], axis=1)
+        elif out.shape[1] == 1:
+            out = np.repeat(out, dry.shape[1], axis=1)
+    return dry, out
+
+
 def limit_to_band(dry_id: str, wet: dict, low: float, high: float) -> dict:
     """AU-31: an effect's result kept only inside a frequency band: out = dry + band(wet - dry), the band taken
     through the FFT with 20 Hz cosine edges, so below and above it the audio is the dry clip's exactly. An effect that
@@ -834,6 +848,7 @@ def limit_to_band(dry_id: str, wet: dict, low: float, high: float) -> dict:
     dv, rate = _wav_view(dry_id)
     wv, wrate = _wav_view(wet["id"])
     dry, out = np.asarray(dv, dtype=np.float64), np.asarray(wv, dtype=np.float64)
+    dry, out = _match_channels(dry, out)
     if dry.shape != out.shape or rate != wrate:
         raise media.MediaError("this effect changes timing or channels, so it cannot be limited to a band")
     f = np.fft.rfftfreq(dry.shape[0], 1 / rate)
@@ -862,6 +877,7 @@ def limit_to_boxes(dry_id: str, wet: dict, boxes: list) -> dict:
     dv, rate = _wav_view(dry_id)
     wv, wrate = _wav_view(wet["id"])
     dry, out = np.asarray(dv, dtype=np.float64), np.asarray(wv, dtype=np.float64)
+    dry, out = _match_channels(dry, out)
     if dry.shape != out.shape or rate != wrate:
         raise media.MediaError("this effect changes timing or channels, so it cannot be limited to a drawn selection")
     n = 2048 if rate > 32000 else 1024

@@ -1013,3 +1013,10 @@ A stroke over a dropout now fills it: when any 5 ms inside the stroke sits 30 dB
 - logged: v1.49.0 (in progress) · 2026-10-03
 
 A save drew no thumbnail for a session over five minutes, because the picture came from rendering the whole mix, too slow to repeat on every save of a long session. Such sessions now get the same 320x64 picture (bars about the centre on a square-root scale, 0xf97316 on transparent, as showwavespic draws) from their clips' own files read at a stride, about 64 samples a column, clip and track gains applied, muted and unsoloed tracks left out, the loudest across tracks per column. Verified: a 6-minute session with tone only in its first and last 30 s saved in 626 ms (the six minutes of audio packed with it), was listed with a thumbnail, lit 26 of 26 columns at each end and none of the 260 between, bars 46 px high (45 for the tone's level), and showed it at 320 by 64 in the start screen's Recent sessions; no page errors. Sessions up to five minutes keep the rendered picture.
+
+### plugins through spectral selections (RX-35)
+- refers-to: app/services/effects.py :: `_match_channels`, `limit_to_band`, `limit_to_boxes`
+- kind: explainer
+- logged: v1.49.0 (in progress) · 2026-10-03
+
+A plugin applied to a lasso, paint or box selection was refused as changing "timing or channels": the CLAP test plugin, like many, returns stereo for a mono clip (144000 frames, 1 channel in, 144000 frames, 2 out). When only the channel count differs and one side is mono, the band and drawn-selection limits now copy that side to the other's channels and limit as before; a real timing change is still refused. Verified through the interface (sidecar verification/verify_plugin_selection.py), measured on session renders of a 440 Hz plus 3 kHz phrase: through a lasso around 3 kHz from 1 to 2 s (33 boxes) and through a box marquee of 1.5 to 4.5 kHz, the plugin took 3 kHz inside from -10.46 to -16.48 dB (its -6.02), left 3 kHz before the selection and 440 Hz inside at -10.46; no page errors. With Preview (AU-29), plugins preview too.
