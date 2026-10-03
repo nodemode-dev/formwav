@@ -147,6 +147,8 @@ export interface Track {
   vcaId?: string;
   /** AU-30's per-track view: this track shown as a spectrogram whatever the session-wide view is. */
   view?: "spectrogram";
+  /** PT-18: post-fader sends, this track's signal (after its inserts and fader) also fed to a bus at a level. */
+  sends?: { busId: string; gainDb: number }[];
   clips: readonly Clip[];
 }
 
@@ -320,7 +322,8 @@ export type Command =
   | { type: "set-clip-pitch"; trackId: string; clipId: string; semitones: number; media: MediaRef | null }
   | { type: "add-marker"; at: number; label: string; clipId?: string }
   | { type: "set-snap"; grid: boolean; bars: boolean }
-  | { type: "set-track-view"; trackId: string; spectrogram: boolean };
+  | { type: "set-track-view"; trackId: string; spectrogram: boolean }
+  | { type: "set-track-send"; trackId: string; busId: string; gainDb: number | null };
 
 export function emptyDocument(sampleRate: number): SessionDoc {
   return { sampleRate, tracks: [], media: {}, markers: [] };
@@ -1015,6 +1018,20 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         return next;
       });
       return changed ? { ...doc, regions: [...regions].sort((a, b) => a.start - b.start) } : doc;
+    }
+    case "set-track-send": {
+      if (!(doc.buses ?? []).some((b) => b.id === cmd.busId)) return doc;
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const rest = (t.sends ?? []).filter((s) => s.busId !== cmd.busId);
+        if (cmd.gainDb === null) {
+          if (rest.length === (t.sends ?? []).length) return t;
+          const { sends: _old, ...base } = t;
+          return rest.length ? { ...base, sends: rest } : base;
+        }
+        const gainDb = Math.max(-60, Math.min(12, Math.round(cmd.gainDb * 10) / 10));
+        if (t.sends?.some((s) => s.busId === cmd.busId && s.gainDb === gainDb)) return t;
+        return { ...t, sends: [...rest, { busId: cmd.busId, gainDb }] };
+      });
     }
     case "set-track-view": {
       return mapTrack(doc, cmd.trackId, (t) => {

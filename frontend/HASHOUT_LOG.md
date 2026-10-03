@@ -2067,3 +2067,10 @@ While playing, a track strip's fader in Write, Touch, Latch or Trim records into
 - logged: v1.46.0 (in progress) · 2026-10-02
 
 The fault the previous entry recorded: Trim measured its offset from the fader after it had moved. Each fader's last value is now kept (after every input and release), and a Trim touch measures from it. Verified with real playback in Chromium: over a Write pass at -6 dB, Trim moving the fader from -6 to -3 wrote its span (1.08 to 1.27 s) at -3, the existing -6 plus 3, with every point outside the span unchanged; no page errors. With Touch, Latch and Write as verified before, the four modes all record.
+
+### post-fader sends to buses (PT-18)
+- refers-to: src/engine/document.ts :: `Track.sends`, `set-track-send`; src/audio/player.ts :: planClips' send duplicates; backend app/services/render.py :: the same for exports; src/ui/mixer.ts :: the strip's send menu and level; src/styles/frame.css :: the strip's full-width rows
+- kind: explainer
+- logged: v1.46.0 (in progress) · 2026-10-02
+
+A track's send feeds its signal, after its inserts and fader, to a bus at a level while the track keeps its own output. No core change: the player plans, and the renderer builds, each clip again into the send's bus at the send level, with its own insert state and automation (rendering one clip twice into two places would have run its insert filters twice per block), and not metered as the track. Verified: an engine export of a 0.2 tone peaked 0.2000 with no send, 0.3002 with a -6 dB send to a unity bus (0.2 times 1.501) and 0.4000 at 0 dB; in Chromium the strip's send menu and level set the send in the document, the player's plan held the main clip (master, gain 1, track 1) and the send (the bus, 0.5012, unmetered), and No send removed it; no page errors; the audits clean (set-track-send dispatched). Found on the way: the strip, a named-area grid, auto-placed the new controls into one column's leftover cells (the send level 6 px wide); they now take full-width rows. With the realtime insert stack already in place, sends and inserts are both there.

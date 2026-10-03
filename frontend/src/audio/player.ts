@@ -153,6 +153,14 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         bus,
         track: doc.tracks.indexOf(track) + 1,
       });
+      // PT-18, post-fader sends: the clip again, into the send's bus at the send level, with its own insert state and
+      // envelopes, not metered as the track (track 0)
+      const main = clips[clips.length - 1];
+      for (const send of track.sends ?? []) {
+        const sendBus = busIndex.get(send.busId);
+        if (sendBus === undefined || mutedBuses.has(send.busId)) continue;
+        clips.push({ ...main, gain: main.gain * dbToGain(send.gainDb), bus: sendBus, track: 0 });
+      }
       end = Math.max(end, clip.start + clip.length);
     }
   }

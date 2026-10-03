@@ -136,6 +136,16 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, track_pan, int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index, clip_env, pan_env))
             fx.extend((len(clips) - 1, *stage) for stage in stages)
             fx_auto.extend((len(clips) - 1, si, param, env) for si, param, env in auto_envs)
+            # PT-18, post-fader sends (as the player plans them): the clip again into the send's bus at the send level,
+            # with its own copy of the inserts and their automation
+            main = clips[-1]
+            for send in track.get("sends") or []:
+                if send.get("busId") not in buses or send.get("busId") in muted_buses:
+                    continue
+                level = 10 ** (float(send.get("gainDb", 0.0)) / 20)
+                clips.append((*main[:4], main[4] * level, *main[5:9], buses[send["busId"]][0], *main[10:]))
+                fx.extend((len(clips) - 1, *stage) for stage in stages)
+                fx_auto.extend((len(clips) - 1, si, param, env) for si, param, env in auto_envs)
             end = max(end, start + length)
     return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains, fx_auto
 

@@ -20,6 +20,8 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
     `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute"><span class="fw-glyph-off">${fcIcon("speaker")}</span><span class="fw-glyph-on">${fcIcon("mute")}</span></button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo"${kind !== "track" ? " hidden" : ""}>${fcIcon("headphones")}</button></div>` +
     `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>` +
     `<select class="fw-strip-vca" aria-label="VCA"${kind !== "track" ? " hidden" : ""}></select>` +
+    `<select class="fw-strip-send" aria-label="Send to bus" title="Send this track, after its inserts and fader, to a bus as well"${kind !== "track" ? " hidden" : ""}></select>` +
+    `<input class="fw-strip-send-level" type="range" min="-60" max="12" step="0.5" value="-12" data-default="-12" aria-label="Send level" title="Send level, dB"${kind !== "track" ? " hidden" : ""}>` +
     `<select class="fw-strip-auto" aria-label="Automation mode" title="Read plays the volume automation; Write, Touch, Latch and Trim record the fader into it while playing"${kind !== "track" ? " hidden" : ""}><option value="read">Read</option><option value="write">Write</option><option value="touch">Touch</option><option value="latch">Latch</option><option value="trim">Trim</option></select>` +
     `<button type="button" class="fw-ibtn fw-strip-remove"${kind === "bus" || kind === "vca" ? "" : " hidden"} title="Remove; its tracks go back to the master or leave the VCA">Remove</button>`;
   return node;
@@ -75,6 +77,20 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
       }
       const value = strip.item.busId ?? "";
       if (out.value !== value) out.value = value;
+    }
+    // PT-18: the strip shows the track's first send (the document allows several)
+    const send = node.querySelector<HTMLSelectElement>(".fw-strip-send");
+    if (send) {
+      const options = [["", "No send"], ...(doc.buses ?? []).map((b) => [b.id, `Send: ${b.name}`])];
+      const signature = JSON.stringify(options);
+      if (send.dataset.options !== signature) {
+        send.dataset.options = signature;
+        send.replaceChildren(...options.map(([v, label]) => new Option(label, v)));
+      }
+      const first = strip.item.sends?.[0];
+      if (send.value !== (first?.busId ?? "")) send.value = first?.busId ?? "";
+      const level = node.querySelector<HTMLInputElement>(".fw-strip-send-level");
+      if (level && first && Number(level.value) !== first.gainDb) level.value = String(first.gainDb);
     }
     const vcaSel = node.querySelector<HTMLSelectElement>(".fw-strip-vca");
     if (vcaSel) {
@@ -254,6 +270,16 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     } else if (el.classList.contains("fw-strip-pan")) {
       const pan = Number(el.value);
       engine.dispatch(s.bus ? { type: "set-bus-pan", busId: s.id, pan } : { type: "set-track-pan", trackId: s.id, pan });
+    } else if (el.classList.contains("fw-strip-send") || el.classList.contains("fw-strip-send-level")) {
+      // PT-18: one send per strip here: choosing a bus replaces the old send, No send removes it, the level updates it
+      const track = engine.get("document").tracks.find((t) => t.id === s.id);
+      const busId = s.node.querySelector<HTMLSelectElement>(".fw-strip-send")?.value ?? "";
+      const gainDb = Number(s.node.querySelector<HTMLInputElement>(".fw-strip-send-level")?.value ?? -12);
+      const commands: { type: "set-track-send"; trackId: string; busId: string; gainDb: number | null }[] = (track?.sends ?? [])
+        .filter((x) => x.busId !== busId)
+        .map((x) => ({ type: "set-track-send", trackId: s.id, busId: x.busId, gainDb: null }));
+      if (busId) commands.push({ type: "set-track-send", trackId: s.id, busId, gainDb });
+      if (commands.length) engine.dispatch({ type: "batch", commands });
     } else if (el.classList.contains("fw-strip-out")) {
       engine.dispatch({ type: "route-track", trackId: s.id, busId: el.value || null });
     } else if (el.classList.contains("fw-strip-vca")) {

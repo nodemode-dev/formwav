@@ -334,3 +334,12 @@
 .fw-float-title { font-size: 12px; color: var(--text-primary); }
 .fw-float-body { flex: 1 1 auto; min-block-size: 0; overflow: auto; padding: 6px; }
 .fw-float-body > [hidden] { display: none; }
+
+/* PT-18, PT-43: a mixer strip holds its send and automation controls too; when they pass its height it scrolls rather
+   than clipping them out of reach */
+.fw-mixer .fw-strip { overflow-y: auto; overflow-x: hidden; }
+.fw-mixer .fw-strip-send, .fw-mixer .fw-strip-auto { inline-size: 100%; max-inline-size: 100%; font-size: 11px; }
+.fw-mixer .fw-strip-send-level { inline-size: 100%; }
+/* the strip is a named-area grid; its send and automation controls take full-width rows of their own (auto-placed they
+   fell into one column's leftover cells, the send level 6 px wide) */
+.fw-strip-send, .fw-strip-send-level, .fw-strip-auto { grid-column: 1 / -1; }
