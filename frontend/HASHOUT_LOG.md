@@ -2011,3 +2011,10 @@ A stereo clip pasted or dragged onto a mono track gets the engine's Downmix as i
 - logged: v1.45.0 (in progress) · 2026-10-02
 
 The test the previous entry left pending, with the gesture the cross-track drop needs (a move counts only once it has travelled sideways, so the earlier purely vertical drag never became a move): in Chromium at 1288 by 683 a stereo clip carrying 500 Hz in its mid and 3 kHz in its side, dragged onto a mono track, landed there at 3.3 s with one-channel media holding the 500 Hz at full level and the 3 kHz at -240 dB (the side cancelled exactly); one undo took back the mixdown and left the move, the two steps as stated; no page errors.
+
+### selections drawn on the spectrogram (RX-23, RX-62): gaps found already closed, re-verified
+- refers-to: the spectrogram marquee (since v1.2.0) and Band gain's band from it
+- kind: explainer
+- logged: v1.45.0 (in progress) · 2026-10-02
+
+Both rows still listed a selection drawn on the spectrogram as missing, though the marquee in the Spectrogram view has drawn one since v1.2.0. Re-verified now in Chromium at 1288 by 683: a box drawn over 0.5 to 1.5 s and about 3 to 7 kHz on a clip of 500 Hz and 5 kHz selected 0.5 to 1.5 s with a 3207 to 7115 Hz band, which filled Band gain's band; -30 dB applied left three pieces, the 5 kHz inside the box down 30.0 dB, the 500 Hz there at -0.00 dB, and the 5 kHz before the box unchanged; no page errors.
