@@ -464,6 +464,32 @@ def share_video(payload: dict) -> Response:
     return Response(content=mp4, media_type="video/mp4", headers={"Content-Disposition": 'attachment; filename="formwav-share.mp4"'})
 
 
+@router.get("/media/{media_id}/notes")
+def media_notes(media_id: str) -> dict:
+    """PT-10: the media's notes (start, end, median pitch) and its pitch curve, for the note editor."""
+    from ..services import effects
+
+    try:
+        return effects.detect_notes(media_id)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, ValueError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
+@router.post("/media/{media_id}/retune-notes", status_code=201)
+def media_retune_notes(media_id: str, payload: dict) -> dict:
+    """PT-10: {"notes": [{"start", "end", "shift"}], "formants", "glide"}: those notes moved, everything else kept."""
+    from ..services import effects
+
+    try:
+        return effects.retune_notes(media_id, payload.get("notes"), bool(payload.get("formants", True)), float(payload.get("glide", 30)))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/share/into-video")
 def share_into_video(payload: dict) -> Response:
     """AP-02: {"document", "mediaId" (the audio a video was imported as), "at" (session seconds of the video's first

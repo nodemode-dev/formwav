@@ -305,7 +305,8 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
         lambda v: "anull",
     ),
     "pitch-correct": (
-        {"key": ("Key (0 C to 11 B)", 0, 11, 0, ""), "scale": ("Scale (0 chromatic, 1 major, 2 minor)", 0, 2, 0, ""), "speed": ("Retune speed", 0, 400, 20, "ms"), "amount": ("Amount", 0, 100, 100, "%")},
+        {"key": ("Key (0 C to 11 B)", 0, 11, 0, ""), "scale": ("Scale (0 chromatic, 1 major, 2 minor)", 0, 2, 0, ""), "speed": ("Retune speed", 0, 400, 20, "ms"), "amount": ("Amount", 0, 100, 100, "%"),
+         "formants": ("Keep formants (0 off, 1 on)", 0, 1, 0, "", 1)},
         lambda v: "anull",
     ),
     "band-gain": (
@@ -801,7 +802,83 @@ def _pitch_correct(x, rate: int, v: dict):
     for i, t in enumerate(target):
         acc = alpha * acc + (1 - alpha) * t
         shift[i] = acc
-    return _rubberband_pitch(x, rate, 2 ** (shift * v["amount"] / 100.0), step, "Pitch correction")
+    return _rubberband_pitch(x, rate, 2 ** (shift * v["amount"] / 100.0), step, "Pitch correction", formants=bool(round(float(v.get("formants", 0)))))
+
+
+def detect_notes(media_id: str) -> dict:
+    """PT-10: the media's notes for the note editor: the pitch tracked every 5 ms (YIN), voiced frames grouped into a
+    note while they stay within half a semitone of its running median (a frame or two of break bridged), notes of 60 ms
+    or more kept, each with its start and end (the media's seconds) and median pitch (MIDI, fractional); with the pitch
+    curve every 20 ms for drawing."""
+    import numpy as np
+
+    from .tools import _wav_view
+
+    view, rate = _wav_view(media_id)
+    mono = np.asarray(view, dtype=np.float64).mean(axis=1)
+    step, f0 = _f0_track(mono, rate)
+    # frames 50 dB under the loudest are not notes: YIN reads digital silence as a pitch near its 1 kHz ceiling
+    hop = max(1, int(round(step * rate)))
+    level = np.array([np.sqrt(np.mean(mono[i * hop : i * hop + hop] ** 2)) if i * hop < len(mono) else 0.0 for i in range(len(f0))])
+    f0 = np.where(level > level.max() * 10 ** (-50 / 20), f0, 0.0)
+    midi = np.where(f0 > 0, 69 + 12 * np.log2(np.maximum(f0, 1e-9) / 440.0), np.nan)
+    notes: list[dict] = []
+    run: list[int] = []
+    gap = 0
+
+    def close() -> None:
+        if len(run) * step >= 0.06:
+            notes.append({"start": round(run[0] * step, 4), "end": round((run[-1] + 1) * step, 4), "midi": round(float(np.median(midi[run])), 3)})
+
+    for i, m in enumerate(midi):
+        if np.isnan(m):
+            gap += 1
+            if gap > 2 and run:
+                close()
+                run = []
+            continue
+        if run and abs(m - np.median(midi[run[-20:]])) > 0.5:
+            close()
+            run = []
+        run.append(i)
+        gap = 0
+    if run:
+        close()
+    every = max(1, int(round(0.02 / step)))
+    curve = [[round(i * step, 3), round(float(midi[i]), 2)] for i in range(0, len(midi), every) if not np.isnan(midi[i])]
+    return {"notes": notes, "curve": curve}
+
+
+def retune_notes(media_id: str, notes: list, formants: bool = True, glide_ms: float = 30.0) -> dict:
+    """PT-10: each listed note ({"start", "end" in the media's seconds, "shift" in semitones}) moved by its shift, gliding
+    in and out over `glide_ms`, everything else left where it was, through rubberband with the formants kept or not;
+    the length is kept. A new media."""
+    import numpy as np
+
+    from .audacity import _wav_bytes
+    from .tools import _wav_view
+
+    if not isinstance(notes, list) or not 1 <= len(notes) <= 2000:
+        raise media.MediaError("send 1 to 2000 notes, each with start, end and shift")
+    info = media.media_info(media_id)
+    view, rate = _wav_view(media_id)
+    x = np.asarray(view, dtype=np.float32)
+    step = 0.005
+    frames = int(len(x) / rate / step) + 1
+    target = np.zeros(frames)
+    for n in notes:
+        a, b, s = float(n["start"]), float(n["end"]), float(n["shift"])
+        if not (b > a) or abs(s) > 24:
+            raise media.MediaError("each note needs start before end and a shift within two octaves")
+        target[int(a / step) : int(np.ceil(b / step))] = s / 12.0  # octaves
+    alpha = 0.0 if glide_ms <= 0 else float(np.exp(-step / (glide_ms / 1000.0)))
+    shift, acc = np.zeros(frames), 0.0
+    for i, t in enumerate(target):
+        acc = alpha * acc + (1 - alpha) * t
+        shift[i] = acc
+    y = _rubberband_pitch(x, rate, 2**shift, step, "Note edit", formants=bool(formants))
+    stem = str(info["name"]).rsplit(".", 1)[0]
+    return media.import_wav(f"{stem} (notes edited).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))
 
 
 def _rubberband_pitch(x, rate: int, ratio, step: float, label: str, formants: bool = False):

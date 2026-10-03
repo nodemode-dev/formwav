@@ -321,3 +321,6 @@
 .fw-env-points[hidden] { display: none; }
 .fw-env-point { position: absolute; inline-size: 9px; block-size: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--accent-color); border: 1.5px solid var(--surface-0); pointer-events: auto; cursor: grab; touch-action: none; }
 .fw-env-point:active { cursor: grabbing; }
+
+/* PT-10: the note editor's canvas, notes dragged up or down */
+.fw-notes-canvas { display: block; inline-size: 100%; block-size: 160px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; cursor: ns-resize; touch-action: none; color: inherit; }

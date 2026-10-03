@@ -28,6 +28,9 @@ const BODY = `
   <p class="fw-empty-note fw-env-readout" data-env-out>No gain envelope</p>
   <div class="fw-insp-head">De-bleed</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
+  <div class="fw-insp-head" title="The clip's sung or played notes; drag one up or down to retune it (Melodyne's note editing)">Notes</div>
+  <canvas class="fw-notes-canvas" data-notes width="512" height="160" aria-label="The clip's notes on a pitch grid; drag a note up or down to retune it a semitone at a time"></canvas>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-notes-act="find" title="Track the clip's pitch and show its notes">Find notes</button><button type="button" class="fw-ibtn" data-notes-act="apply" title="Retune the notes you moved, everything else left as it is, one undo step">Apply note changes</button><label class="fw-sam-opt" title="Keep the voice's character (its formants) where it was as the notes move"><input type="checkbox" data-notes-formants checked> Keep formants</label></div>
   <div class="fw-insp-head" title="Pin a point in the clip's audio, then drag its marker on the clip to re-time the audio on either side (Pro Tools' warp markers)">Warp markers</div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-warp="add" title="Put a warp marker on the selected clip at the playhead">Add warp marker at playhead</button><button type="button" class="fw-ibtn" data-warp="clear" title="Remove the clip's warp markers and play its original timing">Clear warp</button></div>
   <div class="fw-insp-head">Draw samples</div>
@@ -331,6 +334,132 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     syncBand();
   });
   pick?.addEventListener("change", showControls);
+  // PT-10: the note editor. Find notes tracks the selected clip's pitch (the engine's notes within the clip's span); the
+  // canvas shows them on a semitone grid over the pitch curve; dragging a note moves its target a semitone at a time
+  // from its nearest semitone; Apply retunes only the notes moved, formants kept unless unticked, as one change. The
+  // canvas carries the notes and targets as data for checks.
+  const notesCanvas = body.querySelector<HTMLCanvasElement>("[data-notes]");
+  type EditNote = { start: number; end: number; midi: number; target: number };
+  let noteState: { mediaId: string; trackId: string; clipId: string; notes: EditNote[]; curve: [number, number][]; t0: number; t1: number; lo: number; hi: number } | null = null;
+  const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const noteXY = (s: NonNullable<typeof noteState>, w: number, h: number) => ({
+    x: (t: number) => ((t - s.t0) / Math.max(1e-6, s.t1 - s.t0)) * w,
+    y: (m: number) => h - ((m - s.lo) / Math.max(1, s.hi - s.lo)) * h,
+  });
+  const drawNotes = () => {
+    const g = notesCanvas?.getContext("2d");
+    if (!notesCanvas || !g) return;
+    const { width: w, height: h } = notesCanvas;
+    const style = getComputedStyle(notesCanvas);
+    const ink = style.color;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-color").trim() || ink;
+    g.clearRect(0, 0, w, h);
+    const s = noteState;
+    notesCanvas.dataset.notesJson = JSON.stringify(s ? s.notes.map((n) => [n.start, n.end, n.midi, n.target]) : []);
+    if (!s) return;
+    const { x, y } = noteXY(s, w, h);
+    g.globalAlpha = 0.25;
+    g.strokeStyle = ink;
+    for (let m = Math.ceil(s.lo); m <= s.hi; m++) {
+      g.beginPath();
+      g.moveTo(0, y(m) + 0.5);
+      g.lineTo(w, y(m) + 0.5);
+      g.stroke();
+    }
+    g.globalAlpha = 0.6;
+    g.beginPath();
+    s.curve.forEach(([t, m], i) => (i ? g.lineTo(x(t), y(m)) : g.moveTo(x(t), y(m))));
+    g.stroke();
+    g.globalAlpha = 1;
+    g.font = `11px ${style.fontFamily}`;
+    for (const n of s.notes) {
+      const moved = n.target !== n.midi;
+      g.fillStyle = accent;
+      g.globalAlpha = moved ? 0.95 : 0.55;
+      g.fillRect(x(n.start), y(n.target + 0.5), Math.max(2, x(n.end) - x(n.start)), Math.max(3, y(n.target - 0.5) - y(n.target + 0.5)));
+      g.globalAlpha = 1;
+      g.fillStyle = ink;
+      const r = Math.round(n.target);
+      g.fillText(`${NOTE_NAMES[((r % 12) + 12) % 12]}${Math.floor(r / 12) - 1}`, x(n.start) + 2, y(n.target + 0.5) - 2);
+    }
+  };
+  body.addEventListener("click", async (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>("[data-notes-act]")?.dataset.notesAct;
+    if (!act) return;
+    const doc = engine.get("document");
+    const hit = find(doc);
+    const media = hit ? doc.media[hit.clip.mediaId] : undefined;
+    if (!hit || !media) {
+      setText(notice, "Select a clip first");
+      return;
+    }
+    if (act === "find") {
+      setText(notice, "Finding the clip's notes...");
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/notes`);
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; notes?: { start: number; end: number; midi: number }[]; curve?: [number, number][] };
+      if (!res.ok || !out.notes) {
+        setText(notice, `Could not find notes: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+        return;
+      }
+      const t0 = hit.clip.sourceIn / media.sampleRate;
+      const t1 = (hit.clip.sourceIn + hit.clip.length) / media.sampleRate;
+      const notes = out.notes.filter((n) => n.end > t0 && n.start < t1).map((n) => ({ ...n, target: n.midi }));
+      const pitches = notes.map((n) => n.midi);
+      noteState = { mediaId: hit.clip.mediaId, trackId: hit.track.id, clipId: hit.clip.id, notes, curve: (out.curve ?? []).filter(([t]) => t >= t0 && t <= t1), t0, t1, lo: Math.floor(Math.min(...pitches, 60)) - 3, hi: Math.ceil(Math.max(...pitches, 60)) + 3 };
+      drawNotes();
+      setText(notice, notes.length ? `Found ${notes.length} note${notes.length === 1 ? "" : "s"}: drag one up or down to retune it` : "No notes found in this clip");
+      return;
+    }
+    const s = noteState;
+    const moved = s && s.mediaId === hit.clip.mediaId ? s.notes.filter((n) => n.target !== n.midi) : [];
+    if (!s || !moved.length) {
+      setText(notice, "Find notes, then drag a note to a new pitch");
+      return;
+    }
+    setText(notice, `Retuning ${moved.length} note${moved.length === 1 ? "" : "s"}...`);
+    const formants = body.querySelector<HTMLInputElement>("[data-notes-formants]")?.checked !== false;
+    const res = await fetch(`/api/media/${s.mediaId}/retune-notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: moved.map((n) => ({ start: n.start, end: n.end, shift: n.target - n.midi })), formants }),
+    });
+    const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+    if (!res.ok) {
+      setText(notice, `Could not retune: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+      return;
+    }
+    engine.dispatch({ type: "set-clip-media", trackId: s.trackId, clipId: s.clipId, media: out as unknown as MediaRef });
+    noteState = null;
+    drawNotes();
+    setText(notice, `Retuned ${moved.length} note${moved.length === 1 ? "" : "s"}${formants ? ", formants kept" : ""}; Find notes shows them now`);
+  });
+  notesCanvas?.addEventListener("pointerdown", (e) => {
+    const s = noteState;
+    if (!s || !notesCanvas) return;
+    const box = notesCanvas.getBoundingClientRect();
+    const sx = notesCanvas.width / box.width;
+    const sy = notesCanvas.height / box.height;
+    const { x, y } = noteXY(s, notesCanvas.width, notesCanvas.height);
+    const px = (e.clientX - box.left) * sx;
+    const py = (e.clientY - box.top) * sy;
+    const note = s.notes.find((n) => px >= x(n.start) && px <= x(n.end) && py >= y(n.target + 0.6) && py <= y(n.target - 0.6));
+    if (!note) return;
+    e.preventDefault();
+    notesCanvas.setPointerCapture(e.pointerId);
+    const startTarget = note.target === note.midi ? Math.round(note.midi) : note.target;
+    const perSemitone = notesCanvas.height / Math.max(1, s.hi - s.lo);
+    const move = (ev: PointerEvent) => {
+      const steps = Math.round(-((ev.clientY - e.clientY) * sy) / perSemitone);
+      const next = steps === 0 && note.target === note.midi ? note.midi : startTarget + steps;
+      if (next !== note.target) {
+        note.target = next;
+        drawNotes();
+      }
+    };
+    notesCanvas.addEventListener("pointermove", move);
+    notesCanvas.addEventListener("pointerup", () => notesCanvas.removeEventListener("pointermove", move), { once: true });
+  });
+
   // AU-22: playback's output device, rate and channel map, kept on this machine; the device list follows the system's
   // devices, and a stored device that has gone shows as the default
   const outDevice = body.querySelector<HTMLSelectElement>('[data-play-out="device"]');

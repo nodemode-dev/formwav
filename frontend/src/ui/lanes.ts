@@ -37,6 +37,11 @@ let zoom = 1;
 const selectedClipIds = new Set<string>();
 const zoomListeners = new Set<() => void>();
 
+/** The clips selected in the lanes (shift-click or a marquee), read-only, for actions over several clips. */
+export function selectedClips(): ReadonlySet<string> {
+  return selectedClipIds;
+}
+
 export function getZoom(): number {
   return zoom;
 }
