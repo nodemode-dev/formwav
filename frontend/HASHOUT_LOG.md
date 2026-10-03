@@ -2060,3 +2060,10 @@ The dock's Float button moves the shown panel into its own window, dragged by it
 - logged: v1.46.0 (in progress) · 2026-10-02
 
 While playing, a track strip's fader in Write, Touch, Latch or Trim records into the volume automation, each pass replacing the automation in its span at stop, one undo step. Verified with real playback in Chromium on an 8 s tone: Touch wrote 39 points from the first touch at 0.98 s to the release at 1.79 s, stepping -3 to -12, and one undo removed them; Latch wrote from 0.99 s through the release to the stop at 2.99 s, holding -12; Write wrote from the start of play (0 s) to the stop, -12 then -6 after the move; no page errors. Fault, not yet fixed: Trim changed nothing, because its offset is taken from the fader's value before the touch, read in the input event after the fader has already moved, so the offset is always zero; the fix is to remember each fader's last committed value and offset from it. PT-43 stays partial until Trim is fixed and verified.
+
+### Trim's offset fixed; the four automation modes verified (PT-43)
+- refers-to: src/ui/mixer.ts :: `lastFader`, Trim's `trimFrom`
+- kind: explainer
+- logged: v1.46.0 (in progress) · 2026-10-02
+
+The fault the previous entry recorded: Trim measured its offset from the fader after it had moved. Each fader's last value is now kept (after every input and release), and a Trim touch measures from it. Verified with real playback in Chromium: over a Write pass at -6 dB, Trim moving the fader from -6 to -3 wrote its span (1.08 to 1.27 s) at -3, the existing -6 plus 3, with every point outside the span unchanged; no page errors. With Touch, Latch and Write as verified before, the four modes all record.

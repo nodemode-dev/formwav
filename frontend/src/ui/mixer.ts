@@ -165,6 +165,8 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   // fader's move; at stop each pass replaces the automation in the span it covered, one undo step for all tracks
   type Pass = { mode: string; points: { time: number; value: number }[]; from: number; to: number | null; touching: boolean; touchedOnce: boolean; trimFrom: number; base: { time: number; value: number }[]; staticDb: number };
   const passes = new Map<string, Pass>();
+  /** Each fader's value after its last input or release, so a Trim touch measures its offset from where it began. */
+  const lastFader = new Map<string, number>();
   const modeOf = (id: string) => panel.querySelector<HTMLSelectElement>(`.fw-strip[data-key="${id}"] .fw-strip-auto`)?.value ?? "read";
   const faderOf = (id: string) => Number(panel.querySelector<HTMLInputElement>(`.fw-strip[data-key="${id}"] .fw-strip-fader`)?.value ?? 0);
   const valueAt = (pts: { time: number; value: number }[], t: number, fallback: number) => {
@@ -193,7 +195,11 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     const s = stripOf(e.target);
     if (!s || !(e.target as HTMLElement).classList.contains("fw-strip-fader")) return;
     s.node.dataset.dragging = "fader";
-    setText(s.node.querySelector(".fw-strip-db"), dbText(Number((e.target as HTMLInputElement).value)));
+    const now = Number((e.target as HTMLInputElement).value);
+    // the fader's value before this input (the input event comes after the slider has moved)
+    const before = lastFader.get(s.id);
+    lastFader.set(s.id, now);
+    setText(s.node.querySelector(".fw-strip-db"), dbText(now));
     const mode = s.node.dataset.kind === "track" ? modeOf(s.id) : "read";
     const transport = engine.get("transport");
     if (mode === "read" || !transport.playing) return;
@@ -201,7 +207,7 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     if (!p.touching) {
       p.touching = true;
       p.to = null;
-      if (mode === "trim") p.trimFrom = faderOf(s.id) - (Number((e.target as HTMLInputElement).value) - faderOf(s.id));
+      if (mode === "trim") p.trimFrom = before ?? p.staticDb;
       if (!p.touchedOnce && mode !== "write") p.from = transport.positionSamples;
       p.touchedOnce = true;
     }
@@ -233,6 +239,7 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     if (!s) return;
     if (el.classList.contains("fw-strip-fader")) {
       delete s.node.dataset.dragging;
+      lastFader.set(s.id, Number(el.value));
       const pass = s.node.dataset.kind === "track" ? passes.get(s.id) : undefined;
       if (pass) {
         // PT-43: the fader was recording: Touch and Trim stop writing at release, Latch keeps the last value until stop
