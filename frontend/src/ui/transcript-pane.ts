@@ -85,21 +85,112 @@ const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9']/g, "");
  * abandoned, so it goes from its first word up to where the retake starts, keeping the last take as Descript does.
  * Four words, not three: a single take can repeat three ("can do for you" ... "can do for your").
  */
-function retakeRanges(words: SessionWord[]): { start: number; end: number }[] {
+/** DS-07: phrases are runs of words ended by a pause of RETAKE_PAUSE seconds (a restart leaves a gap; rhetoric that
+ *  repeats itself, "ask not what your country can do for you, ask what you can do for your country", runs on without
+ *  one and stays one phrase). Pauses only: the model's punctuation is not evidence (on spliced takes it wrote "Ask,
+ *  not. What your country", and a split at that period kept the takes from ever being compared). */
+const RETAKE_PAUSE = 0.3;
+function phraseSpans(words: SessionWord[], rate: number): { from: number; to: number }[] {
+  const spans: { from: number; to: number }[] = [];
+  let from = 0;
+  words.forEach((w, i) => {
+    const next = words[i + 1];
+    if (!next || next.start - w.end >= RETAKE_PAUSE * rate) {
+      spans.push({ from, to: i });
+      from = i + 1;
+    }
+  });
+  return spans;
+}
+/** Shared words (counted as often as both say them) over the longer phrase, and over the shorter. */
+function overlap(a: string[], b: string[]): { ofLonger: number; ofShorter: number } {
+  const count = new Map<string, number>();
+  for (const t of a) count.set(t, (count.get(t) ?? 0) + 1);
+  let shared = 0;
+  for (const t of b) {
+    const c = count.get(t) ?? 0;
+    if (c > 0) {
+      shared++;
+      count.set(t, c - 1);
+    }
+  }
+  return { ofLonger: shared / Math.max(a.length, b.length, 1), ofShorter: shared / Math.max(1, Math.min(a.length, b.length)) };
+}
+/**
+ * Retakes (DS-07). Phrases within three of each other are takes of one another when they share 70% of their words
+ * (repeated, or reworded) or the shorter, of four words or more, is 90% inside the longer (a take abandoned partway).
+ * In each group the best take stays: the most complete (its distinct words against the group's most), less a point
+ * for each filler, a quarter more for ending a sentence, the last take winning a tie as Descript keeps it. Each other take goes from its first word to the next word kept. Then, as
+ * before, a run of RETAKE_RUN words said again within RETAKE_WINDOW words drops the earlier attempt (a restart inside
+ * one phrase); four words, not three, as a single take can repeat three ("can do for you" ... "can do for your").
+ */
+function retakeRanges(words: SessionWord[], rate: number): { start: number; end: number }[] {
   const n = words.map((w) => norm(w.text));
-  const ranges: { start: number; end: number }[] = [];
+  const gone = new Set<number>();
+  const spans = phraseSpans(words, rate);
+  const tokens = spans.map((s) => n.slice(s.from, s.to + 1).filter((t) => t !== ""));
+  const grouped = new Set<number>();
+  for (let a = 0; a < spans.length; a++) {
+    if (grouped.has(a) || tokens[a].length < 3) continue;
+    const group = [a];
+    for (let b = a + 1; b < spans.length && b <= group[group.length - 1] + 3; b++) {
+      if (grouped.has(b) || tokens[b].length < 3) continue;
+      const o = overlap(tokens[group[group.length - 1]], tokens[b]);
+      if (o.ofLonger >= 0.7 || (Math.min(tokens[group[group.length - 1]].length, tokens[b].length) >= 4 && o.ofShorter >= 0.9)) group.push(b);
+    }
+    if (group.length < 2) continue;
+    const most = Math.max(...group.map((g) => new Set(tokens[g]).size));
+    const score = (g: number, order: number) => {
+      const s = spans[g];
+      const fillers = words.slice(s.from, s.to + 1).filter((w) => w.filler).length;
+      return (2 * new Set(tokens[g]).size) / most - fillers + (/[.?!]$/.test(words[s.to].text.trim()) ? 0.25 : 0) + 0.01 * order;
+    };
+    const best = group.reduce((x, g, order) => (score(g, order) > score(x, group.indexOf(x)) ? g : x), group[0]);
+    for (const g of group) {
+      grouped.add(g);
+      if (g !== best) for (let i = spans[g].from; i <= spans[g].to; i++) gone.add(i);
+    }
+  }
   let i = 0;
   while (i + RETAKE_RUN <= words.length) {
     let found = -1;
     for (let j = i + RETAKE_RUN; j + RETAKE_RUN <= words.length && j <= i + RETAKE_WINDOW && found < 0; j++) {
       let same = true;
-      for (let k = 0; k < RETAKE_RUN && same; k++) same = n[i + k] !== "" && n[i + k] === n[j + k];
+      for (let k = 0; k < RETAKE_RUN && same; k++) same = n[i + k] !== "" && n[i + k] === n[j + k] && !gone.has(i + k) && !gone.has(j + k);
       if (same) found = j;
     }
     if (found >= 0) {
-      ranges.push({ start: words[i].start, end: words[found].start });
-      i = found;
+      // judged like the phrase takes: the earlier attempt [i, found) against the retake; the better stays, the last on a
+      // tie. (The model can stretch a word over the pause between takes, so takes can arrive here as one phrase.) The
+      // retake is found by alignment, not by pauses (a speaker pauses inside a take, "Ask, not."): the words it shares
+      // in order with the earlier attempt, then on while its words still come from it, short of a full second's stop
+      // and at most two words longer than the earlier attempt
+      let common = 0;
+      while (found + common < words.length && i + common < found && n[i + common] === n[found + common]) common++;
+      let later = found + common - 1;
+      const earlierWords = new Set(n.slice(i, found));
+      while (later + 1 < words.length && later + 1 <= found + (found - i) + 2 && !gone.has(later + 1) && earlierWords.has(n[later + 1]) && words[later + 1].start - words[later].end < rate) later++;
+      const toks = (a: number, b: number) => n.slice(a, b + 1).filter((t) => t !== "");
+      const most = Math.max(new Set(toks(i, found - 1)).size, new Set(toks(found, later)).size, 1);
+      const judge = (a: number, b: number, order: number) =>
+        (2 * new Set(toks(a, b)).size) / most - words.slice(a, b + 1).filter((w) => w.filler).length + (/[.?!]$/.test(words[b].text.trim()) ? 0.25 : 0) + 0.01 * order;
+      if (judge(i, found - 1, 0) > judge(found, later, 1)) {
+        for (let k = found; k <= later; k++) gone.add(k);
+        i = later + 1;
+      } else {
+        for (let k = i; k < found; k++) gone.add(k);
+        i = found;
+      }
     } else i += 1;
+  }
+  // each removed run goes from its first word to the next word kept (its trailing pause with it)
+  const ranges: { start: number; end: number }[] = [];
+  for (let k = 0; k < words.length; k++) {
+    if (!gone.has(k)) continue;
+    let e = k;
+    while (e + 1 < words.length && gone.has(e + 1)) e++;
+    ranges.push({ start: words[k].start, end: e + 1 < words.length ? words[e + 1].start : words[e].end });
+    k = e;
   }
   return ranges;
 }
@@ -438,7 +529,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
         setText(notice, hide ? "Filler words hidden in the transcript; the audio is untouched" : "Filler words shown in the transcript again");
       } else cut(rangesOf(words, (w) => w.filler), "filler words", mode === "silence");
     }
-    else if (action === "retakes") cut(retakeRanges(words), "earlier takes");
+    else if (action === "retakes") cut(retakeRanges(words, engine.get("document").sampleRate), "retakes (the best take kept)");
     else if (action === "clip") {
       const picked = words.filter((w) => selected.has(w.key));
       if (!picked.length) {
