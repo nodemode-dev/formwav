@@ -1983,3 +1983,10 @@ A Spectrum tab in the dock draws the output live while playing (an analyser on t
 - logged: v1.44.0 (in progress) · 2026-10-02
 
 On a range: split-cut puts the range's audio on the clip clipboard and leaves a gap, split-delete leaves a gap whatever Shuffle says, split to a new track moves the range's audio to a new track at the same time (import-media without a track), each one undo step; Split at silences splits the selected clip's track where the engine's activity (ducking's) says sound starts and stops. Monitor input now works before a take: on the armed track, with no take running, the take's own input and worklet pass the input through with no take started, stopped when monitoring is turned off or a take starts; a Monitor level (-30 to +6 dB) scales the pass-through before and during takes. The interface builds and type-checks and the audits are clean; the browser test (a drawn range and the three shortcuts, Split at silences on a clip with a silence, the monitor's level measured on a fake input) has not run yet, so AU-05 and AU-21 stay partial until it passes.
+
+### split variants (AU-05) and pre-take monitoring (AU-21), verified
+- refers-to: the previous entry's code, unchanged
+- kind: explainer
+- logged: v1.44.0 (in progress) · 2026-10-02
+
+The browser test the previous entry left pending, in Chromium at 1288 by 683 with a fake microphone: a range drawn over 0.75 to 1.5 s of a 3 s clip; Ctrl+Alt+I left [0, 0.75] and [1.5, 3] on the track and [0.75, 1.5] on a new track, one undo restoring [0, 3]; Ctrl+Alt+K left the gap; Ctrl+Alt+X left the gap and Ctrl+V pasted the cut 0.75 s at 0 s; Split at silences cut a tone, a second of silence and a tone at 1.0 and 2.0 s; Monitor input on the armed track with no take running passed the input at 0.483 RMS, 0.0483 at -20 dB (a ratio of exactly 0.100), and unchecking stopped it; no page errors. Two of the test's own faults on the way: the servers were down at first, and a drag at a quarter of the clip's height landed on its gain line (a gain drag, no range), so the shortcuts saw no range and each undo took back the import; drags above the gain line drew the range.
