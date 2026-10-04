@@ -680,6 +680,19 @@ export class Player {
 
   private open = false;
 
+  /** AU-37: a note on the live instrument (velocity 0 ends it), heard whether the transport runs or not; the audio
+   *  graph is started if this is the first sound, as play starts it. */
+  async liveNote(pitch: number, velocity: number): Promise<void> {
+    const node = await this.ensure();
+    await this.ctx?.resume();
+    send(node, { type: "live-note", pitch: Math.max(0, Math.min(127, Math.round(pitch))), velocity: Math.max(0, Math.min(127, Math.round(velocity))) });
+  }
+
+  /** Releases every live note (a panic, or the input going away). */
+  liveAllOff(): void {
+    if (this.node) send(this.node, { type: "live-all-off" });
+  }
+
   async play(open = false): Promise<void> {
     this.open = open;
     const node = await this.ensure();

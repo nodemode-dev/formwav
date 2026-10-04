@@ -253,6 +253,24 @@ pub unsafe extern "C" fn fw_live_all_off(player: *mut Player) {
     (*player).live_all_off();
 }
 
+/// How many live voices are sounding.
+///
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_live_sounding(player: *mut Player) -> u32 {
+    (*player).live_sounding() as u32
+}
+
+/// The live instrument alone while stopped, into `frames` floats at each of `left` and `right`.
+///
+/// # Safety
+/// `player` must come from `fw_player_new`; `left` and `right` must hold `frames` floats each.
+#[no_mangle]
+pub unsafe extern "C" fn fw_render_idle(player: *mut Player, left: *mut f32, right: *mut f32, frames: usize) {
+    (*player).render_idle(slice::from_raw_parts_mut(left, frames), slice::from_raw_parts_mut(right, frames));
+}
+
 /// PT-42: the bus's format, 0 for 5.1 and 1 for first-order ambisonics.
 ///
 /// # Safety

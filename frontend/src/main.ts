@@ -24,6 +24,7 @@ import { mountAgent } from "./ui/agent-pane";
 import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
 import { mountOutputMeter, mountTrackMeters } from "./ui/meter";
+import { mountMidiInput } from "./ui/midi-input";
 import { mountMixer } from "./ui/mixer";
 import { mountMediaPane } from "./ui/media-pane";
 import { mountModelsPane } from "./ui/models-pane";
@@ -106,6 +107,11 @@ if (host) {
   mountOutputMeter(host, player);
   mountTrackMeters(host, engine, player);
   mountMixer(host, engine, player);
+  // AU-37: MIDI inputs play the live instrument and record into note clips; a kept or failed take is told on the notice line
+  mountMidiInput(engine, player, (text) => {
+    const line = host.querySelector<HTMLElement>(".fw-notice");
+    if (line && line.textContent !== text) line.textContent = text;
+  });
   mountPianoRoll(host, engine);
   mountSpectrum(host, engine, player);
   mountEnvelopeEdit(host, engine);

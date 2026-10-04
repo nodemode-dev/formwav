@@ -1,0 +1,88 @@
+import type { Player } from "../audio/player";
+import type { Engine } from "../engine";
+import type { MediaRef, NoteEvent } from "../engine/document";
+import { armedTrack } from "./arm";
+
+/**
+ * AU-37: live MIDI input. Every MIDI input the browser offers (Web MIDI; one plugged in later too) plays the live
+ * instrument as its keys go down and up, the transport running or not: note-on starts a note, note-off (or note-on at
+ * velocity 0, as MIDI has it) ends it, All Notes Off and All Sound Off end them all. While the transport records, the
+ * notes are captured with their start and length, and when it stops they become one note clip, rendered by the
+ * built-in instrument the live one matches, on the armed track (or a new one), as one undo step.
+ */
+export function mountMidiInput(engine: Engine, player: Player, notice?: (text: string) => void): void {
+  // the transport's position between its reports (every few quanta): the last one, carried on by the clock
+  let last = { position: engine.get("transport").positionSamples, time: performance.now(), playing: false };
+  const now = () => {
+    const t = engine.get("transport");
+    return last.playing ? Math.round(last.position + ((performance.now() - last.time) / 1000) * t.sampleRate) : t.positionSamples;
+  };
+  type Take = { start: number; trackId: string | null; notes: NoteEvent[]; held: Map<number, { at: number; velocity: number }> };
+  let take: Take | null = null;
+  engine.subscribe("transport", (t) => {
+    last = { position: t.positionSamples, time: performance.now(), playing: t.playing };
+    if (t.recording && !take) take = { start: t.positionSamples, trackId: armedTrack() ?? null, notes: [], held: new Map() };
+    else if (!t.recording && take) {
+      const done = take;
+      take = null;
+      const end = t.positionSamples;
+      for (const [pitch, h] of done.held) done.notes.push({ at: h.at - done.start, length: Math.max(1, end - h.at), pitch, velocity: h.velocity });
+      void commit(done);
+    }
+  });
+
+  const commit = async (done: Take) => {
+    const notes = done.notes.filter((n) => n.at >= 0).sort((a, b) => a.at - b.at || a.pitch - b.pitch);
+    if (!notes.length) return;
+    const rate = engine.get("document").sampleRate;
+    try {
+      const res = await fetch("/api/midi/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ notes: notes.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })), rate, name: "MIDI take" }) });
+      const media = (await res.json().catch(() => ({}))) as Partial<MediaRef> & { detail?: unknown };
+      if (!res.ok || !media.id) throw new Error(typeof media.detail === "string" ? media.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "import-media", media: media as MediaRef, at: done.start, ...(done.trackId ? { trackId: done.trackId } : {}), notes });
+      notice?.(`Recorded ${notes.length} MIDI note${notes.length === 1 ? "" : "s"} into a note clip`);
+    } catch (err) {
+      notice?.(`Could not keep the MIDI take: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const onMessage = (data: Uint8Array) => {
+    if (data.length < 2) return;
+    const status = data[0] & 0xf0;
+    const pitch = data[1] & 0x7f;
+    const velocity = (data[2] ?? 0) & 0x7f;
+    if (status === 0x90 && velocity > 0) {
+      void player.liveNote(pitch, velocity);
+      if (take && !take.held.has(pitch)) take.held.set(pitch, { at: now(), velocity });
+    } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
+      void player.liveNote(pitch, 0);
+      const h = take?.held.get(pitch);
+      if (take && h) {
+        take.held.delete(pitch);
+        take.notes.push({ at: h.at - take.start, length: Math.max(1, now() - h.at), pitch, velocity: h.velocity });
+      }
+    } else if (status === 0xb0 && (data[1] === 123 || data[1] === 120)) {
+      player.liveAllOff();
+    }
+  };
+
+  const access = (navigator as Navigator & { requestMIDIAccess?: () => Promise<MIDIAccess> }).requestMIDIAccess;
+  if (typeof access !== "function") return; // no Web MIDI in this browser: the on-screen keys still play
+  access
+    .call(navigator)
+    .then((midi) => {
+      const hook = (input: MIDIInput) => {
+        input.onmidimessage = (e) => {
+          if (e.data) onMessage(e.data);
+        };
+      };
+      midi.inputs.forEach(hook);
+      midi.onstatechange = (e) => {
+        const port = (e as MIDIConnectionEvent).port;
+        if (port && port.type === "input" && port.state === "connected") hook(port as MIDIInput);
+      };
+    })
+    .catch(() => {
+      // MIDI refused or absent: nothing to listen to
+    });
+}

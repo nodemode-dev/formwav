@@ -33,6 +33,10 @@ interface CoreExports {
   fw_set_fold_51(player: number, on: number): void;
   fw_set_surround_format(player: number, format: number): void;
   fw_take_peaks_51(player: number, out: number): void;
+  fw_live_note(player: number, pitch: number, velocity: number): void;
+  fw_live_all_off(player: number): void;
+  fw_live_sounding(player: number): number;
+  fw_render_idle(player: number, left: number, right: number, frames: number): void;
   fw_take_correlation(player: number): number;
   fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
   fw_take_bus_peaks(player: number, out: number, maxBuses: number): number;
@@ -87,6 +91,8 @@ export type WorkletMessage =
   | { type: "rate-ratio"; value: number }
   | { type: "stop" }
   | { type: "seek"; position: number }
+  | { type: "live-note"; pitch: number; velocity: number }
+  | { type: "live-all-off" }
   | { type: "loop"; start: number; end: number };
 
 export type WorkletReply =
@@ -280,6 +286,13 @@ class PlayerProcessor extends AudioWorkletProcessor {
         this.end = msg.end;
         break;
       }
+      case "live-note":
+        // AU-37: a note on the live instrument (a MIDI input, the on-screen keys), heard playing or stopped
+        core.fw_live_note(this.player, msg.pitch, msg.velocity);
+        break;
+      case "live-all-off":
+        core.fw_live_all_off(this.player);
+        break;
       case "seek":
         core.fw_seek(this.player, msg.position);
         this.readPos = 0;
@@ -366,6 +379,15 @@ class PlayerProcessor extends AudioWorkletProcessor {
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const core = this.core;
     const out = outputs[0];
+    if (core && !this.playing && out && out.length > 0 && core.fw_live_sounding(this.player) > 0) {
+      // AU-37: the live instrument heard with the transport stopped (no clips, the position unmoved)
+      const idle = Math.min(out[0].length, MAX_FRAMES);
+      core.fw_render_idle(this.player, this.left, this.right, idle);
+      out[0].set(new Float32Array(core.memory.buffer, this.left, idle));
+      if (out[1]) out[1].set(new Float32Array(core.memory.buffer, this.right, idle));
+      if (++this.quanta % REPORT_EVERY === 0) this.report();
+      return true;
+    }
     if (!core || !this.playing || !out || out.length === 0) return true;
     const frames = Math.min(out[0].length, MAX_FRAMES);
     const base = this.speed * this.rateRatio;

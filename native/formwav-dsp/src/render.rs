@@ -597,6 +597,38 @@ impl Player {
         }
     }
 
+    /// How many live voices are sounding (held or still in their release).
+    pub fn live_sounding(&self) -> usize {
+        self.live.as_ref().map_or(0, |l| l.sounding())
+    }
+
+    /// The live instrument alone while the transport is stopped: no clips, the position unmoved, through the master
+    /// chain and fader as it plays while the transport runs, its peaks taken for the meters.
+    pub fn render_idle(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let n = left.len().min(right.len());
+        left[..n].fill(0.0);
+        right[..n].fill(0.0);
+        let Some(live) = self.live.as_mut() else { return };
+        let mut scratch = std::mem::take(&mut self.live_scratch);
+        scratch.clear();
+        scratch.resize(n, 0.0);
+        live.render(&mut scratch);
+        left[..n].copy_from_slice(&scratch);
+        right[..n].copy_from_slice(&scratch);
+        self.live_scratch = scratch;
+        for j in 0..n {
+            let (mut l, mut r) = (left[j], right[j]);
+            for s in self.master_fx.iter_mut() {
+                (l, r) = s.process(l, r);
+            }
+            let g = self.master_gain.unwrap_or(1.0);
+            left[j] = l * g;
+            right[j] = r * g;
+            self.peak_left = self.peak_left.max(left[j].abs());
+            self.peak_right = self.peak_right.max(right[j].abs());
+        }
+    }
+
     /// PT-42: the bus's format, SURROUND_51 or SURROUND_FOA (any other value is taken as 5.1).
     pub fn set_surround_format(&mut self, format: u8) {
         self.surround_format = if format == SURROUND_FOA { SURROUND_FOA } else { SURROUND_51 };
@@ -1170,5 +1202,34 @@ mod tests {
         let mut after = (vec![0.0f32; rate], vec![0.0f32; rate]);
         p.render(&mut after.0, &mut after.1);
         assert!(after.0[rate / 2..].iter().all(|v| *v == 0.0), "all-off releases a held note");
+    }
+
+    /// AU-37: with the transport stopped, the idle render plays a live note as the synth renders it, through the
+    /// master fader, without moving the position; with nothing sounding it gives silence.
+    #[test]
+    fn the_idle_render_plays_live_notes_with_the_transport_stopped() {
+        let rate = 48000usize;
+        let mut p = Player::new();
+        p.set_rate(rate as f32);
+        p.set_master_db(-6.0);
+        let start = p.position();
+        p.live_note(64, 100);
+        let (mut left, mut right) = (vec![0.0f32; rate / 4], vec![0.0f32; rate / 4]);
+        for (l, r) in left.chunks_mut(128).zip(right.chunks_mut(128)) {
+            p.render_idle(l, r);
+        }
+        let note = [crate::synth::Note { start: 0, length: rate as u64, pitch: 64, velocity: 100 }];
+        let want = crate::synth::render(&note, rate as u32, &crate::synth::Patch::default());
+        let g = 10f32.powf(-6.0 / 20.0);
+        let worst = left.iter().zip(&want).map(|(a, b)| (a - b * g).abs()).fold(0.0f32, f32::max);
+        assert!(worst < 1e-6 && left == right, "the live note through the master fader ({worst})");
+        assert_eq!(p.position(), start, "the position does not move while stopped");
+        p.live_all_off();
+        let mut tail = (vec![0.0f32; rate], vec![0.0f32; rate]);
+        p.render_idle(&mut tail.0, &mut tail.1);
+        assert_eq!(p.live_sounding(), 0, "the released voice is gone");
+        let mut quiet = (vec![1.0f32; 256], vec![1.0f32; 256]);
+        p.render_idle(&mut quiet.0, &mut quiet.1);
+        assert!(quiet.0.iter().chain(&quiet.1).all(|v| *v == 0.0), "silence with nothing sounding");
     }
 }
