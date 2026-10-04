@@ -211,7 +211,8 @@ async def media_draw(media_id: str, request: Request) -> dict:
 
     try:
         body = await request.json()
-        return tools.draw(media_id, int(body.get("start", 0)), list(body.get("values", [])))
+        channel = body.get("channel")
+        return tools.draw(media_id, int(body.get("start", 0)), list(body.get("values", [])), None if channel is None else int(channel))
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err
     except (media.MediaError, TypeError, ValueError) as err:

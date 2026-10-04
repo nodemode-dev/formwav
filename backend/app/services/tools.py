@@ -284,8 +284,9 @@ def samples(media_id: str, start: int, count: int) -> dict:
     return {"start": start, "count": int(seg.shape[0]), "rate": rate, "frames": frames, "channels": [[float(v) for v in seg[:, c]] for c in range(seg.shape[1])]}
 
 
-def draw(media_id: str, start: int, values: list) -> dict:
-    """A new media equal to `media_id` with `values` written into every channel from sample `start`; the rest byte-identical."""
+def draw(media_id: str, start: int, values: list, channel: int | None = None) -> dict:
+    """A new media equal to `media_id` with `values` written from sample `start` into every channel, or into `channel`
+    alone when given (AU-13); the rest byte-identical."""
     import numpy as np
 
     from .audacity import _wav_bytes
@@ -300,7 +301,13 @@ def draw(media_id: str, start: int, values: list) -> dict:
     if start < 0 or start + len(arr) > frames:
         raise media.MediaError(f"the drawn samples must lie inside the audio (samples 0 to {frames - 1})")
     out = np.array(view, dtype=np.float32)
-    out[start : start + len(arr), :] = np.clip(arr, -1.0, 1.0)[:, None]
+    if channel is None:
+        out[start : start + len(arr), :] = np.clip(arr, -1.0, 1.0)[:, None]
+    else:
+        # AU-13: the lane's pencil draws on the channel under it; the others stay as they were
+        if not 0 <= int(channel) < channels:
+            raise media.MediaError(f"there is no channel {channel} to draw on (the audio has {channels})")
+        out[start : start + len(arr), int(channel)] = np.clip(arr, -1.0, 1.0)
     stem = str(media.media_info(media_id)["name"]).rsplit(".", 1)[0]
     name = stem if stem.endswith(" (drawn)") else f"{stem} (drawn)"
     return media.import_wav(f"{name}.wav", _wav_bytes([out[:, c] for c in range(channels)], rate))

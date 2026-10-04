@@ -24,6 +24,7 @@ import { mountAgent } from "./ui/agent-pane";
 import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
 import { mountOutputMeter, mountTrackMeters } from "./ui/meter";
+import { mountDrawTool } from "./ui/draw-tool";
 import { mountMidiInput } from "./ui/midi-input";
 import { mountMixer } from "./ui/mixer";
 import { mountMediaPane } from "./ui/media-pane";
@@ -112,6 +113,7 @@ if (host) {
     const line = host.querySelector<HTMLElement>(".fw-notice");
     if (line && line.textContent !== text) line.textContent = text;
   });
+  mountDrawTool(host, engine); // AU-13: the Draw tool, drawing samples in the lanes at sample zoom
   mountPianoRoll(host, engine);
   mountSpectrum(host, engine, player);
   mountEnvelopeEdit(host, engine);

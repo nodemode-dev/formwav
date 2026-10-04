@@ -17,6 +17,28 @@ const RAW_CHUNK = 8192;
 const rawChunks = new Map<string, Float32Array[]>();
 const rawPending = new Set<string>();
 
+/** AU-13: the stroke the pencil is drawing (frames of the media to their values), shown before it is applied. */
+let drawPreview: { mediaId: string; channel: number; values: Map<number, number> } | null = null;
+
+export function setDrawPreview(preview: { mediaId: string; channel: number; values: Map<number, number> } | null): void {
+  drawPreview = preview;
+}
+
+/** A sample of media `id` from the chunks already fetched (0 where none is). */
+export function sampleAt(id: string, channel: number, frame: number): number {
+  const ci = Math.floor(frame / RAW_CHUNK);
+  const chunk = rawChunks.get(`${id}:${ci}`);
+  const data = chunk?.[Math.min(channel, (chunk?.length ?? 1) - 1)];
+  return data ? data[frame - ci * RAW_CHUNK] ?? 0 : 0;
+}
+
+/** Repaints every clip showing media `id` (a stroke's preview as it grows). */
+export function repaintMedia(id: string): void {
+  for (const c of viewStage?.querySelectorAll<HTMLCanvasElement>(".fw-clip .fw-wave") ?? []) {
+    if (paintInfo.get(c)?.media.id === id) schedulePaint(c, id);
+  }
+}
+
 /** The samples of media `id` from `first` for `count` frames, if every chunk is here; otherwise null, the missing chunks
  *  fetched and `canvas` repainted when each arrives. */
 function rawWindow(id: string, first: number, count: number, canvas: HTMLCanvasElement): ((channel: number, frame: number) => number) | null {
@@ -46,6 +68,11 @@ function rawWindow(id: string, first: number, count: number, canvas: HTMLCanvasE
   }
   if (!ready) return null;
   return (channel, frame) => {
+    // AU-13: a stroke being drawn shows over the stored samples until it is applied
+    if (drawPreview && drawPreview.mediaId === id && drawPreview.channel === channel) {
+      const drawn = drawPreview.values.get(frame);
+      if (drawn !== undefined) return drawn;
+    }
     const ci = Math.floor(frame / RAW_CHUNK);
     const chunk = rawChunks.get(`${id}:${ci}`);
     const data = chunk?.[Math.min(channel, (chunk?.length ?? 1) - 1)];
