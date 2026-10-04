@@ -85,10 +85,25 @@ function envGain(points: [number, number][], t: number): number {
   return 10 ** (points[points.length - 1][1] / 20);
 }
 
+/** AU-34: a clip envelope's gain at `t`, interpolated in dB between points (Audacity 2's clip envelopes are exponential:
+ *  halfway between gains of 1 and 0.25 its own render measures 0.5004) and held outside them. */
+function clipEnvGain(points: [number, number][], t: number): number {
+  if (t <= points[0][0]) return 10 ** (points[0][1] / 20);
+  for (let i = 1; i < points.length; i++) {
+    const [t1, d1] = points[i];
+    if (t <= t1) {
+      const [t0, d0] = points[i - 1];
+      return 10 ** ((t1 === t0 ? d1 : d0 + ((d1 - d0) * (t - t0)) / (t1 - t0)) / 20);
+    }
+  }
+  return 10 ** (points[points.length - 1][1] / 20);
+}
+
 /**
  * A clip's envelope (session times, dB) as the flat gain points the core takes, multiplied with the track's volume
- * automation when it has some: the product is sampled at every breakpoint of both and eight times inside each span,
- * close to exact for the slopes an envelope has. Points before the session start fold into one at 0.
+ * automation when it has some. The core interpolates in gain, so the clip's dB curve is sampled in steps of at most
+ * 0.1 dB (within about 1e-5 of the curve), and with automation the product also at every breakpoint of both and eight
+ * times inside each span. Points before the session start fold into one at 0.
  */
 function clipEnvelope(clipPoints: [number, number][], trackFlat: number[] | undefined): number[] {
   const track: [number, number][] = [];
@@ -96,13 +111,17 @@ function clipEnvelope(clipPoints: [number, number][], trackFlat: number[] | unde
   const times = new Set<number>(clipPoints.map((p) => p[0]));
   for (const p of track) times.add(p[0]);
   const sorted = [...times].sort((a, b) => a - b);
-  if (track.length)
-    for (let i = 0; i + 1 < sorted.length; i++) for (let k = 1; k < 8; k++) times.add(Math.round(sorted[i] + ((sorted[i + 1] - sorted[i]) * k) / 8));
+  for (let i = 0; i + 1 < sorted.length; i++) {
+    const [a, b] = [sorted[i], sorted[i + 1]];
+    const rise = Math.abs(20 * Math.log10(clipEnvGain(clipPoints, b) / clipEnvGain(clipPoints, a)));
+    const steps = Math.max(track.length ? 8 : 1, Math.ceil(rise / 0.1));
+    for (let k = 1; k < steps; k++) times.add(Math.round(a + ((b - a) * k) / steps));
+  }
   const at = [...times].filter((t) => t >= 0);
   if (sorted[0] < 0) at.push(0);
   const out: number[] = [];
   for (const t of [...new Set(at)].sort((a, b) => a - b)) {
-    const g = envGain(clipPoints, t) * (track.length ? envGain(track, t) : 1);
+    const g = clipEnvGain(clipPoints, t) * (track.length ? envGain(track, t) : 1);
     out.push(t, 20 * Math.log10(Math.max(g, 1e-6)));
   }
   return out;

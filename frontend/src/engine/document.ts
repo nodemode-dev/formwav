@@ -65,7 +65,7 @@ export interface Clip {
   length: number;
   sourceIn: number;
   gainDb: number;
-  /** Audacity's clip volume envelope: dB points at the media's frames (so they stay with the audio through trims and splits), linear in gain between points and held outside them, multiplying the clip's gain. */
+  /** Audacity's clip volume envelope: dB points at the media's frames (so they stay with the audio through trims and splits), linear in dB between points as Audacity 2's are (measured against its own render; until v1.75.0 linear in gain) and held outside them, multiplying the clip's gain. */
   envelope?: readonly { at: number; db: number }[];
   /** AA-07, Audition's Essential Sound: what the clip is, which decides its tasks and presets. */
   soundType?: "dialogue" | "music" | "effects" | "ambience";

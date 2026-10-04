@@ -39,16 +39,30 @@ def _env_gain(points: list[tuple[int, float]], t: float) -> float:
     return 10 ** (points[-1][1] / 20)
 
 
+def _clip_env_gain(points: list[tuple[int, float]], t: float) -> float:
+    """AU-34: a clip envelope's gain at t, interpolated in dB between points (Audacity 2's clip envelopes are exponential:
+    halfway between gains of 1 and 0.25 its own render measures 0.5004) and held outside them."""
+    if t <= points[0][0]:
+        return 10 ** (points[0][1] / 20)
+    for (t0, d0), (t1, d1) in zip(points, points[1:]):
+        if t <= t1:
+            return 10 ** ((d1 if t1 == t0 else d0 + (d1 - d0) * (t - t0) / (t1 - t0)) / 20)
+    return 10 ** (points[-1][1] / 20)
+
+
 def _clip_envelope(own: list[tuple[int, float]], track: list[tuple[int, float]]) -> list[tuple[int, float]]:
-    """A clip's envelope multiplied with the track's volume automation, sampled at both sets of breakpoints and eight
-    times inside each span; points before the session start fold into one at 0 (the browser planner does the same)."""
+    """A clip's envelope multiplied with the track's volume automation. The core interpolates in gain, so the clip's dB
+    curve is sampled in steps of at most 0.1 dB, and with automation the product also at both sets of breakpoints and
+    eight times inside each span; points before the session start fold into one at 0. The browser planner does the
+    same, rounding halves up as JavaScript's Math.round does (floor(x + 0.5), not Python's round)."""
     times = {t for t, _ in own} | {t for t, _ in track}
     ordered = sorted(times)
-    if track:
-        for a, b in zip(ordered, ordered[1:]):
-            times.update(round(a + (b - a) * k / 8) for k in range(1, 8))
+    for a, b in zip(ordered, ordered[1:]):
+        rise = abs(20 * math.log10(_clip_env_gain(own, b) / _clip_env_gain(own, a)))
+        steps = max(8 if track else 1, math.ceil(rise / 0.1))
+        times.update(math.floor(a + (b - a) * k / steps + 0.5) for k in range(1, steps))
     at = sorted({t for t in times if t >= 0} | ({0} if ordered[0] < 0 else set()))
-    return [(t, 20 * math.log10(max(_env_gain(own, t) * (_env_gain(track, t) if track else 1.0), 1e-6))) for t in at]
+    return [(t, 20 * math.log10(max(_clip_env_gain(own, t) * (_env_gain(track, t) if track else 1.0), 1e-6))) for t in at]
 
 
 def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
