@@ -5,6 +5,7 @@
 //!
 //! The buffer is 100 ms of a 1 kHz sine at -12 dBFS on both channels at 48 kHz; the report is one JSON line.
 
+mod instrument;
 mod ladspa;
 #[cfg(target_os = "macos")]
 mod mac;
@@ -663,7 +664,19 @@ fn main() {
             println!("{{\"frames\": {}, \"rate\": {}, \"channels\": 2}}", output.channels[0].len(), output.rate);
             Ok(())
         }),
-        _ => Err("usage: fwhost clap <plugin.clap> | fwhost vst3 <plugin.vst3> | fwhost clap-gui <plugin.clap> [seconds]".into()),
+        // PT-15: notes (`start length key velocity` lines, frames) played on a CLAP instrument into a stereo WAV
+        (Some("instrument"), Some(plugin)) if args.len() >= 5 => std::fs::read_to_string(&args[3]).map_err(|e| format!("the notes file: {e}")).and_then(|text| {
+            let notes = instrument::parse(&text)?;
+            let rate: u32 = args.get(5).and_then(|s| s.parse().ok()).unwrap_or(48000);
+            let seconds: f64 = args.get(6).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            let end = notes.iter().map(|n| n.0 + n.1).max().unwrap_or(0) as usize;
+            let frames = ((seconds * rate as f64) as usize).max(end).max(1);
+            let channels = instrument::render(std::path::Path::new(plugin), rate, &notes, frames)?;
+            wav::write(&args[4], &wav::Audio { rate, channels: channels.to_vec() })?;
+            println!("{{\"frames\": {frames}, \"rate\": {rate}, \"channels\": 2, \"notes\": {}}}", notes.len());
+            Ok(())
+        }),
+        _ => Err("usage: fwhost clap <plugin.clap> | fwhost vst3 <plugin.vst3> | fwhost clap-gui <plugin.clap> [seconds] | fwhost instrument <plugin.clap> <notes.txt> <out.wav> [rate] [seconds]".into()),
     };
     if let Err(message) = result {
         eprintln!("fwhost: {message}");
