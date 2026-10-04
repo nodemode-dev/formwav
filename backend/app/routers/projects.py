@@ -12,6 +12,8 @@ async def import_audacity(request: Request) -> dict:
     if not data:
         raise HTTPException(400, "the request carried no file")
     try:
+        if data.startswith(b"SQLite format 3\x00"):  # AU-33: an Audacity 3 project
+            return audacity.import_aup3(data, request.headers.get("x-filename", "Audacity project.aup3").rsplit("/", 1)[-1].rsplit(".", 1)[0])
         return audacity.import_aup_zip(data)
     except media.MediaError as err:
         raise HTTPException(422, str(err)) from err

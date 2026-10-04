@@ -51,11 +51,12 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
           engine.loadDocument(out.document);
           final = `Opened the AAF ${out.name}: ${out.tracks} track${out.tracks === 1 ? "" : "s"}, ${out.clips} clip${out.clips === 1 ? "" : "s"}${out.missing?.length ? `; linked audio not found: ${out.missing.join(", ")}` : ""}`;
         }
-      } else if (lower.endsWith(".zip")) {
+      } else if (lower.endsWith(".zip") || lower.endsWith(".aup3")) {
+        // a zipped .aup with its _data folder, or an Audacity 3 .aup3 (AU-33), read from a copy so the original is never changed
         if (doc.tracks.length && !window.confirm(`Open the Audacity project ${file.name}? Unsaved changes to the current session will be lost.`)) {
           final = "Kept the current session";
         } else {
-          const res = await fetch("/api/projects/import-audacity", { method: "POST", body: file });
+          const res = await fetch("/api/projects/import-audacity", { method: "POST", body: file, headers: { "X-Filename": file.name } });
           const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string; document?: SessionDoc; tracks?: number; clips?: number; labels?: number };
           if (!res.ok || !out.document) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
           engine.loadDocument(out.document);
