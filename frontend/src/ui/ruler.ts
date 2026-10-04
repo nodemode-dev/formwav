@@ -9,7 +9,10 @@ const MIN_MINOR_PX = 6;
 function label(seconds: number, step: number): string {
   const minutes = Math.floor(seconds / 60 + 1e-9);
   const rest = Math.max(0, seconds - minutes * 60);
-  const text = step < 1 ? rest.toFixed(step < 0.5 ? 2 : 1) : String(Math.round(rest));
+  // AU-13: as many decimals as the step needs (0.1 needs 1, 0.25 needs 2, 0.0001 needs 4), up to 6
+  let decimals = 0;
+  while (decimals < 6 && Math.abs(step * 10 ** decimals - Math.round(step * 10 ** decimals)) > 1e-9) decimals++;
+  const text = step < 1 ? rest.toFixed(Math.max(step < 0.5 ? 2 : 1, decimals)) : String(Math.round(rest));
   return `${minutes}:${rest < 10 ? "0" : ""}${text}`;
 }
 

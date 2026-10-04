@@ -8,7 +8,50 @@ import { spectralHz } from "./spectrogram-view";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
 const PEAK_SPP = 256;
-const MAX_TIMELINE_PX = 16000;
+// AU-13: with the ruler and waveform canvases covering only the view, the timeline is laid out up to 16 million px
+// (under every browser's largest layout size), enough for single samples on sessions up to about five minutes at 48 kHz
+const MAX_TIMELINE_PX = 16_000_000;
+// Below this many frames a device pixel, the lanes draw the real samples of what is in view (fetched in chunks)
+const RAW_BELOW = 16;
+const RAW_CHUNK = 8192;
+const rawChunks = new Map<string, Float32Array[]>();
+const rawPending = new Set<string>();
+
+/** The samples of media `id` from `first` for `count` frames, if every chunk is here; otherwise null, the missing chunks
+ *  fetched and `canvas` repainted when each arrives. */
+function rawWindow(id: string, first: number, count: number, canvas: HTMLCanvasElement): ((channel: number, frame: number) => number) | null {
+  const c0 = Math.max(0, Math.floor(first / RAW_CHUNK));
+  const c1 = Math.max(c0, Math.floor((first + count) / RAW_CHUNK));
+  let ready = true;
+  for (let ci = c0; ci <= c1; ci++) {
+    const key = `${id}:${ci}`;
+    if (rawChunks.has(key)) continue;
+    ready = false;
+    if (rawPending.has(key)) continue;
+    rawPending.add(key);
+    fetch(`/api/media/${id}/samples?start=${ci * RAW_CHUNK}&count=${RAW_CHUNK}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((out: { channels: number[][] }) => {
+        rawChunks.set(key, out.channels.map((ch) => Float32Array.from(ch)));
+        // the most recent 512 chunks are kept (16 to 32 MB), the oldest let go first
+        for (const old of rawChunks.keys()) {
+          if (rawChunks.size <= 512) break;
+          rawChunks.delete(old);
+        }
+        const info = paintInfo.get(canvas);
+        if (info) schedulePaint(canvas, info.media.id);
+      })
+      .catch(() => undefined)
+      .finally(() => rawPending.delete(key));
+  }
+  if (!ready) return null;
+  return (channel, frame) => {
+    const ci = Math.floor(frame / RAW_CHUNK);
+    const chunk = rawChunks.get(`${id}:${ci}`);
+    const data = chunk?.[Math.min(channel, (chunk?.length ?? 1) - 1)];
+    return data ? data[frame - ci * RAW_CHUNK] ?? 0 : 0;
+  };
+}
 const BASE_PX_PER_SECOND = 100;
 
 interface PaintInfo {
@@ -32,7 +75,8 @@ function peaksFor(id: string): Promise<PeakData> {
 }
 
 const ZOOM_MIN = 0.25;
-const ZOOM_MAX = 16;
+// AU-13: up from 16 (30 samples a pixel at 48 kHz) to 8000: about 17 pixels a sample at 48 kHz, 8 at 96 kHz
+const ZOOM_MAX = 8000;
 let zoom = 1;
 const selectedClipIds = new Set<string>();
 const zoomListeners = new Set<() => void>();
@@ -64,7 +108,8 @@ export function onZoom(listener: () => void): void {
 }
 
 export function samplesPerPixel(doc: SessionDoc): number {
-  return Math.max(doc.sampleRate / (BASE_PX_PER_SECOND * zoom), Math.ceil(documentLength(doc) / MAX_TIMELINE_PX));
+  // AU-13: the cap's floor a plain ratio: rounded up, it held every session at one sample a pixel at least
+  return Math.max(doc.sampleRate / (BASE_PX_PER_SECOND * zoom), documentLength(doc) / MAX_TIMELINE_PX);
 }
 
 function channelLabel(n: number): string {
@@ -131,7 +176,52 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
   const half = (rowH / 2) * 0.9;
   const clipGain = 10 ** (info.clip.gainDb / 20);
   const drawWave = !(notes && notes.length);
-  for (let x = 0; drawWave && x < w; x++) {
+  // AU-13: zoomed in past the overview, the samples themselves (the overview drawn meanwhile, until they arrive)
+  const fpp = sourceFrames / full; // the media's frames a device pixel
+  const first = info.clip.sourceIn + off * fpp;
+  const raw = drawWave && fpp < RAW_BELOW ? rawWindow(info.media.id, Math.floor(first), Math.ceil(w * fpp) + 2, canvas) : null;
+  if (raw) {
+    const total = info.media.frames;
+    for (let c = 0; c < ch; c++) {
+      const mid = rowH * c + rowH / 2;
+      const yOf = (v: number) => mid - Math.max(-1, Math.min(1, v * clipGain)) * half;
+      if (fpp >= 1) {
+        // still several frames a pixel: each pixel's own minimum and maximum, exact
+        for (let x = 0; x < w; x++) {
+          const k0 = Math.floor(first + x * fpp);
+          const k1 = Math.min(total, Math.max(k0 + 1, Math.floor(first + (x + 1) * fpp)));
+          let lo = Infinity;
+          let hi = -Infinity;
+          for (let k = k0; k < k1; k++) {
+            const v = raw(c, k);
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+          }
+          if (hi < lo) continue;
+          const top = yOf(hi);
+          ctx.fillRect(x, top, 1, Math.max(1, yOf(lo) - top));
+        }
+        continue;
+      }
+      // fewer frames than pixels: a line through the samples, and a dot on each once they stand 6 px apart
+      const k0 = Math.max(0, Math.floor(first));
+      const k1 = Math.min(total - 1, Math.ceil(first + w * fpp));
+      ctx.beginPath();
+      for (let k = k0; k <= k1; k++) {
+        const x = (k - first) / fpp;
+        if (k === k0) ctx.moveTo(x, yOf(raw(c, k)));
+        else ctx.lineTo(x, yOf(raw(c, k)));
+      }
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = Math.max(1, dpr);
+      ctx.stroke();
+      if (1 / fpp >= 6 * dpr) {
+        const r = 1.5 * dpr;
+        for (let k = k0; k <= k1; k++) ctx.fillRect((k - first) / fpp - r, yOf(raw(c, k)) - r, 2 * r, 2 * r);
+      }
+    }
+  }
+  for (let x = 0; drawWave && !raw && x < w; x++) {
     const b0 = Math.floor(startBlock + x * blocksPerPx);
     if (b0 >= peaks.blocks) break;
     const b1 = Math.min(peaks.blocks, Math.max(b0 + 1, Math.floor(startBlock + (x + 1) * blocksPerPx)));
