@@ -29,7 +29,7 @@ export function dbToGain(db: number): number {
 export function flatFx(fx: readonly TrackFx[] | undefined): number[] {
   const codes = { highpass: 1, lowpass: 2, peak: 3, lowshelf: 4, highshelf: 5 } as const;
   return (fx ?? []).flatMap((f) => {
-    if (f.bypass || f.kind === "compressor") return [];
+    if (f.bypass || f.kind === "compressor" || f.kind === "reverb") return [];
     // RX-24, RX-40, RX-49: the denoiser rides the clip chain as kind 7, its reduction and sensitivity in the filter slots
     if (f.kind === "denoise") return [7, f.reductionDb, f.sensitivityDb, 0];
     return [codes[f.kind], f.freq, f.gainDb, f.q];
@@ -42,7 +42,7 @@ export function flatFxAuto(fx: readonly TrackFx[] | undefined): { stage: number;
   const out: { stage: number; param: number; points: number[] }[] = [];
   let stage = 0;
   for (const f of fx ?? []) {
-    if (f.bypass || f.kind === "compressor") continue;
+    if (f.bypass || f.kind === "compressor" || f.kind === "reverb") continue;
     if (f.kind === "denoise") {
       stage++; // a place in the chain, nothing to automate
       continue;
@@ -65,6 +65,7 @@ export function flatStages(fx: readonly TrackFx[] | undefined): number[] {
     if (f.bypass) return [];
     if (f.kind === "compressor") return [6, f.thresholdDb, f.ratio, f.attackMs, f.releaseMs, f.makeupDb];
     if (f.kind === "denoise") return [7, f.reductionDb, f.sensitivityDb, 0, 0, 0];
+    if (f.kind === "reverb") return [8, f.room, f.damping, f.mix, f.width, 0];
     return [codes[f.kind], f.freq, f.gainDb, f.q, 0, 0];
   });
 }
@@ -180,8 +181,9 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     let bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
     let fxFlat = flatFx(track.fx);
     let fxAuto = flatFxAuto(track.fx);
-    if (bus === 0 && (track.fx ?? []).some((f) => f.kind === "compressor" && !f.bypass)) {
-      // A compressor must see the track's sum: its own bus (unity, centre) carries the whole chain, as in exports.
+    if (bus === 0 && (track.fx ?? []).some((f) => (f.kind === "compressor" || f.kind === "reverb") && !f.bypass)) {
+      // A compressor must see the track's sum, and a reverb's tail must ring on past each clip's end (PT-22): its own
+      // bus (unity, centre) carries the whole chain, as in exports.
       // (Bus chains are not automated yet, so the automation stays with the clip chain it was written for.)
       bus = buses.length + 1;
       buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx) });

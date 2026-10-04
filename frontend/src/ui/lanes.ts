@@ -475,7 +475,7 @@ function rowScale(row: HTMLElement): AutoScale {
 /** The filter an effect row automates (its data-fx), or nothing when the track has no such filter. */
 function rowFilter(row: HTMLElement, track: Track) {
   const f = row.dataset.param === "fx" ? track.fx?.[Number(row.dataset.fx)] : undefined;
-  return f && f.kind !== "compressor" && f.kind !== "denoise" ? f : undefined;
+  return f && f.kind !== "compressor" && f.kind !== "denoise" && f.kind !== "reverb" ? f : undefined;
 }
 
 /** A row's points: the track's volume or pan automation, or the chosen filter parameter's. */
@@ -507,7 +507,7 @@ function syncFxRow(node: HTMLElement, track: Track): void {
   if (!select || !head || !row) return;
   const options: [string, string][] = [];
   (track.fx ?? []).forEach((f, i) => {
-    if (f.kind === "compressor" || f.kind === "denoise") return;
+    if (f.kind === "compressor" || f.kind === "denoise" || f.kind === "reverb") return;
     const keys: [string, string][] = f.kind === "highpass" || f.kind === "lowpass" ? [["freq", "Frequency"], ["q", "Q"]] : [["freq", "Frequency"], ["gain", "Gain"], ["q", "Q"]];
     for (const [key, label] of keys) options.push([`${i}:${key}`, `${i + 1} ${FILTER_NAMES[f.kind] ?? f.kind} · ${label}${f.automation?.[key as "freq"] ? " (automated)" : ""}`]);
   });

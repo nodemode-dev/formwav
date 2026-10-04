@@ -117,6 +117,8 @@ impl Biquad {
 
 /// RX-24, RX-40, RX-49: the realtime adaptive denoiser's stage kind (a = reduction dB, b = sensitivity dB).
 pub const DENOISE: u8 = 7;
+/// PT-22: the realtime reverb (Reverb), a = room size, b = damping, c = mix, d = width.
+pub const REVERB: u8 = 8;
 // sixteen bands from 80 Hz to 45% of the rate, about 0.54 of an octave apart, each a Q of 2.65 so neighbours cross at
 // -3 dB and the bands together sum to about unity: bands stopping at 10 kHz left 58% of white noise's power (10 to 24 kHz
 // at 48 kHz) where none could reach, and took it down under 1 dB
@@ -331,12 +333,109 @@ impl Compressor {
     }
 }
 
-/// One stage of a bus or master chain: a filter or a compressor, run a stereo frame at a time.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// PT-22: a realtime reverb after Jezar's Freeverb (released into the public domain): per channel eight damped comb
+/// filters in parallel feeding four all-passes in series, the right channel's delays 23 samples longer for width,
+/// every length scaled from its 44.1 kHz tuning to the rate. Room size sets the combs' feedback (0.7 to 0.98),
+/// damping their low-pass; the dry signal is kept at 1 - mix and the tail added at mix times Freeverb's default wet
+/// level, width blending the two tails.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reverb {
+    combs: [[Vec<f32>; 8]; 2],
+    comb_at: [[usize; 8]; 2],
+    comb_store: [[f32; 8]; 2],
+    allpasses: [[Vec<f32>; 4]; 2],
+    allpass_at: [[usize; 4]; 2],
+    feedback: f32,
+    damp: f32,
+    wet1: f32,
+    wet2: f32,
+    dry: f32,
+}
+
+const COMB_TUNING: [usize; 8] = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617];
+const ALLPASS_TUNING: [usize; 4] = [556, 441, 341, 225];
+const STEREO_SPREAD: usize = 23;
+
+impl Reverb {
+    /// `room` and `damping` from 0 to 1, `mix` from 0 (dry) to 1 (all reverb), `width` from 0 (mono) to 1; None for
+    /// a non-positive rate.
+    pub fn design(room: f32, damping: f32, mix: f32, width: f32, rate: f32) -> Option<Reverb> {
+        if !(rate > 0.0) {
+            return None;
+        }
+        let scale = |n: usize| ((n as f32 * rate / 44100.0).round() as usize).max(1);
+        let spread = |c: usize| if c == 1 { STEREO_SPREAD } else { 0 };
+        let combs = [0, 1].map(|c| COMB_TUNING.map(|n| vec![0.0f32; scale(n + spread(c))]));
+        let allpasses = [0, 1].map(|c| ALLPASS_TUNING.map(|n| vec![0.0f32; scale(n + spread(c))]));
+        let (room, damping, mix, width) = (room.clamp(0.0, 1.0), damping.clamp(0.0, 1.0), mix.clamp(0.0, 1.0), width.clamp(0.0, 1.0));
+        // Freeverb's default wet level (its initial wet of 1/3 times its wet scaling of 3) at full mix; its maximum (3)
+        // put a send-fed tail 6 dB above the dry burst that fed it
+        let wet = mix;
+        Some(Reverb {
+            combs,
+            comb_at: [[0; 8]; 2],
+            comb_store: [[0.0; 8]; 2],
+            allpasses,
+            allpass_at: [[0; 4]; 2],
+            feedback: 0.7 + 0.28 * room,
+            damp: 0.4 * damping,
+            wet1: wet * (0.5 + 0.5 * width),
+            wet2: wet * (0.5 - 0.5 * width),
+            dry: 1.0 - mix,
+        })
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let input = (l + r) * 0.015; // Freeverb's fixed input gain
+        let mut out = [0.0f32; 2];
+        for c in 0..2 {
+            let mut sum = 0.0f32;
+            for k in 0..8 {
+                let buf = &mut self.combs[c][k];
+                let at = self.comb_at[c][k];
+                let y = buf[at];
+                let store = y * (1.0 - self.damp) + self.comb_store[c][k] * self.damp;
+                self.comb_store[c][k] = if store.abs() < 1e-20 { 0.0 } else { store }; // no denormals in the tail
+                buf[at] = input + self.comb_store[c][k] * self.feedback;
+                self.comb_at[c][k] = if at + 1 == buf.len() { 0 } else { at + 1 };
+                sum += y;
+            }
+            for k in 0..4 {
+                let buf = &mut self.allpasses[c][k];
+                let at = self.allpass_at[c][k];
+                let held = buf[at];
+                let y = held - sum;
+                let next = sum + held * 0.5;
+                buf[at] = if next.abs() < 1e-20 { 0.0 } else { next };
+                self.allpass_at[c][k] = if at + 1 == buf.len() { 0 } else { at + 1 };
+                sum = y;
+            }
+            out[c] = sum;
+        }
+        (l * self.dry + out[0] * self.wet1 + out[1] * self.wet2, r * self.dry + out[1] * self.wet1 + out[0] * self.wet2)
+    }
+
+    pub fn reset(&mut self) {
+        for c in 0..2 {
+            for b in self.combs[c].iter_mut().chain(self.allpasses[c].iter_mut()) {
+                b.fill(0.0);
+            }
+            self.comb_at[c] = [0; 8];
+            self.comb_store[c] = [0.0; 8];
+            self.allpass_at[c] = [0; 4];
+        }
+    }
+}
+
+/// One stage of a bus or master chain: a filter, a compressor, the de-noiser or a reverb, run a stereo frame at a
+/// time. The reverb's delay lines live behind a box, so a filter stage stays small.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stage {
     Filter(Biquad),
     Comp(Compressor),
     Denoise(Denoiser),
+    Reverb(Box<Reverb>),
 }
 
 impl Stage {
@@ -347,6 +446,9 @@ impl Stage {
             Compressor::design(a, b, c, d, e, rate).map(Stage::Comp)
         } else if kind == DENOISE {
             Denoiser::design(a, b, rate).map(Stage::Denoise)
+        } else if kind == REVERB {
+            // PT-22: a = room size, b = damping, c = mix, d = width (each 0 to 1)
+            Reverb::design(a, b, c, d, rate).map(|r| Stage::Reverb(Box::new(r)))
         } else {
             Biquad::design(kind, a, b, c, rate).map(Stage::Filter)
         }
@@ -358,6 +460,7 @@ impl Stage {
             Stage::Filter(f) => (f.process(0, l), f.process(1, r)),
             Stage::Comp(c) => c.process(l, r),
             Stage::Denoise(d) => d.process(l, r),
+            Stage::Reverb(v) => v.process(l, r),
         }
     }
 
@@ -366,6 +469,7 @@ impl Stage {
             Stage::Filter(f) => f.reset(),
             Stage::Comp(c) => c.reset(),
             Stage::Denoise(d) => d.reset(),
+            Stage::Reverb(v) => v.reset(),
         }
     }
 }
@@ -478,5 +582,47 @@ mod tests {
         assert!(tone_change.abs() < 1.0, "the bursts' tone moved {tone_change} dB");
         let mut none = Denoiser::design(0.0, 3.0, rate).unwrap();
         assert!(x.iter().all(|&v| (none.process(v, v).0 - v).abs() < 1e-6), "no reduction changed the signal");
+    }
+
+    /// The reverb's impulse response, `seconds` long, as left and right.
+    fn reverb_ir(room: f32, damping: f32, width: f32, seconds: f32) -> (Vec<f32>, Vec<f32>) {
+        let rate = 48000.0;
+        let mut v = Reverb::design(room, damping, 1.0, width, rate).unwrap();
+        let n = (seconds * rate) as usize;
+        (0..n).map(|i| v.process(if i == 0 { 1.0 } else { 0.0 }, if i == 0 { 1.0 } else { 0.0 })).unzip()
+    }
+
+    /// Seconds for the response's energy to fall 60 dB, by Schroeder's backward integration (fitted from -5 to -35 dB).
+    fn rt60(y: &[f32]) -> f32 {
+        let mut tail: Vec<f64> = y.iter().rev().scan(0.0f64, |s, &v| { *s += (v as f64) * (v as f64); Some(*s) }).collect();
+        tail.reverse();
+        let total = tail[0].max(1e-30);
+        let at = |db: f64| tail.iter().position(|&e| 10.0 * (e / total).log10() <= db).unwrap_or(tail.len()) as f32;
+        2.0 * (at(-35.0) - at(-5.0)) / 48000.0
+    }
+
+    /// PT-22: the reverb leaves the signal dry at mix 0, rings with a finite, decaying tail, longer in a bigger room,
+    /// mono at width 0 and wide at 1, stays bounded at its largest room with no damping, and falls silent when reset.
+    #[test]
+    fn the_reverb_rings_by_its_room_and_stays_stable() {
+        let rate = 48000.0;
+        let mut dry = Reverb::design(0.8, 0.5, 0.0, 1.0, rate).unwrap();
+        assert!((0..4800).all(|i| { let x = ((i as f32) * 0.37).sin(); let (l, r) = dry.process(x, -x); l == x && r == -x }), "mix 0 leaves the signal as it was");
+        let (l, r) = reverb_ir(0.8, 0.5, 1.0, 4.0);
+        assert!(l.iter().chain(&r).all(|v| v.is_finite()), "the tail is finite");
+        let energy = |y: &[f32], a: usize, b: usize| y[a..b].iter().map(|v| v * v).sum::<f32>();
+        assert!(energy(&l, 4800, 14400) > 10.0 * energy(&l, 96000, 105600), "the tail decays: 0.1 to 0.3 s holds far more than 2.0 to 2.2 s");
+        let (small, big) = (rt60(&reverb_ir(0.3, 0.5, 1.0, 6.0).0), rt60(&reverb_ir(0.9, 0.5, 1.0, 6.0).0));
+        assert!(small > 0.2 && big > 1.5 * small, "a bigger room rings longer (RT60 {small:.2} s against {big:.2} s)");
+        let (ml, mr) = reverb_ir(0.8, 0.5, 0.0, 1.0);
+        assert!(ml.iter().zip(&mr).all(|(a, b)| (a - b).abs() < 1e-6), "width 0 is mono");
+        let corr = l.iter().zip(&r).map(|(a, b)| a * b).sum::<f32>() / (energy(&l, 0, l.len()) * energy(&r, 0, r.len())).sqrt();
+        assert!(corr < 0.5, "width 1 is wide (left-right correlation {corr:.2})");
+        let mut worst = Reverb::design(1.0, 0.0, 1.0, 1.0, rate).unwrap();
+        let peak = (0..480000).map(|i| { let x = if (i / 1000) % 2 == 0 { 0.9 } else { -0.9 }; let (a, b) = worst.process(x, x); a.abs().max(b.abs()) }).fold(0.0f32, f32::max);
+        assert!(peak.is_finite() && peak < 50.0, "the largest room with no damping stays bounded (peak {peak:.1})");
+        worst.reset();
+        assert!((0..48000).all(|_| worst.process(0.0, 0.0) == (0.0, 0.0)), "a reset reverb is silent");
+        assert!(matches!(Stage::design(REVERB, 0.5, 0.5, 0.3, 1.0, 0.0, rate), Some(Stage::Reverb(_))), "kind 8 designs a reverb stage");
     }
 }

@@ -10,7 +10,7 @@ class RenderError(ValueError):
 
 
 #: Track effect kinds, as the core's stage codes (formwav-dsp fx.rs).
-FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7}
+FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8}
 
 
 def _stage(f: dict) -> tuple | None:
@@ -19,6 +19,8 @@ def _stage(f: dict) -> tuple | None:
     kind = FX_KINDS.get(f.get("kind")) if isinstance(f, dict) else None
     if not kind or f.get("bypass"):
         return None
+    if kind == 8:  # PT-22: the realtime reverb, room size, damping, mix and width (each 0 to 1)
+        return (8, float(f.get("room", 0.6)), float(f.get("damping", 0.5)), float(f.get("mix", 0.25)), float(f.get("width", 1.0)), 0.0)
     if kind == 7:  # RX-24, RX-40, RX-49: the denoiser, its reduction and sensitivity where filters carry frequency and gain
         return (7, float(f.get("reductionDb", 12)), float(f.get("sensitivityDb", 3)), 0.0, 0.0, 0.0)
     if kind == 6:
@@ -98,7 +100,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
 
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
-        if bus_index == 0 and any(s[0] == 6 for s in stages):
+        if bus_index == 0 and any(s[0] in (6, 8) for s in stages):  # a compressor, or a reverb's tail (PT-22)
             # A compressor is nonlinear, so it must see the track's sum: the track plays through a bus of its own
             # (unity gain, centre) whose chain is the track's whole chain, in order.
             buses[f"__track:{track.get('id')}"] = (len(buses) + 1, 1.0, 0.0)

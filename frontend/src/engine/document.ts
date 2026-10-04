@@ -122,9 +122,19 @@ export interface DenoiseFx {
   bypass?: boolean;
 }
 
-export type TrackFx = FilterFx | CompressorFx | DenoiseFx;
+/** PT-22: the realtime reverb (Freeverb's design in the core): room size, damping, mix and width, each 0 to 1. */
+export interface ReverbFx {
+  kind: "reverb";
+  room: number;
+  damping: number;
+  mix: number;
+  width: number;
+  bypass?: boolean;
+}
 
-const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise"]);
+export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx;
+
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb"]);
 
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
@@ -135,6 +145,10 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
       const bypass = f.bypass ? { bypass: true } : {};
       if (f.kind === "denoise") {
         return { kind: "denoise", reductionDb: clamp(f.reductionDb, 0, 40, 12), sensitivityDb: clamp(f.sensitivityDb, -6, 12, 3), ...bypass };
+      }
+      if (f.kind === "reverb") {
+        // PT-22: room size, damping, mix and width, each 0 to 1
+        return { kind: "reverb", room: clamp(f.room, 0, 1, 0.6), damping: clamp(f.damping, 0, 1, 0.5), mix: clamp(f.mix, 0, 1, 0.25), width: clamp(f.width, 0, 1, 1), ...bypass };
       }
       if (f.kind === "compressor") {
         return { kind: "compressor", thresholdDb: clamp(f.thresholdDb, -60, 0, -20), ratio: clamp(f.ratio, 1, 20, 4), attackMs: clamp(f.attackMs, 0.1, 200, 10), releaseMs: clamp(f.releaseMs, 1, 2000, 150), makeupDb: clamp(f.makeupDb, 0, 24, 0), ...bypass };
@@ -641,7 +655,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-fx-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
         const target = t.fx?.[cmd.fxIndex];
-        if (!t.fx || !target || target.kind === "compressor" || target.kind === "denoise") return t;
+        if (!t.fx || !target || target.kind === "compressor" || target.kind === "denoise" || target.kind === "reverb") return t;
         const { [cmd.param]: _old, ...others } = target.automation ?? {};
         const automation = cmd.points.length ? { ...others, [cmd.param]: cmd.points } : others;
         const next = cleanFx(t.fx.map((f, i) => (i === cmd.fxIndex ? { ...target, automation } : f)));

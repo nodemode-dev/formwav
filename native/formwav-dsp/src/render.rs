@@ -239,7 +239,7 @@ impl Player {
         let (Some(chain), Some(meter), Some(f)) = (self.clip_fx.last_mut(), self.meter_fx.last_mut(), crate::fx::Stage::design(kind, freq, gain_db, q, 0.0, 0.0, rate)) else {
             return false;
         };
-        chain.push(f);
+        chain.push(f.clone());
         meter.push(f);
         if let Some(specs) = self.clip_fx_spec.last_mut() {
             specs.push((kind, freq, gain_db, q));
