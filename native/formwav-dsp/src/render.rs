@@ -210,11 +210,16 @@ impl Player {
     /// refused (an unknown kind).
     pub fn add_clip_fx(&mut self, kind: u8, freq: f32, gain_db: f32, q: f32) -> bool {
         let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
-        let (Some(chain), Some(meter), Some(f)) = (self.clip_fx.last_mut(), self.meter_fx.last_mut(), crate::fx::Biquad::design(kind, freq, gain_db, q, rate)) else {
+        // a filter (kinds 1 to 5) or the denoiser (7: freq carries the reduction dB, gain_db the sensitivity dB); the
+        // compressor has its own call (add_clip_comp), with its five settings
+        if kind == crate::fx::COMPRESSOR {
+            return false;
+        }
+        let (Some(chain), Some(meter), Some(f)) = (self.clip_fx.last_mut(), self.meter_fx.last_mut(), crate::fx::Stage::design(kind, freq, gain_db, q, 0.0, 0.0, rate)) else {
             return false;
         };
-        chain.push(crate::fx::Stage::Filter(f));
-        meter.push(crate::fx::Stage::Filter(f));
+        chain.push(f);
+        meter.push(f);
         if let Some(specs) = self.clip_fx_spec.last_mut() {
             specs.push((kind, freq, gain_db, q));
         }
