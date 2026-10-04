@@ -1546,7 +1546,35 @@ NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": 
                  "spectral-repair": _spectral_repair, "dialogue-leveler": _dialogue_leveler, "dynamics-curve": _dynamics_curve}
 
 
-def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0) -> dict:
+def _levinson(r, b):
+    """RX-05: solves the symmetric Toeplitz system T x = b (T's first row `r`) by Levinson's recursion in O(n^2): the
+    forward vector (T f = e1) is extended a tap at a time with its mirror as the backward vector, and the solution
+    with it, so a path of thousands of taps is fitted in seconds where a dense solve would take minutes."""
+    import numpy as np
+
+    r = np.asarray(r, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    n = len(b)
+    f = np.zeros(n)
+    x = np.zeros(n)
+    f[0] = 1.0 / r[0]
+    x[0] = b[0] / r[0]
+    for k in range(1, n):
+        rk = r[k:0:-1]  # r[k], r[k-1], ..., r[1]: the new row's coupling to the earlier taps
+        ef = float(np.dot(rk, f[:k]))
+        d = 1.0 - ef * ef
+        if abs(d) < 1e-15:
+            break
+        fk = f[:k].copy()
+        f[: k + 1] = 0.0
+        f[:k] += fk / d
+        f[1 : k + 1] -= ef / d * fk[::-1]
+        ex = float(np.dot(rk, x[:k]))
+        x[: k + 1] += (b[k] - ex) * f[k::-1]
+    return x
+
+
+def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0, path_ms: float | None = None) -> dict:
     """RX's De-bleed with a reference: what leaked into a recording from another source (headphone spill, a guitar
     amp in the vocal mic) is that source through a fixed path, so the path's transfer function per frequency bin is
     estimated from the cross-spectrum between the recording and the reference over the whole file (the wanted sound is
@@ -1578,13 +1606,25 @@ def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 1
     x = np.array(view, dtype=np.float32)
     y = np.zeros_like(x)
     k = float(amount) / 100.0
-    taps, lead = 128, 16
+    # RX-05: the path's length, 128 taps (2.7 ms at 48 kHz) unless a longer one is asked for (a room between the source
+    # and the mic: up to half a second); a long path is solved by Levinson's recursion from its autocorrelation alone
+    # (its matrix, taps squared, never built)
+    taps = 128 if not path_ms else int(min(0.5 * rate, max(128, round(float(path_ms) * rate / 1000.0))))
+    lead = 16
     est_n = min(frames_n, 60 * rate)
     size = 1 << int(np.ceil(np.log2(2 * est_n + taps)))
     R = np.fft.rfft(ref[:est_n], size)
     auto = np.fft.irfft(np.abs(R) ** 2, size)[:taps]
-    toeplitz = auto[np.abs(np.arange(taps)[:, None] - np.arange(taps)[None, :])]
-    toeplitz[np.diag_indices(taps)] += 1e-9 * max(float(auto[0]), 1e-30)
+    auto[0] += 1e-9 * max(float(auto[0]), 1e-30)
+
+    def solve(r, rhs):  # the symmetric Toeplitz system with first row r
+        if taps > 256:
+            # a long path from a reference of few held tones is badly conditioned and Levinson's recursion grew its
+            # errors (a 150 ms fit left more than it took); loaded by 1e-3 of the power (Tikhonov), it stays stable
+            r = np.array(r, dtype=np.float64)
+            r[0] *= 1.001
+            return _levinson(r, rhs)
+        return np.linalg.solve(r[np.abs(np.arange(taps)[:, None] - np.arange(taps)[None, :])], rhs)
     block = 1 << 16
     fsize = 1 << int(np.ceil(np.log2(block + taps)))
 
@@ -1601,7 +1641,7 @@ def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 1
         xcorr = np.fft.irfft(np.fft.rfft(xc[:est_n], size) * np.conj(R), size)  # xcorr[l] = sum x[t] ref[t - l]
         lags = np.concatenate([np.arange(0, min(est_n - 1, int(0.25 * rate)) + 1), -np.arange(1, min(est_n - 1, int(0.05 * rate)) + 1)])
         start = int(lags[np.argmax(np.abs(xcorr[lags % size]))]) - lead
-        h = np.linalg.solve(toeplitz, xcorr[(start + np.arange(taps)) % size])
+        h = solve(auto, xcorr[(start + np.arange(taps)) % size])
 
         def placed(h):  # the reference through h, delayed by `start`
             est = through(ref, h)
@@ -1629,13 +1669,21 @@ def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 1
                 ref_at[start:] = ref[: est_n - start]
             else:
                 ref_at[: est_n + start] = ref[-start : est_n - start]
-            RA = np.fft.rfft(ref_at, size)
-            p = np.fft.irfft(np.fft.rfft(mask * xc[:est_n], size) * np.conj(RA), size)[:taps]
-            a = np.fft.irfft(np.fft.rfft(mask * ref_at, size) * np.conj(RA), size)[:taps]
-            quiet = a[np.abs(np.arange(taps)[:, None] - np.arange(taps)[None, :])]
-            quiet[np.diag_indices(taps)] += 1e-9 * max(float(a[0]), 1e-30)
+            if taps > 256:
+                # a long path's refit from the weighted signals' own correlations (both weighted by the mask's square
+                # root), which stay positive definite: the masked cross-correlation the short fit uses is not, and at
+                # some lengths Levinson's recursion ran away on it (a 150 ms fit left more than it took)
+                w = np.sqrt(mask)
+                RA = np.fft.rfft(w * ref_at, size)
+                p = np.fft.irfft(np.fft.rfft(w * xc[:est_n], size) * np.conj(RA), size)[:taps]
+                a = np.fft.irfft(np.abs(RA) ** 2, size)[:taps]
+            else:
+                RA = np.fft.rfft(ref_at, size)
+                p = np.fft.irfft(np.fft.rfft(mask * xc[:est_n], size) * np.conj(RA), size)[:taps]
+                a = np.fft.irfft(np.fft.rfft(mask * ref_at, size) * np.conj(RA), size)[:taps]
+            a[0] += 1e-9 * max(float(a[0]), 1e-30)
             if a[0] > 0:
-                shifted = placed(np.linalg.solve(quiet, p))
+                shifted = placed(solve(a, p))
         y[:, c] = (xc - k * shifted).astype(np.float32)
     stem = str(info["name"]).rsplit(".", 1)[0]
     return media.import_wav(f"{stem} (De-bleed {k * 100:g}%).wav", _wav_bytes([y[:, c] for c in range(y.shape[1])], rate))

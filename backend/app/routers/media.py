@@ -157,14 +157,15 @@ def media_list(query: str = "", limit: int = 100, offset: int = 0) -> dict:
 
 
 @router.post("/media/{media_id}/debleed", status_code=201)
-def media_debleed(media_id: str, reference: str, offset: int = 0, amount: float = 100.0) -> dict:
-    """The recording with what leaked into it from the reference subtracted (services/effects.py: debleed)."""
+def media_debleed(media_id: str, reference: str, offset: int = 0, amount: float = 100.0, pathMs: float | None = None) -> dict:
+    """The recording with what leaked into it from the reference subtracted (services/effects.py: debleed); pathMs
+    fits a longer path than the default 2.7 ms (a room between the source and the mic, up to 500 ms)."""
     from ..services import effects
 
     if reference == media_id:
         raise HTTPException(422, "the reference must be another recording")
     try:
-        return effects.debleed(media_id, reference, offset, max(0.0, min(100.0, amount)))
+        return effects.debleed(media_id, reference, offset, max(0.0, min(100.0, amount)), pathMs)
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err
     except media.MediaError as err:
