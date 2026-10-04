@@ -108,11 +108,14 @@ def media_transients(media_id: str, sensitivity: float = 0.5) -> dict:
 
 
 @router.post("/media/{media_id}/deconstruct", status_code=201)
-def media_deconstruct(media_id: str, start: float = 0.0, end: float | None = None) -> list[dict]:
+def media_deconstruct(media_id: str, start: float = 0.0, end: float | None = None, tonalSens: float = 5.0, transientSens: float = 5.0,
+                      rebalance: bool = False, tonalDb: float = 0.0, noisyDb: float = 0.0, transientDb: float = 0.0) -> list[dict]:
     from ..services import separate
 
     try:
-        return separate.deconstruct(media_id, start, end)
+        # RX-15: the split sensitivities, and with rebalance=true one result of the parts at their gains
+        gains = (tonalDb, noisyDb, transientDb) if rebalance else None
+        return separate.deconstruct(media_id, start, end, tonal_sens=tonalSens, transient_sens=transientSens, gains_db=gains)
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err
     except separate.SeparationUnavailable as err:

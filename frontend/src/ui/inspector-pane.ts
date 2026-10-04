@@ -61,6 +61,7 @@ const BODY = `
     <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-macro-act="load" title="Check the script and make it the chain, ready to apply to this clip, save, or run on files">Load into chain</button><button type="button" class="fw-ibtn" data-macro-act="from" title="Write the current chain as a script">Write chain as script</button><button type="button" class="fw-ibtn" data-macro-act="record" aria-pressed="false" title="While on, each effect you apply is written into the script with the settings you used, so doing a task once records it as a macro">Record</button></div>
   </details>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
+  <div class="fw-analyze-buttons" title="Deconstruct's own settings (iZotope RX's module): how readily sound counts as tonal or transient, 0 to 10, and each part's gain; Rebalance renders the clip with those gains in place, one undo step"><label class="fw-sam-opt"><span>Tonal sens</span><input type="number" min="0" max="10" step="0.5" value="5" data-dc="tonalSens"></label><label class="fw-sam-opt"><span>Transient sens</span><input type="number" min="0" max="10" step="0.5" value="5" data-dc="transientSens"></label><label class="fw-sam-opt"><span>Tonal dB</span><input type="number" min="-60" max="12" step="1" value="0" data-dc="tonalDb"></label><label class="fw-sam-opt"><span>Noisy dB</span><input type="number" min="-60" max="12" step="1" value="0" data-dc="noisyDb"></label><label class="fw-sam-opt"><span>Transient dB</span><input type="number" min="-60" max="12" step="1" value="0" data-dc="transientDb"></label><button type="button" class="fw-ibtn" data-dc="rebalance">Rebalance</button></div>
   <div class="fw-analyze-buttons"><input type="text" class="fw-sam-desc" data-sam="desc" maxlength="80" placeholder="Describe a sound" title="What to isolate, for example: man speaking, car horn" aria-label="Sound to isolate"><button type="button" class="fw-ibtn" data-sam="go" title="Put the described sound and everything else on new tracks (SAM-Audio); a selected range marks where the sound occurs">Isolate sound</button></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Let the model find where the described sound occurs from the text alone; a selected range is used instead when there is one"><input type="checkbox" data-sam="predict"> Find where it occurs</label><label class="fw-sam-opt" title="Separate this many candidates and keep the one the model's judge ranks best; slower with more"><span>Candidates</span><select data-sam="candidates" aria-label="Candidate separations to re-rank"><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option></select></label></div>
   <div class="fw-sam-status" data-sam-status></div>
@@ -1400,7 +1401,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     for (const b of buttons) b.disabled = true;
     setText(notice, kind === "separate" ? "Separating into stems (about three times the clip's length on a CPU)..." : "Deconstructing into tonal, noisy and transient parts...");
     try {
-      const res = await fetch(`/api/media/${source.id}/${kind}?start=${start}&end=${end}`, { method: "POST" });
+      const sens = kind === "deconstruct" ? ["tonalSens", "transientSens"].map((k) => `&${k}=${Number(body.querySelector<HTMLInputElement>(`[data-dc="${k}"]`)?.value ?? 5)}`).join("") : "";
+      const res = await fetch(`/api/media/${source.id}/${kind}?start=${start}&end=${end}${sens}`, { method: "POST" });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown } | { source: string; media: MediaRef }[];
       if (!res.ok || !Array.isArray(out)) throw new Error(!Array.isArray(out) && typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       const commands = [
@@ -1413,6 +1415,30 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, `Could not separate: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       for (const b of buttons) b.disabled = false;
+    }
+  });
+
+  // RX-15: Deconstruct's own rebalance, as RX renders it in place: the clip's whole source (so its trim still holds)
+  // with the tonal, noisy and transient parts at their gains, swapped into the clip as one undo step
+  body.querySelector<HTMLButtonElement>('[data-dc="rebalance"]')?.addEventListener("click", async (e) => {
+    const doc = engine.get("document");
+    const hit = find(doc);
+    const source = hit ? doc.media[hit.clip.mediaId] : undefined;
+    if (!hit || !source) return;
+    const button = e.currentTarget as HTMLButtonElement;
+    const q = ["tonalSens", "transientSens", "tonalDb", "noisyDb", "transientDb"].map((k) => `&${k}=${Number(body.querySelector<HTMLInputElement>(`[data-dc="${k}"]`)?.value ?? 0)}`).join("");
+    button.disabled = true;
+    setText(notice, "Rebalancing the tonal, noisy and transient parts...");
+    try {
+      const res = await fetch(`/api/media/${source.id}/deconstruct?rebalance=true${q}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown } | { source: string; media: MediaRef }[];
+      if (!res.ok || !Array.isArray(out) || !out[0]) throw new Error(!Array.isArray(out) && typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out[0].media });
+      setText(notice, "Rebalanced the clip's tonal, noisy and transient parts (undo restores the original)");
+    } catch (err) {
+      setText(notice, `Could not rebalance: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      button.disabled = false;
     }
   });
 

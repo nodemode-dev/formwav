@@ -51,10 +51,17 @@ def _median(s, k: int, dim: int):
     return out if dim == 1 else out.T
 
 
-def deconstruct(media_id: str, start: float = 0.0, end: float | None = None, margin: float = 2.0) -> list[dict]:
+def deconstruct(media_id: str, start: float = 0.0, end: float | None = None, margin: float = 2.0, tonal_sens: float = 5.0,
+                transient_sens: float = 5.0, gains_db: tuple[float, float, float] | None = None) -> list[dict]:
     """iZotope RX's Deconstruct, as a reference: harmonic-percussive separation of a time range into tonal (steady
     across time), transient (broad across frequency) and noisy (neither) parts. The three masks partition the
-    spectrum, so the parts sum back to the range."""
+    spectrum, so the parts sum back to the range.
+
+    RX-15: each split has a sensitivity from 0 to 10 (5 is the margin given, 2 by default; each step of 5 divides or
+    multiplies it by 4), the higher the more of the spectrum goes to that part; transient bins are taken only from
+    what is not tonal, so the masks still partition it at any setting. With gains_db (tonal, noisy, transient) the
+    module renders one rebalanced result instead of three parts: the masks weighted by their gains, inverted once
+    (the separation is linear, so this is the gains applied to the parts and summed)."""
     info = media.media_info(media_id)
     rate, channels = int(info["sampleRate"]), int(info["channels"])
     length = int(info["frames"]) / rate
@@ -78,11 +85,16 @@ def deconstruct(media_id: str, start: float = 0.0, end: float | None = None, mar
     spec = torch.stft(x, 2048, 512, window=window, return_complex=True)
     mag = spec.abs().mean(0)
     tonal_env, trans_env = _median(mag, 17, 1), _median(mag, 17, 0)
-    tonal = tonal_env > margin * trans_env
-    trans = trans_env > margin * tonal_env
+    to_margin = lambda s: margin * 4.0 ** ((5.0 - max(0.0, min(10.0, float(s)))) / 5.0)
+    tonal = tonal_env > to_margin(tonal_sens) * trans_env
+    trans = (trans_env > to_margin(transient_sens) * tonal_env) & ~tonal
     masks = {"tonal": tonal, "noisy": ~(tonal | trans), "transient": trans}
     stem_name = str(info["name"]).rsplit(".", 1)[0]
     out: list[dict] = []
+    if gains_db is not None:
+        # RX-15: the module's own rebalance, the parts' gains as one weighted mask
+        weight = sum(10 ** (float(g) / 20) * m.to(torch.float32) for g, m in zip(gains_db, masks.values()))
+        masks = {"rebalanced": weight}
     with tempfile.TemporaryDirectory() as tmp:
         for part, mask in masks.items():
             y = torch.istft(spec * mask[None].to(spec.dtype), 2048, 512, window=window, length=n)
