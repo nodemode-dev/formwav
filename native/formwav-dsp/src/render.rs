@@ -128,6 +128,11 @@ pub struct Player {
     /// The master chain's copies for the C and LFE pair and the Ls and Rs pair (the chain itself serves L and R).
     master_fx_51: [Vec<crate::fx::Stage>; 2],
     peaks_51: [f32; 6],
+    /// When set, render runs the six-channel bus and folds it to stereo (ITU Lo/Ro), so playback, the bounce and the
+    /// stereo export hear the 5.1 mix exactly and the six peaks are kept for the 5.1 meters.
+    fold_51: bool,
+    /// The fold's six-channel scratch, kept between calls so a warm player renders without allocating.
+    scratch_51: [Vec<f32>; 6],
 }
 
 impl Player {
@@ -334,6 +339,10 @@ impl Player {
     }
 
     pub fn render(&mut self, left: &mut [f32], right: &mut [f32]) {
+        if self.fold_51 {
+            self.render_folded(left, right);
+            return;
+        }
         let n = left.len().min(right.len());
         left[..n].fill(0.0);
         right[..n].fill(0.0);
@@ -487,6 +496,7 @@ impl Player {
                     }
                 }
             }
+            self.meter_tracks(from, len); // the mixer's track meters keep moving while the 5.1 bus plays
             done += len;
             self.position = from + span;
             if let Some((start, end)) = self.loop_range {
@@ -511,6 +521,50 @@ impl Player {
     /// The six channels' peaks since the last call (L R C LFE Ls Rs), for the 5.1 meters.
     pub fn take_peaks_51(&mut self) -> [f32; 6] {
         std::mem::take(&mut self.peaks_51)
+    }
+
+    /// Sets the fold mode: render then plays the six-channel bus folded to stereo (set the placements first).
+    pub fn set_fold_51(&mut self, on: bool) {
+        self.fold_51 = on;
+    }
+
+    /// Whether the fold mode is on (the 5.1 meters are read only then).
+    pub fn is_fold_51(&self) -> bool {
+        self.fold_51
+    }
+
+    /// The six-channel bus folded to stereo by ITU-R BS.775's downmix (Lo = L + 0.707 C + 0.707 Ls, Ro likewise with
+    /// R and Rs, the LFE left out), the stereo meters then taken on the fold as the stereo render takes them.
+    fn render_folded(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let n = left.len().min(right.len());
+        let mut scratch = std::mem::take(&mut self.scratch_51);
+        for c in scratch.iter_mut() {
+            if c.len() < n {
+                c.resize(n, 0.0);
+            }
+        }
+        {
+            let [c0, c1, c2, c3, c4, c5] = &mut scratch;
+            let mut bus: [&mut [f32]; 6] = [&mut c0[..n], &mut c1[..n], &mut c2[..n], &mut c3[..n], &mut c4[..n], &mut c5[..n]];
+            self.render_surround(&mut bus);
+        }
+        let k = std::f32::consts::FRAC_1_SQRT_2;
+        for i in 0..n {
+            left[i] = scratch[0][i] + k * scratch[2][i] + k * scratch[4][i];
+            right[i] = scratch[1][i] + k * scratch[2][i] + k * scratch[5][i];
+        }
+        self.scratch_51 = scratch;
+        for i in 0..n {
+            self.peak_left = self.peak_left.max(left[i].abs());
+            self.peak_right = self.peak_right.max(right[i].abs());
+            let (l, r) = (f64::from(left[i]), f64::from(right[i]));
+            self.corr.0 += l * r;
+            self.corr.1 += l * l;
+            self.corr.2 += r * r;
+        }
+        if let Some(meter) = self.loudness.as_mut() {
+            meter.process(&left[..n], &right[..n]);
+        }
     }
 
     pub fn set_loop(&mut self, start: u64, end: u64) {
@@ -926,5 +980,48 @@ mod tests {
         assert!(lfe_db.abs() < 0.2, "the LFE carries the 50 Hz placement within 0.2 dB ({lfe_db:.3})");
         let peaks = p.take_peaks_51();
         assert!((peaks[2] - 0.25 * g).abs() < 1e-4 && peaks[4] == 0.0, "the six peaks follow the channels");
+    }
+
+    /// The fold mode: the stereo render is the six-channel bus folded by ITU-R BS.775 (Lo = L + 0.707 C + 0.707 Ls,
+    /// Ro likewise), sample for sample, and both the six peaks and the stereo peaks are kept.
+    #[test]
+    fn the_fold_mode_plays_the_six_channel_bus_folded_to_stereo() {
+        let rate = 48000usize;
+        let tone = |hz: f32| (0..rate).map(|i| 0.25 * (2.0 * std::f32::consts::PI * hz * i as f32 / rate as f32).sin()).collect::<Vec<f32>>();
+        let session = || {
+            let mut p = Player::new();
+            p.set_rate(rate as f32);
+            for (id, hz) in [(1u32, 1000.0f32), (2, 330.0), (3, 3000.0)] {
+                p.load_source(id, AudioBuffer { sample_rate: rate as u32, channels: vec![tone(hz)] });
+                p.add_clip(PlayClip { source: id, start: 0, source_in: 0, length: rate as u64, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 0, gain_env: 0, pan_env: 0 });
+            }
+            p.set_places(&[Some([0.0, 0.0, 1.0, 0.0, 0.0, 0.0]), None, Some([0.0, 0.0, 0.0, 0.0, 1.0, 0.0])]);
+            p
+        };
+        let mut six = session();
+        let mut chans: Vec<Vec<f32>> = (0..6).map(|_| vec![0.0f32; rate]).collect();
+        {
+            let [c0, c1, c2, c3, c4, c5] = &mut chans[..] else { unreachable!() };
+            let mut out: [&mut [f32]; 6] = [&mut c0[..], &mut c1[..], &mut c2[..], &mut c3[..], &mut c4[..], &mut c5[..]];
+            for start in (0..rate).step_by(128) {
+                let end = (start + 128).min(rate);
+                let [o0, o1, o2, o3, o4, o5] = &mut out;
+                let mut block: [&mut [f32]; 6] = [&mut o0[start..end], &mut o1[start..end], &mut o2[start..end], &mut o3[start..end], &mut o4[start..end], &mut o5[start..end]];
+                six.render_surround(&mut block);
+            }
+        }
+        let mut folded = session();
+        folded.set_fold_51(true);
+        let (mut left, mut right) = (vec![0.0f32; rate], vec![0.0f32; rate]);
+        for (l, r) in left.chunks_mut(128).zip(right.chunks_mut(128)) {
+            folded.render(l, r);
+        }
+        let k = std::f32::consts::FRAC_1_SQRT_2;
+        let worst = (0..rate).map(|i| (left[i] - (chans[0][i] + k * chans[2][i] + k * chans[4][i])).abs().max((right[i] - (chans[1][i] + k * chans[2][i] + k * chans[5][i])).abs())).fold(0.0f32, f32::max);
+        assert!(worst < 1e-6, "the fold equals the ITU fold of the six-channel bus ({worst})");
+        let six_peaks = folded.take_peaks_51();
+        assert!(six_peaks[2] > 0.24 && six_peaks[4] > 0.24 && six_peaks[5] == 0.0, "the six peaks are kept while folding");
+        let (pl, pr) = folded.take_peaks();
+        assert!(pl > 0.0 && pr > 0.0, "the stereo peaks are taken on the fold");
     }
 }

@@ -192,6 +192,45 @@ pub unsafe extern "C" fn fw_take_peaks(player: *mut Player, out: *mut f32) {
     *out.add(1) = right;
 }
 
+/// PT-38, AA-11: the clips' 5.1 placements, `count` records of seven floats (the clip's index, then its six speaker
+/// gains in SMPTE order); clips without a record keep their stereo image on L and R.
+///
+/// # Safety
+/// `player` must come from `fw_player_new`; `ptr` must hold `count * 7` floats.
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_places(player: *mut Player, ptr: *const f32, count: usize) {
+    let records = if count == 0 { &[][..] } else { slice::from_raw_parts(ptr, count * 7) };
+    let mut places: Vec<Option<[f32; 6]>> = Vec::new();
+    for r in records.chunks_exact(7) {
+        let index = r[0] as usize;
+        if places.len() <= index {
+            places.resize(index + 1, None);
+        }
+        places[index] = Some([r[1], r[2], r[3], r[4], r[5], r[6]]);
+    }
+    (*player).set_places(&places);
+}
+
+/// Turns the fold mode on (nonzero) or off: playback then hears the six-channel bus folded to stereo.
+///
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_fold_51(player: *mut Player, on: u32) {
+    (*player).set_fold_51(on != 0);
+}
+
+/// The six channels' peaks since the last call (L R C LFE Ls Rs) into `out`.
+///
+/// # Safety
+/// `player` must come from `fw_player_new`; `out` must hold six floats.
+#[no_mangle]
+pub unsafe extern "C" fn fw_take_peaks_51(player: *mut Player, out: *mut f32) {
+    for (k, v) in (*player).take_peaks_51().into_iter().enumerate() {
+        *out.add(k) = v;
+    }
+}
+
 /// The master's phase correlation since the last call (AA-02); NaN with nothing playing.
 ///
 /// # Safety

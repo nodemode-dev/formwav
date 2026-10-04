@@ -4,8 +4,9 @@ side of its angle (VBAP in two dimensions); a position nearer the middle of the 
 power kept. A track may also send to the LFE channel, which carries only what lies below 120 Hz. A track with no
 surround position keeps its stereo image on L and R. The mix runs through the core's six-channel master bus
 (render.rs render_surround), the master chain and fader acting on the 5.1 mix as on the stereo one, and is written in
-SMPTE order (L R C LFE Ls Rs) as a WAVE_FORMAT_EXTENSIBLE file marked 5.1. `fold` gives the ITU stereo downmix as the
-core's clip gain and pan, for hearing the 5.1 in playback and the stereo mix."""
+SMPTE order (L R C LFE Ls Rs) as a WAVE_FORMAT_EXTENSIBLE file marked 5.1. A session hearing its 5.1 as a fold-down
+gives the core the same placements with its fold mode on, so playback and the stereo mix are the bus folded to stereo
+by ITU-R BS.775's downmix."""
 
 import math
 import struct
@@ -39,21 +40,20 @@ def gains(x: float, y: float) -> dict[str, float]:
     return {k: v / norm for k, v in spread.items()}
 
 
-FOLD = 1 / math.sqrt(2)  # ITU-R BS.775's downmix: centre and surrounds into the front pair at -3 dB, the LFE left out
-
-
-def fold(x: float, y: float) -> tuple[float, float]:
-    """A 5.1 position's stereo fold-down (Lo = L + 0.707 C + 0.707 Ls, Ro = R + 0.707 C + 0.707 Rs) as the core's
-    clip gain in dB and pan: its pan law keeps the near side at 1 and turns the far side down by cos(pan * pi / 2), so
-    a mono source reaches Lo and Ro exactly; a stereo source keeps its own image within that balance."""
-    g = gains(x, y)
-    lo = g["L"] + FOLD * g["C"] + FOLD * g["Ls"]
-    ro = g["R"] + FOLD * g["C"] + FOLD * g["Rs"]
-    near, far = max(lo, ro), min(lo, ro)
-    if near <= 1e-12:
-        return -120.0, 0.0
-    pan = (2 / math.pi) * math.acos(max(0.0, min(1.0, far / near)))
-    return 20 * math.log10(near), (-pan if lo >= ro else pan)
+def places_for(doc: dict, owners: list[int]) -> list[tuple[int, list[float]]]:
+    """Each placed clip's speaker gains in SMPTE order (L R C LFE Ls Rs, the LFE's from its send in dB), by the clip's
+    index in the plan; clips of tracks without a position are left out (their stereo image goes to L and R)."""
+    tracks = [t for t in (doc.get("tracks") or []) if isinstance(t, dict)]
+    out = []
+    for index, owner in enumerate(owners):
+        place = tracks[owner].get("surround") if owner < len(tracks) else None
+        if not isinstance(place, dict):
+            continue
+        g = gains(float(place.get("x", 0.0)), float(place.get("y", 1.0)))
+        lfe = place.get("lfeDb")
+        lfe_gain = 10 ** (float(lfe) / 20) if lfe is not None and float(lfe) > -80 else 0.0
+        out.append((index, [g["L"], g["R"], g["C"], lfe_gain, g["Ls"], g["Rs"]]))
+    return out
 
 
 def wav_51(channels: np.ndarray, rate: int) -> bytes:
@@ -87,15 +87,7 @@ def render_51(doc: dict) -> dict:
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
     chains = chains + [(2, 0, *s) for s in (render._stage(f) for f in (doc.get("masterFx") or [])) if s]
-    places = []
-    for index, owner in enumerate(owners):
-        place = tracks[owner].get("surround") if owner < len(tracks) else None
-        if not isinstance(place, dict):
-            continue
-        g = gains(float(place.get("x", 0.0)), float(place.get("y", 1.0)))
-        lfe = place.get("lfeDb")
-        lfe_gain = 10 ** (float(lfe) / 20) if lfe is not None and float(lfe) > -80 else 0.0
-        places.append((index, [g["L"], g["R"], g["C"], lfe_gain, g["Ls"], g["Rs"]]))
+    places = places_for(doc, owners)
     if not places:
         places = [(len(clips), [0.0] * 6)]  # nothing placed: still six channels, the stereo on L and R
     interleaved, _, _ = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places)

@@ -3,7 +3,7 @@ import { FADE_SHAPES, type TrackFx } from "../engine/document";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
 import { NativeNode, nativeChoice } from "./native-node";
-import { foldDown } from "./surround";
+import { surroundGains } from "./surround";
 
 const CORE_URL = "/core/formwav_dsp.wasm";
 
@@ -11,6 +11,9 @@ export interface ClipPlan {
   clips: WorkletClip[];
   end: number;
   skipped: number;
+  /** PT-38, AA-11: placed clips as records of seven (index, then speaker gains), and whether the core folds its bus. */
+  places?: number[];
+  fold?: boolean;
   buses: WorkletBus[];
   /** Master fader in dB (0 turns the master stage off). */
   masterDb: number;
@@ -164,6 +167,9 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     buses.push({ id, gain: dbToGain(bus.gainDb), pan: bus.pan ?? 0, ...(busStages.length ? { stages: busStages } : {}) });
   }
   const clips: WorkletClip[] = [];
+  // PT-38, AA-11: each placed clip as a record of seven numbers (its index in `clips`, then its speaker gains in SMPTE
+  // order), for the core's six-channel bus when the session hears its fold-down
+  const places: number[] = [];
   let end = 0;
   let skipped = 0;
   for (const track of doc.tracks) {
@@ -181,10 +187,11 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       fxAuto = [];
     }
     const volumePoints = track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
-    // PT-38, AA-11: with the session hearing its 5.1 as a stereo fold-down, a placed track's position replaces its pan
-    // (and any pan automation), as the engine's export planner does
-    const fold = doc.surroundFold && track.surround ? foldDown(track.surround.x, track.surround.y) : null;
-    const panPoints = !fold && track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
+    const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
+    // PT-38, AA-11: a session hearing its 5.1 as a fold-down gives the core each placed clip's speaker gains, and the
+    // core plays its six-channel bus folded to stereo (the engine's stereo mix does the same)
+    const place = doc.surroundFold && track.surround ? surroundGains(track.surround.x, track.surround.y) : null;
+    const lfeGain = track.surround?.lfeDb !== undefined && track.surround.lfeDb > -80 ? 10 ** (track.surround.lfeDb / 20) : 0;
     for (const clip of track.clips) {
       // A pitched clip plays its derived render (non-destructive pitch; same length as the original).
       const playId = clip.pitchMediaId && doc.media[clip.pitchMediaId] ? clip.pitchMediaId : clip.mediaId;
@@ -201,8 +208,8 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         start: clip.start,
         sourceIn: clip.sourceIn,
         length: clip.length,
-        gain: dbToGain((volumePoints ? 0 : track.gainDb) + (vca?.gainDb ?? 0) + clip.gainDb + (fold?.gainDb ?? 0)),
-        pan: fold ? fold.pan : panPoints ? 0 : track.pan ?? 0,
+        gain: dbToGain((volumePoints ? 0 : track.gainDb) + (vca?.gainDb ?? 0) + clip.gainDb),
+        pan: panPoints ? 0 : track.pan ?? 0,
         gainPoints: envPoints,
         panPoints,
         ...clipChain(clip, fxFlat, fxAuto),
@@ -212,6 +219,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         bus,
         track: doc.tracks.indexOf(track) + 1,
       });
+      if (place) places.push(clips.length - 1, place.L, place.R, place.C, lfeGain, place.Ls, place.Rs);
       // PT-18, post-fader sends: the clip again, into the send's bus at the send level, with its own insert state and
       // envelopes, not metered as the track (track 0)
       const main = clips[clips.length - 1];
@@ -223,7 +231,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       end = Math.max(end, clip.start + clip.length);
     }
   }
-  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0 };
+  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0, places, fold: !!doc.surroundFold && places.length > 0 };
 }
 
 function send(node: AudioWorkletNode, message: WorkletMessage, transfer: Transferable[] = []): void {
@@ -437,6 +445,13 @@ export class Player {
     this.levelListeners.add(listener);
   }
 
+  private surroundListeners = new Set<(peaks: number[] | null) => void>();
+
+  /** PT-38, AA-11: the 5.1 bus's six peaks (L R C LFE Ls Rs) while it plays folded, null otherwise. */
+  onSurroundLevel(listener: (peaks: number[] | null) => void): void {
+    this.surroundListeners.add(listener);
+  }
+
   private emitLevel(left: number, right: number, tracks: number[], loudness: number[] | null, buses: number[] = [], correlation: number | null = null): void {
     for (const listener of this.levelListeners) listener(left, right, tracks, loudness, buses, correlation);
   }
@@ -482,7 +497,7 @@ export class Player {
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true, places: this.lastPlan.places, fold: this.lastPlan.fold });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
@@ -494,6 +509,8 @@ export class Player {
     this.lastIntegrated = reply.loudness[2];
     if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks, reply.loudness, reply.busPeaks, reply.correlation ?? null);
     else this.emitLevel(0, 0, [], [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, reply.loudness[2]]);
+    const six = this.engine.get("transport").playing && reply.surroundPeaks?.length === 6 ? reply.surroundPeaks : null;
+    for (const listener of this.surroundListeners) listener(six);
   }
 
   private onReply = (e: MessageEvent<WorkletReply>): void => {
@@ -714,7 +731,7 @@ export class Player {
     const node = await makeNode(ctx, await this.core());
     await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter, streamInfo(doc, id, 0), true)));
     const plan = planClips(doc, sources);
-    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack, timeTrackLog: doc.timeTrackLog === true });
+    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack, timeTrackLog: doc.timeTrackLog === true, places: plan.places, fold: plan.fold });
     send(node, { type: "play" });
     await request(node, { type: "seek", position: 0 }, (r) => r.type === "position");
     const rendered = await ctx.startRendering();

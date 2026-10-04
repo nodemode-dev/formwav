@@ -91,6 +91,12 @@ struct Mix {
     master_db: f64,
     #[serde(default)]
     end: f64,
+    /// PT-38, AA-11: placed clips as records of seven (the clip's index, then its speaker gains in SMPTE order).
+    #[serde(default)]
+    places: Option<Vec<f32>>,
+    /// Whether the session hears its 5.1 as the bus folded to stereo.
+    #[serde(default)]
+    fold: bool,
 }
 
 /// The output devices of the default host, by name.
@@ -254,6 +260,18 @@ impl NativeOutput {
                 p.add_master_stage(st[0] as u8, st[1], st[2], st[3], st[4], st[5]);
             }
             p.set_master_db(mix.master_db);
+            // PT-38, AA-11: the placements and fold mode after the master chain, as the worklet applies them
+            let records: &[f32] = if mix.fold { mix.places.as_deref().unwrap_or(&[]) } else { &[] };
+            let mut places: Vec<Option<[f32; 6]>> = Vec::new();
+            for r in records.chunks_exact(7) {
+                let index = r[0] as usize;
+                if places.len() <= index {
+                    places.resize(index + 1, None);
+                }
+                places[index] = Some([r[1], r[2], r[3], r[4], r[5], r[6]]);
+            }
+            p.set_places(&places);
+            p.set_fold_51(!records.is_empty());
             s.end = mix.end.max(0.0) as u64;
         });
         Ok(())
@@ -294,7 +312,9 @@ impl NativeOutput {
             let mut buses = vec![0f32; MAX_BUSES * 2];
             let bn = p.take_bus_peaks(&mut buses);
             let (m, st, i) = p.loudness();
+            let surround = if p.is_fold_51() { Some(p.take_peaks_51()) } else { None };
             serde_json::json!({
+                "surroundPeaks": surround,
                 "type": "position",
                 "position": p.position(),
                 "playing": playing,

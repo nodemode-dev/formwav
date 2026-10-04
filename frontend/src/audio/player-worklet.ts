@@ -29,6 +29,9 @@ interface CoreExports {
   fw_add_master_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
   fw_add_bus_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
   fw_take_peaks(player: number, out: number): void;
+  fw_set_places(player: number, ptr: number, count: number): void;
+  fw_set_fold_51(player: number, on: number): void;
+  fw_take_peaks_51(player: number, out: number): void;
   fw_take_correlation(player: number): number;
   fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
   fw_take_bus_peaks(player: number, out: number, maxBuses: number): number;
@@ -77,7 +80,7 @@ export type WorkletMessage =
   | { type: "load"; id: number; bytes: ArrayBuffer }
   | { type: "alloc"; id: number; rate: number; channels: number; frames: number }
   | { type: "write"; id: number; offset: number; data: Float32Array }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[]; timeTrackLog?: boolean }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean }
   | { type: "play" }
   | { type: "speed"; value: number }
   | { type: "rate-ratio"; value: number }
@@ -89,7 +92,7 @@ export type WorkletReply =
   | { type: "ready" }
   | { type: "error"; message: string }
   | { type: "loaded"; id: number; frames: number }
-  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; correlation?: number | null; trackPeaks: number[]; loudness: number[]; busPeaks: number[] }
+  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; correlation?: number | null; trackPeaks: number[]; loudness: number[]; busPeaks: number[]; surroundPeaks?: number[] }
   | { type: "ended"; position: number };
 
 /** The AudioWorkletGlobalScope's context sample rate. */
@@ -133,6 +136,9 @@ class PlayerProcessor extends AudioWorkletProcessor {
   private bufR = new Float32Array(1024);
   private quanta = 0;
   private peaks = 0;
+  /** PT-38, AA-11: whether the core folds its six-channel bus, and where the six peaks are read into. */
+  private fold51 = false;
+  private peaks51 = 0;
   private views: { buffer: ArrayBuffer; frames: number; left: Float32Array; right: Float32Array } | null = null;
 
   constructor() {
@@ -171,6 +177,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       trackPeaks: Array.from(peaks.subarray(2)),
       loudness: Array.from(new Float32Array(core.memory.buffer, loudnessAt, 3)),
       busPeaks: Array.from(new Float32Array(core.memory.buffer, busesAt, buses * 2)),
+      ...(this.fold51 ? { surroundPeaks: (core.fw_take_peaks_51(this.player, this.peaks51), Array.from(new Float32Array(core.memory.buffer, this.peaks51, 6))) } : {}),
     });
   }
 
@@ -184,6 +191,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       this.left = core.fw_alloc(MAX_FRAMES * 4);
       this.right = core.fw_alloc(MAX_FRAMES * 4);
       this.peaks = core.fw_alloc(8 + MAX_METERED_TRACKS * 8 + 12 + MAX_METERED_BUSES * 8);
+      this.peaks51 = core.fw_alloc(24);
       this.reply({ type: "ready" });
       return;
     }
@@ -257,6 +265,16 @@ class PlayerProcessor extends AudioWorkletProcessor {
         const mfx = msg.masterFx ?? [];
         for (let k = 0; k + 5 < mfx.length; k += 6) core.fw_add_master_stage(this.player, mfx[k], mfx[k + 1], mfx[k + 2], mfx[k + 3], mfx[k + 4], mfx[k + 5]);
         core.fw_set_master_db(this.player, msg.masterDb);
+        // PT-38, AA-11: the placements and the fold mode, after the master chain (the core copies it for the C and LFE
+        // pair and the surrounds); a session not hearing its fold-down clears both
+        const records = msg.fold && msg.places ? msg.places : [];
+        const placeBytes = Math.max(4, records.length * 4);
+        const placeAt = core.fw_alloc(placeBytes);
+        new Float32Array(core.memory.buffer, placeAt, records.length).set(records);
+        core.fw_set_places(this.player, placeAt, records.length / 7);
+        core.fw_free(placeAt, placeBytes);
+        core.fw_set_fold_51(this.player, records.length ? 1 : 0);
+        this.fold51 = records.length > 0;
         this.end = msg.end;
         break;
       }

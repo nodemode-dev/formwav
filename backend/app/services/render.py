@@ -96,15 +96,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             pan_env = len(envelopes)
         track_db = (0.0 if gain_env else float(track.get("gainDb", 0))) + (float(vca.get("gainDb", 0)) if vca else 0.0)
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
-        place = track.get("surround")
-        if doc.get("surroundFold") and isinstance(place, dict):
-            # PT-38, AA-11: the session hears its 5.1 as a stereo fold-down, so a placed track's position replaces its
-            # pan (and any pan automation), as the browser's planner does for playback
-            from .surround import fold
 
-            fold_db, track_pan = fold(float(place.get("x", 0.0)), float(place.get("y", 1.0)))
-            track_db += fold_db
-            pan_env = 0
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
         if bus_index == 0 and any(s[0] == 6 for s in stages):
             # A compressor is nonlinear, so it must see the track's sum: the track plays through a bus of its own
@@ -193,7 +185,7 @@ def dbfs(peak: float) -> str:
 
 def render(doc: object) -> dict:
     native = media._require_core()
-    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, _owners = plan(doc)
+    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, owners = plan(doc)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -202,7 +194,12 @@ def render(doc: object) -> dict:
             raise KeyError(media_id)
         loaded.append((source, path.read_bytes()))
     chains = chains + [(2, 0, *s) for s in (_stage(f) for f in (doc.get("masterFx") or [])) if s]
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps)
+    # PT-38, AA-11: a session hearing its 5.1 as a fold-down plays the core's six-channel bus folded to stereo, here as
+    # in playback, so the stereo mix and the 5.1 export's fold-down are the same computation
+    from .surround import places_for
+
+    places = places_for(doc, owners) if isinstance(doc, dict) and doc.get("surroundFold") else []
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places))
     frames = max(1, end)
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:

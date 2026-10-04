@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new()))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -28,6 +28,7 @@ fn render<'py>(
     fx_auto: Vec<(usize, usize, u8, u32)>,
     comps: Vec<(usize, usize, f32, f32, f32, f32, f32)>,
     places: Vec<(usize, [f32; 6])>,
+    fold: bool,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let n_clips = clips.len();
     let mut player = Player::new();
@@ -79,12 +80,18 @@ fn render<'py>(
         // PT-38, AA-11: a 5.1 mix through the six-channel master bus, its channels interleaved in SMPTE order (L R C
         // LFE Ls Rs); the two peaks returned are L's and R's, the engine reading all six from the samples
         let mut per_clip: Vec<Option<[f32; 6]>> = vec![None; n_clips];
-        for (index, gains) in places {
+        for &(index, gains) in &places {
             if index < n_clips {
                 per_clip[index] = Some(gains);
             }
         }
         player.set_places(&per_clip);
+        if fold {
+            // the stereo mix heard as the 5.1 bus folded to stereo, as playback hears it: the stereo render below folds
+            player.set_fold_51(true);
+        }
+    }
+    if !places.is_empty() && !fold {
         let mut chans: Vec<Vec<f32>> = (0..6).map(|_| vec![0.0f32; frames]).collect();
         let mut at = 0;
         while at < frames {

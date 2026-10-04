@@ -13,7 +13,7 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
   node.dataset.kind = kind;
   node.innerHTML =
     `<div class="fw-strip-name"></div>` +
-    `<div class="fw-strip-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div>` +
+    `<div class="fw-strip-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div>${kind === "master" ? ["L", "R", "C", "LFE", "Ls", "Rs"].map((ch) => `<div class="fw-out-track fw-out-51" data-ch="${ch}" title="5.1 ${ch}" hidden><div class="fw-out-bar"></div></div>`).join("") : ""}</div>` +
     `<input class="fw-strip-fader" type="range" min="-60" max="12" step="0.1" data-default="0" aria-label="Volume">` +
     `<output class="fw-strip-db"></output>` +
     `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" data-default="0" aria-label="Pan"${kind === "master" || kind === "vca" ? " hidden" : ""}>` +
@@ -305,9 +305,9 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
 
   const shown = new Map<string, number[]>();
   let lastTime = performance.now();
-  const drive = (key: string, selector: string, pair: [number, number], silent: boolean, fall: number) => {
+  const drive = (key: string, selector: string, pair: number[], silent: boolean, fall: number) => {
     const previous = shown.get(key) ?? [-Infinity, -Infinity];
-    const next = pair.map((peak, c) => (silent ? -Infinity : Math.max(peak > 0 ? 20 * Math.log10(peak) : -Infinity, previous[c] - fall)));
+    const next = pair.map((peak, c) => (silent ? -Infinity : Math.max(peak > 0 ? 20 * Math.log10(peak) : -Infinity, (previous[c] ?? -Infinity) - fall)));
     shown.set(key, next);
     const bars = panel.querySelectorAll<HTMLElement>(selector);
     next.forEach((db, c) => {
@@ -317,6 +317,14 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
       if (bar.style.transform !== transform) bar.style.transform = transform;
     });
   };
+  // PT-38, AA-11: the 5.1 bus's six channels (L R C LFE Ls Rs) on the master strip while it plays, from the core's own
+  // six-channel peaks; hidden when the session plays plain stereo
+  player.onSurroundLevel((six) => {
+    const tracks = panel.querySelectorAll<HTMLElement>('.fw-strip[data-kind="master"] .fw-out-51');
+    for (const t of tracks) if (t.hidden === !!six) t.hidden = !six;
+    const now = performance.now();
+    drive("master51", '.fw-strip[data-kind="master"] .fw-out-51 .fw-out-bar', six ?? [0, 0, 0, 0, 0, 0], !six, ((now - lastTime) / 1000) * 20);
+  });
   player.onOutputLevel((left, right, _tracks, _loudness, buses) => {
     const now = performance.now();
     const fall = ((now - lastTime) / 1000) * 20;
