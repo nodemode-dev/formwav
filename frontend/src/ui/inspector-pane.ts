@@ -28,6 +28,7 @@ const BODY = `
   <p class="fw-empty-note fw-env-readout" data-env-out>No gain envelope</p>
   <div class="fw-insp-head">De-bleed</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Guide</span><select data-align="guide" aria-label="The original line this replacement take should follow"><option value="">no other clip overlaps</option></select></label><button type="button" class="fw-ibtn" data-clip-act="align" title="Re-time this replacement take to follow the guide word for word, and set it in the guide's place (automatic speech alignment)">Align to guide</button></div>
   <div class="fw-insp-head" title="The clip's sung or played notes; drag one up or down to retune it (Melodyne's note editing)">Notes</div>
   <canvas class="fw-notes-canvas" data-notes width="512" height="160" aria-label="The clip's notes on a pitch grid; drag a note up or down to retune it a semitone at a time"></canvas>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-notes-act="find" title="Track the clip's pitch and show its notes">Find notes</button><label class="fw-sam-opt" title="Find every note inside played chords, so one can be moved without the others (Melodyne's Direct Note Access)"><input type="checkbox" data-notes-poly> In chords</label><button type="button" class="fw-ibtn" data-notes-act="apply" title="Retune the notes you moved, everything else left as it is, one undo step">Apply note changes</button><label class="fw-sam-opt" title="Keep the voice's character (its formants) where it was as the notes move"><input type="checkbox" data-notes-formants checked> Keep formants</label></div>
@@ -163,7 +164,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (batch && batch.textContent !== batchLabel) batch.textContent = batchLabel;
     show(body.querySelector(".fw-insp-analyze"), !!hit);
     show(body.querySelector(".fw-insp-quantize"), !!hit || selected.length > 0);
-    const refPick = body.querySelector<HTMLSelectElement>('[data-debleed="ref"]');
+    // the clips on other tracks overlapping this one: De-bleed's Leak from and AA-12's Guide
+    for (const refPick of body.querySelectorAll<HTMLSelectElement>('[data-debleed="ref"], [data-align="guide"]')) {
     if (hit && refPick) {
       const c0 = hit.clip;
       const overlaps = doc.tracks.flatMap((t) => (t.id === hit.track.id ? [] : t.clips.filter((c) => c.start < c0.start + c0.length && c.start + c.length > c0.start).map((c) => ({ value: `${t.id}:${c.id}`, label: `${t.name}: ${doc.media[c.mediaId]?.name ?? "clip"}` }))));
@@ -181,6 +183,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         );
         if (overlaps.some((o) => o.value === keep)) refPick.value = keep;
       }
+    }
     }
     const envOut = body.querySelector<HTMLElement>("[data-env-out]");
     if (hit && envOut) {
@@ -1472,6 +1475,37 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         fillInputs();
         setText(notice, list.length ? `${list.length} input${list.length === 1 ? "" : "s"} listed` : "No input device found; the system default is used");
       });
+    } else if (b.dataset.clipAct === "align") {
+      // AA-12: this replacement take re-timed to follow the chosen guide word for word, then set exactly in the
+      // guide's place, as one change
+      const hit = find(doc);
+      const [guideTrack, guideClipId] = (body.querySelector<HTMLSelectElement>('[data-align="guide"]')?.value ?? "").split(":");
+      const guide = doc.tracks.find((t) => t.id === guideTrack)?.clips.find((c) => c.id === guideClipId);
+      const guideMedia = guide ? doc.media[guide.mediaId] : undefined;
+      const takeMedia = hit ? doc.media[hit.clip.mediaId] : undefined;
+      if (!hit || !guide || !guideMedia || !takeMedia) {
+        setText(notice, "Select the replacement take and choose the guide it should follow");
+        return;
+      }
+      setText(notice, "Aligning the take to the guide...");
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/align`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guide: guide.mediaId, guideIn: guide.sourceIn / guideMedia.sampleRate, guideLen: guide.length / doc.sampleRate, takeIn: hit.clip.sourceIn / takeMedia.sampleRate, takeLen: hit.clip.length / doc.sampleRate }),
+      });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      if (!res.ok) {
+        setText(notice, `Could not align: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+        return;
+      }
+      engine.dispatch({
+        type: "batch",
+        commands: [
+          { type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as unknown as MediaRef },
+          { type: "set-clip-bounds", trackId: hit.track.id, clipId: hit.clip.id, start: guide.start, sourceIn: 0, length: guide.length },
+        ],
+      });
+      setText(notice, `Aligned to ${guideMedia.name}: re-timed word for word and set in its place`);
     } else if (b.dataset.clipAct === "debleed") {
       const hit = find(doc);
       const [refTrack, refClipId] = (body.querySelector<HTMLSelectElement>('[data-debleed="ref"]')?.value ?? "").split(":");

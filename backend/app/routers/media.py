@@ -510,6 +510,20 @@ def media_notes(media_id: str, poly: bool = False) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/align", status_code=201)
+def media_align(media_id: str, payload: dict) -> dict:
+    """AA-12: {"guide", "guideIn", "guideLen", "takeIn", "takeLen", "smoothMs"}: this media (the replacement take)
+    re-timed to follow the guide's span (services/align.py); new media as long as the guide's span."""
+    from ..services import align
+
+    try:
+        return align.align(str(payload["guide"]), media_id, float(payload.get("guideIn", 0)), payload.get("guideLen"), float(payload.get("takeIn", 0)), payload.get("takeLen"), float(payload.get("smoothMs", 100)))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/retune-notes", status_code=201)
 def media_retune_notes(media_id: str, payload: dict) -> dict:
     """PT-10: {"notes": [{"start", "end", "shift"}], "formants", "glide"}: those notes moved, everything else kept."""
