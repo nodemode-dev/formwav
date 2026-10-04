@@ -81,7 +81,8 @@ const BODY = `
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
-  <div class="fw-analyze-buttons" title="Where this track sits in a 5.1 export: left to right and back to front from -1 to 1 (front centre is 0 and 1), and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback stays stereo for now"><label class="fw-sam-opt"><input type="checkbox" data-sur="on"> 5.1 position</label><label class="fw-sam-opt"><span>Left to right</span><input type="number" min="-1" max="1" step="0.05" value="0" data-sur="x"></label><label class="fw-sam-opt"><span>Back to front</span><input type="number" min="-1" max="1" step="0.05" value="1" data-sur="y"></label><label class="fw-sam-opt"><span>LFE dB</span><input type="number" min="-80" max="10" step="1" value="-80" data-sur="lfe"></label></div>
+  <div class="fw-analyze-buttons" title="Where this track sits in a 5.1 export: left to right and back to front from -1 to 1 (front centre is 0 and 1), and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback stays stereo for now"><label class="fw-sam-opt"><input type="checkbox" data-sur="on"> 5.1 position</label><label class="fw-sam-opt"><span>Left to right</span><input type="number" min="-1" max="1" step="0.05" value="0" data-sur="x"></label><label class="fw-sam-opt"><span>Back to front</span><input type="number" min="-1" max="1" step="0.05" value="1" data-sur="y"></label><label class="fw-sam-opt"><span>LFE dB</span><input type="number" min="-80" max="10" step="1" value="-80" data-sur="lfe"></label><label class="fw-sam-opt" title="Hear the session's 5.1 as an ITU stereo fold-down (centre and surrounds at -3 dB), in playback and in the stereo mix export; off, the 5.1 position shapes only the 5.1 export"><input type="checkbox" data-sur-fold> Hear the fold-down</label></div>
+  <canvas class="fw-surround-pad" data-sur-pad width="168" height="168" aria-label="The track's place in the 5.1 room: drag the dot; front is up, the five speakers marked"></canvas>
   <label class="fw-field"><span>Colour</span><select data-track-color aria-label="Track colour"><option value="">Green</option>${COLOURS.replace('<option value="green">Green</option>', "")}</select><span></span></label>
   <label class="fw-field"><span>Input</span><select data-track-input aria-label="Input device for recording on this track"><option value="">System default</option></select><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button><label class="fw-sam-opt" title="Where the browser's playback goes, on this machine (the status bar's Output chooses between the browser and native output)"><span>Browser output</span><select data-play-out="device" aria-label="Browser playback output device"><option value="">System default</option></select></label><label class="fw-sam-opt" title="The output's sample rate; the session plays at the right pitch at any of them"><span>Rate</span><select data-play-out="rate" aria-label="Playback output rate"><option value="0">Session rate</option><option value="44100">44.1 kHz</option><option value="48000">48 kHz</option><option value="88200">88.2 kHz</option><option value="96000">96 kHz</option></select></label><label class="fw-sam-opt" title="The device channels playback's left and right go to"><span>Channels</span><select data-play-out="map" aria-label="Playback channel mapping"><option value="0,1">1 and 2</option><option value="1,0">2 and 1 (swapped)</option><option value="0,0">both to 1</option><option value="1,1">both to 2</option><option value="2,3">3 and 4</option><option value="4,5">5 and 6</option><option value="6,7">7 and 8</option></select></label><label class="fw-sam-opt" title="Hear this track's input through the speakers when it is armed, before and while it records (software playthrough; a headphone mix avoids feedback)"><input type="checkbox" data-track-monitor> Monitor input</label><label class="fw-field"><span>Monitor level</span><input type="range" min="-30" max="6" step="1" value="0" data-monitor-level aria-label="Monitor level, dB"><output data-monitor-level-out>0 dB</output></label><label class="fw-sam-opt" title="Show this track as a spectrogram, with a frequency ruler and guides, whatever the session's view is"><input type="checkbox" data-track-spectral> Spectrogram view</label></div>
@@ -165,6 +166,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   let essential: { sync: () => void } | null = null;
   // PT-14: the track the Playlists section follows: the last one a clip was selected on, kept when its playlist empties
   let playlistTrackId: string | null = null;
+  // PT-38, AA-11: the 5.1 panner pad's drawing, set once it is mounted (further down) and called by render
+  let drawPadRef: ((pos: { x: number; y: number } | null) => void) | null = null;
   const render = () => {
     const doc = engine.get("document");
     const hit = find(doc);
@@ -256,6 +259,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       put(body.querySelector<HTMLInputElement>('[data-sur="y"]'), String(track.surround.y));
       put(body.querySelector<HTMLInputElement>('[data-sur="lfe"]'), String(track.surround.lfeDb ?? -80));
     }
+    const foldBox = body.querySelector<HTMLInputElement>("[data-sur-fold]");
+    if (foldBox && document.activeElement !== foldBox) foldBox.checked = !!doc.surroundFold;
+    drawPadRef?.(track.surround ? { x: track.surround.x, y: track.surround.y } : null);
     fillInputs();
     const automated = track.automation;
     const volume = field<HTMLInputElement>("volume");
@@ -795,6 +801,78 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const on = body.querySelector<HTMLInputElement>('[data-sur="on"]')?.checked === true;
     engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: on ? { x: value("x"), y: value("y"), lfeDb: value("lfe") } : null });
     if (notice) setText(notice, on ? `${track.name} placed in 5.1 at ${value("x")}, ${value("y")}${value("lfe") > -80 ? `, LFE ${value("lfe")} dB` : ""}` : `${track.name} back to stereo in 5.1 exports`);
+  });
+  // PT-38, AA-11: the two-dimensional panner, the room from above with the front up and the five speakers on a circle at
+  // their ITU angles; dragging moves the dot, and letting go places the track there as one change
+  const pad = body.querySelector<HTMLCanvasElement>("[data-sur-pad]");
+  let padDrag: { x: number; y: number } | null = null;
+  const drawPad = (pos: { x: number; y: number } | null) => {
+    const g = pad?.getContext("2d");
+    if (!pad || !g) return;
+    const { width: w, height: h } = pad;
+    const style = getComputedStyle(pad);
+    const ink = style.color;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent-color").trim() || ink;
+    const radius = w / 2 - 18;
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = ink;
+    g.globalAlpha = 0.3;
+    g.beginPath();
+    g.arc(w / 2, h / 2, radius, 0, Math.PI * 2);
+    g.stroke();
+    g.globalAlpha = 0.8;
+    g.fillStyle = ink;
+    g.font = `10px ${style.fontFamily}`;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    for (const [name, deg] of [["L", -30], ["C", 0], ["R", 30], ["Ls", -110], ["Rs", 110]] as [string, number][]) {
+      const a = (deg * Math.PI) / 180;
+      g.fillText(name, w / 2 + Math.sin(a) * (radius + 10), h / 2 - Math.cos(a) * (radius + 10));
+    }
+    g.globalAlpha = 1;
+    pad.dataset.pos = pos ? `${pos.x.toFixed(2)},${pos.y.toFixed(2)}` : "";
+    if (!pos) return;
+    g.fillStyle = accent;
+    g.beginPath();
+    g.arc(w / 2 + pos.x * radius, h / 2 - pos.y * radius, 6, 0, Math.PI * 2);
+    g.fill();
+  };
+  drawPadRef = (pos) => {
+    if (!padDrag) drawPad(pos);
+  };
+  const padPos = (e: PointerEvent): { x: number; y: number } => {
+    if (!pad) return { x: 0, y: 1 };
+    const box = pad.getBoundingClientRect();
+    const radius = pad.width / 2 - 18;
+    const x = (((e.clientX - box.left) * pad.width) / box.width - pad.width / 2) / radius;
+    const y = -((((e.clientY - box.top) * pad.height) / box.height - pad.height / 2) / radius);
+    const k = Math.hypot(x, y) > 1 ? 1 / Math.hypot(x, y) : 1; // held inside the room
+    return { x: Math.round(x * k * 100) / 100, y: Math.round(y * k * 100) / 100 };
+  };
+  pad?.addEventListener("pointerdown", (e) => {
+    if (!find(engine.get("document"))) return;
+    pad.setPointerCapture(e.pointerId);
+    padDrag = padPos(e);
+    drawPad(padDrag);
+  });
+  pad?.addEventListener("pointermove", (e) => {
+    if (!padDrag) return;
+    padDrag = padPos(e);
+    drawPad(padDrag);
+  });
+  pad?.addEventListener("pointerup", () => {
+    const hit = find(engine.get("document"));
+    const pos = padDrag;
+    padDrag = null;
+    if (!hit || !pos) return;
+    const lfe = Number(body.querySelector<HTMLInputElement>('[data-sur="lfe"]')?.value ?? -80);
+    engine.dispatch({ type: "set-track-surround", trackId: hit.track.id, surround: { x: pos.x, y: pos.y, lfeDb: lfe } });
+    if (notice) setText(notice, `${hit.track.name} placed in 5.1 at ${pos.x}, ${pos.y}`);
+  });
+  body.querySelector<HTMLInputElement>("[data-sur-fold]")?.addEventListener("change", (e) => {
+    const on = (e.target as HTMLInputElement).checked;
+    engine.dispatch({ type: "set-surround-fold", on });
+    if (notice) setText(notice, on ? "Hearing the 5.1 as a stereo fold-down, in playback and the stereo mix" : "Playback and the stereo mix back to each track's own pan");
   });
   const playlistTrackNow = () => engine.get("document").tracks.find((t) => t.id === playlistTrackId);
   body.querySelector<HTMLSelectElement>('[data-pl="pick"]')?.addEventListener("change", (e) => {

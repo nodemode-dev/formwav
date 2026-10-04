@@ -236,6 +236,9 @@ export interface LoopRange {
 
 export interface SessionDoc {
   sampleRate: number;
+  /** PT-38, AA-11: hear the 5.1 placement as an ITU stereo fold-down, in playback and in the stereo mix export alike;
+   *  off, a track's 5.1 position shapes only the 5.1 export. */
+  surroundFold?: boolean;
   /** Master fader in dB, applied after the buses; absent means 0 dB. */
   masterGainDb?: number;
   /** Realtime effects on the summed mix, before the master fader (Audacity's master stack). */
@@ -308,6 +311,7 @@ export type Command =
   | { type: "set-clip-type"; trackId: string; clipId: string; soundType: "dialogue" | "music" | "effects" | "ambience" | null }
   | { type: "new-playlist"; trackId: string; duplicate: boolean }
   | { type: "set-track-surround"; trackId: string; surround: { x: number; y: number; lfeDb?: number } | null }
+  | { type: "set-surround-fold"; on: boolean }
   | { type: "switch-playlist"; trackId: string; name: string }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
@@ -651,6 +655,12 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const camelotCode = cmd.camelot.trim().slice(0, 4);
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
+    }
+    case "set-surround-fold": {
+      if (!!doc.surroundFold === cmd.on) return doc;
+      if (cmd.on) return { ...doc, surroundFold: true };
+      const { surroundFold: _off, ...rest } = doc;
+      return rest;
     }
     case "set-track-surround": {
       // PT-38, AA-11: x and y held inside the room (-1 to 1), the LFE send from -80 (off) to +10 dB

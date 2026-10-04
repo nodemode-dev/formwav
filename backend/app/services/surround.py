@@ -39,6 +39,23 @@ def gains(x: float, y: float) -> dict[str, float]:
     return {k: v / norm for k, v in spread.items()}
 
 
+FOLD = 1 / math.sqrt(2)  # ITU-R BS.775's downmix: centre and surrounds into the front pair at -3 dB, the LFE left out
+
+
+def fold(x: float, y: float) -> tuple[float, float]:
+    """A 5.1 position's stereo fold-down (Lo = L + 0.707 C + 0.707 Ls, Ro = R + 0.707 C + 0.707 Rs) as the core's
+    clip gain in dB and pan: its pan law keeps the near side at 1 and turns the far side down by cos(pan * pi / 2), so
+    a mono source reaches Lo and Ro exactly; a stereo source keeps its own image within that balance."""
+    g = gains(x, y)
+    lo = g["L"] + FOLD * g["C"] + FOLD * g["Ls"]
+    ro = g["R"] + FOLD * g["C"] + FOLD * g["Rs"]
+    near, far = max(lo, ro), min(lo, ro)
+    if near <= 1e-12:
+        return -120.0, 0.0
+    pan = (2 / math.pi) * math.acos(max(0.0, min(1.0, far / near)))
+    return 20 * math.log10(near), (-pan if lo >= ro else pan)
+
+
 def _lowpass(x: np.ndarray, rate: int, cutoff: float = 120.0) -> np.ndarray:
     """The LFE send's low-pass: a fourth-order Butterworth's magnitude applied in the frequency domain, zero phase and
     fast at any length (a per-sample loop would take minutes on a long session)."""
@@ -49,7 +66,10 @@ def _lowpass(x: np.ndarray, rate: int, cutoff: float = 120.0) -> np.ndarray:
 
 def _stem(doc: dict, index: int) -> tuple[np.ndarray, int]:
     tracks = list(doc.get("tracks") or [])
-    result = render.render({**doc, "tracks": [{**t, "solo": False, "mute": bool(t.get("mute")) if j == index else True} for j, t in enumerate(tracks)]})
+    # the track's own sound: rendered with the session's fold-down off, or a placed track came back already folded
+    # and was placed again (playback and the 5.1 export's fold-down differed by -15.6 dB)
+    unfolded = {k: v for k, v in doc.items() if k != "surroundFold"}
+    result = render.render({**unfolded, "tracks": [{**t, "solo": False, "mute": bool(t.get("mute")) if j == index else True} for j, t in enumerate(tracks)]})
     wav = result["wav"]
     i, chunks = 12, {}
     while i + 8 <= len(wav):

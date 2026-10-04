@@ -3,6 +3,7 @@ import { FADE_SHAPES, type TrackFx } from "../engine/document";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
 import { NativeNode, nativeChoice } from "./native-node";
+import { foldDown } from "./surround";
 
 const CORE_URL = "/core/formwav_dsp.wasm";
 
@@ -180,7 +181,10 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       fxAuto = [];
     }
     const volumePoints = track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
-    const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
+    // PT-38, AA-11: with the session hearing its 5.1 as a stereo fold-down, a placed track's position replaces its pan
+    // (and any pan automation), as the engine's export planner does
+    const fold = doc.surroundFold && track.surround ? foldDown(track.surround.x, track.surround.y) : null;
+    const panPoints = !fold && track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
     for (const clip of track.clips) {
       // A pitched clip plays its derived render (non-destructive pitch; same length as the original).
       const playId = clip.pitchMediaId && doc.media[clip.pitchMediaId] ? clip.pitchMediaId : clip.mediaId;
@@ -197,8 +201,8 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         start: clip.start,
         sourceIn: clip.sourceIn,
         length: clip.length,
-        gain: dbToGain((volumePoints ? 0 : track.gainDb) + (vca?.gainDb ?? 0) + clip.gainDb),
-        pan: panPoints ? 0 : track.pan ?? 0,
+        gain: dbToGain((volumePoints ? 0 : track.gainDb) + (vca?.gainDb ?? 0) + clip.gainDb + (fold?.gainDb ?? 0)),
+        pan: fold ? fold.pan : panPoints ? 0 : track.pan ?? 0,
         gainPoints: envPoints,
         panPoints,
         ...clipChain(clip, fxFlat, fxAuto),
