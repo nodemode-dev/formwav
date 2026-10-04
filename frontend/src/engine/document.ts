@@ -172,6 +172,10 @@ export interface Track {
   view?: "spectrogram";
   /** PT-18: post-fader sends, this track's signal (after its inserts and fader) also fed to a bus at a level. */
   sends?: { busId: string; gainDb: number }[];
+  /** PT-14, Pro Tools' playlists: the active playlist's name (its clips are `clips`, which play and export) and the
+   *  other playlists, stashed with their clips until switched in. */
+  playlist?: string;
+  playlists?: readonly { name: string; clips: readonly Clip[] }[];
   clips: readonly Clip[];
 }
 
@@ -299,6 +303,8 @@ export type Command =
   | { type: "set-time-track"; points: TimePoint[]; log?: boolean }
   | { type: "set-clip-envelope"; trackId: string; clipId: string; points: { at: number; db: number }[] }
   | { type: "set-clip-type"; trackId: string; clipId: string; soundType: "dialogue" | "music" | "effects" | "ambience" | null }
+  | { type: "new-playlist"; trackId: string; duplicate: boolean }
+  | { type: "switch-playlist"; trackId: string; name: string }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
@@ -641,6 +647,31 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const camelotCode = cmd.camelot.trim().slice(0, 4);
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
+    }
+    case "new-playlist": {
+      // PT-14: the active clips stashed under their playlist's name; the new playlist starts empty or as a copy (fresh
+      // clip ids, the same media and notes), named as Pro Tools names them, the track's name and the next number
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const current = t.playlist ?? `${t.name}.01`;
+        const taken = new Set([current, ...(t.playlists ?? []).map((p) => p.name)]);
+        let k = 2;
+        while (taken.has(`${t.name}.${String(k).padStart(2, "0")}`)) k++;
+        const name = `${t.name}.${String(k).padStart(2, "0")}`;
+        const clips = cmd.duplicate ? t.clips.map((c) => ({ ...c, id: newId() })) : [];
+        return { ...t, playlist: name, playlists: [...(t.playlists ?? []), { name: current, clips: t.clips }], clips };
+      });
+    }
+    case "switch-playlist": {
+      // PT-14: the chosen playlist's clips become the track's (they play and export), the active ones stashed in turn
+      const track = doc.tracks.find((t) => t.id === cmd.trackId);
+      const target = track?.playlists?.find((p) => p.name === cmd.name);
+      if (!track || !target) return doc;
+      return mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        playlist: target.name,
+        clips: target.clips,
+        playlists: [...(t.playlists ?? []).filter((p) => p.name !== cmd.name), { name: t.playlist ?? `${t.name}.01`, clips: t.clips }],
+      }));
     }
     case "set-clip-type": {
       const known = cmd.soundType === "dialogue" || cmd.soundType === "music" || cmd.soundType === "effects" || cmd.soundType === "ambience";

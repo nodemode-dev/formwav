@@ -74,6 +74,10 @@ const BODY = `
   <dl class="fw-stats"></dl>
   <img class="fw-spectrogram" alt="Spectrogram of the selected clip" hidden>
 </div>
+<div class="fw-insp-section fw-insp-playlist" hidden>
+  <div class="fw-insp-head" data-pl="head" title="Alternate versions of a track's clips, one playing at a time (Pro Tools' playlists)">Playlists</div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Playlist</span><select data-pl="pick" aria-label="The playlist this track plays"></select></label><button type="button" class="fw-ibtn" data-pl="new" title="Keep these clips as a playlist and start an empty one">New playlist</button><button type="button" class="fw-ibtn" data-pl="dup" title="Keep these clips as a playlist and carry on with a copy of them">Duplicate playlist</button></div>
+</div>
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
@@ -158,12 +162,38 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
 
   // AA-07: Essential Sound, mounted once the notice line exists (further down); render keeps it on the selected clip
   let essential: { sync: () => void } | null = null;
+  // PT-14: the track the Playlists section follows: the last one a clip was selected on, kept when its playlist empties
+  let playlistTrackId: string | null = null;
   const render = () => {
     const doc = engine.get("document");
     const hit = find(doc);
     show(body.querySelector(".fw-insp-empty"), !hit);
     show(body.querySelector(".fw-insp-clip"), !!hit);
     show(body.querySelector(".fw-insp-track"), !!hit);
+    // PT-14: the Playlists section follows the last track a clip was selected on and stays when its playlist is empty
+    // (no clip left to select), so another playlist can always be switched back in
+    if (hit) playlistTrackId = hit.track.id;
+    const playlistTrack = doc.tracks.find((t) => t.id === playlistTrackId) ?? null;
+    show(body.querySelector(".fw-insp-playlist"), !!playlistTrack);
+    const playlistPick = body.querySelector<HTMLSelectElement>('[data-pl="pick"]');
+    if (playlistTrack && playlistPick) {
+      setText(body.querySelector('[data-pl="head"]'), `Playlists · ${playlistTrack.name}`);
+      const active = playlistTrack.playlist ?? `${playlistTrack.name}.01`;
+      const names = [active, ...(playlistTrack.playlists ?? []).map((p) => p.name)].sort();
+      const signature = `${names.join("|")}@${active}`;
+      if (playlistPick.dataset.sig !== signature) {
+        playlistPick.dataset.sig = signature;
+        playlistPick.replaceChildren(
+          ...names.map((name) => {
+            const option = document.createElement("option");
+            option.value = name;
+            option.textContent = name;
+            return option;
+          }),
+        );
+        playlistPick.value = active;
+      }
+    }
     // PT-10: several clips selected keep the effects, for Apply to the selected clips; the one-clip actions wait
     show(body.querySelector(".fw-insp-effects"), !!hit || selected.length > 1);
     for (const one of body.querySelectorAll<HTMLButtonElement>('[data-fx="apply"], [data-fx-preview]')) if (one.disabled === !!hit) one.disabled = !hit;
@@ -746,6 +776,22 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   essential = mountEssentialSound(body, engine, find, notice);
   essential.sync();
+  // PT-14: picking a playlist switches the track to it; New and Duplicate keep the playing clips as a playlist
+  const playlistTrackNow = () => engine.get("document").tracks.find((t) => t.id === playlistTrackId);
+  body.querySelector<HTMLSelectElement>('[data-pl="pick"]')?.addEventListener("change", (e) => {
+    const track = playlistTrackNow();
+    const name = (e.target as HTMLSelectElement).value;
+    if (!track || name === (track.playlist ?? `${track.name}.01`)) return;
+    engine.dispatch({ type: "switch-playlist", trackId: track.id, name });
+    if (notice) setText(notice, `${track.name} now plays ${name}`);
+  });
+  body.addEventListener("click", (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-pl="new"], [data-pl="dup"]')?.dataset.pl;
+    const track = act ? playlistTrackNow() : undefined;
+    if (!act || !track) return;
+    engine.dispatch({ type: "new-playlist", trackId: track.id, duplicate: act === "dup" });
+    if (notice) setText(notice, `${track.name} now plays ${playlistTrackNow()?.playlist ?? "a new playlist"}${act === "dup" ? ", a copy of the last" : ", empty"}; the others stay in Playlist`);
+  });
   body.addEventListener("click", async (e) => {
     const action = (e.target as HTMLElement).closest<HTMLElement>("[data-fx]")?.dataset.fx;
     if (action !== "enhance" && action !== "apply") return;
