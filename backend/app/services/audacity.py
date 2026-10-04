@@ -61,7 +61,38 @@ def _wav_bytes(channels: list[np.ndarray], rate: int) -> bytes:
     return header + inter
 
 
-def _clip_samples(clip: ElementTree.Element, blocks: dict[str, bytes]) -> np.ndarray:
+class _Aliases:
+    """AU-34: the files uploaded beside an .aup, read as Audacity reads an aliased block: each file decoded once (its own
+    channels and rate) and sliced by frame and channel; a file the project needs and the upload lacks is named."""
+
+    def __init__(self, files: dict[str, bytes]):
+        self.files = files
+        self.decoded: dict[str, np.ndarray] = {}
+
+    def read(self, path: str, start: int, count: int, channel: int) -> np.ndarray:
+        import subprocess
+        import tempfile
+
+        name = path.replace("\\", "/").rsplit("/", 1)[-1]
+        if name not in self.decoded:
+            if name not in self.files:
+                raise media.MediaError(f"this project reads audio from {name} in place (an aliased file, outside its _data folder); add {name} to the zip beside the .aup and import again")
+            with tempfile.NamedTemporaryFile(suffix="." + name.rsplit(".", 1)[-1]) as tmp:
+                tmp.write(self.files[name])
+                tmp.flush()
+                probe = subprocess.run([media._tool("ffprobe"), "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=channels", "-of", "csv=p=0", tmp.name], capture_output=True, text=True, timeout=60)
+                channels = int((probe.stdout.strip() or "0").split(",")[0] or 0)
+                pcm = subprocess.run([media._tool("ffmpeg"), "-v", "error", "-nostdin", "-i", tmp.name, "-f", "f32le", "-acodec", "pcm_f32le", "-"], capture_output=True, timeout=600)
+            if probe.returncode != 0 or channels < 1 or pcm.returncode != 0:
+                raise media.MediaError(f"could not read {name}, the audio this project reads in place")
+            self.decoded[name] = np.frombuffer(pcm.stdout, dtype="<f4").reshape(-1, channels)
+        audio = self.decoded[name]
+        if channel >= audio.shape[1] or start < 0 or start + count > audio.shape[0]:
+            raise media.MediaError(f"{name} is shorter than this project expects (frames {start} to {start + count}, channel {channel}); is it the same file?")
+        return audio[start : start + count, channel].astype(np.float32)
+
+
+def _clip_samples(clip: ElementTree.Element, blocks: dict[str, bytes], aliases: _Aliases | None = None) -> np.ndarray:
     parts: list[np.ndarray] = []
     for sequence in clip:
         if _tag(sequence) != "sequence":
@@ -84,6 +115,12 @@ def _clip_samples(clip: ElementTree.Element, blocks: dict[str, bytes]) -> np.nda
                     parts.append(_read_au(blocks[name], count))
                 elif kind == "silentblockfile":
                     parts.append(np.zeros(count, dtype=np.float32))
+                elif kind in ("pcmaliasblockfile", "odpcmaliasblockfile") and aliases is not None:
+                    # AU-34: Audacity 2.3.2 and earlier could read a WAV in place rather than copy it: the block names
+                    # the file, the first frame, the length and the channel. The file comes in the upload beside the .aup,
+                    # matched by its name (the path recorded is the machine's that made the project)
+                    length = int(part.get("aliaslen", part.get("len", "0")))  # an alias block has aliaslen, not len
+                    parts.append(aliases.read(part.get("aliasfile", ""), int(part.get("aliasstart", "0")), length, int(part.get("aliaschannel", "0"))))
                 elif kind in ("pcmaliasblockfile", "odpcmaliasblockfile", "oddecodeblockfile"):
                     raise media.MediaError("this project references audio outside its _data folder (an aliased file); open it in Audacity and save a copy that embeds its audio first")
     return np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
@@ -101,14 +138,17 @@ def import_aup_zip(data: bytes) -> dict:
         raise media.MediaError("the zip holds no .aup project; zip the .aup file together with its _data folder")
     aup_name = aups[0]
     blocks = {n.rsplit("/", 1)[-1]: z.read(n) for n in names if n.lower().endswith(".au")}
+    # AU-34: any other file in the upload may be audio the project reads in place (an aliased file), by its name
+    others = {n.rsplit("/", 1)[-1]: n for n in names if not n.endswith("/") and not n.lower().endswith((".au", ".auf", ".aup"))}
+    aliases = _Aliases({name: z.read(path) for name, path in others.items()})
     try:
         root = ElementTree.fromstring(z.read(aup_name))
     except ElementTree.ParseError as err:
         raise media.MediaError(f"the .aup is not well-formed XML: {err}") from err
-    return _session_from_root(root, blocks, aup_name.rsplit("/", 1)[-1][:-4])
+    return _session_from_root(root, blocks, aup_name.rsplit("/", 1)[-1][:-4], aliases)
 
 
-def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: str) -> dict:
+def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: str, aliases: _Aliases | None = None) -> dict:
     """An Audacity project's <project> element as a session document with its media stored, shared by .aup (block
     files by name) and .aup3 (sample blocks by id)."""
     if _tag(root) != "project":
@@ -130,8 +170,8 @@ def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: st
         track_rate = int(float(t.get("rate", str(rate))))
         clips: list[dict] = []
         for n, clip in enumerate(clips_a):
-            left = _clip_samples(clip, blocks)
-            channels = [left, _clip_samples(clips_b[n], blocks)] if stereo else [left]
+            left = _clip_samples(clip, blocks, aliases)
+            channels = [left, _clip_samples(clips_b[n], blocks, aliases)] if stereo else [left]
             counter += 1
             name = f"{t.get('name', 'Audio Track')} clip {counter}.wav"
             ref = media.import_wav(name, _wav_bytes(channels, track_rate))
