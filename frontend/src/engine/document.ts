@@ -67,6 +67,8 @@ export interface Clip {
   gainDb: number;
   /** Audacity's clip volume envelope: dB points at the media's frames (so they stay with the audio through trims and splits), linear in gain between points and held outside them, multiplying the clip's gain. */
   envelope?: readonly { at: number; db: number }[];
+  /** AA-07, Audition's Essential Sound: what the clip is, which decides its tasks and presets. */
+  soundType?: "dialogue" | "music" | "effects" | "ambience";
   fadeIn?: number;
   fadeOut?: number;
   fadeShape?: FadeShape;
@@ -296,6 +298,7 @@ export type Command =
   | { type: "set-tempo"; bpm: number; beatsPerBar: number }
   | { type: "set-time-track"; points: TimePoint[]; log?: boolean }
   | { type: "set-clip-envelope"; trackId: string; clipId: string; points: { at: number; db: number }[] }
+  | { type: "set-clip-type"; trackId: string; clipId: string; soundType: "dialogue" | "music" | "effects" | "ambience" | null }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
@@ -638,6 +641,20 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const camelotCode = cmd.camelot.trim().slice(0, 4);
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
+    }
+    case "set-clip-type": {
+      const known = cmd.soundType === "dialogue" || cmd.soundType === "music" || cmd.soundType === "effects" || cmd.soundType === "ambience";
+      let found = false;
+      const next = mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.map((c) => {
+          if (c.id !== cmd.clipId) return c;
+          found = true;
+          const { soundType: _old, ...rest } = c;
+          return known && cmd.soundType ? { ...rest, soundType: cmd.soundType } : rest;
+        }),
+      }));
+      return found ? next : doc;
     }
     case "set-clip-envelope": {
       const byAt = new Map<number, number>();

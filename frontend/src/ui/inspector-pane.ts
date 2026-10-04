@@ -9,6 +9,7 @@ import { inputDevices, inputSignature, onInputsChanged, refreshInputs, setTrackI
 import { setMonitorLevel } from "../audio/recorder";
 import { loadOutput } from "../audio/player";
 import { mountCurveEditor } from "./curve-editor";
+import { mountEssentialSound } from "./essential-sound";
 
 const BODY = `
 <p class="fw-empty-note fw-insp-empty"></p>
@@ -29,6 +30,10 @@ const BODY = `
   <div class="fw-insp-head">De-bleed</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Guide</span><select data-align="guide" aria-label="The original line this replacement take should follow"><option value="">no other clip overlaps</option></select></label><button type="button" class="fw-ibtn" data-clip-act="align" title="Re-time this replacement take to follow the guide word for word, and set it in the guide's place (automatic speech alignment)">Align to guide</button></div>
+  <div class="fw-insp-head" title="Say what this clip is, then run its type's tasks or a preset (Audition's Essential Sound)">Essential sound</div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Type</span><select data-es="type" aria-label="What this clip is"><option value="">Not set</option><option value="dialogue">Dialogue</option><option value="music">Music</option><option value="effects">Sound effects</option><option value="ambience">Ambience</option></select></label><label class="fw-sam-opt"><span>Preset</span><select data-es="preset" aria-label="A preset for this type"></select></label></div>
+  <div class="fw-es-tasks" data-es="tasks"></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-es-act="apply" title="Run the ticked tasks on this clip as one change, loudness last">Apply tasks</button><button type="button" class="fw-ibtn" data-es-act="save" title="Keep these task settings as a preset for this type on this machine">Save preset</button></div>
   <div class="fw-insp-head" title="The clip's sung or played notes; drag one up or down to retune it (Melodyne's note editing)">Notes</div>
   <canvas class="fw-notes-canvas" data-notes width="512" height="160" aria-label="The clip's notes on a pitch grid; drag a note up or down to retune it a semitone at a time"></canvas>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-notes-act="find" title="Track the clip's pitch and show its notes">Find notes</button><label class="fw-sam-opt" title="Find every note inside played chords, so one can be moved without the others (Melodyne's Direct Note Access)"><input type="checkbox" data-notes-poly> In chords</label><button type="button" class="fw-ibtn" data-notes-act="apply" title="Retune the notes you moved, everything else left as it is, one undo step">Apply note changes</button><label class="fw-sam-opt" title="Keep the voice's character (its formants) where it was as the notes move"><input type="checkbox" data-notes-formants checked> Keep formants</label></div>
@@ -150,6 +155,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (el instanceof HTMLElement && el.hidden === on) el.hidden = !on;
   };
 
+  // AA-07: Essential Sound, mounted once the notice line exists (further down); render keeps it on the selected clip
+  let essential: { sync: () => void } | null = null;
   const render = () => {
     const doc = engine.get("document");
     const hit = find(doc);
@@ -185,6 +192,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       }
     }
     }
+    essential?.sync();
     const envOut = body.querySelector<HTMLElement>("[data-env-out]");
     if (hit && envOut) {
       const env = hit.clip.envelope ?? [];
@@ -735,6 +743,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     })
     .catch(() => undefined);
   const notice = host.querySelector<HTMLElement>(".fw-notice");
+  essential = mountEssentialSound(body, engine, find, notice);
+  essential.sync();
   body.addEventListener("click", async (e) => {
     const action = (e.target as HTMLElement).closest<HTMLElement>("[data-fx]")?.dataset.fx;
     if (action !== "enhance" && action !== "apply") return;

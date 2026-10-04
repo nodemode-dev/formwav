@@ -52,6 +52,8 @@ AUDIO_CHAINS = {
     "slapback": "aecho=0.8:0.6:120:0.45",
     "wide-stage": "haas=left_delay=2.05:right_delay=10",
     "stereo-bloom": "stereowiden=delay=20:feedback=0.3:crossfeed=0.3:drymix=0.8",
+    "stereo-width": "extrastereo=m=1:c=false",
+    "noise-reduce": "afftdn=nr=12:nf=-50:tn=1",
     "long-tail": "aecho=0.8:0.8:400|800|1200:0.5|0.35|0.2",
     "tunnel": "aecho=0.8:0.85:60|120|180|240:0.6|0.45|0.3|0.2,lowpass=f=5000",
     "small-booth": "aecho=0.8:0.6:8|14|21:0.3|0.2|0.1,lowpass=f=6000",
@@ -135,10 +137,10 @@ ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
 #: Menu groups for formwav's Inspector; every chain appears exactly once.
 GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
-    ("Clean up", [("voice-clean", "Enhance speech"), ("denoise", "Denoise"), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess"), ("dialogue-isolate", "Dialogue isolate (neural)...")]),
+    ("Clean up", [("voice-clean", "Enhance speech"), ("denoise", "Denoise"), ("noise-reduce", "Noise reduction..."), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess"), ("dialogue-isolate", "Dialogue isolate (neural)...")]),
     ("Dynamics", [("compress", "Compress"), ("normalize", "Normalize to -16 LUFS"), ("level-rider", "Level rider"), ("peak-limiter", "Peak limiter"), ("dynamics-curve", "Dynamics curve...")]),
     ("Tone", [("bass", "Bass boost"), ("treble", "Treble boost"), ("warm-lows", "Warm lows"), ("presence-lift", "Presence lift"), ("mid-scoop", "Mid scoop"), ("crisp-detail", "Crisp detail"), ("eq-3band", "Parametric EQ, 3 bands..."), ("graphic-eq-5", "Graphic EQ, 5 bands..."), ("graphic-eq", "Graphic EQ, 10 bands..."), ("filter-curve", "Filter curve EQ...")]),
-    ("Space", [("reverb", "Reverb..."), ("room", "Room echo"), ("hall", "Hall echo"), ("cathedral", "Cathedral echo"), ("plate", "Plate echo"), ("echo", "Echo"), ("slapback", "Slapback"), ("long-tail", "Long tail"), ("tunnel", "Tunnel"), ("small-booth", "Small booth"), ("far-away", "Far away"), ("wide-stage", "Wide stage"), ("stereo-bloom", "Stereo bloom")]),
+    ("Space", [("reverb", "Reverb..."), ("room", "Room echo"), ("hall", "Hall echo"), ("cathedral", "Cathedral echo"), ("plate", "Plate echo"), ("echo", "Echo"), ("slapback", "Slapback"), ("long-tail", "Long tail"), ("tunnel", "Tunnel"), ("small-booth", "Small booth"), ("far-away", "Far away"), ("wide-stage", "Wide stage"), ("stereo-bloom", "Stereo bloom"), ("stereo-width", "Stereo width...")]),
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
@@ -149,7 +151,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
 ]
 LABELS = {key: label for _, items in GROUPS for key, label in items}
 #: Effects that make a stereo image, so their output is stereo even from mono.
-STEREO = {"wide-stage", "stereo-bloom"}
+STEREO = {"wide-stage", "stereo-bloom", "stereo-width"}
 #: Effects that work between two channels and so need a stereo source.
 STEREO_ONLY = {"center-extract", "center-remove", "swap-channels", "mid-side-encode", "mid-side-decode", "azimuth"}
 
@@ -265,6 +267,11 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     "bass": ({"gain": ("Gain", -20, 20, 8, "dB")}, lambda v: f"bass=g={v['gain']:.1f}:f=120"),
     "treble": ({"gain": ("Gain", -20, 20, 6, "dB")}, lambda v: f"treble=g={v['gain']:.1f}:f=3500"),
     "presence-lift": ({"freq": ("Frequency", 200, 12000, 3000, "Hz"), "gain": ("Gain", -15, 15, 5, "dB")}, lambda v: f"equalizer=f={v['freq']:.0f}:t=q:w=1.2:g={v['gain']:.1f}"),
+    # AA-07: how far noise comes down, its floor tracked as it plays (Denoise's one control sets only the floor's
+    # estimate, so a "reduce noise by" amount needs afftdn's reduction)
+    "noise-reduce": ({"amount": ("Reduction", 0, 40, 12, "dB")}, lambda v: f"afftdn=nr={max(0.01, v['amount']):.2f}:nf=-50:tn=1"),
+    # AA-07: the side signal (left minus right) scaled by the width: 0% mono, 100% unchanged, 200% twice as wide
+    "stereo-width": ({"width": ("Width", 0, 200, 100, "%")}, lambda v: f"extrastereo=m={v['width'] / 100:.3f}:c=false"),
     "echo": ({"delay": ("Delay", 20, 2000, 100, "ms"), "decay": ("Decay", 5, 90, 40, "%")}, lambda v: f"aecho=0.8:0.7:{v['delay']:.0f}:{v['decay'] / 100:.2f}"),
     "click-removal": ({"threshold": ("Threshold", 1, 20, 2, ""), "window": ("Window", 10, 100, 55, "ms")}, lambda v: f"adeclick=w={v['window']:.0f}:t={v['threshold']:.1f}"),
     "gap-repair": ({"window": ("Window", 10, 100, 10, "ms"), "order": ("Order", 0, 25, 4, "")}, lambda v: f"adeclick=w={v['window']:.0f}:o=50:a={v['order']:.0f}"),
