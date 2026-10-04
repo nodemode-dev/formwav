@@ -147,6 +147,91 @@ pub fn render(notes: &[Note], rate: u32, patch: &Patch) -> Vec<f32> {
     out.into_iter().map(|v| v as f32).collect()
 }
 
+/// AU-37: the instrument played live: notes start and end as they arrive (a keyboard, a MIDI input) and each voice
+/// follows the same oscillator and envelope as `render`, its phase from 0 at its start and its release from the frame
+/// its note ends, voices summed in the order they started, so a voice ended `n` frames in sounds exactly as a rendered
+/// note `n` frames long.
+#[derive(Debug, Clone)]
+pub struct Synth {
+    patch: Patch,
+    rate: f64,
+    voices: Vec<Voice>,
+}
+
+#[derive(Debug, Clone)]
+struct Voice {
+    pitch: u8,
+    dt: f64,
+    level: f64,
+    phase: f64,
+    t: u64,
+    held: Option<u64>,
+}
+
+impl Synth {
+    pub fn new(patch: Patch, rate: u32) -> Synth {
+        Synth { patch, rate: rate.max(1) as f64, voices: Vec::new() }
+    }
+
+    /// A new patch for the notes to come (and the ones still sounding).
+    pub fn set_patch(&mut self, patch: Patch) {
+        self.patch = patch;
+    }
+
+    /// Starts a note; a velocity of 0 ends it, as MIDI's note-on with velocity 0 does.
+    pub fn note_on(&mut self, pitch: u8, velocity: u8) {
+        if velocity == 0 {
+            self.note_off(pitch);
+            return;
+        }
+        let dt = hz(pitch) / self.rate;
+        if dt >= 0.5 {
+            return; // above Nyquist, as render skips it
+        }
+        let level = self.patch.gain as f64 * (velocity.min(127) as f64 / 127.0);
+        self.voices.push(Voice { pitch, dt, level, phase: 0.0, t: 0, held: None });
+    }
+
+    /// Ends the earliest still-held voice of this pitch: its release starts now.
+    pub fn note_off(&mut self, pitch: u8) {
+        if let Some(v) = self.voices.iter_mut().find(|v| v.pitch == pitch && v.held.is_none()) {
+            v.held = Some(v.t);
+        }
+    }
+
+    /// Ends every voice (the transport stopping, a panic).
+    pub fn all_off(&mut self) {
+        for v in self.voices.iter_mut().filter(|v| v.held.is_none()) {
+            v.held = Some(v.t);
+        }
+    }
+
+    pub fn sounding(&self) -> usize {
+        self.voices.len()
+    }
+
+    /// Adds the voices' next frames to `out` (mono), dropping each voice once its release has run out.
+    pub fn render(&mut self, out: &mut [f32]) {
+        let release = (self.patch.release.max(0.0) as f64 * self.rate).ceil() as u64 + 1;
+        for sample in out.iter_mut() {
+            let mut sum = 0.0f64;
+            for v in self.voices.iter_mut() {
+                let held = v.held.unwrap_or(u64::MAX);
+                if v.t < held.saturating_add(release) {
+                    sum += v.level * envelope(&self.patch, self.rate, v.t, held) * oscillator(self.patch.wave, v.phase, v.dt);
+                }
+                v.phase += v.dt;
+                if v.phase >= 1.0 {
+                    v.phase -= 1.0;
+                }
+                v.t += 1;
+            }
+            *sample += sum as f32;
+        }
+        self.voices.retain(|v| v.held.map_or(true, |h| v.t < h.saturating_add(release)));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,5 +270,41 @@ mod tests {
         let peak = |v: &[f32]| v.iter().fold(0f32, |m, x| m.max(x.abs()));
         let ratio = peak(&soft) / peak(&loud);
         assert!((ratio - 64.0 / 127.0).abs() < 0.01, "ratio {ratio}");
+    }
+
+    /// AU-37: notes started and ended live on their frames, through uneven blocks as an audio callback gives them,
+    /// sound exactly as render makes them (every sample equal), and no voice is left once the last release ends.
+    #[test]
+    fn the_live_instrument_plays_exactly_what_render_makes() {
+        let rate = 48000u32;
+        for wave in [Wave::Sine, Wave::Triangle, Wave::Saw, Wave::Square] {
+            let patch = Patch { wave, attack: 0.01, decay: 0.1, sustain: 0.6, release: 0.15, gain: 0.3 };
+            // overlapping notes, a repeated pitch, a soft one, a very short one
+            let notes = [
+                Note { start: 0, length: 24000, pitch: 60, velocity: 100 },
+                Note { start: 6000, length: 12000, pitch: 64, velocity: 80 },
+                Note { start: 12000, length: 300, pitch: 67, velocity: 30 },
+                Note { start: 20000, length: 9000, pitch: 60, velocity: 127 },
+            ];
+            let want = render(&notes, rate, &patch);
+            let mut synth = Synth::new(patch, rate);
+            let mut got = vec![0.0f32; want.len()];
+            let mut events: Vec<(u64, bool, u8, u8)> = notes.iter().flat_map(|n| [(n.start, true, n.pitch, n.velocity), (n.start + n.length, false, n.pitch, 0)]).collect();
+            events.sort_by_key(|e| (e.0, e.1)); // at one frame, ends before starts
+            let (mut at, mut next, mut step) = (0usize, 0usize, 1usize);
+            while at < got.len() {
+                while next < events.len() && events[next].0 as usize == at {
+                    let (_, on, pitch, velocity) = events[next];
+                    if on { synth.note_on(pitch, velocity) } else { synth.note_off(pitch) }
+                    next += 1;
+                }
+                let until = events.get(next).map_or(got.len(), |e| e.0 as usize).min(at + step).min(got.len());
+                synth.render(&mut got[at..until]);
+                at = until;
+                step = step % 128 + 7; // uneven block sizes
+            }
+            assert!(got == want, "{wave:?}: the live instrument differs from render");
+            assert_eq!(synth.sounding(), 0, "{wave:?}: a voice outlived its release");
+        }
     }
 }

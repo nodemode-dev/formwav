@@ -133,6 +133,10 @@ pub struct Player {
     fold_51: bool,
     /// The fold's six-channel scratch, kept between calls so a warm player renders without allocating.
     scratch_51: [Vec<f32>; 6],
+    /// AU-37: the instrument played live (a MIDI input, the on-screen keys), made on its first note.
+    live: Option<crate::synth::Synth>,
+    /// Its block's scratch, kept between calls so a warm player renders without allocating.
+    live_scratch: Vec<f32>,
     /// PT-42: the bus's format: SURROUND_51, or SURROUND_FOA (first-order ambisonics in the first four slots, AmbiX:
     /// W Y Z X in ACN order with SN3D gains; no LFE low-pass, unplaced clips encoded at the front, folded for
     /// listening through two virtual cardioids facing left and right).
@@ -368,6 +372,19 @@ impl Player {
             self.mix(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from, |c| c.bus == 0);
             self.mix_buses(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from);
             self.clip_fx = fx;
+            if let Some(live) = self.live.as_mut() {
+                // AU-37: the instrument played live, mono into both channels at unity as a note clip plays at pan 0,
+                // before the master chain so the master's effects and meters include it
+                let mut scratch = std::mem::take(&mut self.live_scratch);
+                scratch.clear();
+                scratch.resize(len, 0.0);
+                live.render(&mut scratch);
+                for j in 0..len {
+                    left[done + j] += scratch[j];
+                    right[done + j] += scratch[j];
+                }
+                self.live_scratch = scratch;
+            }
             if !self.master_fx.is_empty() {
                 for i in done..done + len {
                     let (mut l, mut r) = (left[i], right[i]);
@@ -555,6 +572,29 @@ impl Player {
     /// Whether the fold mode is on (the 5.1 meters are read only then).
     pub fn is_fold_51(&self) -> bool {
         self.fold_51
+    }
+
+    /// AU-37: a note on the live instrument (velocity 0 ends it, as MIDI's does); the instrument is made with the
+    /// built-in patch at the player's rate if it has not played yet.
+    pub fn live_note(&mut self, pitch: u8, velocity: u8) {
+        let rate = self.rate.max(1.0) as u32;
+        self.live.get_or_insert_with(|| crate::synth::Synth::new(crate::synth::Patch::default(), rate)).note_on(pitch, velocity);
+    }
+
+    /// The live instrument's patch (a note track's own, so what is played sounds as what is recorded will).
+    pub fn set_live_patch(&mut self, patch: crate::synth::Patch) {
+        let rate = self.rate.max(1.0) as u32;
+        match self.live.as_mut() {
+            Some(live) => live.set_patch(patch),
+            None => self.live = Some(crate::synth::Synth::new(patch, rate)),
+        }
+    }
+
+    /// Releases every live note (the transport stopping, a panic).
+    pub fn live_all_off(&mut self) {
+        if let Some(live) = self.live.as_mut() {
+            live.all_off();
+        }
     }
 
     /// PT-42: the bus's format, SURROUND_51 or SURROUND_FOA (any other value is taken as 5.1).
@@ -1100,5 +1140,35 @@ mod tests {
         folded.render(&mut left, &mut right);
         assert!(worst(&left, &|i| a[i] + 0.5 * b[i] + 0.5 * c[i]) < 1e-6, "the left cardioid hears the left source whole, the others at half");
         assert!(worst(&right, &|i| 0.5 * b[i] + 0.5 * c[i]) < 1e-6, "the right cardioid's null faces the left source");
+    }
+
+    /// AU-37: a note played live through the player lands in both channels exactly as the synth renders it, and
+    /// releasing every note leaves silence once the release has run out.
+    #[test]
+    fn a_live_note_plays_through_the_player_as_the_synth_renders_it() {
+        let rate = 48000usize;
+        let mut p = Player::new();
+        p.set_rate(rate as f32);
+        p.live_note(69, 127);
+        let (mut left, mut right) = (vec![0.0f32; rate / 2], vec![0.0f32; rate / 2]);
+        for (l, r) in left.chunks_mut(128).zip(right.chunks_mut(128)) {
+            p.render(l, r);
+        }
+        p.live_note(69, 0);
+        let mut tail = (vec![0.0f32; rate / 2], vec![0.0f32; rate / 2]);
+        for (l, r) in tail.0.chunks_mut(128).zip(tail.1.chunks_mut(128)) {
+            p.render(l, r);
+        }
+        let note = [crate::synth::Note { start: 0, length: (rate / 2) as u64, pitch: 69, velocity: 127 }];
+        let want = crate::synth::render(&note, rate as u32, &crate::synth::Patch::default());
+        let got: Vec<f32> = left.iter().chain(&tail.0).copied().collect();
+        assert!(got[..want.len()] == want[..], "the live note equals the synth's render of it");
+        assert!(left == right && tail.0 == tail.1, "mono into both channels");
+        assert!(got[want.len()..].iter().all(|v| *v == 0.0), "silent after the release");
+        p.live_note(60, 90);
+        p.live_all_off();
+        let mut after = (vec![0.0f32; rate], vec![0.0f32; rate]);
+        p.render(&mut after.0, &mut after.1);
+        assert!(after.0[rate / 2..].iter().all(|v| *v == 0.0), "all-off releases a held note");
     }
 }
