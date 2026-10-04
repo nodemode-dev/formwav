@@ -22,7 +22,12 @@ export function dbToGain(db: number): number {
 /** Enabled effect stages as flat [kind, freq, gainDb, q, ...] in the core's codes (backend render.py FX_KINDS, core fx.rs). */
 export function flatFx(fx: readonly TrackFx[] | undefined): number[] {
   const codes = { highpass: 1, lowpass: 2, peak: 3, lowshelf: 4, highshelf: 5 } as const;
-  return (fx ?? []).flatMap((f) => (f.bypass || f.kind === "compressor" ? [] : [codes[f.kind], f.freq, f.gainDb, f.q]));
+  return (fx ?? []).flatMap((f) => {
+    if (f.bypass || f.kind === "compressor") return [];
+    // RX-24, RX-40, RX-49: the denoiser rides the clip chain as kind 7, its reduction and sensitivity in the filter slots
+    if (f.kind === "denoise") return [7, f.reductionDb, f.sensitivityDb, 0];
+    return [codes[f.kind], f.freq, f.gainDb, f.q];
+  });
 }
 
 /** The filters' parameter automation (PT-19) for the clip chain flatFx builds, numbered by its stages (bypassed
@@ -32,6 +37,10 @@ export function flatFxAuto(fx: readonly TrackFx[] | undefined): { stage: number;
   let stage = 0;
   for (const f of fx ?? []) {
     if (f.bypass || f.kind === "compressor") continue;
+    if (f.kind === "denoise") {
+      stage++; // a place in the chain, nothing to automate
+      continue;
+    }
     (["freq", "gain", "q"] as const).forEach((key, param) => {
       const pts = f.automation?.[key];
       if (pts?.length) out.push({ stage, param, points: pts.flatMap((p) => [p.time, p.value]) });
@@ -49,6 +58,7 @@ export function flatStages(fx: readonly TrackFx[] | undefined): number[] {
   return (fx ?? []).flatMap((f) => {
     if (f.bypass) return [];
     if (f.kind === "compressor") return [6, f.thresholdDb, f.ratio, f.attackMs, f.releaseMs, f.makeupDb];
+    if (f.kind === "denoise") return [7, f.reductionDb, f.sensitivityDb, 0, 0, 0];
     return [codes[f.kind], f.freq, f.gainDb, f.q, 0, 0];
   });
 }

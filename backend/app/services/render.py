@@ -10,7 +10,7 @@ class RenderError(ValueError):
 
 
 #: Track effect kinds, as the core's stage codes (formwav-dsp fx.rs).
-FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6}
+FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7}
 
 
 def _stage(f: dict) -> tuple | None:
@@ -19,6 +19,8 @@ def _stage(f: dict) -> tuple | None:
     kind = FX_KINDS.get(f.get("kind")) if isinstance(f, dict) else None
     if not kind or f.get("bypass"):
         return None
+    if kind == 7:  # RX-24, RX-40, RX-49: the denoiser, its reduction and sensitivity where filters carry frequency and gain
+        return (7, float(f.get("reductionDb", 12)), float(f.get("sensitivityDb", 3)), 0.0, 0.0, 0.0)
     if kind == 6:
         return (6, float(f.get("thresholdDb", -20)), float(f.get("ratio", 4)), float(f.get("attackMs", 10)), float(f.get("releaseMs", 150)), float(f.get("makeupDb", 0)))
     return (kind, float(f.get("freq") or 1000), float(f.get("gainDb") or 0), float(f.get("q") or 0.707), 0.0, 0.0)

@@ -84,12 +84,12 @@ const BODY = `
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
   <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
   <div class="fw-rtfx-list" data-scope="track"></div>
-  <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-clipfx">
   <div class="fw-insp-head" title="Realtime EQ and dynamics on the selected clip alone, ahead of its track's effects; the compressor follows the clip gain, not the fader">Clip effects</div>
   <div class="fw-rtfx-list" data-scope="clip"></div>
-  <div class="fw-analyze-buttons" data-scope="clip"><select data-rtfx="kind" aria-label="Realtime effect to add to the clip"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-analyze-buttons" data-scope="clip"><select data-rtfx="kind" aria-label="Realtime effect to add to the clip"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-bus" hidden>
   <div class="fw-insp-head fw-bus-head">Bus effects</div>
@@ -1940,8 +1940,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const busId = find(doc)?.track.busId;
     return busId !== undefined ? (doc.buses ?? []).find((b) => b.id === busId) ?? null : null;
   };
-  const RTFX_LABEL: Record<TrackFx["kind"], string> = { highpass: "High-pass", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor" };
+  const RTFX_LABEL: Record<TrackFx["kind"], string> = { highpass: "High-pass", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor", denoise: "Denoise" };
   const RTFX_DEFAULT: Record<TrackFx["kind"], TrackFx> = {
+    denoise: { kind: "denoise", reductionDb: 12, sensitivityDb: 3 },
     highpass: { kind: "highpass", freq: 100, gainDb: 0, q: 0.707 },
     lowpass: { kind: "lowpass", freq: 8000, gainDb: 0, q: 0.707 },
     peak: { kind: "peak", freq: 1000, gainDb: 0, q: 1 },
@@ -1971,7 +1972,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         const fields =
           f.kind === "compressor"
             ? num("Thr dB", "thresholdDb", -60, 0, 0.5) + num("Ratio", "ratio", 1, 20, 0.5) + num("Atk ms", "attackMs", 0.1, 200, 1) + num("Rel ms", "releaseMs", 1, 2000, 10) + num("Gain dB", "makeupDb", 0, 24, 0.5)
-            : num("Hz", "freq", 20, 20000, 1) + (shaped ? num("dB", "gainDb", -24, 24, 0.5) : "") + num("Q", "q", 0.1, 18, 0.1);
+            : f.kind === "denoise"
+              ? num("Reduce dB", "reductionDb", 0, 40, 1) + num("Sens dB", "sensitivityDb", -6, 12, 0.5)
+              : num("Hz", "freq", 20, 20000, 1) + (shaped ? num("dB", "gainDb", -24, 24, 0.5) : "") + num("Q", "q", 0.1, 18, 0.1);
         row.innerHTML = `<span class="fw-rtfx-name"></span>${fields}<label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="up">Up</button><button type="button" class="fw-ibtn" data-rtfx="down">Down</button><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button><select data-preset="rt" aria-label="Preset for this effect"></select><button type="button" class="fw-ibtn" data-preset="rt-save">Save</button>`;
         fillPresets(row.querySelector<HTMLSelectElement>('[data-preset="rt"]'), `rt:${f.kind}`);
         const name = row.querySelector<HTMLElement>(".fw-rtfx-name");

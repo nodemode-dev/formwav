@@ -110,9 +110,19 @@ export interface CompressorFx {
   bypass?: boolean;
 }
 
-export type TrackFx = FilterFx | CompressorFx;
+/** RX-24, RX-40, RX-49: a realtime adaptive denoiser (the core's stage kind 7, zero latency): it learns each band's
+ *  noise floor as it plays and cuts by up to `reductionDb`; `sensitivityDb` raises how far over the floor counts as
+ *  noise. */
+export interface DenoiseFx {
+  kind: "denoise";
+  reductionDb: number;
+  sensitivityDb: number;
+  bypass?: boolean;
+}
 
-const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor"]);
+export type TrackFx = FilterFx | CompressorFx | DenoiseFx;
+
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise"]);
 
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
@@ -121,6 +131,9 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
     .filter((f) => FX_KINDS.has(f.kind))
     .map((f): TrackFx => {
       const bypass = f.bypass ? { bypass: true } : {};
+      if (f.kind === "denoise") {
+        return { kind: "denoise", reductionDb: clamp(f.reductionDb, 0, 40, 12), sensitivityDb: clamp(f.sensitivityDb, -6, 12, 3), ...bypass };
+      }
       if (f.kind === "compressor") {
         return { kind: "compressor", thresholdDb: clamp(f.thresholdDb, -60, 0, -20), ratio: clamp(f.ratio, 1, 20, 4), attackMs: clamp(f.attackMs, 0.1, 200, 10), releaseMs: clamp(f.releaseMs, 1, 2000, 150), makeupDb: clamp(f.makeupDb, 0, 24, 0), ...bypass };
       }
@@ -607,7 +620,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-fx-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
         const target = t.fx?.[cmd.fxIndex];
-        if (!t.fx || !target || target.kind === "compressor") return t;
+        if (!t.fx || !target || target.kind === "compressor" || target.kind === "denoise") return t;
         const { [cmd.param]: _old, ...others } = target.automation ?? {};
         const automation = cmd.points.length ? { ...others, [cmd.param]: cmd.points } : others;
         const next = cleanFx(t.fx.map((f, i) => (i === cmd.fxIndex ? { ...target, automation } : f)));
