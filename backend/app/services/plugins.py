@@ -1,4 +1,4 @@
-"""Third-party plugins (CLAP and VST3) as effects, through formwav-host (native/formwav-host, `fwhost`).
+"""Third-party plugins (CLAP, VST3 and LADSPA) as effects, through formwav-host (native/formwav-host, `fwhost`).
 
 The host runs as its own process for every job, so a plugin that crashes ends that job and never the engine. A scan
 of the system's plugin folders (and FORMWAV_PLUGIN_PATH) lists what is installed; each plugin then appears in the

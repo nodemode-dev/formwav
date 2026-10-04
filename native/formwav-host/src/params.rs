@@ -61,6 +61,7 @@ pub fn list(format: &str, path: &Path) -> Result<Vec<Param>, String> {
         match format {
             "clap" => clap_list(path),
             "vst3" => vst3_list(path),
+            "ladspa" => crate::ladspa::params(path),
             other => Err(format!("unknown plugin format {other}")),
         }
     }

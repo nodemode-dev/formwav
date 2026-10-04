@@ -28,7 +28,7 @@ pub const BLOCK: usize = 512;
 pub fn default_dirs() -> Vec<PathBuf> {
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
     let mut dirs = Vec::new();
-    for kind in ["CLAP", "VST3"] {
+    for kind in ["CLAP", "VST3", "LADSPA"] {
         if cfg!(target_os = "macos") {
             dirs.push(home.join("Library/Audio/Plug-Ins").join(kind));
             dirs.push(PathBuf::from("/Library/Audio/Plug-Ins").join(kind));
@@ -49,6 +49,9 @@ pub fn default_dirs() -> Vec<PathBuf> {
     if let Some(extra) = std::env::var_os("FORMWAV_PLUGIN_PATH") {
         dirs.extend(std::env::split_paths(&extra));
     }
+    if let Some(extra) = std::env::var_os("LADSPA_PATH") {
+        dirs.extend(std::env::split_paths(&extra));
+    }
     dirs
 }
 
@@ -59,6 +62,8 @@ fn find(dir: &Path, found: &mut Vec<(&'static str, PathBuf)>, depth: usize) {
         match path.extension().and_then(|x| x.to_str()) {
             Some("clap") => found.push(("clap", path)),
             Some("vst3") => found.push(("vst3", path)),
+            // LADSPA libraries only where a folder is named ladspa: loading a library runs its initialisers
+            Some("so") if path.ancestors().skip(1).any(|a| a.file_name().is_some_and(|n| n.to_string_lossy().eq_ignore_ascii_case("ladspa"))) => found.push(("ladspa", path)),
             _ if path.is_dir() && depth < 3 => find(&path, found, depth + 1),
             _ => {}
         }
@@ -168,6 +173,14 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
     let mut out = Vec::new();
     for (format, path) in found {
         let p = json(&path.to_string_lossy());
+        if format == "ladspa" {
+            // AU-41: a library holds many plugins, each listed and addressed as <library>#<index>
+            match crate::ladspa::describe(&path) {
+                Ok(list) => out.extend(list.into_iter().map(|(i, label, name)| format!("{{\"format\": \"ladspa\", \"path\": \"{p}#{i}\", \"id\": \"{}\", \"name\": \"{}\"}}", json(&label), json(&name)))),
+                Err(e) => out.push(format!("{{\"format\": \"ladspa\", \"path\": \"{p}\", \"error\": \"{}\"}}", json(&e))),
+            }
+            continue;
+        }
         let described: Result<Vec<(String, String)>, String> = unsafe {
             match format {
                 "clap" => clap_open(&path).and_then(|(lib, entry)| {
@@ -205,6 +218,9 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
 /// in blocks of BLOCK frames with its clock advancing, followed by `tail_s` seconds of silence so reverbs and delays
 /// can ring out; returns stereo.
 pub fn process(format: &str, plugin: &Path, input: &Audio, tail_s: f64, values: &[(u32, f64)]) -> Result<Audio, String> {
+    if format == "ladspa" {
+        return crate::ladspa::process(plugin, input, tail_s, values);
+    }
     let rate = input.rate;
     let frames = input.channels.first().map_or(0, |c| c.len());
     let total = frames + (tail_s.max(0.0) * rate as f64) as usize;
