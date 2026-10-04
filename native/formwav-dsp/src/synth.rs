@@ -147,6 +147,35 @@ pub fn render(notes: &[Note], rate: u32, patch: &Patch) -> Vec<f32> {
     out.into_iter().map(|v| v as f32).collect()
 }
 
+/// PT-15: a sampler: each note plays `sample` (mono, at `sample_rate`) re-pitched from `root` (a note at the root plays
+/// it at its own speed, an octave up at twice), read with linear interpolation, through the same envelope and velocity
+/// as `render`; a note ends when its envelope's release does or the sample runs out.
+pub fn render_sampled(notes: &[Note], rate: u32, patch: &Patch, sample: &[f32], sample_rate: u32, root: u8) -> Vec<f32> {
+    let total = length(notes, rate, patch) as usize;
+    let mut out = vec![0f64; total];
+    let rate_f = rate as f64;
+    let release = (patch.release.max(0.0) as f64 * rate_f).ceil() as u64 + 1;
+    if sample.len() < 2 {
+        return vec![0.0; total];
+    }
+    for note in notes.iter().filter(|n| n.velocity > 0 && n.length > 0) {
+        let step = hz(note.pitch) / hz(root) * sample_rate as f64 / rate_f;
+        let level = patch.gain as f64 * (note.velocity.min(127) as f64 / 127.0);
+        for t in 0..note.length + release {
+            let at = (note.start + t) as usize;
+            let pos = t as f64 * step;
+            let i = pos as usize;
+            if at >= total || i + 1 >= sample.len() {
+                break;
+            }
+            let frac = pos - i as f64;
+            let s = sample[i] as f64 * (1.0 - frac) + sample[i + 1] as f64 * frac;
+            out[at] += level * envelope(patch, rate_f, t, note.length) * s;
+        }
+    }
+    out.into_iter().map(|v| v as f32).collect()
+}
+
 /// AU-37: the instrument played live: notes start and end as they arrive (a keyboard, a MIDI input) and each voice
 /// follows the same oscillator and envelope as `render`, its phase from 0 at its start and its release from the frame
 /// its note ends, voices summed in the order they started, so a voice ended `n` frames in sounds exactly as a rendered
@@ -270,6 +299,21 @@ mod tests {
         let peak = |v: &[f32]| v.iter().fold(0f32, |m, x| m.max(x.abs()));
         let ratio = peak(&soft) / peak(&loud);
         assert!((ratio - 64.0 / 127.0).abs() < 0.01, "ratio {ratio}");
+    }
+
+    /// PT-15: at its root the sampler plays the sample as it is (scaled by gain and velocity), an octave up at twice the
+    /// speed (every second sample, exactly), both through a flat envelope here.
+    #[test]
+    fn the_sampler_plays_its_sample_at_the_notes_pitch() {
+        let rate = 48000u32;
+        let sample: Vec<f32> = (0..4800).map(|i| ((i as f32) * 0.037).sin() * 0.5).collect();
+        let patch = Patch { wave: Wave::Sine, attack: 0.0, decay: 0.0, sustain: 1.0, release: 0.0, gain: 1.0 };
+        let at_root = render_sampled(&[Note { start: 0, length: 2000, pitch: 60, velocity: 127 }], rate, &patch, &sample, rate, 60);
+        assert!((1..2000).all(|i| (at_root[i] - sample[i]).abs() < 1e-6), "at the root the sample plays as it is");
+        let octave = render_sampled(&[Note { start: 0, length: 2000, pitch: 72, velocity: 127 }], rate, &patch, &sample, rate, 60);
+        assert!((1..2000).all(|i| (octave[i] - sample[2 * i]).abs() < 1e-5), "an octave up plays every second sample");
+        let soft = render_sampled(&[Note { start: 0, length: 2000, pitch: 60, velocity: 64 }], rate, &patch, &sample, rate, 60);
+        assert!((1..2000).all(|i| (soft[i] - sample[i] * 64.0 / 127.0).abs() < 1e-6), "velocity scales it");
     }
 
     /// AU-37: notes started and ended live on their frames, through uneven blocks as an audio callback gives them,

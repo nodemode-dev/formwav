@@ -33,20 +33,42 @@ class Patch(BaseModel):
     gain: float = Field(0.25, ge=0, le=2)
 
 
+class Sampler(BaseModel):
+    """PT-15: a session media played as the instrument, re-pitched from its root note."""
+
+    media: str
+    root: int = Field(60, ge=0, le=127)
+
+
 class RenderRequest(BaseModel):
     notes: list[Note]
     rate: int = Field(48000, ge=8000, le=192000)
     patch: Patch = Patch()
     name: str = "notes"
+    sampler: Sampler | None = None
 
 
-def _render(notes: list[dict], rate: int, patch: Patch, name: str) -> dict:
+def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Sampler | None = None) -> dict:
     if patch.wave not in WAVES:
         raise HTTPException(status_code=422, detail=f"no waveform named {patch.wave} (one of {', '.join(WAVES)})")
     if not notes:
         raise HTTPException(status_code=422, detail="no notes to render")
     core = media._require_core()
     frames = [(int(round(n["start"] * rate)), max(1, int(round(n["length"] * rate))), int(n["pitch"]), int(n["velocity"])) for n in notes]
+    if sampler is not None:
+        # PT-15: the sampler plays the media, mixed to mono, re-pitched from its root, through the patch's envelope
+        from ..services import tools
+
+        try:
+            view, sample_rate = tools._wav_view(sampler.media)
+        except (KeyError, FileNotFoundError) as err:
+            raise HTTPException(status_code=404, detail="no media with that id for the sampler") from err
+        except (OSError, ValueError, media.MediaError) as err:
+            raise HTTPException(status_code=422, detail=f"the sampler's media cannot be read: {err}") from err
+        mono = np.asarray(view, dtype=np.float32).mean(axis=1).astype("<f4")
+        raw = core.render_sampled(frames, rate, mono.tobytes(), int(sample_rate), sampler.root, patch.attack, patch.decay, patch.sustain, patch.release, patch.gain)
+        out = np.frombuffer(raw, dtype="<f4").copy()
+        return media.import_wav(f"{name}.wav", _wav_bytes([out, out], rate))
     raw = core.render_notes(frames, rate, patch.wave, patch.attack, patch.decay, patch.sustain, patch.release, patch.gain)
     mono = np.frombuffer(raw, dtype="<f4").copy()
     return media.import_wav(f"{name}.wav", _wav_bytes([mono, mono], rate))
@@ -87,4 +109,4 @@ def midi_from_audio(media_id: str, mode: str = "melodic", start: float = 0.0, le
 @router.post("/render", status_code=201)
 def render_notes(body: RenderRequest) -> dict:
     """Edited notes rendered again by the built-in instrument, as new media."""
-    return _render([n.model_dump() for n in body.notes], body.rate, body.patch, body.name)
+    return _render([n.model_dump() for n in body.notes], body.rate, body.patch, body.name, body.sampler)
