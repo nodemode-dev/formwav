@@ -324,6 +324,21 @@ def media_spectrogram(media_id: str, w: int = 640, h: int = 240, legend: bool = 
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/transcript/speakers")
+async def media_transcript_speakers(media_id: str, request: Request) -> dict:
+    """DS-12, RX-59: {"speakers": optional count}: the transcript's words labelled by speaker, told apart by voice."""
+    from ..services import transcript
+
+    try:
+        b = await request.json() if (await request.body()) else {}
+        count = int(b["speakers"]) if isinstance(b, dict) and b.get("speakers") else None
+        return transcript.diarize(media_id, count, str(b.get("model", "")) if isinstance(b, dict) else "")
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (media.MediaError, ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.put("/media/{media_id}/transcript/word")
 async def media_transcript_word(media_id: str, request: Request) -> dict:
     from ..services import transcript

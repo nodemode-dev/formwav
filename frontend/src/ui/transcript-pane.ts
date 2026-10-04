@@ -8,6 +8,8 @@ interface MediaWord {
   start: number;
   end: number;
   filler: boolean;
+  /** DS-12, RX-59: the speaker told apart inside the recording, when asked for. */
+  speaker?: string;
 }
 /** A word placed on the session timeline, in session samples. */
 interface SessionWord {
@@ -47,7 +49,7 @@ function sessionWords(doc: SessionDoc, transcripts: Map<string, MediaWord[]>): S
           key: `${clip.id}:${i}`,
           text: w.text,
           filler: w.filler,
-          speaker: track.name,
+          speaker: w.speaker ?? track.name,
           mediaId: clip.mediaId,
           mediaStart: Math.max(s, clip.sourceIn) / media.sampleRate,
           mediaEnd: Math.min(e, srcEnd) / media.sampleRate,
@@ -210,7 +212,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
   <label class="fw-field"><span>Gaps over</span><input type="number" data-t-gap="over" value="${GAP_OVER}" min="0.1" max="10" step="0.05" aria-label="Shorten gaps longer than, seconds"><span>s</span></label>
   <label class="fw-field"><span>Keep</span><input type="number" data-t-gap="keep" value="${GAP_KEEP}" min="0" max="5" step="0.05" aria-label="Length each shortened gap keeps, seconds"><span>s</span></label>
   <button type="button" class="fw-ibtn" data-t="gaps">Shorten gaps</button>
-  <button type="button" class="fw-ibtn" data-t="retakes">Remove retakes</button>
+  <button type="button" class="fw-ibtn" data-t="retakes">Remove retakes</button><button type="button" class="fw-ibtn" data-t="speakers" title="Tell the speakers apart inside each transcribed recording, by their voices, and label the words">Tell speakers apart</button>
   <button type="button" class="fw-ibtn" data-t="clip">Make a clip from selected words</button>
   <div class="fw-word-timing" hidden><label class="fw-sam-opt"><span>Start</span><input type="number" data-wt="start" step="0.01" min="0" aria-label="The selected word's start in seconds"> s</label><label class="fw-sam-opt"><span>End</span><input type="number" data-wt="end" step="0.01" min="0" aria-label="The selected word's end in seconds"> s</label><button type="button" class="fw-ibtn" data-t="timing" title="Move the selected word's start and end; deleting the word then removes exactly that span">Set word timing</button><label class="fw-sam-opt"><span>Gap after</span><input type="number" data-wt="gap" step="0.05" min="0" aria-label="The gap after the selected word in seconds"> s</label><button type="button" class="fw-ibtn" data-t="gap" title="Shorten the gap to the next word to this length, closing up everything after it">Set gap</button></div>
 </div>
@@ -497,6 +499,24 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
       transcripts.set(w.mediaId, out.words);
       render();
       setText(notice, `"${w.text}" now runs from ${start.toFixed(3)} to ${end.toFixed(3)} s`);
+      return;
+    }
+    if (action === "speakers") {
+      // DS-12, RX-59: each transcribed recording's speakers told apart by the engine, the words labelled
+      setText(notice, "Telling the speakers apart...");
+      try {
+        for (const mediaId of transcripts.keys()) {
+          const res = await fetch(`/api/media/${mediaId}/transcript/speakers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+          const out = (await res.json().catch(() => ({}))) as { detail?: unknown; words?: MediaWord[] };
+          if (!res.ok || !out.words) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          transcripts.set(mediaId, out.words);
+        }
+        render();
+        const found = new Set(words.map((w) => w.speaker)).size;
+        setText(notice, `Found ${found} speaker${found === 1 ? "" : "s"}`);
+      } catch (err) {
+        setText(notice, `Could not tell the speakers apart: ${err instanceof Error ? err.message : String(err)}`);
+      }
       return;
     }
     if (action === "share") {
