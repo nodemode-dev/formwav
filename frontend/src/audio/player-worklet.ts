@@ -11,6 +11,7 @@ interface CoreExports {
   fw_player_new(): number;
   fw_load_wav(player: number, id: number, ptr: number, len: number): number;
   fw_source_alloc(player: number, id: number, rate: number, channels: number, frames: number): number;
+  fw_source_alloc_window(player: number, id: number, rate: number, channels: number, frames: number, window: number): number;
   fw_source_write(player: number, id: number, offset: number, ptr: number, len: number): number;
   fw_clear_clips(player: number): void;
   fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number, bus: number, track: number, gainEnv: number, panEnv: number): void;
@@ -83,7 +84,8 @@ export interface WorkletBus {
 export type WorkletMessage =
   | { type: "init"; bytes: ArrayBuffer }
   | { type: "load"; id: number; bytes: ArrayBuffer }
-  | { type: "alloc"; id: number; rate: number; channels: number; frames: number }
+  | { type: "alloc"; id: number; rate: number; channels: number; frames: number; window?: number }
+  | { type: "stats" }
   | { type: "write"; id: number; offset: number; data: Float32Array }
   | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean; surroundFormat?: number }
   | { type: "play" }
@@ -99,6 +101,7 @@ export type WorkletReply =
   | { type: "ready" }
   | { type: "error"; message: string }
   | { type: "loaded"; id: number; frames: number }
+  | { type: "stats"; bytes: number }
   | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; correlation?: number | null; trackPeaks: number[]; loudness: number[]; busPeaks: number[]; surroundPeaks?: number[] }
   | { type: "ended"; position: number };
 
@@ -215,10 +218,15 @@ class PlayerProcessor extends AudioWorkletProcessor {
         break;
       }
       case "alloc": {
-        const frames = core.fw_source_alloc(this.player, msg.id, msg.rate, msg.channels, msg.frames);
+        // AP-05: a file larger than memory is held as a window around the playhead
+        const frames = msg.window ? core.fw_source_alloc_window(this.player, msg.id, msg.rate, msg.channels, msg.frames, msg.window) : core.fw_source_alloc(this.player, msg.id, msg.rate, msg.channels, msg.frames);
         this.reply({ type: "loaded", id: msg.id, frames });
         break;
       }
+      case "stats":
+        // AP-05: the core's memory, so a long file's bound can be measured
+        this.reply({ type: "stats", bytes: core.memory.buffer.byteLength });
+        break;
       case "write": {
         const bytes = msg.data.length * 4;
         const ptr = core.fw_alloc(bytes);

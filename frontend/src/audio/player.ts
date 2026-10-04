@@ -296,7 +296,19 @@ interface StreamCtl {
   filled: Set<number>;
   waiters: { need: number[]; resolve: () => void }[];
   running: boolean;
+  /** AP-05: a source held as a window: the ring's frames, the next frame to queue, and how far ahead to keep filled */
+  window?: number;
+  next?: number;
+  ahead?: number;
+  /** bumped when a windowed source starts afresh, so a piece fetched before then is not counted as held */
+  gen?: number;
 }
+
+// AP-05: a file whose floats would pass this is held as a window of WINDOW_SECONDS around the playhead, filled
+// AHEAD_SECONDS ahead of it as it plays
+const WINDOW_ABOVE_BYTES = 512 * 2 ** 20;
+const WINDOW_SECONDS = 240;
+const AHEAD_SECONDS = 150;
 const streams = new WeakMap<AudioWorkletNode, Map<string, StreamCtl>>();
 
 /**
@@ -308,10 +320,34 @@ function focusStream(node: AudioWorkletNode, mediaId: string, frame: number): Pr
   if (!ctl) return null;
   const first = Math.floor(Math.max(0, Math.min(frame, ctl.total - 1)) / ctl.chunk) * ctl.chunk;
   const need = [first, first + ctl.chunk].filter((s) => s < ctl.total);
+  if (ctl.window && !need.every((s) => ctl.filled.has(s))) {
+    // AP-05: a windowed source starts afresh at the playhead (the core begins a new range at a write that does not carry
+    // on), its pieces queued in order from there as far ahead as it fills
+    ctl.filled.clear();
+    ctl.queue = [];
+    ctl.next = first;
+    ctl.gen = (ctl.gen ?? 0) + 1;
+    advanceWindow(ctl, first);
+    return new Promise((resolve) => ctl.waiters.push({ need, resolve }));
+  }
+  if (ctl.window) return Promise.resolve();
   const rest = ctl.queue.filter((s) => !need.includes(s));
   ctl.queue = [...need.filter((s) => !ctl.filled.has(s)), ...rest.filter((s) => s > first), ...rest.filter((s) => s < first)];
   if (need.every((s) => ctl.filled.has(s))) return Promise.resolve();
   return new Promise((resolve) => ctl.waiters.push({ need, resolve }));
+}
+
+/** AP-05: queues a windowed source's next pieces in order up to `ahead` past `frame` (the playhead's frame in it), and
+ *  forgets pieces its ring no longer holds, so a seek back to them fetches them again. */
+function advanceWindow(ctl: StreamCtl, frame: number): void {
+  if (!ctl.window || ctl.next === undefined) return;
+  const until = Math.min(ctl.total, frame + (ctl.ahead ?? 0));
+  while (ctl.next < until) {
+    if (!ctl.filled.has(ctl.next) && !ctl.queue.includes(ctl.next)) ctl.queue.push(ctl.next);
+    ctl.next += ctl.chunk;
+  }
+  const keepFrom = ctl.next - ctl.window;
+  for (const s of ctl.filled) if (s < keepFrom) ctl.filled.delete(s);
 }
 
 /** Fetches a streamed source's queued pieces one at a time, releasing waiters as their pieces land (and all of them if it stops). */
@@ -321,12 +357,14 @@ async function pump(ctl: StreamCtl, mediaId: string, fetchAt: (start: number) =>
   while (ctl.queue.length) {
     const s = ctl.queue.shift() as number;
     if (ctl.filled.has(s)) continue;
+    const gen = ctl.gen;
     try {
       await fetchAt(s);
     } catch (err) {
       console.warn(`formwav: streaming ${mediaId} stopped at frame ${s}:`, err);
       break;
     }
+    if (ctl.gen !== gen) continue; // AP-05: a seek started the window afresh while this piece was on its way
     ctl.filled.add(s);
     ctl.waiters = ctl.waiters.filter((w) => (w.need.every((n) => ctl.filled.has(n)) ? (w.resolve(), false) : true));
   }
@@ -340,13 +378,22 @@ async function pump(ctl: StreamCtl, mediaId: string, fetchAt: (start: number) =>
  * written into it (each a short copy on the audio thread), the two at `from` first; it counts as loaded once those
  * two are in, and play and seek refocus the fill on the playhead. With `wait` every piece is written first.
  */
-async function streamInto(node: AudioWorkletNode, sources: Map<string, number>, mediaId: string, nextId: () => number, info: StreamInfo, wait: boolean): Promise<void> {
+async function streamInto(node: AudioWorkletNode, sources: Map<string, number>, mediaId: string, nextId: () => number, info: StreamInfo, wait: boolean, where?: () => number | null): Promise<void> {
   const id = nextId();
-  const reply = await request(node, { type: "alloc", id, rate: info.rate, channels: info.channels, frames: info.frames }, (r) => r.type === "loaded" && r.id === id);
+  // AP-05: a file whose floats would pass WINDOW_ABOVE_BYTES is held as a window around the playhead
+  const windowed = info.frames * info.channels * 4 > WINDOW_ABOVE_BYTES;
+  const window = windowed ? WINDOW_SECONDS * info.rate : 0;
+  const reply = await request(node, { type: "alloc", id, rate: info.rate, channels: info.channels, frames: info.frames, ...(windowed ? { window } : {}) }, (r) => r.type === "loaded" && r.id === id);
   if (reply.type === "loaded" && reply.frames < 0) throw new Error("the audio core could not hold this file");
   const chunk = info.rate * 2;
   const ctl: StreamCtl = { chunk, total: info.frames, queue: [], filled: new Set(), waiters: [], running: false };
-  for (let s = 0; s < info.frames; s += chunk) ctl.queue.push(s);
+  if (windowed) {
+    ctl.window = window;
+    ctl.ahead = AHEAD_SECONDS * info.rate;
+    ctl.next = Math.floor(info.from / chunk) * chunk;
+    ctl.gen = 0;
+    advanceWindow(ctl, info.from);
+  } else for (let s = 0; s < info.frames; s += chunk) ctl.queue.push(s);
   let byMedia = streams.get(node);
   if (!byMedia) streams.set(node, (byMedia = new Map()));
   byMedia.set(mediaId, ctl);
@@ -362,7 +409,17 @@ async function streamInto(node: AudioWorkletNode, sources: Map<string, number>, 
   };
   const ready = focusStream(node, mediaId, info.from);
   const filling = pump(ctl, mediaId, fetchAt);
-  await (wait ? filling : ready);
+  if (windowed && where) {
+    // AP-05: twice a second the window is filled on ahead of the playhead (and lets go behind it)
+    const timer = setInterval(() => {
+      if (streams.get(node)?.get(mediaId) !== ctl) return clearInterval(timer);
+      const at = where();
+      if (at === null) return;
+      advanceWindow(ctl, at);
+      void pump(ctl, mediaId, fetchAt);
+    }, 500);
+  }
+  await (wait && !windowed ? filling : ready);
   sources.set(mediaId, id);
 }
 
@@ -389,7 +446,7 @@ function streamInfo(doc: SessionDoc, mediaId: string, position: number): StreamI
   return { frames: media.frames, channels: media.channels || 1, rate: media.sampleRate, from };
 }
 
-async function loadInto(node: AudioWorkletNode, sources: Map<string, number>, mediaId: string, nextId: () => number, info?: StreamInfo, wait = false): Promise<void> {
+async function loadInto(node: AudioWorkletNode, sources: Map<string, number>, mediaId: string, nextId: () => number, info?: StreamInfo, wait = false, where?: () => number | null): Promise<void> {
   if (sources.has(mediaId)) return;
   if ((node as unknown) instanceof NativeNode) {
     const id = nextId();
@@ -397,7 +454,7 @@ async function loadInto(node: AudioWorkletNode, sources: Map<string, number>, me
     sources.set(mediaId, id);
     return;
   }
-  if (info && info.frames > 60 * info.rate) return streamInto(node, sources, mediaId, nextId, info, wait);
+  if (info && info.frames > 60 * info.rate) return streamInto(node, sources, mediaId, nextId, info, wait, where);
   const res = await fetch(`/api/media/${mediaId}/audio`);
   if (!res.ok) throw new Error(`audio request answered ${res.status}`);
   const bytes = await res.arrayBuffer();
@@ -502,7 +559,14 @@ export class Player {
   private load(node: AudioWorkletNode, mediaId: string): Promise<void> {
     let loading = this.pending.get(mediaId);
     if (!loading) {
-      loading = loadInto(node, this.sources, mediaId, this.nextId, streamInfo(this.engine.get("document"), mediaId, this.engine.get("transport").positionSamples));
+      // AP-05: a windowed source keeps filling ahead of the playhead's frame in it (a clip of it under the playhead)
+      const where = () => {
+        const doc = this.engine.get("document");
+        const at = this.engine.get("transport").positionSamples;
+        for (const t of doc.tracks) for (const c of t.clips) if (c.mediaId === mediaId && at >= c.start && at < c.start + c.length) return c.sourceIn + (at - c.start);
+        return null;
+      };
+      loading = loadInto(node, this.sources, mediaId, this.nextId, streamInfo(this.engine.get("document"), mediaId, this.engine.get("transport").positionSamples), false, where);
       this.pending.set(mediaId, loading);
       loading.catch(() => this.pending.delete(mediaId));
     }
@@ -686,6 +750,13 @@ export class Player {
     const node = await this.ensure();
     await this.ctx?.resume();
     send(node, { type: "live-note", pitch: Math.max(0, Math.min(127, Math.round(pitch))), velocity: Math.max(0, Math.min(127, Math.round(velocity))) });
+  }
+
+  /** AP-05: the audio core's memory in bytes (null before it runs), so a long file's bound can be measured. */
+  async coreMemory(): Promise<number | null> {
+    if (!this.node) return null;
+    const reply = await request(this.node, { type: "stats" }, (r) => r.type === "stats");
+    return reply.type === "stats" ? reply.bytes : null;
   }
 
   /** Releases every live note (a panic, or the input going away). */
