@@ -75,10 +75,27 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
   const info = paintInfo.get(canvas);
   if (!info || !canvas.isConnected) return;
   const dpr = window.devicePixelRatio || 1;
-  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
+  // AU-13: the canvas covers only the part of its clip in view (at deep zoom a clip is far wider than a canvas can
+  // be); what follows maps through the clip's whole width (full) and the window's offset into it (off)
+  const node = canvas.parentElement;
+  const box = node?.getBoundingClientRect();
+  const stageBox = viewStage?.getBoundingClientRect();
+  if (!node || !box || !viewStage || !stageBox) return;
+  const head = viewStage.querySelector<HTMLElement>(".fw-ruler-corner")?.offsetWidth ?? 0;
+  const from = Math.max(box.left, stageBox.left + head);
+  const to = Math.min(box.right, stageBox.left + viewStage.clientWidth);
+  const cssW = Math.max(0, to - from);
+  const offCss = Math.max(0, from - box.left);
+  const leftStyle = `${offCss}px`;
+  const widthStyle = `${Math.max(1, cssW)}px`;
+  if (canvas.style.left !== leftStyle) canvas.style.left = leftStyle;
+  if (canvas.style.width !== widthStyle) canvas.style.width = widthStyle;
+  const w = Math.max(1, Math.round(cssW * dpr));
   const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
   if (canvas.width !== w) canvas.width = w;
   if (canvas.height !== h) canvas.height = h;
+  const full = Math.max(1, node.clientWidth * dpr);
+  const off = offCss * dpr;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   ctx.clearRect(0, 0, w, h);
@@ -96,10 +113,10 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
     const rows = Math.max(12, highest - lowest + 1);
     const base = lowest - Math.floor((rows - (highest - lowest + 1)) / 2);
     const noteH = h / rows;
-    const pxPerFrame = w / sourceFrames;
+    const pxPerFrame = full / sourceFrames;
     for (const n of notes) {
-      const x0 = (n.at - info.clip.sourceIn) * pxPerFrame;
-      const x1 = (n.at + n.length - info.clip.sourceIn) * pxPerFrame;
+      const x0 = (n.at - info.clip.sourceIn) * pxPerFrame - off;
+      const x1 = (n.at + n.length - info.clip.sourceIn) * pxPerFrame - off;
       if (x1 < 0 || x0 > w) continue;
       ctx.globalAlpha = 0.4 + 0.6 * (n.velocity / 127);
       ctx.fillRect(Math.max(0, x0), h - (n.pitch - base + 1) * noteH + 1, Math.max(2, Math.min(w, x1) - Math.max(0, x0)), Math.max(2, noteH - 2));
@@ -108,8 +125,8 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
   }
   const ch = Math.max(1, peaks.channels);
   const stride = ch * 2;
-  const blocksPerPx = sourceFrames / w / peaks.samplesPerPeak;
-  const startBlock = info.clip.sourceIn / peaks.samplesPerPeak;
+  const blocksPerPx = sourceFrames / full / peaks.samplesPerPeak;
+  const startBlock = info.clip.sourceIn / peaks.samplesPerPeak + off * blocksPerPx;
   const rowH = h / ch;
   const half = (rowH / 2) * 0.9;
   const clipGain = 10 ** (info.clip.gainDb / 20);
@@ -139,26 +156,30 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
   if (fadeIn <= 0 && fadeOut <= 0) return;
   const curve = (v: number) => fadeCurve(v, clip.fadeShape);
   const style = getComputedStyle(canvas);
-  const pxPerSample = w / clip.length;
+  const pxPerSample = full / clip.length;
+  // AU-13: the curve traced only across the pixels in view (a fade at deep zoom can span millions of them)
   const envelope = (from: number, span: number, rising: boolean) => {
+    const a = Math.max(from, 0);
+    const b = Math.min(from + span, w);
+    if (b <= a || span <= 0) return false;
     ctx.beginPath();
-    ctx.moveTo(from, 0);
-    const steps = Math.max(2, Math.ceil(span));
+    ctx.moveTo(a, 0);
+    const steps = Math.max(2, Math.ceil(b - a));
     for (let i = 0; i <= steps; i++) {
-      const v = i / steps;
-      ctx.lineTo(from + v * span, h * (1 - curve(rising ? v : 1 - v)));
+      const x = a + ((b - a) * i) / steps;
+      const v = (x - from) / span;
+      ctx.lineTo(x, h * (1 - curve(rising ? v : 1 - v)));
     }
-    ctx.lineTo(from + span, 0);
+    ctx.lineTo(b, 0);
     ctx.closePath();
+    return true;
   };
   ctx.fillStyle = style.outlineColor;
   ctx.globalAlpha = 0.6;
-  if (fadeIn > 0) {
-    envelope(0, fadeIn * pxPerSample, true);
+  if (fadeIn > 0 && envelope(-off, fadeIn * pxPerSample, true)) {
     ctx.fill();
   }
-  if (fadeOut > 0) {
-    envelope(w - fadeOut * pxPerSample, fadeOut * pxPerSample, false);
+  if (fadeOut > 0 && envelope(full - fadeOut * pxPerSample - off, fadeOut * pxPerSample, false)) {
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -573,6 +594,20 @@ function drawAutoLane(row: HTMLElement, track: Track, param: AutoScale, spp: num
 export function mountLanes(host: HTMLElement, engine: Engine): void {
   const stage = host.querySelector<HTMLElement>(".fw-stage");
   viewStage = stage;
+  // AU-13: a clip's waveform canvas covers only the part in view, so scrolling or resizing repaints them (once a frame)
+  let waveRaf = 0;
+  const repaintWaves = () => {
+    if (waveRaf || !stage) return;
+    waveRaf = requestAnimationFrame(() => {
+      waveRaf = 0;
+      for (const c of stage.querySelectorAll<HTMLCanvasElement>(".fw-clip .fw-wave")) {
+        const info = paintInfo.get(c);
+        if (info) schedulePaint(c, info.media.id);
+      }
+    });
+  };
+  stage?.addEventListener("scroll", repaintWaves, { passive: true });
+  if (stage) new ResizeObserver(repaintWaves).observe(stage);
   // AU-34: a session opened with a saved view comes back to its zoom and left edge (the engine restores the selection)
   engine.subscribe("view", (view) => {
     if (!view) return;

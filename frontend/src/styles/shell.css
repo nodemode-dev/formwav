@@ -210,7 +210,8 @@ html, body, #app { height: 100%; }
   color: var(--accent-color);
 }
 
-.fw-wave { display: block; inline-size: 100%; block-size: 100%; }
+/* AU-13: placed by the script over the part of its clip in view (full size until then) */
+.fw-wave { display: block; position: absolute; inset-block-start: 0; inset-inline-start: 0; inline-size: 100%; block-size: 100%; }
 
 .fw-lanes { position: relative; }
 
