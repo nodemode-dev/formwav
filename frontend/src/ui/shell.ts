@@ -98,14 +98,43 @@ function shellHtml(): string {
 </div>`;
 }
 
-export type ClockMode = "time" | "tc24" | "tc25" | "tc30";
-export const CLOCK_MODES: ClockMode[] = ["time", "tc24", "tc25", "tc30"];
+export type ClockMode = "time" | "tc24" | "tc25" | "tc2997df" | "tc30";
+export const CLOCK_MODES: ClockMode[] = ["time", "tc24", "tc25", "tc2997df", "tc30"];
 
-export function formatClock(positionSamples: number, sampleRate: number, mode: ClockMode = "time"): string {
+// PT-26: the clock's mode, for the ruler to label in the same timecode (an event tells it when the mode changes)
+let currentMode: ClockMode = "time";
+export function clockMode(): ClockMode {
+  return currentMode;
+}
+
+/** PT-26: timecode text (hh:mm:ss:ff, or hh:mm:ss;ff for drop-frame) as seconds, in `mode`'s rate; null if unreadable. */
+export function parseTimecode(text: string, mode: ClockMode): number | null {
+  const m = /^(\d{1,2}):(\d{2}):(\d{2})[:;.](\d{2})$/.exec(text.trim());
+  if (!m) return null;
+  const [h, mi, s, f] = m.slice(1).map(Number);
+  if (mode === "tc2997df") {
+    // SMPTE drop-frame: frame numbers 00 and 01 skipped at each minute but every tenth
+    const minutes = h * 60 + mi;
+    return (((h * 3600 + mi * 60 + s) * 30 + f - 2 * (minutes - Math.floor(minutes / 10))) * 1001) / 30000;
+  }
+  const fps = mode === "tc24" ? 24 : mode === "tc25" ? 25 : 30;
+  return h * 3600 + mi * 60 + s + f / fps;
+}
+
+export function formatClock(positionSamples: number, sampleRate: number, mode: ClockMode = "time", startSeconds = 0): string {
   const two = (n: number) => String(n).padStart(2, "0");
+  if (mode === "tc2997df") {
+    // PT-26: 29.97 drop-frame (SMPTE): real frames counted at 30000/1001 a second, numbered skipping 00 and 01 at each
+    // minute but every tenth, written with ';' before the frames
+    const frame = Math.floor((positionSamples / sampleRate + startSeconds) * (30000 / 1001) + 1e-6);
+    const tens = Math.floor(frame / 17982);
+    const rest = frame % 17982;
+    const n = frame + 18 * tens + (rest > 1 ? 2 * Math.floor((rest - 2) / 1798) : 0);
+    return `${two(Math.floor(n / 108000))}:${two(Math.floor(n / 1800) % 60)}:${two(Math.floor(n / 30) % 60)};${two(n % 30)}`;
+  }
   if (mode !== "time") {
     const fps = mode === "tc24" ? 24 : mode === "tc25" ? 25 : 30;
-    const totalFrames = Math.floor((positionSamples * fps) / sampleRate);
+    const totalFrames = Math.floor((positionSamples / sampleRate + startSeconds) * fps + 1e-6);
     const f = totalFrames % fps;
     const s = Math.floor(totalFrames / fps) % 60;
     const m = Math.floor(totalFrames / (fps * 60)) % 60;
@@ -158,9 +187,14 @@ export function mountShell(host: HTMLElement, engine: Engine): void {
   } catch {
     clock?.setAttribute("data-storage", "none");
   }
-  const renderClock = (t: TransportState) => setText(clock, formatClock(t.positionSamples, t.sampleRate, clockMode));
+  currentMode = clockMode;
+  // PT-26: timecode reads from the session's timecode start (Pro Tools' session start, 01:00:00:00 by habit)
+  const renderClock = (t: TransportState) => setText(clock, formatClock(t.positionSamples, t.sampleRate, clockMode, engine.get("document").timecodeStart ?? 0));
+  engine.subscribe("document", () => renderClock(engine.get("transport")));
   const cycleClock = () => {
     clockMode = CLOCK_MODES[(CLOCK_MODES.indexOf(clockMode) + 1) % CLOCK_MODES.length];
+    currentMode = clockMode;
+    document.dispatchEvent(new CustomEvent("fw:clock-mode"));
     if (clock && clock.dataset.mode !== clockMode) clock.dataset.mode = clockMode;
     try {
       localStorage.setItem(CLOCK_KEY, clockMode);

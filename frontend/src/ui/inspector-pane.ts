@@ -2,6 +2,7 @@ import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import type { FadeShape, MidiFx, TrackFx } from "../engine/document";
 import { renderNotes } from "../audio/notes";
 import { importFile } from "../io/media-client";
+import { clockMode, formatClock, parseTimecode } from "./shell";
 import { PALETTE } from "../engine/document";
 
 const COLOURS = PALETTE.map((k) => `<option value="${k}">${k[0].toUpperCase()}${k.slice(1)}</option>`).join("");
@@ -127,7 +128,7 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
-  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button><label class="fw-q-field">Length <input type="number" min="0.1" step="0.1" data-q="target" placeholder="s" aria-label="Target length in seconds"></label><button type="button" class="fw-ibtn" data-an="fit-length" title="Re-time this clip to the length typed, keeping pitch (half to double its length)">Fit to length</button><button type="button" class="fw-ibtn" data-an="remix-length" title="Re-arrange this song on its beats to the length typed, cutting or repeating whole bars where they sound alike rather than stretching it (Audition's Remix)">Remix to length</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><label class="fw-q-field" title="The timecode the session starts at (Pro Tools' session start), read in the clock's timecode rate">TC start <input type="text" size="11" placeholder="00:00:00:00" data-tc-start aria-label="Session timecode start"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button><label class="fw-q-field">Length <input type="number" min="0.1" step="0.1" data-q="target" placeholder="s" aria-label="Target length in seconds"></label><button type="button" class="fw-ibtn" data-an="fit-length" title="Re-time this clip to the length typed, keeping pitch (half to double its length)">Fit to length</button><button type="button" class="fw-ibtn" data-an="remix-length" title="Re-arrange this song on its beats to the length typed, cutting or repeating whole bars where they sound alike rather than stretching it (Audition's Remix)">Remix to length</button></div>
   <div class="fw-analyze-buttons"><label class="fw-q-field">Stretch <input type="number" min="50" max="200" step="1" value="100" data-q="stretch" aria-label="New length of the selected clips as a percentage"> %</label><button type="button" class="fw-ibtn" data-an="stretch-group" title="Re-time every selected clip to this percentage of its length, keeping pitch, and scale their positions from the first one so the tracks stay in sync">Stretch selected clips</button><button type="button" class="fw-ibtn" data-an="stretch-playhead" title="Stretch the selected clips so the last of them ends at the playhead, keeping pitch, positions scaled from the first">Stretch to playhead</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="detect-key" title="Find this clip's musical key and its Camelot code">Detect key</button><span class="fw-key-readout" data-key-out>Key not set</span></div>
 </div>`;
@@ -2491,6 +2492,25 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   engine.subscribe("document", () => {
     const k = engine.get("document").key;
     setText(keyOut, k ? `Key ${k.name} · ${k.camelot}` : "Key not set");
+  });
+  // PT-26: the session's timecode start, read and shown in the clock's timecode rate (30 non-drop while it shows time)
+  const tcField = body.querySelector<HTMLInputElement>("[data-tc-start]");
+  const tcMode = () => (clockMode() === "time" ? "tc30" : clockMode());
+  const syncTc = () => {
+    const doc = engine.get("document");
+    const text = formatClock(0, doc.sampleRate, tcMode(), doc.timecodeStart ?? 0);
+    if (tcField && document.activeElement !== tcField && tcField.value !== text) tcField.value = text;
+  };
+  engine.subscribe("document", syncTc);
+  document.addEventListener("fw:clock-mode", syncTc);
+  tcField?.addEventListener("change", () => {
+    const seconds = parseTimecode(tcField.value, tcMode());
+    if (seconds === null) {
+      setText(notice, "Timecode start reads hh:mm:ss:ff (or hh:mm:ss;ff for drop-frame)");
+      syncTc();
+      return;
+    }
+    engine.dispatch({ type: "set-timecode-start", seconds });
   });
   const commitTempo = () => engine.dispatch({ type: "set-tempo", bpm: Number(bpmField?.value), beatsPerBar: Number(bpbField?.value) });
   bpmField?.addEventListener("change", commitTempo);

@@ -3,6 +3,7 @@ import type { Player } from "../audio/player";
 import { documentLength } from "../engine/document";
 import { barsEnabled, labelStep, setBeatGrid, snapSamples } from "./grid";
 import { onZoom, samplesPerPixel } from "./lanes";
+import { clockMode, formatClock } from "./shell";
 
 const MIN_MINOR_PX = 6;
 
@@ -89,6 +90,9 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     } else {
       const step = labelStep(pxPerSecond);
       const minor = step / 5;
+      // PT-26: with the clock in timecode, the ruler labels in the same timecode, from the session's timecode start
+      const mode = clockMode();
+      const tcLabel = mode !== "time" ? (s: number) => formatClock(Math.round(s * doc.sampleRate), doc.sampleRate, mode, doc.timecodeStart ?? 0) : null;
       const drawMinor = minor * pxPerSecond >= MIN_MINOR_PX;
       const tickPx = minor * pxPerSecond;
       for (let i = Math.max(0, Math.floor((left - 5 * tickPx) / tickPx)); i * tickPx <= Math.min(width, left + view + tickPx); i++) {
@@ -96,7 +100,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
         if (!major && !drawMinor) continue;
         const x = Math.round(i * minor * pxPerSecond);
         ctx.fillRect(x, major ? height * 0.5 : height * 0.75, 1, height);
-        if (major) ctx.fillText(label(i * minor, step), x + 4, 3);
+        if (major) ctx.fillText(tcLabel ? tcLabel(i * minor) : label(i * minor, step), x + 4, 3);
       }
     }
 
@@ -240,6 +244,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
   });
   engine.subscribe("document", draw);
   onZoom(draw);
+  document.addEventListener("fw:clock-mode", draw); // PT-26: labels follow the clock's timecode
   // AU-13: the paint canvas covers only what is in view, so scrolling repaints it (once a frame)
   let scrollRaf = 0;
   stage.addEventListener(

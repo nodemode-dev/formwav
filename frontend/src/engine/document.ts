@@ -274,6 +274,8 @@ export interface SessionDoc {
   masterFx?: TrackFx[];
   /** The session tempo, for the bars ruler, beat snapping and Quantize (set by hand or detected). */
   tempo?: { bpm: number; beatsPerBar: number };
+  /** PT-26: the timecode the session starts at, in seconds (Pro Tools' session start); timecode reads add it. */
+  timecodeStart?: number;
   /** AU-07: this project's snap settings, saved with it: snapping to the grid, and the grid in bars and beats. */
   snap?: { grid: boolean; bars: boolean };
   /** The session's musical key and Camelot code, as detected (services/key.py). */
@@ -352,6 +354,7 @@ export type Command =
   | { type: "set-surround-fold"; on: boolean }
   | { type: "set-spatial-format"; format: "5.1" | "foa" }
   | { type: "set-track-midi-fx"; trackId: string; midiFx: MidiFx[] }
+  | { type: "set-timecode-start"; seconds: number }
   | { type: "switch-playlist"; trackId: string; name: string }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
@@ -695,6 +698,13 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const camelotCode = cmd.camelot.trim().slice(0, 4);
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
+    }
+    case "set-timecode-start": {
+      // PT-26: the timecode the session starts at, in seconds (0 to 24 hours); 0 drops the field
+      const seconds = Number.isFinite(cmd.seconds) ? Math.min(86400, Math.max(0, cmd.seconds)) : 0;
+      if ((doc.timecodeStart ?? 0) === seconds) return doc;
+      const { timecodeStart: _old, ...rest } = doc;
+      return seconds > 0 ? { ...rest, timecodeStart: seconds } : rest;
     }
     case "set-track-midi-fx": {
       // PT-16: transpose -48 to 48 semitones, velocity scale 0 to 4 and offset -127 to 127, quantize 1/16 to 4 beats at
