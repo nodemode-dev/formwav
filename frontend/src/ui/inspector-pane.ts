@@ -103,6 +103,7 @@ const BODY = `
   <div class="fw-rtfx-list" data-scope="track"></div>
   <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument (Pro Tools' MIDI effect plugins): its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
   <div data-midifx-list></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fill-gaps title="Fill every gap between this track's clips with room tone (RX's Ambience Match under every edit): learned from half a second at each side, moving from the one background to the other across the gap">Fill gaps with room tone</button></div>
   <div data-stems></div>
   <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="reverb">Reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
@@ -945,6 +946,49 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       setText(notice, "Rendered the rebalance onto a new track; the stems are muted (undo brings them back)");
     } catch (err) {
       setText(notice, `Could not render the rebalance: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // RX-01: every gap of 10 ms or more between the selected track's clips filled with room tone learned from half a
+  // second at each side (the end of the clip before, the start of the clip after), placed exactly in the gap, one undo step
+  body.querySelector<HTMLButtonElement>("[data-fill-gaps]")?.addEventListener("click", async (e) => {
+    const doc = engine.get("document");
+    const hit = find(doc);
+    if (!hit) return;
+    const button = e.currentTarget as HTMLButtonElement;
+    const rate = doc.sampleRate;
+    const clips = [...hit.track.clips].sort((a, b) => a.start - b.start);
+    const edge = (c: (typeof clips)[number], side: "end" | "start") => {
+      const m = doc.media[c.mediaId];
+      const r = m?.sampleRate ?? rate;
+      const from = c.sourceIn / r;
+      const to = (c.sourceIn + (c.length * r) / rate) / r;
+      return side === "end" ? { media: c.mediaId, from: Math.max(from, to - 0.5), to } : { media: c.mediaId, from, to: Math.min(to, from + 0.5) };
+    };
+    const commands: Parameters<Engine["dispatch"]>[0][] = [];
+    button.disabled = true;
+    setText(notice, "Filling the gaps with room tone...");
+    try {
+      for (let i = 0; i + 1 < clips.length; i++) {
+        const a = clips[i];
+        const b = clips[i + 1];
+        const gap = b.start - (a.start + a.length);
+        if (gap < 0.01 * rate) continue;
+        const res = await fetch("/api/roomtone/gap", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ left: edge(a, "end"), right: edge(b, "start"), seconds: gap / rate, seed: `${a.id}:${b.id}` }) });
+        const out = (await res.json().catch(() => ({}))) as Partial<MediaRef> & { detail?: unknown };
+        if (!res.ok || !out.id) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        commands.push({ type: "import-media", media: out as MediaRef, at: a.start + a.length, trackId: hit.track.id });
+      }
+      if (!commands.length) {
+        setText(notice, "No gaps between this track's clips");
+        return;
+      }
+      engine.dispatch({ type: "batch", commands } as Parameters<Engine["dispatch"]>[0]);
+      setText(notice, `Filled ${commands.length} gap${commands.length === 1 ? "" : "s"} with room tone (one undo step)`);
+    } catch (err) {
+      setText(notice, `Could not fill the gaps: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      button.disabled = false;
     }
   });
 

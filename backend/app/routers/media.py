@@ -219,6 +219,23 @@ async def media_draw(media_id: str, request: Request) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+async def roomtone_gap(request: Request) -> dict:
+    """RX-01: room tone for a gap between clips, moving from the left clip's edge to the right clip's."""
+    from ..services import tools
+
+    try:
+        b = await request.json()
+        edge = lambda e: (str(e["media"]), float(e["from"]), float(e["to"]))  # noqa: E731
+        return tools.gap_tone(edge(b["left"]), edge(b["right"]) if b.get("right") else None, float(b["seconds"]), str(b.get("seed", "")))
+    except KeyError as err:
+        raise HTTPException(404 if "media" not in str(err) and "left" not in str(err) and "seconds" not in str(err) else 422, f"missing or unknown {err}") from err
+    except (TypeError, ValueError, media.MediaError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
+router.add_api_route("/roomtone/gap", roomtone_gap, methods=["POST"], status_code=201)
+
+
 @router.post("/media/{media_id}/room-tone", status_code=201)
 async def media_room_tone(media_id: str, request: Request) -> dict:
     from ..services import tools

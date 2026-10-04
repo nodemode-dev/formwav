@@ -358,6 +358,59 @@ def room_tone(media_id: str, learn_media: str, learn_from: float, learn_to: floa
     return media.import_wav(f"{name}.wav", _wav_bytes([out[:, c] for c in range(channels)], rate))
 
 
+def gap_tone(left: tuple[str, float, float], right: tuple[str, float, float] | None, seconds: float, seed: str = "") -> dict:
+    """RX-01: room tone for a gap between clips, a new media `seconds` long: fresh noise shaped by the power spectrum of
+    the left clip's edge (media, from, to seconds), crossfaded at equal power into noise shaped by the right clip's edge,
+    so the background moves from the one to the other across the gap (a drifting hum, a room that changes); with no
+    right edge, the left's throughout; 5 ms fades where it meets the clips."""
+    import hashlib
+
+    import numpy as np
+
+    from .audacity import _wav_bytes
+
+    def profile(edge: tuple[str, float, float]) -> tuple[list, int, int]:
+        view, rate = _wav_view(edge[0])
+        a, b = int(round(edge[1] * rate)), int(round(edge[2] * rate))
+        a, b = max(0, a), min(int(view.shape[0]), b)
+        if b - a < int(0.05 * rate):
+            raise media.MediaError("each clip beside a gap needs at least 50 ms at its edge to learn from")
+        n = min(4096, 1 << int(np.log2(b - a)))
+        window = np.hanning(n)
+        norm = float(np.sum(window**2))
+        psds = []
+        for c in range(int(view.shape[1])):
+            x = np.asarray(view[a:b, c], dtype=np.float64)
+            psds.append(np.mean([np.abs(np.fft.rfft(x[i : i + n] * window)) ** 2 for i in range(0, len(x) - n + 1, n // 2)], axis=0) / norm)
+        return psds, n, rate
+
+    lp, ln, rate = profile(left)
+    rp, rn, rrate = profile(right) if right else (lp, ln, rate)
+    if rrate != rate:
+        raise media.MediaError("the clips beside the gap have different sample rates")
+    length = int(round(seconds * rate))
+    if length < 1 or length > 600 * rate:
+        raise media.MediaError("a gap to fill must be between one sample and 10 minutes")
+    channels = max(len(lp), len(rp))
+    rng = np.random.default_rng(int.from_bytes(hashlib.sha256(f"{left}:{right}:{length}:{seed}".encode()).digest()[:8], "little"))
+    # each side's background carries on past its edit for a quarter of the gap, the crossfade in the middle half
+    u = np.clip(((np.arange(length) + 0.5) / length - 0.25) / 0.5, 0.0, 1.0)
+    wl, wr = np.cos(0.5 * np.pi * u), np.sin(0.5 * np.pi * u)
+    fade = min(int(0.005 * rate), length // 4)
+    env = np.ones(length)
+    if fade > 0:
+        ramp = np.linspace(0.0, 1.0, fade, endpoint=False)
+        env[:fade] = ramp
+        env[-fade:] = ramp[::-1]
+    f = np.fft.rfftfreq(length)
+
+    def shaped(psd: np.ndarray, n: int) -> np.ndarray:
+        return np.fft.irfft(np.fft.rfft(rng.standard_normal(length)) * np.sqrt(np.interp(f, np.fft.rfftfreq(n), psd)), n=length)
+
+    out = [((shaped(lp[min(c, len(lp) - 1)], ln) * wl + shaped(rp[min(c, len(rp) - 1)], rn) * wr) * env).astype(np.float32) for c in range(channels)]
+    return media.import_wav("room tone (gap).wav", _wav_bytes(out, rate))
+
+
 def _phase_correlation(media_id: str) -> float | None:
     """Pearson correlation of the left and right channels over the whole file, -1 (opposed) to 1 (mono), read in chunks."""
     import numpy as np
