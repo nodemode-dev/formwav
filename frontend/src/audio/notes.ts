@@ -1,5 +1,5 @@
 import type { Engine } from "../engine";
-import type { MediaRef, NoteEvent } from "../engine/document";
+import type { MediaRef, MidiFx, NoteEvent } from "../engine/document";
 
 /**
  * A note clip's edited notes rendered again by the built-in instrument (POST /api/midi/render) and swapped in together
@@ -37,14 +37,32 @@ export function midiFile(notes: readonly NoteEvent[], rate: number, bpm = 120, p
   return new Uint8Array([...header, 0x4d, 0x54, 0x72, 0x6b, ...u32(body.length), ...body]);
 }
 
+/** PT-16: notes through a track's MIDI effects in order: transpose (notes leaving 0 to 127 dropped), velocity scaled and
+ *  offset (held to 1 to 127), starts quantized to a grid of beats at `bpm` by the strength (lengths kept). */
+export function applyMidiFx(notes: readonly NoteEvent[], fx: readonly MidiFx[] | undefined, rate: number, bpm = 120): NoteEvent[] {
+  let out = notes.map((n) => ({ ...n }));
+  for (const f of fx ?? []) {
+    if (f.kind === "transpose") out = out.map((n) => ({ ...n, pitch: n.pitch + f.semitones })).filter((n) => n.pitch >= 0 && n.pitch <= 127);
+    else if (f.kind === "velocity") out = out.map((n) => ({ ...n, velocity: Math.max(1, Math.min(127, Math.round(n.velocity * f.scale + f.offset))) }));
+    else if (f.kind === "quantize") {
+      const grid = (60 / Math.max(1, bpm)) * f.beats * rate;
+      out = out.map((n) => ({ ...n, at: Math.max(0, Math.round(n.at + (Math.round(n.at / grid) * grid - n.at) * f.strength)) }));
+    }
+  }
+  return out;
+}
+
 export async function renderNotes(engine: Engine, trackId: string, clipId: string, notes: readonly NoteEvent[]): Promise<void> {
   const doc = engine.get("document");
-  const clip = doc.tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === clipId);
+  const track = doc.tracks.find((t) => t.id === trackId);
+  const clip = track?.clips.find((c) => c.id === clipId);
   if (!clip) throw new Error("no such clip");
   const media = doc.media[clip.mediaId];
   const rate = media?.sampleRate ?? doc.sampleRate;
+  // PT-16: the clip keeps the notes as played; its sound is rendered from them after the track's MIDI effects
+  const heard = applyMidiFx(notes, track?.midiFx, rate, doc.tempo?.bpm ?? 120);
   const body = {
-    notes: notes.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })),
+    notes: heard.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })),
     rate,
     name: (media?.name ?? "notes").replace(/\.wav$/i, ""),
   };

@@ -134,6 +134,10 @@ export interface ReverbFx {
 
 export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx;
 
+/** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
+ *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
+export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocity"; scale: number; offset: number } | { kind: "quantize"; beats: number; strength: number };
+
 const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb"]);
 
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
@@ -170,6 +174,9 @@ export interface Track {
   color?: string;
   /** Realtime effects in order (Audacity's realtime stack); bypassed ones are skipped. */
   fx?: TrackFx[];
+  /** PT-16: MIDI effects before the instrument, in order; a note clip keeps the notes as played and is rendered from
+   *  the notes after them, and live MIDI on the track passes through them too. */
+  midiFx?: MidiFx[];
   /** Volume (dB) and pan automation; when present each replaces the track's static fader or pan. */
   automation?: { volume?: AutoPoint[]; pan?: AutoPoint[] };
   id: string;
@@ -341,6 +348,7 @@ export type Command =
   | { type: "set-track-surround"; trackId: string; surround: { x: number; y: number; lfeDb?: number; el?: number } | null }
   | { type: "set-surround-fold"; on: boolean }
   | { type: "set-spatial-format"; format: "5.1" | "foa" }
+  | { type: "set-track-midi-fx"; trackId: string; midiFx: MidiFx[] }
   | { type: "switch-playlist"; trackId: string; name: string }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
@@ -684,6 +692,22 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const camelotCode = cmd.camelot.trim().slice(0, 4);
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
+    }
+    case "set-track-midi-fx": {
+      // PT-16: transpose -48 to 48 semitones, velocity scale 0 to 4 and offset -127 to 127, quantize 1/16 to 4 beats at
+      // a strength 0 to 1; anything else dropped
+      const num = (v: unknown, lo: number, hi: number, d: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+      const clean: MidiFx[] = [];
+      for (const f of cmd.midiFx) {
+        if (f.kind === "transpose") clean.push({ kind: "transpose", semitones: Math.round(num(f.semitones, -48, 48, 0)) });
+        else if (f.kind === "velocity") clean.push({ kind: "velocity", scale: num(f.scale, 0, 4, 1), offset: Math.round(num(f.offset, -127, 127, 0)) });
+        else if (f.kind === "quantize") clean.push({ kind: "quantize", beats: num(f.beats, 0.0625, 4, 0.5), strength: num(f.strength, 0, 1, 1) });
+      }
+      return mapTrack(doc, cmd.trackId, (t) => {
+        if (JSON.stringify(t.midiFx ?? []) === JSON.stringify(clean)) return t;
+        const { midiFx: _old, ...rest } = t;
+        return clean.length ? { ...rest, midiFx: clean } : rest;
+      });
     }
     case "set-spatial-format": {
       // PT-42: 5.1 is the default and is stored as nothing

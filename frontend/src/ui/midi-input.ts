@@ -1,3 +1,4 @@
+import { applyMidiFx } from "../audio/notes";
 import type { Player } from "../audio/player";
 import type { Engine } from "../engine";
 import type { MediaRef, NoteEvent } from "../engine/document";
@@ -31,12 +32,16 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
     }
   });
 
+  const sounding = new Map<number, number>(); // PT-16: a held key to the pitch its MIDI effects sound
   const commit = async (done: Take) => {
     const notes = done.notes.filter((n) => n.at >= 0).sort((a, b) => a.at - b.at || a.pitch - b.pitch);
     if (!notes.length) return;
-    const rate = engine.get("document").sampleRate;
+    const doc = engine.get("document");
+    const rate = doc.sampleRate;
+    // PT-16: the take keeps the notes as played and sounds them through its track's MIDI effects, as any note clip
+    const heard = applyMidiFx(notes, doc.tracks.find((t) => t.id === done.trackId)?.midiFx, rate, doc.tempo?.bpm ?? 120);
     try {
-      const res = await fetch("/api/midi/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ notes: notes.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })), rate, name: "MIDI take" }) });
+      const res = await fetch("/api/midi/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ notes: heard.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })), rate, name: "MIDI take" }) });
       const media = (await res.json().catch(() => ({}))) as Partial<MediaRef> & { detail?: unknown };
       if (!res.ok || !media.id) throw new Error(typeof media.detail === "string" ? media.detail : `the engine answered ${res.status}`);
       engine.dispatch({ type: "import-media", media: media as MediaRef, at: done.start, ...(done.trackId ? { trackId: done.trackId } : {}), notes });
@@ -52,10 +57,19 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
     const pitch = data[1] & 0x7f;
     const velocity = (data[2] ?? 0) & 0x7f;
     if (status === 0x90 && velocity > 0) {
-      void player.liveNote(pitch, velocity);
+      // PT-16: heard through the armed track's MIDI effects (quantize does not apply to notes as they are played)
+      const doc = engine.get("document");
+      const track = doc.tracks.find((t) => t.id === armedTrack());
+      const heard = applyMidiFx([{ at: 0, length: 1, pitch, velocity }], track?.midiFx?.filter((f) => f.kind !== "quantize"), doc.sampleRate)[0];
+      if (heard) {
+        sounding.set(pitch, heard.pitch);
+        void player.liveNote(heard.pitch, heard.velocity);
+      }
       if (take && !take.held.has(pitch)) take.held.set(pitch, { at: now(), velocity });
     } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
-      void player.liveNote(pitch, 0);
+      const was = sounding.get(pitch);
+      sounding.delete(pitch);
+      if (was !== undefined) void player.liveNote(was, 0);
       const h = take?.held.get(pitch);
       if (take && h) {
         take.held.delete(pitch);

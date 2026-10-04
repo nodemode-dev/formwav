@@ -1,5 +1,6 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
-import type { FadeShape, TrackFx } from "../engine/document";
+import type { FadeShape, MidiFx, TrackFx } from "../engine/document";
+import { renderNotes } from "../audio/notes";
 import { PALETTE } from "../engine/document";
 
 const COLOURS = PALETTE.map((k) => `<option value="${k}">${k[0].toUpperCase()}${k.slice(1)}</option>`).join("");
@@ -98,6 +99,8 @@ const BODY = `
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
   <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
   <div class="fw-rtfx-list" data-scope="track"></div>
+  <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument (Pro Tools' MIDI effect plugins): its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
+  <div data-midifx-list></div>
   <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="reverb">Reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-clipfx">
@@ -169,6 +172,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   let playlistTrackId: string | null = null;
   // PT-38, AA-11: the 5.1 panner pad's drawing, set once it is mounted (further down) and called by render
   let drawPadRef: ((pos: { x: number; y: number } | null) => void) | null = null;
+  // PT-16: the MIDI effects list's drawing, set once mounted
+  let midiFxRef: ((track: Track) => void) | null = null;
   const render = () => {
     const doc = engine.get("document");
     const hit = find(doc);
@@ -266,6 +271,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const formatPick = body.querySelector<HTMLSelectElement>("[data-sur-format]");
     if (formatPick && document.activeElement !== formatPick && formatPick.value !== (doc.spatialFormat ?? "5.1")) formatPick.value = doc.spatialFormat ?? "5.1";
     drawPadRef?.(track.surround ? { x: track.surround.x, y: track.surround.y } : null);
+    midiFxRef?.(track);
     fillInputs();
     const automated = track.automation;
     const volume = field<HTMLInputElement>("volume");
@@ -883,6 +889,57 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const on = (e.target as HTMLInputElement).checked;
     engine.dispatch({ type: "set-surround-fold", on });
     if (notice) setText(notice, on ? "Hearing the 5.1 as a stereo fold-down, in playback and the stereo mix" : "Playback and the stereo mix back to each track's own pan");
+  });
+  // PT-16: the selected track's MIDI effects, each with its settings and a Remove; a change re-renders its note clips
+  const midiList = body.querySelector<HTMLElement>("[data-midifx-list]");
+  let midiSig = "";
+  midiFxRef = (track) => {
+    if (!midiList) return;
+    const fx = track.midiFx ?? [];
+    const sig = `${track.id}|${JSON.stringify(fx)}`;
+    if (sig === midiSig || midiList.contains(document.activeElement)) return;
+    midiSig = sig;
+    const n = (i: number, p: string, label: string, v: number, min: number, max: number, step: number) =>
+      `<label class="fw-sam-opt"><span>${label}</span><input type="number" min="${min}" max="${max}" step="${step}" value="${v}" data-mfx-i="${i}" data-mfx-p="${p}"></label>`;
+    midiList.innerHTML = fx
+      .map((f, i) => {
+        const fields = f.kind === "transpose" ? n(i, "semitones", "Semitones", f.semitones, -48, 48, 1) : f.kind === "velocity" ? n(i, "scale", "Scale", f.scale, 0, 4, 0.05) + n(i, "offset", "Offset", f.offset, -127, 127, 1) : n(i, "beats", "Grid beats", f.beats, 0.0625, 4, 0.0625) + n(i, "strength", "Strength", f.strength, 0, 1, 0.05);
+        return `<div class="fw-analyze-buttons"><span>${f.kind === "transpose" ? "Transpose" : f.kind === "velocity" ? "Velocity" : "Quantize"}</span>${fields}<button type="button" class="fw-ibtn" data-mfx-remove="${i}">Remove</button></div>`;
+      })
+      .join("");
+  };
+  const setMidiFx = (next: MidiFx[]) => {
+    const hit = find(engine.get("document"));
+    if (!hit) return;
+    engine.dispatch({ type: "set-track-midi-fx", trackId: hit.track.id, midiFx: next });
+    const track = engine.get("document").tracks.find((t) => t.id === hit.track.id);
+    const clips = (track?.clips ?? []).filter((c) => c.notes?.length);
+    void (async () => {
+      for (const c of clips) await renderNotes(engine, hit.track.id, c.id, c.notes ?? []).catch(() => undefined);
+      if (notice && clips.length) setText(notice, `MIDI effects applied: ${clips.length} note clip${clips.length === 1 ? "" : "s"} re-rendered`);
+    })();
+  };
+  body.querySelector<HTMLButtonElement>('[data-midifx="add"]')?.addEventListener("click", () => {
+    const hit = find(engine.get("document"));
+    if (!hit) return;
+    const kind = body.querySelector<HTMLSelectElement>('[data-midifx="kind"]')?.value;
+    const fresh: MidiFx = kind === "velocity" ? { kind: "velocity", scale: 1, offset: 0 } : kind === "quantize" ? { kind: "quantize", beats: 0.5, strength: 1 } : { kind: "transpose", semitones: 0 };
+    setMidiFx([...(hit.track.midiFx ?? []), fresh]);
+  });
+  midiList?.addEventListener("change", (e) => {
+    const input = (e.target as HTMLElement).closest<HTMLInputElement>("[data-mfx-i]");
+    const hit = find(engine.get("document"));
+    if (!input || !hit) return;
+    const i = Number(input.dataset.mfxI);
+    const next = (hit.track.midiFx ?? []).map((f, j) => (j === i ? ({ ...f, [input.dataset.mfxP ?? ""]: Number(input.value) } as MidiFx) : f));
+    midiSig = "";
+    setMidiFx(next);
+  });
+  midiList?.addEventListener("click", (e) => {
+    const remove = (e.target as HTMLElement).closest<HTMLElement>("[data-mfx-remove]");
+    const hit = find(engine.get("document"));
+    if (!remove || !hit) return;
+    setMidiFx((hit.track.midiFx ?? []).filter((_, j) => j !== Number(remove.dataset.mfxRemove)));
   });
   const playlistTrackNow = () => engine.get("document").tracks.find((t) => t.id === playlistTrackId);
   body.querySelector<HTMLSelectElement>('[data-pl="pick"]')?.addEventListener("change", (e) => {
