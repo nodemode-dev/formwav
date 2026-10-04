@@ -1,5 +1,5 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
-import { documentLength, fadeCurve, nextFadeShape, sessionLength, type AutoPoint } from "../engine/document";
+import { documentLength, fadeCurve, nextFadeShape, sessionLength, type AutoPoint, type SessionView } from "../engine/document";
 import { icon as fcIcon } from "../vendor/formcut/icons";
 import { fetchPeaks, type PeakData } from "../io/media-client";
 import { gridEnabled, shuffleEnabled, snapSamples, spotEnabled } from "./grid";
@@ -46,6 +46,17 @@ export function setZoom(next: number): void {
   if (clamped === zoom) return;
   zoom = clamped;
   for (const listener of zoomListeners) listener();
+}
+
+// AU-34: the stage the lanes scroll in, kept for currentView
+let viewStage: HTMLElement | null = null;
+
+/** AU-34: the view to save with a session: the zoom factor, the lanes' left edge in seconds, the time selection. */
+export function currentView(engine: Engine): SessionView {
+  const doc = engine.get("document");
+  const sel = engine.get("selection");
+  const scroll = viewStage ? (viewStage.scrollLeft * samplesPerPixel(doc)) / doc.sampleRate : 0;
+  return { zoom, scrollSeconds: Math.round(scroll * 1000) / 1000, ...(sel && sel.end > sel.start ? { selection: { start: sel.start, end: sel.end } } : {}) };
 }
 
 export function onZoom(listener: () => void): void {
@@ -561,6 +572,19 @@ function drawAutoLane(row: HTMLElement, track: Track, param: AutoScale, spp: num
 
 export function mountLanes(host: HTMLElement, engine: Engine): void {
   const stage = host.querySelector<HTMLElement>(".fw-stage");
+  viewStage = stage;
+  // AU-34: a session opened with a saved view comes back to its zoom and left edge (the engine restores the selection)
+  engine.subscribe("view", (view) => {
+    if (!view) return;
+    if (typeof view.zoom === "number" && Number.isFinite(view.zoom)) setZoom(view.zoom);
+    const seconds = view.scrollSeconds;
+    if (stage && typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0) {
+      requestAnimationFrame(() => {
+        const doc = engine.get("document");
+        stage.scrollLeft = (seconds * doc.sampleRate) / samplesPerPixel(doc);
+      });
+    }
+  });
   const lanes = host.querySelector<HTMLElement>(".fw-lanes");
   if (!stage || !lanes) return;
 

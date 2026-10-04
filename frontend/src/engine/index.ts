@@ -1,4 +1,4 @@
-import { applyCommand, emptyDocument, followClips, type Command, type Selection, type SessionDoc } from "./document";
+import { applyCommand, emptyDocument, followClips, type Command, type Selection, type SessionDoc, type SessionView } from "./document";
 import { History, type HistoryState } from "./history";
 
 export type { Clip, Command, FrequencyBand, MediaRef, Marker, Selection, SessionDoc, Track } from "./document";
@@ -24,6 +24,8 @@ export interface EngineState {
   document: SessionDoc;
   history: HistoryState;
   selection: Selection | null;
+  /** AU-34: the view of the session last opened, for the lanes to apply (zoom and scroll); set only by loadDocument. */
+  view: SessionView | null;
 }
 
 export type EngineEvent = keyof EngineState;
@@ -40,6 +42,7 @@ export class Engine {
     document: emptyDocument(DEFAULT_SESSION_RATE),
     history: { canUndo: false, canRedo: false, undoDepth: 0, redoDepth: 0 },
     selection: null,
+    view: null,
   };
 
   private listeners: ListenerSets = {
@@ -48,6 +51,7 @@ export class Engine {
     document: new Set(),
     history: new Set(),
     selection: new Set(),
+    view: new Set(),
   };
 
   private readonly past = new History<SessionDoc>(HISTORY_LIMIT);
@@ -107,6 +111,11 @@ export class Engine {
     this.update("document", doc);
     this.update("history", this.past.state());
     this.setTransport({ playing: false, recording: false, positionSamples: 0, sampleRate: doc.sampleRate });
+    // AU-34: the session's saved view: its time selection (a previous session's would point at tracks no longer
+    // there, so none clears it), and the zoom and scroll for the lanes, which follow the view slot
+    const sel = doc.view?.selection;
+    this.setSelection(sel && sel.end > sel.start ? { start: sel.start, end: sel.end, trackIds: [], band: null } : null);
+    this.update("view", doc.view ?? null);
   }
 
   private commit(doc: SessionDoc): void {

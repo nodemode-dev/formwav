@@ -167,6 +167,22 @@ def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: st
                 markers.append({"id": f"aup-marker-{len(markers) + 1}", "at": int(round(a * rate)), "label": title})
     media_refs = {c["mediaId"]: media.media_info(c["mediaId"]) for t in tracks for c in t["clips"]}
     doc = {"sampleRate": rate, "tracks": tracks, "media": media_refs, "markers": markers, **({"regions": regions} if regions else {})}
+    # AU-34: the view the project was left in: Audacity's zoom in pixels a second over formwav's 100 at zoom 1 (held to
+    # its 0.25 to 16), its left edge h in seconds, its selection sel0 to sel1 (the same attributes in .aup and .aup3)
+    view: dict = {}
+    try:
+        zoom, h = float(root.get("zoom", "0")), float(root.get("h", "0"))
+        sel0, sel1 = float(root.get("sel0", "0")), float(root.get("sel1", "0"))
+    except ValueError:
+        zoom = h = sel0 = sel1 = 0.0
+    if zoom > 0:
+        view["zoom"] = round(max(0.25, min(16.0, zoom / 100.0)), 4)
+    if h > 0:
+        view["scrollSeconds"] = round(h, 3)
+    if sel1 > sel0:
+        view["selection"] = {"start": int(round(sel0 * rate)), "end": int(round(sel1 * rate))}
+    if view:
+        doc["view"] = view
     return {"name": project_name, "document": doc, "tracks": len(tracks), "clips": sum(len(t["clips"]) for t in tracks), "labels": len(markers) + len(regions)}
 
 

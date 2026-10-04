@@ -256,6 +256,8 @@ export interface SessionDoc {
   /** PT-42: the spatial format tracks are placed in: 5.1 (absent) or first-order ambisonics ("foa", AmbiX), which
    *  playback folds through two cardioids and Export writes as a four-channel AmbiX file. */
   spatialFormat?: "5.1" | "foa";
+  /** AU-34: the view saved with the session (see SessionView), applied when it is opened. */
+  view?: SessionView;
   /** Master fader in dB, applied after the buses; absent means 0 dB. */
   masterGainDb?: number;
   /** Realtime effects on the summed mix, before the master fader (Audacity's master stack). */
@@ -309,6 +311,15 @@ export interface Selection {
   end: number;
   trackIds: readonly string[];
   band: FrequencyBand | null;
+}
+
+/** AU-34: where a session was being looked at, saved with it (or as an imported Audacity project left it) and restored
+ *  when it opens, as Audacity reopens a project: the lanes' zoom factor, their left edge in seconds, and the time
+ *  selection in samples. Captured only when saving, so it is never part of undo or of a session's unsaved changes. */
+export interface SessionView {
+  zoom?: number;
+  scrollSeconds?: number;
+  selection?: { start: number; end: number };
 }
 
 export type Command =

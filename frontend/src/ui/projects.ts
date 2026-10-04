@@ -2,6 +2,7 @@ import type { Engine, SessionDoc } from "../engine";
 import type { Player } from "../audio/player";
 import { listProjects, openProject, RevisionConflict, saveProject, type ProjectSummary } from "../io/projects-client";
 import { delayedIndicator, patchList, setText } from "../vendor/nodemode/dom-stable";
+import { currentView } from "./lanes";
 
 function reason(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -68,7 +69,8 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       let base = known && known.name === name ? known.revision : 0;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const saved = await saveProject(name, doc, base);
+          // AU-34: the view goes with what is sent, not into the engine's document (so it is not an unsaved change)
+          const saved = await saveProject(name, { ...doc, view: currentView(engine) }, base);
           known = { name, revision: saved.revision };
           lastSaved = doc;
           return `Saved ${name}`;
