@@ -493,11 +493,16 @@ def media_remix(media_id: str, payload: dict) -> dict:
 
 
 @router.get("/media/{media_id}/notes")
-def media_notes(media_id: str) -> dict:
-    """PT-10: the media's notes (start, end, median pitch) and its pitch curve, for the note editor."""
+def media_notes(media_id: str, poly: bool = False) -> dict:
+    """PT-10: the media's notes (start, end, median pitch) and its pitch curve, for the note editor; with poly, the notes
+    inside its chords (services/polyphonic.py), several at once."""
     from ..services import effects
 
     try:
+        if poly:
+            from ..services import polyphonic
+
+            return polyphonic.find_notes(media_id)
         return effects.detect_notes(media_id)
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err
@@ -511,6 +516,11 @@ def media_retune_notes(media_id: str, payload: dict) -> dict:
     from ..services import effects
 
     try:
+        if payload.get("poly"):
+            # notes inside chords: each edit names its note by pitch as well as span ({"start", "end", "midi", "shift"})
+            from ..services import polyphonic
+
+            return polyphonic.move_notes(media_id, list(payload.get("notes") or []))
         return effects.retune_notes(media_id, payload.get("notes"), bool(payload.get("formants", True)), float(payload.get("glide", 30)))
     except KeyError as err:
         raise HTTPException(404, "no media with that id") from err

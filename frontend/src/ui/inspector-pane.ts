@@ -30,7 +30,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
   <div class="fw-insp-head" title="The clip's sung or played notes; drag one up or down to retune it (Melodyne's note editing)">Notes</div>
   <canvas class="fw-notes-canvas" data-notes width="512" height="160" aria-label="The clip's notes on a pitch grid; drag a note up or down to retune it a semitone at a time"></canvas>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-notes-act="find" title="Track the clip's pitch and show its notes">Find notes</button><button type="button" class="fw-ibtn" data-notes-act="apply" title="Retune the notes you moved, everything else left as it is, one undo step">Apply note changes</button><label class="fw-sam-opt" title="Keep the voice's character (its formants) where it was as the notes move"><input type="checkbox" data-notes-formants checked> Keep formants</label></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-notes-act="find" title="Track the clip's pitch and show its notes">Find notes</button><label class="fw-sam-opt" title="Find every note inside played chords, so one can be moved without the others (Melodyne's Direct Note Access)"><input type="checkbox" data-notes-poly> In chords</label><button type="button" class="fw-ibtn" data-notes-act="apply" title="Retune the notes you moved, everything else left as it is, one undo step">Apply note changes</button><label class="fw-sam-opt" title="Keep the voice's character (its formants) where it was as the notes move"><input type="checkbox" data-notes-formants checked> Keep formants</label></div>
   <div class="fw-insp-head" title="Pin a point in the clip's audio, then drag its marker on the clip to re-time the audio on either side (Pro Tools' warp markers)">Warp markers</div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-warp="add" title="Put a warp marker on the selected clip at the playhead">Add warp marker at playhead</button><button type="button" class="fw-ibtn" data-warp="clear" title="Remove the clip's warp markers and play its original timing">Clear warp</button></div>
   <div class="fw-insp-head">Draw samples</div>
@@ -345,7 +345,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   // canvas carries the notes and targets as data for checks.
   const notesCanvas = body.querySelector<HTMLCanvasElement>("[data-notes]");
   type EditNote = { start: number; end: number; midi: number; target: number };
-  let noteState: { mediaId: string; trackId: string; clipId: string; notes: EditNote[]; curve: [number, number][]; t0: number; t1: number; lo: number; hi: number } | null = null;
+  let noteState: { mediaId: string; trackId: string; clipId: string; notes: EditNote[]; curve: [number, number][]; t0: number; t1: number; lo: number; hi: number; poly?: boolean } | null = null;
   const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   const noteXY = (s: NonNullable<typeof noteState>, w: number, h: number) => ({
     x: (t: number) => ((t - s.t0) / Math.max(1e-6, s.t1 - s.t0)) * w,
@@ -400,7 +400,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
     if (act === "find") {
       setText(notice, "Finding the clip's notes...");
-      const res = await fetch(`/api/media/${hit.clip.mediaId}/notes`);
+      const poly = body.querySelector<HTMLInputElement>("[data-notes-poly]")?.checked === true;
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/notes${poly ? "?poly=1" : ""}`);
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown; notes?: { start: number; end: number; midi: number }[]; curve?: [number, number][] };
       if (!res.ok || !out.notes) {
         setText(notice, `Could not find notes: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
@@ -411,8 +412,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const notes = out.notes.filter((n) => n.end > t0 && n.start < t1).map((n) => ({ ...n, target: n.midi }));
       const pitches = notes.map((n) => n.midi);
       noteState = { mediaId: hit.clip.mediaId, trackId: hit.track.id, clipId: hit.clip.id, notes, curve: (out.curve ?? []).filter(([t]) => t >= t0 && t <= t1), t0, t1, lo: Math.floor(Math.min(...pitches, 60)) - 3, hi: Math.ceil(Math.max(...pitches, 60)) + 3 };
+      if (noteState) noteState.poly = poly;
       drawNotes();
-      setText(notice, notes.length ? `Found ${notes.length} note${notes.length === 1 ? "" : "s"}: drag one up or down to retune it` : "No notes found in this clip");
+      setText(notice, notes.length ? `Found ${notes.length} note${notes.length === 1 ? "" : "s"}${poly ? " in its chords" : ""}: drag one up or down to retune it` : "No notes found in this clip");
       return;
     }
     const s = noteState;
@@ -426,7 +428,11 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const res = await fetch(`/api/media/${s.mediaId}/retune-notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: moved.map((n) => ({ start: n.start, end: n.end, shift: n.target - n.midi })), formants }),
+      body: JSON.stringify(
+        s.poly
+          ? { poly: true, notes: moved.map((n) => ({ start: n.start, end: n.end, midi: n.midi, shift: n.target - n.midi })) }
+          : { notes: moved.map((n) => ({ start: n.start, end: n.end, shift: n.target - n.midi })), formants },
+      ),
     });
     const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
     if (!res.ok) {
@@ -436,7 +442,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     engine.dispatch({ type: "set-clip-media", trackId: s.trackId, clipId: s.clipId, media: out as unknown as MediaRef });
     noteState = null;
     drawNotes();
-    setText(notice, `Retuned ${moved.length} note${moved.length === 1 ? "" : "s"}${formants ? ", formants kept" : ""}; Find notes shows them now`);
+    setText(notice, s.poly ? `Moved ${moved.length} note${moved.length === 1 ? "" : "s"} inside the chord, the others kept; Find notes shows them now` : `Retuned ${moved.length} note${moved.length === 1 ? "" : "s"}${formants ? ", formants kept" : ""}; Find notes shows them now`);
   });
   notesCanvas?.addEventListener("pointerdown", (e) => {
     const s = noteState;
