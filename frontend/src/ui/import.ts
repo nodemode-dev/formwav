@@ -40,7 +40,18 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
       const doc = engine.get("document");
       const lower = file.name.toLowerCase();
       if (lower.endsWith(".aup")) throw new Error("zip the .aup together with its _data folder and import the zip");
-      if (lower.endsWith(".zip")) {
+      if (lower.endsWith(".aaf")) {
+        // PT-30: an AAF's timeline opens as the session, its embedded audio imported; linked audio is named, not reached
+        if (doc.tracks.length && !window.confirm(`Open the AAF ${file.name}? Unsaved changes to the current session will be lost.`)) {
+          final = "Kept the current session";
+        } else {
+          const res = await fetch("/api/projects/import-aaf", { method: "POST", body: file });
+          const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string; document?: SessionDoc; tracks?: number; clips?: number; missing?: string[] };
+          if (!res.ok || !out.document) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          engine.loadDocument(out.document);
+          final = `Opened the AAF ${out.name}: ${out.tracks} track${out.tracks === 1 ? "" : "s"}, ${out.clips} clip${out.clips === 1 ? "" : "s"}${out.missing?.length ? `; linked audio not found: ${out.missing.join(", ")}` : ""}`;
+        }
+      } else if (lower.endsWith(".zip")) {
         if (doc.tracks.length && !window.confirm(`Open the Audacity project ${file.name}? Unsaved changes to the current session will be lost.`)) {
           final = "Kept the current session";
         } else {

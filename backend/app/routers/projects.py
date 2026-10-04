@@ -17,6 +17,32 @@ async def import_audacity(request: Request) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/projects/import-aaf")
+async def import_aaf(request: Request) -> dict:
+    """PT-30: an AAF's timeline as tracks of clips, its embedded audio imported (services/aaf.py)."""
+    from ..services import aaf
+
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "the request carried no file")
+    try:
+        return aaf.import_aaf(data)
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
+@router.post("/projects/export-aaf")
+def export_aaf(document: dict = Body(...)) -> Response:
+    """PT-30: the session's timeline as an AAF with its audio embedded."""
+    from ..services import aaf
+
+    try:
+        data = aaf.export_aaf(document)
+    except (media.MediaError, KeyError) as err:
+        raise HTTPException(422, str(err)) from err
+    return Response(content=data, media_type="application/octet-stream", headers={"Content-Disposition": 'attachment; filename="formwav-session.aaf"'})
+
+
 @router.get("/projects")
 def list_projects() -> list[dict]:
     return projects.list_projects()

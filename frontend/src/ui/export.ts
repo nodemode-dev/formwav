@@ -23,7 +23,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     <option value="flac">FLAC, 24-bit lossless</option><option value="mp3">MP3, 320 kbps</option><option value="mp3-192">MP3, 192 kbps</option>
     <option value="ogg">OGG Vorbis</option><option value="m4a">M4A, AAC 256 kbps</option></select></label>
   <label class="fw-field fw-field-stack"><span>What</span><select data-x="what">
-    <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option><option value="preview">Streaming preview: add a track that sounds like the encoded file (MP3, OGG or M4A)</option></select></label>
+    <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option><option value="aaf">The timeline as AAF, for Pro Tools and Avid (audio embedded)</option><option value="preview">Streaming preview: add a track that sounds like the encoded file (MP3, OGG or M4A)</option></select></label>
   <label class="fw-field fw-field-stack" data-x="channels-row" hidden><span>Channel order</span><input type="text" data-x="channels" placeholder="Track order" title="Track numbers in channel order, such as 2,1,3 (a track may fill several channels); empty keeps track order" aria-label="Channel order, track numbers separated by commas"></label>
   <label class="fw-field fw-field-stack" data-x="platform-row" hidden><span>Platform loudness</span><select data-x="platform">
     <option value="">None: the codec only</option><option value="spotify">Spotify: -14 LUFS, lifts quiet mixes only to -1 dB true peak</option><option value="youtube">YouTube: -14 LUFS, turns loud mixes down only</option><option value="apple">Apple Music: -16 LUFS, modelled as turning down only (sources disagree on lifting)</option></select></label>
@@ -115,6 +115,24 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
   });
   dialog.addEventListener("close", () => {
     if (dialog.returnValue !== "export") return;
+    if (dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value === "aaf") {
+      // PT-30: the timeline as an AAF, its audio embedded, for Pro Tools and Avid
+      void (async () => {
+        const res = await fetch("/api/projects/export-aaf", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(engine.get("document")) });
+        if (!res.ok) {
+          const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
+          window.alert(`Could not export the AAF: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+          return;
+        }
+        const url = URL.createObjectURL(await res.blob());
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "formwav-session.aaf";
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      })();
+      return;
+    }
     const format = dialog.querySelector<HTMLSelectElement>('[data-x="format"]')?.value ?? "wav";
     const what = (dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value ?? "mix") as "mix" | "stems" | "multichannel" | "preview";
     choice = { format, what };

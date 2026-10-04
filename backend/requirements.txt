@@ -2,3 +2,4 @@ fastapi==0.115.14
 uvicorn[standard]==0.39.0
 numpy==2.5.2
 maturin==1.15.0
+pyaaf2==1.7.1
