@@ -210,6 +210,17 @@ impl Denoiser {
         })
     }
 
+    /// RX-67: new reduction and sensitivity, set as `design` sets them, with the learned noise floors, envelopes and
+    /// band gains kept, so a plugin's knob can move while it plays without the noise being learned again.
+    pub fn retune(&mut self, reduction_db: f32, sensitivity_db: f32) {
+        if reduction_db.is_finite() {
+            self.floor = 10f32.powf(-reduction_db.clamp(0.0, 40.0) / 20.0);
+        }
+        if sensitivity_db.is_finite() {
+            self.over = 10f32.powf(sensitivity_db.clamp(-6.0, 12.0) / 10.0);
+        }
+    }
+
     #[inline]
     pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
         self.analyse(l, r);

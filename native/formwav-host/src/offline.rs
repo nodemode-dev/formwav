@@ -243,12 +243,18 @@ pub fn process(format: &str, plugin: &Path, input: &Audio, tail_s: f64, values: 
 
 unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out: &mut [Vec<f32>], values: &[(u32, f64)]) -> Result<(), String> {
     let param_events = crate::params::ClapEvents::new(values);
-    let (lib, entry) = clap_open(path)?;
+    // a bundle's other plugins by index, `file.clap#1`, as LADSPA libraries are named (RX-67: formwav's bundle holds two)
+    let text = path.to_string_lossy();
+    let (path, index) = match text.rsplit_once('#') {
+        Some((file, n)) if n.parse::<u32>().is_ok() => (Path::new(file).to_path_buf(), n.parse::<u32>().unwrap_or(0)),
+        _ => (path.to_path_buf(), 0),
+    };
+    let (lib, entry) = clap_open(&path)?;
     let factory = ((*entry).get_factory.ok_or("no get_factory")?)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
     if factory.is_null() {
         return Err("no plugin factory".into());
     }
-    let desc = ((*factory).get_plugin_descriptor.ok_or("no descriptors")?)(factory, 0);
+    let desc = ((*factory).get_plugin_descriptor.ok_or("no descriptors")?)(factory, index);
     if desc.is_null() {
         return Err("the file holds no plugin".into());
     }
