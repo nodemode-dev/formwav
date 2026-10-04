@@ -133,6 +133,9 @@ pub struct Player {
     fold_51: bool,
     /// The fold's six-channel scratch, kept between calls so a warm player renders without allocating.
     scratch_51: [Vec<f32>; 6],
+    /// AP-05: sources held as a window rather than whole (a file larger than memory): by source id, its true length,
+    /// the window's length, and the contiguous range of frames it holds now.
+    windows: HashMap<u32, SourceWindow>,
     /// AU-37: the instrument played live (a MIDI input, the on-screen keys), made on its first note.
     live: Option<crate::synth::Synth>,
     /// Its block's scratch, kept between calls so a warm player renders without allocating.
@@ -158,11 +161,45 @@ impl Player {
 
     /// A source of `frames` silent frames, filled later by `write_source` while it can already play.
     pub fn alloc_source(&mut self, id: u32, sample_rate: u32, channels: usize, frames: usize) {
+        self.windows.remove(&id);
         self.sources.insert(id, AudioBuffer { sample_rate, channels: vec![vec![0.0; frames]; channels.max(1)] });
     }
 
-    /// Interleaved frames written into a source from `offset`, clipped to its length; returns the frames written.
+    /// AP-05: a source `frames` long held as a window of `window` frames (a ring): only the range written most recently,
+    /// up to the window's length, plays; everywhere else is silence until it is written. A window as long as the source
+    /// or longer is a whole source.
+    pub fn alloc_source_window(&mut self, id: u32, sample_rate: u32, channels: usize, frames: usize, window: usize) {
+        if window == 0 || window >= frames {
+            return self.alloc_source(id, sample_rate, channels, frames);
+        }
+        self.sources.insert(id, AudioBuffer { sample_rate, channels: vec![vec![0.0; window]; channels.max(1)] });
+        self.windows.insert(id, SourceWindow { total: frames, len: window, lo: 0, hi: 0 });
+    }
+
+    /// Interleaved frames written into a source from `offset`, clipped to its length; returns the frames written. A
+    /// windowed source takes them into its ring: a write carrying on from the range it holds extends it (the oldest
+    /// frames giving way), any other (a seek) starts a fresh range there.
     pub fn write_source(&mut self, id: u32, offset: usize, interleaved: &[f32]) -> usize {
+        if let Some(w) = self.windows.get_mut(&id) {
+            let Some(buf) = self.sources.get_mut(&id) else { return 0 };
+            let channels = buf.channels.len();
+            if channels == 0 || offset >= w.total {
+                return 0;
+            }
+            let n = (interleaved.len() / channels).min(w.total - offset);
+            if offset != w.hi {
+                w.lo = offset;
+                w.hi = offset;
+            }
+            for (c, channel) in buf.channels.iter_mut().enumerate() {
+                for i in 0..n {
+                    channel[(offset + i) % w.len] = interleaved[i * channels + c];
+                }
+            }
+            w.hi = offset + n;
+            w.lo = w.lo.max(w.hi.saturating_sub(w.len));
+            return n;
+        }
         let Some(buf) = self.sources.get_mut(&id) else { return 0 };
         let channels = buf.channels.len();
         let frames = buf.frames();
@@ -760,6 +797,9 @@ impl Player {
             let Some(src) = self.sources.get(&clip.source) else { return };
             let Some(l) = src.channels.first() else { return };
             let r = src.channels.get(1).unwrap_or(l);
+            // AP-05: a windowed source's true length, and the range its ring holds
+            let window = self.windows.get(&clip.source).copied();
+            let total = window.map_or(l.len(), |w| w.total);
             let mut chain = fx.get_mut(index).filter(|c| !c.is_empty());
             let a = from.max(clip.start);
             let b = to.min(clip.start + clip.length);
@@ -774,7 +814,7 @@ impl Player {
             for t in a..b {
                 let k = t - clip.start;
                 let s = (clip.source_in + k) as usize;
-                if s >= l.len() {
+                if s >= total {
                     break;
                 }
                 let mut fade = 1.0f32;
@@ -797,7 +837,11 @@ impl Player {
                         }
                     }
                 }
-                let (mut xl, mut xr) = (l[s], r[s]);
+                let (mut xl, mut xr) = match window {
+                    None => (l[s], r[s]),
+                    Some(w) if s >= w.lo && s < w.hi => (l[s % w.len], r[s % w.len]),
+                    Some(_) => (0.0, 0.0),
+                };
                 if let Some(stages) = chain.as_deref_mut() {
                     for f in stages.iter_mut() {
                         (xl, xr) = f.process(xl, xr);
@@ -926,9 +970,53 @@ impl Player {
     }
 }
 
+/// AP-05: a windowed source's state: its true length, the ring's length, and the contiguous range [lo, hi) it holds.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SourceWindow {
+    pub total: usize,
+    pub len: usize,
+    pub lo: usize,
+    pub hi: usize,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// AP-05: a windowed source plays the range it holds (through its ring) and silence elsewhere, its oldest frames
+    /// giving way as writes carry on, a jump starting a fresh range, and its true length still ending the clip.
+    #[test]
+    fn a_windowed_source_plays_the_range_it_holds() {
+        let mut p = Player::new();
+        p.set_rate(48000.0);
+        p.alloc_source_window(1, 48000, 1, 10_000, 1000);
+        assert_eq!(p.sources[&1].frames(), 1000, "only the window is held");
+        let ramp = |from: usize, n: usize| -> Vec<f32> { (from..from + n).map(|f| f as f32 / 10_000.0).collect() };
+        for start in (0..2500).step_by(500) {
+            assert_eq!(p.write_source(1, start, &ramp(start, 500)), 500);
+        }
+        p.add_clip(PlayClip { source: 1, start: 0, source_in: 0, length: 10_000, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 1, gain_env: 0, pan_env: 0 });
+        let play = |p: &mut Player, n: usize| {
+            p.seek(0);
+            let (mut l, mut r) = (vec![0f32; n], vec![0f32; n]);
+            for (a, b) in l.chunks_mut(128).zip(r.chunks_mut(128)) {
+                p.render(a, b);
+            }
+            (l, r)
+        };
+        let (l, r) = play(&mut p, 3000);
+        let g = pan_gains(0.0).0;
+        // frames 1500..2500 held (the last 1000 written), 0..1500 given way, 2500.. not yet written
+        assert!(l[..1500].iter().all(|v| *v == 0.0), "the frames that gave way are silent");
+        assert!((1500..2500).all(|f| (l[f] - f as f32 / 10_000.0 * g).abs() < 1e-6), "the held range plays");
+        assert!(l[2500..].iter().all(|v| *v == 0.0) && l == r, "not yet written is silent");
+        // a jump (a seek) starts a fresh range there
+        assert_eq!(p.write_source(1, 7000, &ramp(7000, 500)), 500);
+        let (l, _) = play(&mut p, 10_000);
+        assert!(l[1500..2500].iter().all(|v| *v == 0.0), "the old range is gone after a jump");
+        assert!((7000..7500).all(|f| (l[f] - f as f32 / 10_000.0 * g).abs() < 1e-6), "the fresh range plays");
+        assert_eq!(p.write_source(1, 9800, &ramp(9800, 500)), 200, "writes stop at the true length");
+    }
 
     #[test]
     fn a_streamed_source_plays_what_was_written_and_silence_elsewhere() {

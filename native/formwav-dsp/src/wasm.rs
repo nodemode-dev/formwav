@@ -45,6 +45,20 @@ pub unsafe extern "C" fn fw_source_alloc(player: *mut Player, id: u32, rate: u32
     frames
 }
 
+/// AP-05: a source `frames` long held as a window of `window` frames (a file larger than memory), filled by
+/// `fw_source_write` around the playhead; returns the frames held, or -1.
+///
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_source_alloc_window(player: *mut Player, id: u32, rate: u32, channels: u32, frames: f64, window: f64) -> f64 {
+    if !(frames >= 0.0) || !(window >= 0.0) || channels == 0 || channels > 32 {
+        return -1.0;
+    }
+    (*player).alloc_source_window(id, rate, channels as usize, frames as usize, window as usize);
+    window.min(frames)
+}
+
 /// Interleaved f32 frames written into a source from `offset`; returns the frames written.
 #[no_mangle]
 pub unsafe extern "C" fn fw_source_write(player: *mut Player, id: u32, offset: f64, ptr: *const f32, len: usize) -> f64 {
