@@ -325,6 +325,13 @@ html, body, #app { height: 100%; }
   border-bottom: 1px solid var(--border-color);
 }
 
+/* AU-13: the ruler's paint canvas, placed by the script over the visible window; the canvas under it takes the clicks */
+.fw-ruler-paint {
+  position: absolute;
+  inset-block: 0;
+  pointer-events: none;
+}
+
 .fw-ruler-corner {
   position: sticky;
   left: 0;

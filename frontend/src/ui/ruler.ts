@@ -19,10 +19,13 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
   if (!stage || !lanes) return;
   const ruler = document.createElement("div");
   ruler.className = "fw-ruler";
-  ruler.innerHTML = `<div class="fw-ruler-corner"></div><canvas class="fw-ruler-canvas" aria-label="Timeline: click to move the playhead"></canvas>`;
+  // AU-13: the first canvas spans the timeline and takes the clicks (it holds no pixels); the second, only the visible
+  // window wide, paints, so a timeline zoomed to single samples (millions of pixels) never needs a canvas that big
+  ruler.innerHTML = `<div class="fw-ruler-corner"></div><canvas class="fw-ruler-canvas" aria-label="Timeline: click to move the playhead"></canvas><canvas class="fw-ruler-canvas fw-ruler-paint" aria-hidden="true"></canvas>`;
   stage.insertBefore(ruler, lanes);
   const corner = ruler.firstElementChild as HTMLElement;
-  const canvas = ruler.lastElementChild as HTMLCanvasElement;
+  const canvas = ruler.children[1] as HTMLCanvasElement;
+  const paint = ruler.children[2] as HTMLCanvasElement;
   let lastWidth = "";
 
   const draw = () => {
@@ -35,17 +38,25 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
       lastWidth = cssWidth;
       canvas.style.width = cssWidth;
     }
+    if (canvas.width !== 1) canvas.width = 1;
+    if (canvas.height !== 1) canvas.height = 1;
     const dpr = window.devicePixelRatio || 1;
-    const w = Math.max(1, Math.round(width * dpr));
+    const left = Math.min(stage.scrollLeft, Math.max(0, width - 1));
+    const view = Math.max(1, Math.min(width - left, stage.clientWidth - corner.offsetWidth));
+    const paintLeft = `${corner.offsetWidth + left}px`;
+    const paintWidth = `${view}px`;
+    if (paint.style.left !== paintLeft) paint.style.left = paintLeft;
+    if (paint.style.width !== paintWidth) paint.style.width = paintWidth;
+    const w = Math.max(1, Math.round(view * dpr));
     const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
-    if (canvas.width !== w) canvas.width = w;
-    if (canvas.height !== h) canvas.height = h;
-    const ctx = canvas.getContext("2d");
+    if (paint.width !== w) paint.width = w;
+    if (paint.height !== h) paint.height = h;
+    const ctx = paint.getContext("2d");
     if (!ctx) return;
     const style = getComputedStyle(canvas);
     const height = h / dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
+    ctx.setTransform(dpr, 0, 0, dpr, -left * dpr, 0);
+    ctx.clearRect(left, 0, view, height);
     ctx.font = `${style.fontSize} ${style.fontFamily}`;
     ctx.textBaseline = "top";
 
@@ -60,7 +71,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
       const barPx = beatPx * tempo.beatsPerBar;
       let every = 1;
       while (every * barPx < 48) every *= 2;
-      for (let b = 0; b * beatPx <= width; b++) {
+      for (let b = Math.max(0, Math.floor(left / beatPx) - 1); b * beatPx <= Math.min(width, left + view + beatPx); b++) {
         const x = Math.round(b * beatPx);
         const inBar = b % tempo.beatsPerBar;
         const barIndex = Math.floor(b / tempo.beatsPerBar);
@@ -76,7 +87,8 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
       const step = labelStep(pxPerSecond);
       const minor = step / 5;
       const drawMinor = minor * pxPerSecond >= MIN_MINOR_PX;
-      for (let i = 0; i * minor * pxPerSecond <= width; i++) {
+      const tickPx = minor * pxPerSecond;
+      for (let i = Math.max(0, Math.floor((left - 5 * tickPx) / tickPx)); i * tickPx <= Math.min(width, left + view + tickPx); i++) {
         const major = i % 5 === 0;
         if (!major && !drawMinor) continue;
         const x = Math.round(i * minor * pxPerSecond);
@@ -225,6 +237,19 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
   });
   engine.subscribe("document", draw);
   onZoom(draw);
+  // AU-13: the paint canvas covers only what is in view, so scrolling repaints it (once a frame)
+  let scrollRaf = 0;
+  stage.addEventListener(
+    "scroll",
+    () => {
+      if (!scrollRaf)
+        scrollRaf = requestAnimationFrame(() => {
+          scrollRaf = 0;
+          draw();
+        });
+    },
+    { passive: true },
+  );
   document.addEventListener("nm:ui-settings-changed", draw);
   document.addEventListener("fw-bars-changed", draw);
   window.addEventListener("resize", draw);
