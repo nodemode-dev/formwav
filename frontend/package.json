@@ -1,7 +1,7 @@
 {
   "name": "formwav-frontend",
   "private": true,
-  "version": "1.76.0",
+  "version": "1.77.0",
   "description": "formwav · local-first audio editor in the form family",
   "license": "Apache-2.0",
   "type": "module",
