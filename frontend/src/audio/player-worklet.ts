@@ -31,6 +31,7 @@ interface CoreExports {
   fw_take_peaks(player: number, out: number): void;
   fw_set_places(player: number, ptr: number, count: number): void;
   fw_set_fold_51(player: number, on: number): void;
+  fw_set_surround_format(player: number, format: number): void;
   fw_take_peaks_51(player: number, out: number): void;
   fw_take_correlation(player: number): number;
   fw_take_track_peaks(player: number, out: number, maxTracks: number): number;
@@ -80,7 +81,7 @@ export type WorkletMessage =
   | { type: "load"; id: number; bytes: ArrayBuffer }
   | { type: "alloc"; id: number; rate: number; channels: number; frames: number }
   | { type: "write"; id: number; offset: number; data: Float32Array }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean; surroundFormat?: number }
   | { type: "play" }
   | { type: "speed"; value: number }
   | { type: "rate-ratio"; value: number }
@@ -271,6 +272,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
         const placeBytes = Math.max(4, records.length * 4);
         const placeAt = core.fw_alloc(placeBytes);
         new Float32Array(core.memory.buffer, placeAt, records.length).set(records);
+        core.fw_set_surround_format(this.player, msg.surroundFormat === 1 ? 1 : 0);
         core.fw_set_places(this.player, placeAt, records.length / 7);
         core.fw_free(placeAt, placeBytes);
         core.fw_set_fold_51(this.player, records.length ? 1 : 0);

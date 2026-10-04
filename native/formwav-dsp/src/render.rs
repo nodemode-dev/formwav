@@ -133,7 +133,15 @@ pub struct Player {
     fold_51: bool,
     /// The fold's six-channel scratch, kept between calls so a warm player renders without allocating.
     scratch_51: [Vec<f32>; 6],
+    /// PT-42: the bus's format: SURROUND_51, or SURROUND_FOA (first-order ambisonics in the first four slots, AmbiX:
+    /// W Y Z X in ACN order with SN3D gains; no LFE low-pass, unplaced clips encoded at the front, folded for
+    /// listening through two virtual cardioids facing left and right).
+    surround_format: u8,
 }
+
+/// The six-channel bus's formats.
+pub const SURROUND_51: u8 = 0;
+pub const SURROUND_FOA: u8 = 1;
 
 impl Player {
     pub fn new() -> Self {
@@ -458,9 +466,18 @@ impl Player {
                 self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], from, to, index);
             }
             self.mix_buses(&mut fx, &mut sl[..len], &mut sr[..len], from);
-            for j in 0..len {
-                out[0][done + j] += sl[j];
-                out[1][done + j] += sr[j];
+            if self.surround_format == SURROUND_FOA {
+                // PT-42: unplaced sound encoded straight ahead (W and X at its level, Y and Z silent)
+                for j in 0..len {
+                    let m = 0.5 * (sl[j] + sr[j]);
+                    out[0][done + j] += m;
+                    out[3][done + j] += m;
+                }
+            } else {
+                for j in 0..len {
+                    out[0][done + j] += sl[j];
+                    out[1][done + j] += sr[j];
+                }
             }
             let mut groups = std::mem::take(&mut self.surround_groups);
             for (clips, gains, lfe) in groups.iter_mut() {
@@ -469,8 +486,15 @@ impl Player {
                 for &index in clips.iter() {
                     self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], from, to, index);
                 }
+                let foa = self.surround_format == SURROUND_FOA;
                 for j in 0..len {
                     let m = 0.5 * (sl[j] + sr[j]);
+                    if foa {
+                        for k in 0..6 {
+                            out[k][done + j] += gains[k] * m;
+                        }
+                        continue;
+                    }
                     for k in [0usize, 1, 2, 4, 5] {
                         out[k][done + j] += gains[k] * m;
                     }
@@ -533,6 +557,11 @@ impl Player {
         self.fold_51
     }
 
+    /// PT-42: the bus's format, SURROUND_51 or SURROUND_FOA (any other value is taken as 5.1).
+    pub fn set_surround_format(&mut self, format: u8) {
+        self.surround_format = if format == SURROUND_FOA { SURROUND_FOA } else { SURROUND_51 };
+    }
+
     /// The six-channel bus folded to stereo by ITU-R BS.775's downmix (Lo = L + 0.707 C + 0.707 Ls, Ro likewise with
     /// R and Rs, the LFE left out), the stereo meters then taken on the fold as the stereo render takes them.
     fn render_folded(&mut self, left: &mut [f32], right: &mut [f32]) {
@@ -548,10 +577,18 @@ impl Player {
             let mut bus: [&mut [f32]; 6] = [&mut c0[..n], &mut c1[..n], &mut c2[..n], &mut c3[..n], &mut c4[..n], &mut c5[..n]];
             self.render_surround(&mut bus);
         }
-        let k = std::f32::consts::FRAC_1_SQRT_2;
-        for i in 0..n {
-            left[i] = scratch[0][i] + k * scratch[2][i] + k * scratch[4][i];
-            right[i] = scratch[1][i] + k * scratch[2][i] + k * scratch[5][i];
+        if self.surround_format == SURROUND_FOA {
+            // PT-42: two virtual cardioids facing left and right (SN3D: a source to the left has Y equal to W)
+            for i in 0..n {
+                left[i] = 0.5 * (scratch[0][i] + scratch[1][i]);
+                right[i] = 0.5 * (scratch[0][i] - scratch[1][i]);
+            }
+        } else {
+            let k = std::f32::consts::FRAC_1_SQRT_2;
+            for i in 0..n {
+                left[i] = scratch[0][i] + k * scratch[2][i] + k * scratch[4][i];
+                right[i] = scratch[1][i] + k * scratch[2][i] + k * scratch[5][i];
+            }
         }
         self.scratch_51 = scratch;
         for i in 0..n {
@@ -1023,5 +1060,45 @@ mod tests {
         assert!(six_peaks[2] > 0.24 && six_peaks[4] > 0.24 && six_peaks[5] == 0.0, "the six peaks are kept while folding");
         let (pl, pr) = folded.take_peaks();
         assert!(pl > 0.0 && pr > 0.0, "the stereo peaks are taken on the fold");
+    }
+
+    /// PT-42: in first-order ambisonics (AmbiX: W Y Z X, SN3D) a source to the left lands in W and Y, one overhead
+    /// in W and Z, an unplaced one straight ahead in W and X with no low-pass on X; folded, the left source is heard
+    /// on the left alone (the right cardioid's null faces it) and the overhead and front ones evenly.
+    #[test]
+    fn the_ambisonic_format_encodes_by_direction_and_folds_through_two_cardioids() {
+        let rate = 48000usize;
+        let tone = |hz: f32| (0..rate).map(|i| 0.25 * (2.0 * std::f32::consts::PI * hz * i as f32 / rate as f32).sin()).collect::<Vec<f32>>();
+        let session = |fold: bool| {
+            let mut p = Player::new();
+            p.set_rate(rate as f32);
+            for (id, hz) in [(1u32, 1000.0f32), (2, 330.0), (3, 3000.0)] {
+                p.load_source(id, AudioBuffer { sample_rate: rate as u32, channels: vec![tone(hz)] });
+                p.add_clip(PlayClip { source: id, start: 0, source_in: 0, length: rate as u64, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 0, gain_env: 0, pan_env: 0 });
+            }
+            p.set_surround_format(SURROUND_FOA);
+            p.set_places(&[Some([1.0, 1.0, 0.0, 0.0, 0.0, 0.0]), None, Some([1.0, 0.0, 1.0, 0.0, 0.0, 0.0])]);
+            p.set_fold_51(fold);
+            p
+        };
+        let mut p = session(false);
+        let mut chans: Vec<Vec<f32>> = (0..6).map(|_| vec![0.0f32; rate]).collect();
+        {
+            let [c0, c1, c2, c3, c4, c5] = &mut chans[..] else { unreachable!() };
+            let mut out: [&mut [f32]; 6] = [&mut c0[..], &mut c1[..], &mut c2[..], &mut c3[..], &mut c4[..], &mut c5[..]];
+            p.render_surround(&mut out);
+        }
+        let (a, b, c) = (tone(1000.0), tone(330.0), tone(3000.0));
+        let worst = |x: &[f32], y: &dyn Fn(usize) -> f32| (0..rate).map(|i| (x[i] - y(i)).abs()).fold(0.0f32, f32::max);
+        assert!(worst(&chans[0], &|i| a[i] + b[i] + c[i]) < 1e-6, "W holds every source at its level");
+        assert!(worst(&chans[1], &|i| a[i]) < 1e-6, "Y holds the source to the left");
+        assert!(worst(&chans[2], &|i| c[i]) < 1e-6, "Z holds the source overhead");
+        assert!(worst(&chans[3], &|i| b[i]) < 1e-6, "X holds the unplaced source ahead, not low-passed");
+        assert!(chans[4].iter().chain(&chans[5]).all(|v| *v == 0.0), "the last two slots stay empty");
+        let mut folded = session(true);
+        let (mut left, mut right) = (vec![0.0f32; rate], vec![0.0f32; rate]);
+        folded.render(&mut left, &mut right);
+        assert!(worst(&left, &|i| a[i] + 0.5 * b[i] + 0.5 * c[i]) < 1e-6, "the left cardioid hears the left source whole, the others at half");
+        assert!(worst(&right, &|i| 0.5 * b[i] + 0.5 * c[i]) < 1e-6, "the right cardioid's null faces the left source");
     }
 }

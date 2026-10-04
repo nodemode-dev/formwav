@@ -198,8 +198,10 @@ def render(doc: object) -> dict:
     # in playback, so the stereo mix and the 5.1 export's fold-down are the same computation
     from .surround import places_for
 
-    places = places_for(doc, owners) if isinstance(doc, dict) and doc.get("surroundFold") else []
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places))
+    # PT-42: in the session's format, the 5.1 bus or first-order ambisonics (folded through two cardioids)
+    spatial = 1 if isinstance(doc, dict) and doc.get("spatialFormat") == "foa" else 0
+    places = places_for(doc, owners, spatial) if isinstance(doc, dict) and doc.get("surroundFold") else []
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial)
     frames = max(1, end)
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:

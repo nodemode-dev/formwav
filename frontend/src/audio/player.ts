@@ -3,7 +3,7 @@ import { FADE_SHAPES, type TrackFx } from "../engine/document";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
 import { NativeNode, nativeChoice } from "./native-node";
-import { surroundGains } from "./surround";
+import { foaGains, surroundGains } from "./surround";
 
 const CORE_URL = "/core/formwav_dsp.wasm";
 
@@ -14,6 +14,8 @@ export interface ClipPlan {
   /** PT-38, AA-11: placed clips as records of seven (index, then speaker gains), and whether the core folds its bus. */
   places?: number[];
   fold?: boolean;
+  /** PT-42: the bus's format, 0 for 5.1 and 1 for first-order ambisonics. */
+  surroundFormat?: number;
   buses: WorkletBus[];
   /** Master fader in dB (0 turns the master stage off). */
   masterDb: number;
@@ -190,8 +192,11 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
     // PT-38, AA-11: a session hearing its 5.1 as a fold-down gives the core each placed clip's speaker gains, and the
     // core plays its six-channel bus folded to stereo (the engine's stereo mix does the same)
-    const place = doc.surroundFold && track.surround ? surroundGains(track.surround.x, track.surround.y) : null;
-    const lfeGain = track.surround?.lfeDb !== undefined && track.surround.lfeDb > -80 ? 10 ** (track.surround.lfeDb / 20) : 0;
+    const s = track.surround;
+    const lfeGain = s?.lfeDb !== undefined && s.lfeDb > -80 ? 10 ** (s.lfeDb / 20) : 0;
+    const g = s && doc.spatialFormat !== "foa" ? surroundGains(s.x, s.y) : null;
+    // PT-42: an ambisonic session encodes each placed track by direction and elevation (W Y Z X, the last two slots empty)
+    const record = !doc.surroundFold || !s ? null : g ? [g.L, g.R, g.C, lfeGain, g.Ls, g.Rs] : [...foaGains(s.x, s.y, s.el ?? 0), 0, 0];
     for (const clip of track.clips) {
       // A pitched clip plays its derived render (non-destructive pitch; same length as the original).
       const playId = clip.pitchMediaId && doc.media[clip.pitchMediaId] ? clip.pitchMediaId : clip.mediaId;
@@ -219,7 +224,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         bus,
         track: doc.tracks.indexOf(track) + 1,
       });
-      if (place) places.push(clips.length - 1, place.L, place.R, place.C, lfeGain, place.Ls, place.Rs);
+      if (record) places.push(clips.length - 1, ...record);
       // PT-18, post-fader sends: the clip again, into the send's bus at the send level, with its own insert state and
       // envelopes, not metered as the track (track 0)
       const main = clips[clips.length - 1];
@@ -231,7 +236,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       end = Math.max(end, clip.start + clip.length);
     }
   }
-  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0, places, fold: !!doc.surroundFold && places.length > 0 };
+  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0, places, fold: !!doc.surroundFold && places.length > 0, surroundFormat: doc.spatialFormat === "foa" ? 1 : 0 };
 }
 
 function send(node: AudioWorkletNode, message: WorkletMessage, transfer: Transferable[] = []): void {
@@ -497,7 +502,7 @@ export class Player {
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true, places: this.lastPlan.places, fold: this.lastPlan.fold });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true, places: this.lastPlan.places, fold: this.lastPlan.fold, surroundFormat: this.lastPlan.surroundFormat });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
@@ -731,7 +736,7 @@ export class Player {
     const node = await makeNode(ctx, await this.core());
     await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter, streamInfo(doc, id, 0), true)));
     const plan = planClips(doc, sources);
-    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack, timeTrackLog: doc.timeTrackLog === true, places: plan.places, fold: plan.fold });
+    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack, timeTrackLog: doc.timeTrackLog === true, places: plan.places, fold: plan.fold, surroundFormat: plan.surroundFormat });
     send(node, { type: "play" });
     await request(node, { type: "seek", position: 0 }, (r) => r.type === "position");
     const rendered = await ctx.startRendering();

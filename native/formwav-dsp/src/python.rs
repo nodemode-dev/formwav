@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -29,6 +29,7 @@ fn render<'py>(
     comps: Vec<(usize, usize, f32, f32, f32, f32, f32)>,
     places: Vec<(usize, [f32; 6])>,
     fold: bool,
+    surround_format: u8,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let n_clips = clips.len();
     let mut player = Player::new();
@@ -85,6 +86,7 @@ fn render<'py>(
                 per_clip[index] = Some(gains);
             }
         }
+        player.set_surround_format(surround_format);
         player.set_places(&per_clip);
         if fold {
             // the stereo mix heard as the 5.1 bus folded to stereo, as playback hears it: the stereo render below folds

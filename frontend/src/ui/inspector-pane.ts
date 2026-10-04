@@ -81,7 +81,7 @@ const BODY = `
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
-  <div class="fw-analyze-buttons" title="Where this track sits in a 5.1 export: left to right and back to front from -1 to 1 (front centre is 0 and 1), and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback stays stereo for now"><label class="fw-sam-opt"><input type="checkbox" data-sur="on"> 5.1 position</label><label class="fw-sam-opt"><span>Left to right</span><input type="number" min="-1" max="1" step="0.05" value="0" data-sur="x"></label><label class="fw-sam-opt"><span>Back to front</span><input type="number" min="-1" max="1" step="0.05" value="1" data-sur="y"></label><label class="fw-sam-opt"><span>LFE dB</span><input type="number" min="-80" max="10" step="1" value="-80" data-sur="lfe"></label><label class="fw-sam-opt" title="Hear the session's 5.1 as an ITU stereo fold-down (centre and surrounds at -3 dB), in playback and in the stereo mix export; off, the 5.1 position shapes only the 5.1 export"><input type="checkbox" data-sur-fold> Hear the fold-down</label></div>
+  <div class="fw-analyze-buttons" title="Where this track sits in a 5.1 export: left to right and back to front from -1 to 1 (front centre is 0 and 1), and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback stays stereo for now"><label class="fw-sam-opt"><input type="checkbox" data-sur="on"> 5.1 position</label><label class="fw-sam-opt"><span>Left to right</span><input type="number" min="-1" max="1" step="0.05" value="0" data-sur="x"></label><label class="fw-sam-opt"><span>Back to front</span><input type="number" min="-1" max="1" step="0.05" value="1" data-sur="y"></label><label class="fw-sam-opt"><span>LFE dB</span><input type="number" min="-80" max="10" step="1" value="-80" data-sur="lfe"></label><label class="fw-sam-opt" title="Elevation in degrees, for ambisonics: 90 overhead, -90 below (5.1 has no height and ignores it)"><span>Elev°</span><input type="number" min="-90" max="90" step="5" value="0" data-sur="el"></label><label class="fw-sam-opt" title="The session's spatial format: 5.1 speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for 360 video and binaural or speaker decoding later)"><span>Format</span><select data-sur-format><option value="5.1">5.1</option><option value="foa">Ambisonics (FOA)</option></select></label><label class="fw-sam-opt" title="Hear the session's 5.1 as an ITU stereo fold-down (centre and surrounds at -3 dB), in playback and in the stereo mix export; off, the 5.1 position shapes only the 5.1 export"><input type="checkbox" data-sur-fold> Hear the fold-down</label></div>
   <canvas class="fw-surround-pad" data-sur-pad width="168" height="168" aria-label="The track's place in the 5.1 room: drag the dot; front is up, the five speakers marked"></canvas>
   <label class="fw-field"><span>Colour</span><select data-track-color aria-label="Track colour"><option value="">Green</option>${COLOURS.replace('<option value="green">Green</option>', "")}</select><span></span></label>
   <label class="fw-field"><span>Input</span><select data-track-input aria-label="Input device for recording on this track"><option value="">System default</option></select><span></span></label>
@@ -258,9 +258,12 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       put(body.querySelector<HTMLInputElement>('[data-sur="x"]'), String(track.surround.x));
       put(body.querySelector<HTMLInputElement>('[data-sur="y"]'), String(track.surround.y));
       put(body.querySelector<HTMLInputElement>('[data-sur="lfe"]'), String(track.surround.lfeDb ?? -80));
+      put(body.querySelector<HTMLInputElement>('[data-sur="el"]'), String(track.surround.el ?? 0));
     }
     const foldBox = body.querySelector<HTMLInputElement>("[data-sur-fold]");
     if (foldBox && document.activeElement !== foldBox) foldBox.checked = !!doc.surroundFold;
+    const formatPick = body.querySelector<HTMLSelectElement>("[data-sur-format]");
+    if (formatPick && document.activeElement !== formatPick && formatPick.value !== (doc.spatialFormat ?? "5.1")) formatPick.value = doc.spatialFormat ?? "5.1";
     drawPadRef?.(track.surround ? { x: track.surround.x, y: track.surround.y } : null);
     fillInputs();
     const automated = track.automation;
@@ -799,7 +802,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (!track) return;
     const value = (name: string) => Number(body.querySelector<HTMLInputElement>(`[data-sur="${name}"]`)?.value ?? 0);
     const on = body.querySelector<HTMLInputElement>('[data-sur="on"]')?.checked === true;
-    engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: on ? { x: value("x"), y: value("y"), lfeDb: value("lfe") } : null });
+    engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: on ? { x: value("x"), y: value("y"), lfeDb: value("lfe"), el: value("el") } : null });
     if (notice) setText(notice, on ? `${track.name} placed in 5.1 at ${value("x")}, ${value("y")}${value("lfe") > -80 ? `, LFE ${value("lfe")} dB` : ""}` : `${track.name} back to stereo in 5.1 exports`);
   });
   // PT-38, AA-11: the two-dimensional panner, the room from above with the front up and the five speakers on a circle at
@@ -866,8 +869,14 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     padDrag = null;
     if (!hit || !pos) return;
     const lfe = Number(body.querySelector<HTMLInputElement>('[data-sur="lfe"]')?.value ?? -80);
-    engine.dispatch({ type: "set-track-surround", trackId: hit.track.id, surround: { x: pos.x, y: pos.y, lfeDb: lfe } });
+    const el = Number(body.querySelector<HTMLInputElement>('[data-sur="el"]')?.value ?? 0);
+    engine.dispatch({ type: "set-track-surround", trackId: hit.track.id, surround: { x: pos.x, y: pos.y, lfeDb: lfe, el } });
     if (notice) setText(notice, `${hit.track.name} placed in 5.1 at ${pos.x}, ${pos.y}`);
+  });
+  body.querySelector<HTMLSelectElement>("[data-sur-format]")?.addEventListener("change", (e) => {
+    const format = (e.target as HTMLSelectElement).value === "foa" ? "foa" : "5.1";
+    engine.dispatch({ type: "set-spatial-format", format });
+    if (notice) setText(notice, format === "foa" ? "The session places tracks in first-order ambisonics: Export writes an AmbiX file, and the fold-down plays it through two cardioids" : "The session places tracks in 5.1");
   });
   body.querySelector<HTMLInputElement>("[data-sur-fold]")?.addEventListener("change", (e) => {
     const on = (e.target as HTMLInputElement).checked;

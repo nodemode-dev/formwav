@@ -97,6 +97,9 @@ struct Mix {
     /// Whether the session hears its 5.1 as the bus folded to stereo.
     #[serde(default)]
     fold: bool,
+    /// PT-42: the bus's format, 0 for 5.1 and 1 for first-order ambisonics.
+    #[serde(default)]
+    surround_format: u8,
 }
 
 /// The output devices of the default host, by name.
@@ -270,6 +273,7 @@ impl NativeOutput {
                 }
                 places[index] = Some([r[1], r[2], r[3], r[4], r[5], r[6]]);
             }
+            p.set_surround_format(mix.surround_format);
             p.set_places(&places);
             p.set_fold_51(!records.is_empty());
             s.end = mix.end.max(0.0) as u64;

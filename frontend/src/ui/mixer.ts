@@ -320,8 +320,16 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   // PT-38, AA-11: the 5.1 bus's six channels (L R C LFE Ls Rs) on the master strip while it plays, from the core's own
   // six-channel peaks; hidden when the session plays plain stereo
   player.onSurroundLevel((six) => {
+    // PT-42: an ambisonic session meters its four channels, W Y Z X
+    const foa = engine.get("document").spatialFormat === "foa";
+    const names = foa ? ["W", "Y", "Z", "X"] : ["L", "R", "C", "LFE", "Ls", "Rs"];
     const tracks = panel.querySelectorAll<HTMLElement>('.fw-strip[data-kind="master"] .fw-out-51');
-    for (const t of tracks) if (t.hidden === !!six) t.hidden = !six;
+    tracks.forEach((t, i) => {
+      const show = !!six && i < names.length;
+      if (t.hidden === show) t.hidden = !show;
+      const title = i < names.length ? `${foa ? "Ambisonic" : "5.1"} ${names[i]}` : "";
+      if (t.title !== title) t.title = title;
+    });
     const now = performance.now();
     drive("master51", '.fw-strip[data-kind="master"] .fw-out-51 .fw-out-bar', six ?? [0, 0, 0, 0, 0, 0], !six, ((now - lastTime) / 1000) * 20);
   });

@@ -13,6 +13,15 @@ const SPEAKERS: [string, number][] = [
   ["Rs", 110],
 ];
 
+/** PT-42: a source's first-order ambisonic gains (AmbiX: W Y Z X, SN3D) from its place on the pad (its distance from
+ *  the middle how focused it is) and its elevation in degrees; the engine's foa_gains line for line. */
+export function foaGains(x: number, y: number, el = 0): number[] {
+  const r = Math.min(1, Math.hypot(x, y));
+  const az = Math.atan2(-x, y); // 0 ahead, positive to the left
+  const e = (Math.max(-90, Math.min(90, el)) * Math.PI) / 180;
+  return [1, r * Math.sin(az) * Math.cos(e), Math.sin(e), r * Math.cos(az) * Math.cos(e)];
+}
+
 /** The five speakers' gains for a source at (x, y): x from -1 (left) to 1 (right), y from -1 (behind) to 1 (in front). */
 export function surroundGains(x: number, y: number): Record<string, number> {
   const r = Math.min(1, Math.hypot(x, y));

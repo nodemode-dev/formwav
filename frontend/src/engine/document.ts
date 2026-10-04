@@ -178,7 +178,7 @@ export interface Track {
   playlists?: readonly { name: string; clips: readonly Clip[] }[];
   /** PT-38, AA-11: where the track sits in a 5.1 mix, x from -1 (left) to 1 (right) and y from -1 (behind) to 1 (in
    *  front), with a send to the LFE channel in dB; absent, its stereo image goes to L and R. */
-  surround?: { x: number; y: number; lfeDb?: number };
+  surround?: { x: number; y: number; lfeDb?: number; /** PT-42: elevation in degrees, for ambisonics (90 overhead) */ el?: number };
   clips: readonly Clip[];
 }
 
@@ -239,6 +239,9 @@ export interface SessionDoc {
   /** PT-38, AA-11: hear the 5.1 placement as an ITU stereo fold-down, in playback and in the stereo mix export alike;
    *  off, a track's 5.1 position shapes only the 5.1 export. */
   surroundFold?: boolean;
+  /** PT-42: the spatial format tracks are placed in: 5.1 (absent) or first-order ambisonics ("foa", AmbiX), which
+   *  playback folds through two cardioids and Export writes as a four-channel AmbiX file. */
+  spatialFormat?: "5.1" | "foa";
   /** Master fader in dB, applied after the buses; absent means 0 dB. */
   masterGainDb?: number;
   /** Realtime effects on the summed mix, before the master fader (Audacity's master stack). */
@@ -310,8 +313,9 @@ export type Command =
   | { type: "set-clip-envelope"; trackId: string; clipId: string; points: { at: number; db: number }[] }
   | { type: "set-clip-type"; trackId: string; clipId: string; soundType: "dialogue" | "music" | "effects" | "ambience" | null }
   | { type: "new-playlist"; trackId: string; duplicate: boolean }
-  | { type: "set-track-surround"; trackId: string; surround: { x: number; y: number; lfeDb?: number } | null }
+  | { type: "set-track-surround"; trackId: string; surround: { x: number; y: number; lfeDb?: number; el?: number } | null }
   | { type: "set-surround-fold"; on: boolean }
+  | { type: "set-spatial-format"; format: "5.1" | "foa" }
   | { type: "switch-playlist"; trackId: string; name: string }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
@@ -656,6 +660,13 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
     }
+    case "set-spatial-format": {
+      // PT-42: 5.1 is the default and is stored as nothing
+      if ((doc.spatialFormat ?? "5.1") === cmd.format) return doc;
+      if (cmd.format === "foa") return { ...doc, spatialFormat: "foa" };
+      const { spatialFormat: _was, ...rest } = doc;
+      return rest;
+    }
     case "set-surround-fold": {
       if (!!doc.surroundFold === cmd.on) return doc;
       if (cmd.on) return { ...doc, surroundFold: true };
@@ -670,7 +681,8 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         const { surround: _old, ...rest } = t;
         if (!s) return rest;
         const lfe = s.lfeDb !== undefined && Number.isFinite(s.lfeDb) && s.lfeDb > -80 ? { lfeDb: clamp(s.lfeDb, -80, 10) } : {};
-        return { ...rest, surround: { x: clamp(s.x, -1, 1), y: clamp(s.y, -1, 1), ...lfe } };
+        const el = s.el !== undefined && Number.isFinite(s.el) && s.el !== 0 ? { el: clamp(s.el, -90, 90) } : {};
+        return { ...rest, surround: { x: clamp(s.x, -1, 1), y: clamp(s.y, -1, 1), ...lfe, ...el } };
       });
     }
     case "new-playlist": {

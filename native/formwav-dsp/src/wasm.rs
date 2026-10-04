@@ -220,6 +220,15 @@ pub unsafe extern "C" fn fw_set_fold_51(player: *mut Player, on: u32) {
     (*player).set_fold_51(on != 0);
 }
 
+/// PT-42: the bus's format, 0 for 5.1 and 1 for first-order ambisonics.
+///
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_surround_format(player: *mut Player, format: u32) {
+    (*player).set_surround_format(format.min(255) as u8);
+}
+
 /// The six channels' peaks since the last call (L R C LFE Ls Rs) into `out`.
 ///
 /// # Safety
