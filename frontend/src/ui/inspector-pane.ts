@@ -1,5 +1,5 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
-import type { FadeShape, MidiFx, TrackFx } from "../engine/document";
+import type { FadeShape, Instrument, MidiFx, TrackFx } from "../engine/document";
 import { renderNotes } from "../audio/notes";
 import { importFile } from "../io/media-client";
 import { clockMode, formatClock, parseTimecode } from "./shell";
@@ -103,6 +103,7 @@ const BODY = `
   <div class="fw-rtfx-list" data-scope="track"></div>
   <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument (Pro Tools' MIDI effect plugins): its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
   <div data-midifx-list></div>
+  <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fill-gaps title="Fill every gap between this track's clips with room tone (RX's Ambience Match under every edit): learned from half a second at each side, moving from the one background to the other across the gap">Fill gaps with room tone</button></div>
   <div data-stems></div>
   <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="reverb">Reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
@@ -180,6 +181,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   let midiFxRef: ((track: Track) => void) | null = null;
   // RX-32, RX-66: the Stems view's drawing, set once mounted
   let stemsRef: ((track: Track) => void) | null = null;
+  // PT-15: the Instrument row's syncing, set once mounted
+  let instrumentRef: ((track: Track) => void) | null = null;
   const render = () => {
     const doc = engine.get("document");
     const hit = find(doc);
@@ -279,6 +282,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     drawPadRef?.(track.surround ? { x: track.surround.x, y: track.surround.y } : null);
     midiFxRef?.(track);
     stemsRef?.(track);
+    instrumentRef?.(track);
     fillInputs();
     const automated = track.automation;
     const volume = field<HTMLInputElement>("volume");
@@ -991,6 +995,60 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       button.disabled = false;
     }
   });
+
+  // PT-15: the Instrument row: Synth, Sampler (a session clip and its root note) or a CLAP instrument from the plugin
+  // folder (listed once by the engine); a change re-renders the track's note clips through it
+  const instSel = body.querySelector<HTMLSelectElement>("[data-instrument]");
+  const sampleSel = body.querySelector<HTMLSelectElement>("[data-sampler-media]");
+  const rootField = body.querySelector<HTMLInputElement>("[data-sampler-root]");
+  fetch("/api/midi/instruments")
+    .then((r) => (r.ok ? r.json() : []))
+    .then((list: { id: string; name: string }[]) => {
+      for (const p of list) {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = `${p.name} (CLAP)`;
+        instSel?.append(o);
+      }
+    })
+    .catch(() => undefined);
+  let mediaSig = "";
+  instrumentRef = (track) => {
+    const doc = engine.get("document");
+    const inst = track.instrument;
+    const value = inst?.kind === "sampler" ? "sampler" : inst?.kind === "plugin" ? inst.id : "synth";
+    if (instSel && document.activeElement !== instSel && instSel.value !== value) instSel.value = value;
+    const sig = Object.values(doc.media).map((m) => `${m.id}:${m.name}`).join("|");
+    if (sampleSel && sig !== mediaSig) {
+      mediaSig = sig;
+      sampleSel.innerHTML = Object.values(doc.media).map((m) => `<option value="${m.id}">${m.name.replace(/</g, "&lt;")}</option>`).join("");
+    }
+    if (inst?.kind === "sampler") {
+      if (sampleSel && document.activeElement !== sampleSel && sampleSel.value !== inst.media) sampleSel.value = inst.media;
+      if (rootField && document.activeElement !== rootField && rootField.value !== String(inst.root)) rootField.value = String(inst.root);
+    }
+    for (const el of body.querySelectorAll<HTMLElement>("[data-sampler-only]")) el.hidden = inst?.kind !== "sampler";
+  };
+  const setInstrument = () => {
+    const hit = find(engine.get("document"));
+    if (!hit || !instSel) return;
+    const v = instSel.value;
+    const label = instSel.selectedOptions[0]?.textContent ?? v;
+    const next: Instrument | null = v === "synth" ? null : v === "sampler" ? { kind: "sampler", media: sampleSel?.value ?? "", root: Number(rootField?.value ?? 60) } : { kind: "plugin", id: v, name: label.replace(/ \(CLAP\)$/, "") };
+    if (next?.kind === "sampler" && !next.media) {
+      setText(notice, "Choose a clip to sample first");
+      return;
+    }
+    engine.dispatch({ type: "set-track-instrument", trackId: hit.track.id, instrument: next });
+    const clips = (engine.get("document").tracks.find((t) => t.id === hit.track.id)?.clips ?? []).filter((c) => c.notes?.length);
+    void (async () => {
+      for (const c of clips) await renderNotes(engine, hit.track.id, c.id, c.notes ?? []).catch((err) => setText(notice, `Could not play the notes: ${err instanceof Error ? err.message : String(err)}`));
+      if (clips.length) setText(notice, `Instrument set: ${clips.length} note clip${clips.length === 1 ? "" : "s"} re-rendered`);
+    })();
+  };
+  instSel?.addEventListener("change", setInstrument);
+  sampleSel?.addEventListener("change", setInstrument);
+  rootField?.addEventListener("change", setInstrument);
 
   // PT-16: the selected track's MIDI effects, each with its settings and a Remove; a change re-renders its note clips
   const midiList = body.querySelector<HTMLElement>("[data-midifx-list]");

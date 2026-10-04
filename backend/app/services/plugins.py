@@ -61,9 +61,36 @@ def catalogue_group() -> list[dict]:
             "learnsNoise": False,
         }
         for p in scan()
-        if "error" not in p
+        if "error" not in p and not p.get("instrument")
     ]
     return [{"group": "Plugins", "effects": effects}] if effects else []
+
+
+def instruments() -> list[dict]:
+    """PT-15: the CLAP instruments installed here, as note tracks offer them (plugin:<format>:<path> and a name)."""
+    return [{"id": f"plugin:{p['format']}:{p['path']}", "name": p["name"]} for p in scan() if "error" not in p and p.get("instrument")]
+
+
+def play_instrument(name: str, notes: list[tuple[int, int, int, int]], rate: int, label: str) -> dict:
+    """PT-15: notes (first frame, length, key, velocity) played on the instrument `name` (as listed) into new media."""
+    fmt, path, plugin = _installed(name)
+    if not plugin.get("instrument"):
+        raise media.MediaError(f"{plugin['name']} is not an instrument")
+    with tempfile.TemporaryDirectory(prefix="formwav-instrument-") as tmp:
+        listing = Path(tmp) / "notes.txt"
+        listing.write_text("".join(f"{s} {n} {k} {v}\n" for s, n, k, v in notes))
+        out = Path(tmp) / "out.wav"
+        try:
+            seconds = max(s + n for s, n, _, _ in notes) / rate + 2.0  # two seconds past the last note-off, for its release
+            done = subprocess.run([host_binary(), "instrument", path, str(listing), str(out), str(rate), f"{seconds:g}"], capture_output=True, timeout=900)
+        except subprocess.TimeoutExpired as err:
+            raise media.MediaError(f"{plugin['name']} did not finish within 15 minutes") from err
+        if done.returncode != 0 or not out.is_file():
+            reason = (done.stderr or b"").decode(errors="replace").strip().splitlines()[-1:] or [f"exit status {done.returncode}"]
+            if done.returncode < 0:
+                reason = [f"the plugin crashed (signal {-done.returncode}); formwav is unaffected"]
+            raise media.MediaError(f"{plugin['name']} failed: {reason[0][:300]}")
+        return media.import_wav(f"{label}.wav", out.read_bytes())
 
 
 _params: dict[str, list[dict]] = {}

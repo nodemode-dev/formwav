@@ -136,6 +136,9 @@ export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx;
 
 /** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
+/** PT-15: a note track's instrument beside the built-in synth. */
+export type Instrument = { kind: "sampler"; media: string; root: number } | { kind: "plugin"; id: string; name: string };
+
 export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocity"; scale: number; offset: number } | { kind: "quantize"; beats: number; strength: number };
 
 const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb"]);
@@ -180,6 +183,9 @@ export interface Track {
   /** RX-32, RX-66: a stem separated from another track (`of`, its id) and which part it is (vocals, drums, bass,
    *  other), so the Stems view can rebalance the group. */
   stem?: { of: string; part: string };
+  /** PT-15: what plays a note track's clips: the built-in synth when absent, a sampler (a session media re-pitched
+   *  from its root note) or a CLAP instrument from the plugin folder. */
+  instrument?: Instrument;
   /** Volume (dB) and pan automation; when present each replaces the track's static fader or pan. */
   automation?: { volume?: AutoPoint[]; pan?: AutoPoint[] };
   id: string;
@@ -355,6 +361,7 @@ export type Command =
   | { type: "set-spatial-format"; format: "5.1" | "foa" }
   | { type: "set-track-midi-fx"; trackId: string; midiFx: MidiFx[] }
   | { type: "set-timecode-start"; seconds: number }
+  | { type: "set-track-instrument"; trackId: string; instrument: Instrument | null }
   | { type: "switch-playlist"; trackId: string; name: string }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
@@ -698,6 +705,16 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const camelotCode = cmd.camelot.trim().slice(0, 4);
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
+    }
+    case "set-track-instrument": {
+      // PT-15: the track's instrument; null returns it to the built-in synth
+      const i = cmd.instrument;
+      const clean: Instrument | null = !i ? null : i.kind === "sampler" ? { kind: "sampler", media: String(i.media), root: Math.max(0, Math.min(127, Math.round(Number(i.root) || 60))) } : i.kind === "plugin" ? { kind: "plugin", id: String(i.id), name: String(i.name) } : null;
+      return mapTrack(doc, cmd.trackId, (t) => {
+        if (JSON.stringify(t.instrument ?? null) === JSON.stringify(clean)) return t;
+        const { instrument: _old, ...rest } = t;
+        return clean ? { ...rest, instrument: clean } : rest;
+      });
     }
     case "set-timecode-start": {
       // PT-26: the timecode the session starts at, in seconds (0 to 24 hours); 0 drops the field

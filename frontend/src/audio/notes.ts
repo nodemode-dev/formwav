@@ -61,7 +61,11 @@ export async function renderNotes(engine: Engine, trackId: string, clipId: strin
   const rate = media?.sampleRate ?? doc.sampleRate;
   // PT-16: the clip keeps the notes as played; its sound is rendered from them after the track's MIDI effects
   const heard = applyMidiFx(notes, track?.midiFx, rate, doc.tempo?.bpm ?? 120);
+  // PT-15: through the track's instrument: a sampler (its sample's own shape, so a near-flat envelope) or a plugin
+  const inst = track?.instrument;
   const body = {
+    ...(inst?.kind === "sampler" ? { sampler: { media: inst.media, root: inst.root }, patch: { wave: "sine", attack: 0.002, decay: 0, sustain: 1, release: 0.1, gain: 1 } } : {}),
+    ...(inst?.kind === "plugin" ? { plugin: inst.id } : {}),
     notes: heard.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })),
     rate,
     name: (media?.name ?? "notes").replace(/\.wav$/i, ""),

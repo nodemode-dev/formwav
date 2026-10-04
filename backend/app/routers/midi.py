@@ -46,15 +46,33 @@ class RenderRequest(BaseModel):
     patch: Patch = Patch()
     name: str = "notes"
     sampler: Sampler | None = None
+    # PT-15: a CLAP instrument from the plugin folder (plugin:clap:<path>, as /api/midi/instruments lists them)
+    plugin: str | None = None
 
 
-def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Sampler | None = None) -> dict:
+@router.get("/instruments")
+def list_instruments() -> list[dict]:
+    """PT-15: the CLAP instruments in the plugin folder, for a note track's Instrument choice."""
+    from ..services import plugins
+
+    return plugins.instruments()
+
+
+def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Sampler | None = None, plugin: str | None = None) -> dict:
     if patch.wave not in WAVES:
         raise HTTPException(status_code=422, detail=f"no waveform named {patch.wave} (one of {', '.join(WAVES)})")
     if not notes:
         raise HTTPException(status_code=422, detail="no notes to render")
-    core = media._require_core()
     frames = [(int(round(n["start"] * rate)), max(1, int(round(n["length"] * rate))), int(n["pitch"]), int(n["velocity"])) for n in notes]
+    if plugin is not None:
+        # PT-15: the notes played on a CLAP instrument by the plugin host
+        from ..services import plugins
+
+        try:
+            return plugins.play_instrument(plugin, frames, rate, name)
+        except media.MediaError as err:
+            raise HTTPException(status_code=422, detail=str(err)) from err
+    core = media._require_core()
     if sampler is not None:
         # PT-15: the sampler plays the media, mixed to mono, re-pitched from its root, through the patch's envelope
         from ..services import tools
@@ -109,4 +127,4 @@ def midi_from_audio(media_id: str, mode: str = "melodic", start: float = 0.0, le
 @router.post("/render", status_code=201)
 def render_notes(body: RenderRequest) -> dict:
     """Edited notes rendered again by the built-in instrument, as new media."""
-    return _render([n.model_dump() for n in body.notes], body.rate, body.patch, body.name, body.sampler)
+    return _render([n.model_dump() for n in body.notes], body.rate, body.patch, body.name, body.sampler, body.plugin)

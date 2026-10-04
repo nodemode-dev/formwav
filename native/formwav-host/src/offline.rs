@@ -181,7 +181,7 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
             }
             continue;
         }
-        let described: Result<Vec<(String, String)>, String> = unsafe {
+        let described: Result<Vec<(String, String, bool)>, String> = unsafe {
             match format {
                 "clap" => clap_open(&path).and_then(|(lib, entry)| {
                     let factory = ((*entry).get_factory.ok_or("no get_factory")?)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
@@ -190,7 +190,14 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
                         for i in 0..((*factory).get_plugin_count.ok_or("no count")?)(factory) {
                             let d = ((*factory).get_plugin_descriptor.ok_or("no descriptors")?)(factory, i);
                             if !d.is_null() {
-                                list.push((CStr::from_ptr((*d).id).to_string_lossy().into_owned(), CStr::from_ptr((*d).name).to_string_lossy().into_owned()));
+                                // PT-15: an instrument says so among its features (a null-terminated list)
+                                let mut instrument = false;
+                                let mut f = (*d).features;
+                                while !f.is_null() && !(*f).is_null() {
+                                    instrument |= CStr::from_ptr(*f).to_bytes() == b"instrument";
+                                    f = f.add(1);
+                                }
+                                list.push((CStr::from_ptr((*d).id).to_string_lossy().into_owned(), CStr::from_ptr((*d).name).to_string_lossy().into_owned(), instrument));
                             }
                         }
                     }
@@ -199,7 +206,7 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
                     Ok(list)
                 }),
                 _ => vst3_open(&path).map(|(lib, factory)| {
-                    let list = vst3_effects(&factory).into_iter().map(|(cid, name)| (cid.iter().map(|b| format!("{:02X}", *b as u8)).collect(), name)).collect();
+                    let list = vst3_effects(&factory).into_iter().map(|(cid, name)| (cid.iter().map(|b| format!("{:02X}", *b as u8)).collect(), name, false)).collect();
                     drop(factory);
                     vst3_close(lib);
                     list
@@ -207,7 +214,7 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
             }
         };
         match described {
-            Ok(list) => out.extend(list.into_iter().map(|(id, name)| format!("{{\"format\": \"{format}\", \"path\": \"{p}\", \"id\": \"{}\", \"name\": \"{}\"}}", json(&id), json(&name)))),
+            Ok(list) => out.extend(list.into_iter().map(|(id, name, instrument)| format!("{{\"format\": \"{format}\", \"path\": \"{p}\", \"id\": \"{}\", \"name\": \"{}\"{}}}", json(&id), json(&name), if instrument { ", \"instrument\": true" } else { "" }))),
             Err(e) => out.push(format!("{{\"format\": \"{format}\", \"path\": \"{p}\", \"error\": \"{}\"}}", json(&e))),
         }
     }
