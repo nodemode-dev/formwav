@@ -40,7 +40,25 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
       const doc = engine.get("document");
       const lower = file.name.toLowerCase();
       if (lower.endsWith(".aup")) throw new Error("zip the .aup together with its _data folder and import the zip");
-      if (lower.endsWith(".aaf")) {
+      if (lower.endsWith(".edl")) {
+        // PT-31: the picture edit conformed to the field recorder's files already in the session (broadcast WAVs with
+        // timecode); the session becomes the edit's timeline
+        const answer = window.prompt(`Conform ${file.name} to the recorder files in this session? The session will be replaced by the edit. Frames per second of the edit (24, 25, 30, 48, 50 or 60):`, "25");
+        if (answer === null || !Number(answer)) {
+          final = "Kept the current session";
+        } else {
+          const split = window.confirm("Put each recorder channel (boom, lavaliers) on its own track? Cancel keeps each file's channels together.");
+          const res = await fetch("/api/projects/conform", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ edl: await file.text(), media: Object.keys(doc.media), fps: Number(answer), split, rate: doc.tracks.length ? doc.sampleRate : 48000 }),
+          });
+          const out = (await res.json().catch(() => ({}))) as { detail?: unknown; document?: SessionDoc; events?: number; matched?: number; unmatched?: { event: string; reel: string }[] };
+          if (!res.ok || !out.document) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          engine.loadDocument(out.document);
+          final = `Conformed ${file.name}: ${out.matched} of ${out.events} events placed from the recorder files${out.unmatched?.length ? `; not found: ${out.unmatched.map((u) => `${u.event} (${u.reel})`).join(", ")}` : ""}`;
+        }
+      } else if (lower.endsWith(".aaf")) {
         // PT-30: an AAF's timeline opens as the session, its embedded audio imported; linked audio is named, not reached
         if (doc.tracks.length && !window.confirm(`Open the AAF ${file.name}? Unsaved changes to the current session will be lost.`)) {
           final = "Kept the current session";

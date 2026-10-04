@@ -66,9 +66,35 @@ def import_wav(name: str, data: bytes) -> dict:
     audio = folder / f"{media_id}.wav"
     if not audio.exists():
         _write_atomic(audio, data)
-    info = {"id": media_id, "name": name, "sampleRate": rate, "channels": channels, "frames": frames, "format": fmt}
+    info = {"id": media_id, "name": name, "sampleRate": rate, "channels": channels, "frames": frames, "format": fmt, **_bwf_meta(data, rate)}
     _write_atomic(folder / f"{media_id}.json", json.dumps(info).encode())
     return info
+
+
+def _bwf_meta(data: bytes, rate: int) -> dict:
+    """PT-31: a field recorder's broadcast WAV metadata: the bext chunk's TimeReference (samples since midnight, at
+    byte 338 of the chunk) as `timecode` in seconds, and iXML's TAPE, SCENE and TAKE when present; {} for other WAVs."""
+    import re
+
+    out: dict = {}
+    if len(data) < 12 or data[:4] not in (b"RIFF", b"RF64") or data[8:12] != b"WAVE":
+        return out
+    i = 12
+    while i + 8 <= len(data):
+        cid, size = data[i : i + 4], int.from_bytes(data[i + 4 : i + 8], "little")
+        body = data[i + 8 : i + 8 + min(size, 1 << 20)] if cid in (b"bext", b"iXML") else b""
+        if cid == b"bext" and len(body) >= 346 and rate > 0:
+            out["timecode"] = int.from_bytes(body[338:346], "little") / rate
+        elif cid == b"iXML":
+            text = body.decode("utf-8", "replace")
+            for tag, key in (("TAPE", "tape"), ("SCENE", "scene"), ("TAKE", "take")):
+                hit = re.search(rf"<{tag}>([^<]*)</{tag}>", text)
+                if hit and hit.group(1).strip():
+                    out[key] = hit.group(1).strip()
+        if cid == b"data" and size > len(data):  # an unsized data chunk ends the walk
+            break
+        i += 8 + size + (size & 1)
+    return out
 
 
 #: Rates a new session may keep from its first file; anything else starts the session at 48 kHz.
@@ -168,7 +194,13 @@ def resample_media(media_id: str, rate: int) -> dict:
         return info
     with tempfile.TemporaryDirectory() as tmp:
         wav = _transcode(media_dir() / f"{media_id}.wav", Path(tmp) / "resampled.wav", rate, int(info["channels"]))
-    return import_wav(info["name"], wav)
+    out = import_wav(info["name"], wav)
+    # PT-31: the transcode drops the bext and iXML chunks, so a recorder file's timecode and tape carry over here
+    carried = {k: info[k] for k in ("timecode", "tape", "scene", "take") if k in info}
+    if carried and any(k not in out for k in carried):
+        out = {**out, **carried}
+        _write_atomic(media_dir() / f"{out['id']}.json", json.dumps(out).encode())
+    return out
 
 
 def list_media(query: str = "", limit: int = 100, offset: int = 0) -> dict:

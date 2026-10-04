@@ -33,6 +33,18 @@ async def import_aaf(request: Request) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/projects/conform")
+def conform_edit(payload: dict = Body(...)) -> dict:
+    """PT-31: {"edl", "media": [ids], "fps", "split", "rate"}: the edit's audio events built from the recorder files
+    (services/conform.py)."""
+    from ..services import conform
+
+    try:
+        return conform.conform(str(payload.get("edl", "")), [str(m) for m in payload.get("media") or []], float(payload.get("fps", 25)), bool(payload.get("split")), int(payload.get("rate", 48000)))
+    except (media.MediaError, ValueError, TypeError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/projects/export-aaf")
 def export_aaf(document: dict = Body(...)) -> Response:
     """PT-30: the session's timeline as an AAF with its audio embedded."""
