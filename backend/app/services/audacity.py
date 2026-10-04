@@ -137,7 +137,12 @@ def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: st
             ref = media.import_wav(name, _wav_bytes(channels, track_rate))
             start = int(round(float(clip.get("offset", "0")) * rate))
             frames = int(ref["frames"])
-            clips.append({"id": f"aup-clip-{counter}", "mediaId": ref["id"], "start": start, "length": int(round(frames * rate / int(ref["sampleRate"]))), "sourceIn": 0, "gainDb": 0})
+            # AU-34: the clip's volume envelope, its control points timed from the clip's start (Audacity 2.4.2 stores a
+            # point set at 2.5 s on a clip at 2 s as t="0.5") and linear in gain between points, as formwav's are; a
+            # gain below formwav's -60 dB floor is held there
+            points = [(float(p.get("t", "0")), float(p.get("val", "1"))) for e in clip if _tag(e) == "envelope" for p in e if _tag(p) == "controlpoint"]
+            envelope = [{"at": int(round(at * track_rate)), "db": round(max(-60.0, min(12.0, 20 * math.log10(max(v, 1e-9)))), 4)} for at, v in points]
+            clips.append({"id": f"aup-clip-{counter}", "mediaId": ref["id"], "start": start, "length": int(round(frames * rate / int(ref["sampleRate"]))), "sourceIn": 0, "gainDb": 0, **({"envelope": envelope} if envelope else {})})
         gain = float(t.get("gain", "1"))
         tracks.append(
             {
