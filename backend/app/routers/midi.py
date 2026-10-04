@@ -65,6 +65,25 @@ async def import_midi(request: Request, rate: int = 48000) -> dict:
     return {"notes": song["notes"], "tempo": song["tempo"], "duration": song["duration"], "media": rendered}
 
 
+@router.post("/from-audio", status_code=201)
+def midi_from_audio(media_id: str, mode: str = "melodic", start: float = 0.0, length: float | None = None, rate: int = 48000) -> dict:
+    """PT-13: a clip's audio as MIDI notes (melodic, polyphonic or rhythmic, services/audio_midi.py) and their rendering
+    by the built-in instrument, shaped as MIDI import answers so the interface makes the same note clip."""
+    from ..services import audio_midi
+
+    try:
+        notes = audio_midi.to_notes(media_id, mode, start, length)
+    except KeyError as err:
+        raise HTTPException(status_code=404, detail="no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
+    if not notes:
+        raise HTTPException(status_code=422, detail="no notes were found in this clip")
+    name = f"{media.media_info(media_id)['name'].rsplit('.', 1)[0]} ({mode} MIDI)"
+    duration = max(n["start"] + n["length"] for n in notes)
+    return {"notes": notes, "tempo": 120.0, "duration": duration, "media": _render(notes, rate, Patch(), name)}
+
+
 @router.post("/render", status_code=201)
 def render_notes(body: RenderRequest) -> dict:
     """Edited notes rendered again by the built-in instrument, as new media."""
