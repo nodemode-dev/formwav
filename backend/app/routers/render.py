@@ -114,6 +114,14 @@ def _with_cues(wav: bytes, document: dict) -> bytes:
 @router.post("/render")
 def render_session(document: dict = Body(...), format: str = "wav", what: str = "mix", platform: str = "", channels: str = "") -> Response:
     try:
+        if what == "surround51":
+            # PT-38, AA-11: the session as a 5.1 mix, six channels in SMPTE order (services/surround.py)
+            import json
+
+            from ..services import surround
+
+            out = surround.render_51(document)
+            return Response(content=out["wav"], media_type="audio/wav", headers={"Content-Disposition": 'attachment; filename="surround-5.1.wav"', "X-Channel-Peaks": json.dumps(out["levels"])})
         if what in ("stems", "multichannel"):
             import io
             import zipfile

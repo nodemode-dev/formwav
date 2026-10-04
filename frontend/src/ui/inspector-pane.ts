@@ -81,6 +81,7 @@ const BODY = `
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
+  <div class="fw-analyze-buttons" title="Where this track sits in a 5.1 export: left to right and back to front from -1 to 1 (front centre is 0 and 1), and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback stays stereo for now"><label class="fw-sam-opt"><input type="checkbox" data-sur="on"> 5.1 position</label><label class="fw-sam-opt"><span>Left to right</span><input type="number" min="-1" max="1" step="0.05" value="0" data-sur="x"></label><label class="fw-sam-opt"><span>Back to front</span><input type="number" min="-1" max="1" step="0.05" value="1" data-sur="y"></label><label class="fw-sam-opt"><span>LFE dB</span><input type="number" min="-80" max="10" step="1" value="-80" data-sur="lfe"></label></div>
   <label class="fw-field"><span>Colour</span><select data-track-color aria-label="Track colour"><option value="">Green</option>${COLOURS.replace('<option value="green">Green</option>', "")}</select><span></span></label>
   <label class="fw-field"><span>Input</span><select data-track-input aria-label="Input device for recording on this track"><option value="">System default</option></select><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-track-act="refresh-inputs" title="List the microphones and interfaces again (the list also follows the system's device changes)">Refresh inputs</button><label class="fw-sam-opt" title="Where the browser's playback goes, on this machine (the status bar's Output chooses between the browser and native output)"><span>Browser output</span><select data-play-out="device" aria-label="Browser playback output device"><option value="">System default</option></select></label><label class="fw-sam-opt" title="The output's sample rate; the session plays at the right pitch at any of them"><span>Rate</span><select data-play-out="rate" aria-label="Playback output rate"><option value="0">Session rate</option><option value="44100">44.1 kHz</option><option value="48000">48 kHz</option><option value="88200">88.2 kHz</option><option value="96000">96 kHz</option></select></label><label class="fw-sam-opt" title="The device channels playback's left and right go to"><span>Channels</span><select data-play-out="map" aria-label="Playback channel mapping"><option value="0,1">1 and 2</option><option value="1,0">2 and 1 (swapped)</option><option value="0,0">both to 1</option><option value="1,1">both to 2</option><option value="2,3">3 and 4</option><option value="4,5">5 and 6</option><option value="6,7">7 and 8</option></select></label><label class="fw-sam-opt" title="Hear this track's input through the speakers when it is armed, before and while it records (software playthrough; a headphone mix avoids feedback)"><input type="checkbox" data-track-monitor> Monitor input</label><label class="fw-field"><span>Monitor level</span><input type="range" min="-30" max="6" step="1" value="0" data-monitor-level aria-label="Monitor level, dB"><output data-monitor-level-out>0 dB</output></label><label class="fw-sam-opt" title="Show this track as a spectrogram, with a frequency ruler and guides, whatever the session's view is"><input type="checkbox" data-track-spectral> Spectrogram view</label></div>
@@ -247,6 +248,14 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     put(field<HTMLInputElement>("fadeOut"), ((clip.fadeOut ?? 0) / rate).toFixed(2));
     put(field<HTMLSelectElement>("shape"), clip.fadeShape ?? "linear");
     setText(body.querySelector(".fw-insp-track-name"), `Track · ${track.name}`);
+    // PT-38, AA-11: the track's 5.1 position, ticked when it has one
+    const surroundOn = body.querySelector<HTMLInputElement>('[data-sur="on"]');
+    if (surroundOn && document.activeElement !== surroundOn) surroundOn.checked = !!track.surround;
+    if (track.surround) {
+      put(body.querySelector<HTMLInputElement>('[data-sur="x"]'), String(track.surround.x));
+      put(body.querySelector<HTMLInputElement>('[data-sur="y"]'), String(track.surround.y));
+      put(body.querySelector<HTMLInputElement>('[data-sur="lfe"]'), String(track.surround.lfeDb ?? -80));
+    }
     fillInputs();
     const automated = track.automation;
     const volume = field<HTMLInputElement>("volume");
@@ -777,6 +786,16 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   essential = mountEssentialSound(body, engine, find, notice);
   essential.sync();
   // PT-14: picking a playlist switches the track to it; New and Duplicate keep the playing clips as a playlist
+  // PT-38, AA-11: any change in the 5.1 row sets the selected clip's track's surround position, or clears it unticked
+  body.addEventListener("change", (e) => {
+    if (!(e.target as HTMLElement).closest("[data-sur]")) return;
+    const track = find(engine.get("document"))?.track;
+    if (!track) return;
+    const value = (name: string) => Number(body.querySelector<HTMLInputElement>(`[data-sur="${name}"]`)?.value ?? 0);
+    const on = body.querySelector<HTMLInputElement>('[data-sur="on"]')?.checked === true;
+    engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: on ? { x: value("x"), y: value("y"), lfeDb: value("lfe") } : null });
+    if (notice) setText(notice, on ? `${track.name} placed in 5.1 at ${value("x")}, ${value("y")}${value("lfe") > -80 ? `, LFE ${value("lfe")} dB` : ""}` : `${track.name} back to stereo in 5.1 exports`);
+  });
   const playlistTrackNow = () => engine.get("document").tracks.find((t) => t.id === playlistTrackId);
   body.querySelector<HTMLSelectElement>('[data-pl="pick"]')?.addEventListener("change", (e) => {
     const track = playlistTrackNow();

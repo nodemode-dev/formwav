@@ -176,6 +176,9 @@ export interface Track {
    *  other playlists, stashed with their clips until switched in. */
   playlist?: string;
   playlists?: readonly { name: string; clips: readonly Clip[] }[];
+  /** PT-38, AA-11: where the track sits in a 5.1 mix, x from -1 (left) to 1 (right) and y from -1 (behind) to 1 (in
+   *  front), with a send to the LFE channel in dB; absent, its stereo image goes to L and R. */
+  surround?: { x: number; y: number; lfeDb?: number };
   clips: readonly Clip[];
 }
 
@@ -304,6 +307,7 @@ export type Command =
   | { type: "set-clip-envelope"; trackId: string; clipId: string; points: { at: number; db: number }[] }
   | { type: "set-clip-type"; trackId: string; clipId: string; soundType: "dialogue" | "music" | "effects" | "ambience" | null }
   | { type: "new-playlist"; trackId: string; duplicate: boolean }
+  | { type: "set-track-surround"; trackId: string; surround: { x: number; y: number; lfeDb?: number } | null }
   | { type: "switch-playlist"; trackId: string; name: string }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
@@ -647,6 +651,17 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const camelotCode = cmd.camelot.trim().slice(0, 4);
       if (!name || (doc.key && doc.key.name === name && doc.key.camelot === camelotCode)) return doc;
       return { ...doc, key: { name, camelot: camelotCode } };
+    }
+    case "set-track-surround": {
+      // PT-38, AA-11: x and y held inside the room (-1 to 1), the LFE send from -80 (off) to +10 dB
+      const s = cmd.surround;
+      const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : 0);
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const { surround: _old, ...rest } = t;
+        if (!s) return rest;
+        const lfe = s.lfeDb !== undefined && Number.isFinite(s.lfeDb) && s.lfeDb > -80 ? { lfeDb: clamp(s.lfeDb, -80, 10) } : {};
+        return { ...rest, surround: { x: clamp(s.x, -1, 1), y: clamp(s.y, -1, 1), ...lfe } };
+      });
     }
     case "new-playlist": {
       // PT-14: the active clips stashed under their playlist's name; the new playlist starts empty or as a copy (fresh
