@@ -71,6 +71,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         bus_chains.extend((1, len(buses) - 1, *s) for s in (_stage(f) for f in (bus.get("fx") or [])) if s)
     sources: dict[str, int] = {}
     clips: list[tuple] = []
+    owners: list[int] = []  # PT-38, AA-11: each clip's track (its index in tracks), for the 5.1 bus's placements
     envelopes: list[tuple] = []
     fx: list[tuple] = []
     fx_auto: list[tuple] = []
@@ -146,6 +147,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
                 envelopes.append((_clip_envelope(own, track_pts), True))
                 clip_env = len(envelopes)
             clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, track_pan, int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index, clip_env, pan_env))
+            owners.append(tracks.index(track))
             # PT-33, as the player's clipChain: the clip's own filters, then its own compressor (its threshold lowered by
             # the clip gain, which the core applies after the chain), then the track's filters, whose automation moves
             # past the clip's stages
@@ -171,9 +173,10 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
                     continue
                 level = 10 ** (float(send.get("gainDb", 0.0)) / 20)
                 clips.append((*main[:4], main[4] * level, *main[5:9], buses[send["busId"]][0], *main[10:]))
+                owners.append(tracks.index(track))
                 add_chain(len(clips) - 1)
             end = max(end, start + length)
-    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains, fx_auto, comps
+    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains, fx_auto, comps, owners
 
 
 def wav_float32_stereo(interleaved: bytes, rate: int) -> bytes:
@@ -190,7 +193,7 @@ def dbfs(peak: float) -> str:
 
 def render(doc: object) -> dict:
     native = media._require_core()
-    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps = plan(doc)
+    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, _owners = plan(doc)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)

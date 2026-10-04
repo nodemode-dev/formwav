@@ -1,11 +1,11 @@
-"""PT-38, AA-11 (first part): a 5.1 surround mix. Each track is rendered alone through the core's chain (as the stems
-export renders it) and placed among the five full-range speakers at ITU-R BS.775's angles (C 0, L and R 30 degrees
-either side, Ls and Rs 110), by pairwise constant-power panning between the two speakers either side of its angle
-(VBAP in two dimensions); a position nearer the middle of the room spreads it over all five, its power kept. A track
-may also send to the LFE channel, which carries only what lies below 120 Hz. A track with no surround position keeps
-its stereo image on L and R. The six channels are written in SMPTE order (L R C LFE Ls Rs) as a WAVE_FORMAT_EXTENSIBLE
-file marked 5.1, so other software reads the layout. Master effects act on each track as in the stems export, not on
-a six-channel master bus, which the core does not have yet."""
+"""PT-38, AA-11: a 5.1 surround mix. Each track is placed among the five full-range speakers at ITU-R BS.775's angles (C
+0, L and R 30 degrees either side, Ls and Rs 110), by pairwise constant-power panning between the two speakers either
+side of its angle (VBAP in two dimensions); a position nearer the middle of the room spreads it over all five, its
+power kept. A track may also send to the LFE channel, which carries only what lies below 120 Hz. A track with no
+surround position keeps its stereo image on L and R. The mix runs through the core's six-channel master bus
+(render.rs render_surround), the master chain and fader acting on the 5.1 mix as on the stereo one, and is written in
+SMPTE order (L R C LFE Ls Rs) as a WAVE_FORMAT_EXTENSIBLE file marked 5.1. `fold` gives the ITU stereo downmix as the
+core's clip gain and pan, for hearing the 5.1 in playback and the stereo mix."""
 
 import math
 import struct
@@ -56,29 +56,6 @@ def fold(x: float, y: float) -> tuple[float, float]:
     return 20 * math.log10(near), (-pan if lo >= ro else pan)
 
 
-def _lowpass(x: np.ndarray, rate: int, cutoff: float = 120.0) -> np.ndarray:
-    """The LFE send's low-pass: a fourth-order Butterworth's magnitude applied in the frequency domain, zero phase and
-    fast at any length (a per-sample loop would take minutes on a long session)."""
-    spectrum = np.fft.rfft(x)
-    f = np.fft.rfftfreq(len(x), 1 / rate)
-    return np.fft.irfft(spectrum / np.sqrt(1 + (f / cutoff) ** 8), len(x))
-
-
-def _stem(doc: dict, index: int) -> tuple[np.ndarray, int]:
-    tracks = list(doc.get("tracks") or [])
-    # the track's own sound: rendered with the session's fold-down off, or a placed track came back already folded
-    # and was placed again (playback and the 5.1 export's fold-down differed by -15.6 dB)
-    unfolded = {k: v for k, v in doc.items() if k != "surroundFold"}
-    result = render.render({**unfolded, "tracks": [{**t, "solo": False, "mute": bool(t.get("mute")) if j == index else True} for j, t in enumerate(tracks)]})
-    wav = result["wav"]
-    i, chunks = 12, {}
-    while i + 8 <= len(wav):
-        cid, size = wav[i : i + 4], int.from_bytes(wav[i + 4 : i + 8], "little")
-        chunks[cid] = wav[i + 8 : i + 8 + size]
-        i += 8 + size + (size & 1)
-    return np.frombuffer(chunks[b"data"], dtype="<f4").reshape(-1, 2).astype(np.float64), int(result.get("sampleRate") or doc.get("sampleRate") or 48000)
-
-
 def wav_51(channels: np.ndarray, rate: int) -> bytes:
     """Six channels (frames by L R C LFE Ls Rs) as a 32-bit float WAVE_FORMAT_EXTENSIBLE file marked 5.1."""
     data = channels.astype("<f4").tobytes()
@@ -89,32 +66,39 @@ def wav_51(channels: np.ndarray, rate: int) -> bytes:
 
 
 def render_51(doc: dict) -> dict:
-    """{"wav": six-channel WAV bytes, "frames", "sampleRate", "levels": per-channel peak dBFS}."""
-    tracks = list(doc.get("tracks") or [])
+    """{"wav": six-channel WAV bytes, "frames", "sampleRate", "levels": per-channel peak dBFS}: the session through the
+    core's six-channel master bus (render.rs render_surround), so the master chain and fader act on the 5.1 mix (the
+    chain on each pair of channels) as they do on the stereo one. Planned with the fold-down off, a placed track's
+    position shaping its own sound; each clip takes its track's speaker gains and LFE send."""
+    from . import media
+    from ..core.paths import media_dir
+
+    tracks = [t for t in (doc.get("tracks") or []) if isinstance(t, dict)]
     if not tracks:
         raise render.RenderError("there are no tracks to mix")
-    out = None
-    rate = int(doc.get("sampleRate") or 48000)
-    for i, track in enumerate(tracks):
-        stem, rate = _stem(doc, i)
-        if out is None or len(out) < len(stem):
-            grown = np.zeros((len(stem), 6))
-            if out is not None:
-                grown[: len(out)] = out
-            out = grown
-        place = track.get("surround")
+    native = media._require_core()
+    unfolded = {k: v for k, v in doc.items() if k != "surroundFold"}
+    rate, sources, clips, end, _skipped, buses, envelopes, fx, chains, fx_auto, comps, owners = render.plan(unfolded)
+    loaded = []
+    for media_id, source in sources.items():
+        media._check_id(media_id)
+        path = media_dir() / f"{media_id}.wav"
+        if not path.exists():
+            raise KeyError(media_id)
+        loaded.append((source, path.read_bytes()))
+    chains = chains + [(2, 0, *s) for s in (render._stage(f) for f in (doc.get("masterFx") or [])) if s]
+    places = []
+    for index, owner in enumerate(owners):
+        place = tracks[owner].get("surround") if owner < len(tracks) else None
         if not isinstance(place, dict):
-            out[: len(stem), 0] += stem[:, 0]  # no surround position: its stereo image on L and R
-            out[: len(stem), 1] += stem[:, 1]
             continue
-        mono = stem.mean(axis=1)
         g = gains(float(place.get("x", 0.0)), float(place.get("y", 1.0)))
-        for name, gain in g.items():
-            if gain > 1e-9:
-                out[: len(stem), CHANNELS.index(name)] += gain * mono
         lfe = place.get("lfeDb")
-        if lfe is not None and float(lfe) > -80:
-            out[: len(stem), 3] += 10 ** (float(lfe) / 20) * _lowpass(mono, rate)
-    assert out is not None
+        lfe_gain = 10 ** (float(lfe) / 20) if lfe is not None and float(lfe) > -80 else 0.0
+        places.append((index, [g["L"], g["R"], g["C"], lfe_gain, g["Ls"], g["Rs"]]))
+    if not places:
+        places = [(len(clips), [0.0] * 6)]  # nothing placed: still six channels, the stereo on L and R
+    interleaved, _, _ = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places)
+    out = np.frombuffer(bytes(interleaved), dtype="<f4").reshape(-1, 6).astype(np.float64)
     levels = {name: round(20 * math.log10(max(1e-12, float(np.abs(out[:, k]).max()))), 2) for k, name in enumerate(CHANNELS)}
     return {"wav": wav_51(out, rate), "frames": len(out), "sampleRate": rate, "levels": levels}

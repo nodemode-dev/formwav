@@ -120,6 +120,14 @@ pub struct Player {
     /// Each bus's chain, parallel to `buses`, run on the bus's sum before its gain and pan: a track holding a
     /// nonlinear stage (a compressor) plays through a bus of its own so its whole chain sees the track's sum.
     bus_fx: Vec<Vec<crate::fx::Stage>>,
+    /// PT-38, AA-11: the 5.1 render's groups, clips sharing a placement (a track) mixed together and then spread by
+    /// their speaker gains in SMPTE order (L R C LFE Ls Rs), each with its LFE send's fourth-order 120 Hz low-pass.
+    surround_groups: Vec<(Vec<usize>, [f32; 6], [crate::fx::Biquad; 2])>,
+    /// Clips with no placement play their stereo image on L and R in the 5.1 render.
+    surround_unplaced: Vec<usize>,
+    /// The master chain's copies for the C and LFE pair and the Ls and Rs pair (the chain itself serves L and R).
+    master_fx_51: [Vec<crate::fx::Stage>; 2],
+    peaks_51: [f32; 6],
 }
 
 impl Player {
@@ -277,8 +285,12 @@ impl Player {
         for f in self.clip_fx.iter_mut().chain(self.meter_fx.iter_mut()).flatten() {
             f.reset();
         }
-        for s in self.master_fx.iter_mut().chain(self.bus_fx.iter_mut().flatten()) {
+        for s in self.master_fx.iter_mut().chain(self.bus_fx.iter_mut().flatten()).chain(self.master_fx_51.iter_mut().flatten()) {
             s.reset();
+        }
+        for (_, _, lfe) in self.surround_groups.iter_mut() {
+            lfe[0].reset();
+            lfe[1].reset();
         }
     }
 
@@ -376,6 +388,129 @@ impl Player {
         if let Some(meter) = self.loudness.as_mut() {
             meter.process(&left[..n], &right[..n]);
         }
+    }
+
+    /// PT-38, AA-11: each clip's 5.1 placement, parallel to the clips added (speaker gains in SMPTE order, the LFE's
+    /// applied to what lies below 120 Hz; None, or no entry, plays the clip's stereo image on L and R). Clips sharing
+    /// a placement are grouped; a clip routed to a bus plays through it to L and R; the master chain is copied for
+    /// the C and LFE pair and the surround pair.
+    pub fn set_places(&mut self, places: &[Option<[f32; 6]>]) {
+        self.surround_groups.clear();
+        self.surround_unplaced.clear();
+        let rate = self.rate;
+        for (index, clip) in self.clips.iter().enumerate() {
+            if clip.bus != 0 {
+                continue;
+            }
+            match places.get(index).copied().flatten() {
+                None => self.surround_unplaced.push(index),
+                Some(gains) => match self.surround_groups.iter_mut().find(|g| g.1 == gains) {
+                    Some(group) => group.0.push(index),
+                    None => {
+                        let low = |q: f32| crate::fx::Biquad::design(crate::fx::LOWPASS, 120.0, 0.0, q, rate).unwrap_or(crate::fx::Biquad::bandpass(120.0, q, rate));
+                        self.surround_groups.push((vec![index], gains, [low(0.5412), low(1.3066)]));
+                    }
+                },
+            }
+        }
+        let mut copy = self.master_fx.clone();
+        for s in copy.iter_mut() {
+            s.reset();
+        }
+        self.master_fx_51 = [copy.clone(), copy];
+        self.peaks_51 = [0.0; 6];
+    }
+
+    /// The session as a 5.1 mix into six buffers (L R C LFE Ls Rs): unplaced clips and the buses' outputs on L and R,
+    /// each placement group mixed, folded to mono and spread by its gains, the master chain on each pair of channels,
+    /// then the master gain. The stereo render is untouched by any of this.
+    pub fn render_surround(&mut self, out: &mut [&mut [f32]; 6]) {
+        let n = out.iter().map(|c| c.len()).min().unwrap_or(0);
+        for c in out.iter_mut() {
+            c[..n].fill(0.0);
+        }
+        let mut sl = vec![0.0f32; n];
+        let mut sr = vec![0.0f32; n];
+        let mut done = 0;
+        while done < n {
+            let from = self.position;
+            let mut span = (n - done) as u64;
+            if let Some((_, end)) = self.loop_range {
+                if from < end {
+                    span = span.min(end - from);
+                }
+            }
+            let len = span as usize;
+            let to = from + span;
+            let mut fx = std::mem::take(&mut self.clip_fx);
+            sl[..len].fill(0.0);
+            sr[..len].fill(0.0);
+            for &index in &self.surround_unplaced {
+                self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], from, to, index);
+            }
+            self.mix_buses(&mut fx, &mut sl[..len], &mut sr[..len], from);
+            for j in 0..len {
+                out[0][done + j] += sl[j];
+                out[1][done + j] += sr[j];
+            }
+            let mut groups = std::mem::take(&mut self.surround_groups);
+            for (clips, gains, lfe) in groups.iter_mut() {
+                sl[..len].fill(0.0);
+                sr[..len].fill(0.0);
+                for &index in clips.iter() {
+                    self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], from, to, index);
+                }
+                for j in 0..len {
+                    let m = 0.5 * (sl[j] + sr[j]);
+                    for k in [0usize, 1, 2, 4, 5] {
+                        out[k][done + j] += gains[k] * m;
+                    }
+                    if gains[3] != 0.0 {
+                        let first = lfe[0].process(0, m);
+                        let low = lfe[1].process(0, first);
+                        out[3][done + j] += gains[3] * low;
+                    }
+                }
+            }
+            self.surround_groups = groups;
+            self.clip_fx = fx;
+            if !self.master_fx.is_empty() {
+                for j in done..done + len {
+                    for (pair, chain) in [(0usize, 1usize), (2, 3), (4, 5)].into_iter().zip(0..3) {
+                        let stages = if chain == 0 { &mut self.master_fx } else { &mut self.master_fx_51[chain - 1] };
+                        let (mut l, mut r) = (out[pair.0][j], out[pair.1][j]);
+                        for s in stages.iter_mut() {
+                            (l, r) = s.process(l, r);
+                        }
+                        out[pair.0][j] = l;
+                        out[pair.1][j] = r;
+                    }
+                }
+            }
+            done += len;
+            self.position = from + span;
+            if let Some((start, end)) = self.loop_range {
+                if self.position == end {
+                    self.position = start;
+                    self.reset_fx();
+                }
+            }
+        }
+        for (k, c) in out.iter_mut().enumerate() {
+            if let Some(g) = self.master_gain {
+                for v in c[..n].iter_mut() {
+                    *v *= g;
+                }
+            }
+            for v in c[..n].iter() {
+                self.peaks_51[k] = self.peaks_51[k].max(v.abs());
+            }
+        }
+    }
+
+    /// The six channels' peaks since the last call (L R C LFE Ls Rs), for the 5.1 meters.
+    pub fn take_peaks_51(&mut self) -> [f32; 6] {
+        std::mem::take(&mut self.peaks_51)
     }
 
     pub fn set_loop(&mut self, start: u64, end: u64) {
@@ -758,5 +893,38 @@ mod tests {
         assert!(!p.add_clip_fx_auto(0, 0, env));
         assert!(p.add_clip_fx(crate::fx::PEAK, 1000.0, 6.0, 1.0));
         assert!(!p.add_clip_fx_auto(0, 3, env) && !p.add_clip_fx_auto(0, 1, 7) && p.add_clip_fx_auto(0, 1, env));
+    }
+
+    /// PT-38, AA-11: the six-channel bus puts a clip placed at C on C alone, an unplaced clip on L and R as its stereo
+    /// image, an LFE placement through the 120 Hz low-pass, and the master fader on all six; the stereo render of the
+    /// same session is not touched.
+    #[test]
+    fn the_six_channel_bus_places_each_clip_and_applies_the_master_to_all_six() {
+        let rate = 48000usize;
+        let tone = |hz: f32| (0..rate).map(|i| 0.25 * (2.0 * std::f32::consts::PI * hz * i as f32 / rate as f32).sin()).collect::<Vec<f32>>();
+        let mut p = Player::new();
+        p.set_rate(rate as f32);
+        for (id, hz) in [(1u32, 1000.0f32), (2, 330.0), (3, 50.0)] {
+            p.load_source(id, AudioBuffer { sample_rate: rate as u32, channels: vec![tone(hz)] });
+            p.add_clip(PlayClip { source: id, start: 0, source_in: 0, length: rate as u64, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 0, gain_env: 0, pan_env: 0 });
+        }
+        p.set_master_db(-6.0);
+        p.set_places(&[Some([0.0, 0.0, 1.0, 0.0, 0.0, 0.0]), None, Some([0.0, 0.0, 0.0, 1.0, 0.0, 0.0])]);
+        let mut chans: Vec<Vec<f32>> = (0..6).map(|_| vec![0.0f32; rate]).collect();
+        let [c0, c1, c2, c3, c4, c5] = &mut chans[..] else { unreachable!() };
+        let mut out: [&mut [f32]; 6] = [&mut c0[..], &mut c1[..], &mut c2[..], &mut c3[..], &mut c4[..], &mut c5[..]];
+        p.render_surround(&mut out);
+        let g = 10f32.powf(-6.0 / 20.0);
+        let worst = |a: &[f32], b: &[f32]| a.iter().zip(b).map(|(x, y)| (x - y).abs()).fold(0.0f32, f32::max);
+        let (c1k, c330, c50) = (tone(1000.0), tone(330.0), tone(50.0));
+        let scaled = |t: &[f32]| t.iter().map(|v| v * g).collect::<Vec<f32>>();
+        assert!(worst(&chans[2], &scaled(&c1k)) < 1e-6, "C holds the clip placed there, at the master gain");
+        assert!(worst(&chans[0], &scaled(&c330)) < 1e-6 && worst(&chans[1], &scaled(&c330)) < 1e-6, "L and R hold the unplaced clip");
+        assert!(chans[4].iter().chain(&chans[5]).all(|v| *v == 0.0), "the surrounds stay silent");
+        let level = |x: &[f32]| (x[rate / 2..].iter().map(|v| v * v).sum::<f32>() / (rate / 2) as f32).sqrt();
+        let lfe_db = 20.0 * (level(&chans[3]) / level(&scaled(&c50))).log10();
+        assert!(lfe_db.abs() < 0.2, "the LFE carries the 50 Hz placement within 0.2 dB ({lfe_db:.3})");
+        let peaks = p.take_peaks_51();
+        assert!((peaks[2] - 0.25 * g).abs() < 1e-4 && peaks[4] == 0.0, "the six peaks follow the channels");
     }
 }

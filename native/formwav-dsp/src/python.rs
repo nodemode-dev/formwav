@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new()))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new()))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -27,7 +27,9 @@ fn render<'py>(
     chains: Vec<(u8, usize, u8, f32, f32, f32, f32, f32)>,
     fx_auto: Vec<(usize, usize, u8, u32)>,
     comps: Vec<(usize, usize, f32, f32, f32, f32, f32)>,
+    places: Vec<(usize, [f32; 6])>,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
+    let n_clips = clips.len();
     let mut player = Player::new();
     player.set_master_db(master_db);
     player.set_rate(rate);
@@ -72,6 +74,34 @@ fn render<'py>(
     }
     for &(_, _, kind, a, b, c, d, e) in chains.iter().filter(|s| s.0 == 2) {
         player.add_master_stage(kind, a, b, c, d, e);
+    }
+    if !places.is_empty() {
+        // PT-38, AA-11: a 5.1 mix through the six-channel master bus, its channels interleaved in SMPTE order (L R C
+        // LFE Ls Rs); the two peaks returned are L's and R's, the engine reading all six from the samples
+        let mut per_clip: Vec<Option<[f32; 6]>> = vec![None; n_clips];
+        for (index, gains) in places {
+            if index < n_clips {
+                per_clip[index] = Some(gains);
+            }
+        }
+        player.set_places(&per_clip);
+        let mut chans: Vec<Vec<f32>> = (0..6).map(|_| vec![0.0f32; frames]).collect();
+        let mut at = 0;
+        while at < frames {
+            let end = (at + RENDER_BLOCK).min(frames);
+            let [c0, c1, c2, c3, c4, c5] = &mut chans[..] else { unreachable!() };
+            let mut block: [&mut [f32]; 6] = [&mut c0[at..end], &mut c1[at..end], &mut c2[at..end], &mut c3[at..end], &mut c4[at..end], &mut c5[at..end]];
+            player.render_surround(&mut block);
+            at = end;
+        }
+        let peaks = player.take_peaks_51();
+        let mut interleaved = Vec::with_capacity(frames * 24);
+        for i in 0..frames {
+            for c in &chans {
+                interleaved.extend_from_slice(&c[i].to_le_bytes());
+            }
+        }
+        return Ok((PyBytes::new(py, &interleaved), peaks[0], peaks[1]));
     }
     let mut left = vec![0.0f32; frames];
     let mut right = vec![0.0f32; frames];
