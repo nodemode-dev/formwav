@@ -326,6 +326,23 @@ html, body, #app { height: 100%; }
   border-bottom: 1px solid var(--border-color);
 }
 
+/* PT-26: the Picture panel, floating over the lanes at the lower right */
+.fw-picture {
+  position: fixed;
+  inset-block-end: var(--space-8);
+  inset-inline-end: var(--space-8);
+  z-index: var(--z-raised);
+  inline-size: min(360px, 40vw);
+  padding: var(--space-2);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+.fw-picture[hidden] { display: none; }
+.fw-picture-bar { display: flex; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
+.fw-picture-name { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-picture-video { display: block; inline-size: 100%; background: var(--bg-primary); }
+
 /* AU-13: the ruler's paint canvas, placed by the script over the visible window; the canvas under it takes the clicks */
 .fw-ruler-paint {
   position: absolute;

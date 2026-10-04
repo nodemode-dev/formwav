@@ -1265,3 +1265,10 @@ Separate into stems now tags each stem's track with the track it came from and i
 - logged: v1.79.0 (in progress) · 2026-10-04
 
 The clock gains 29.97 drop-frame (SMPTE: real frames at 30000/1001 a second, frame numbers 00 and 01 skipped at each minute but every tenth, ';' before the frames) beside 24, 25 and 30 non-drop; every timecode reading adds the session's timecode start (Pro Tools' session start), set in the TC start field beside the tempo and read in the clock's rate (30 non-drop while the clock shows time); in a timecode mode the ruler labels in that timecode from the start, redrawn when the mode changes. Verified in Chromium (sidecar verification/verify_timecode.py): in drop-frame, start 00:00:59;29 read so and one frame later 00:01:00;02 (00 and 01 skipped), start 00:09:59;29 one frame later 00:10:00;00 (no skip at the tenth minute), 01:00:00;00 read back; at 25 fps 01:00:00:00 read back and 25 frames later 01:00:01:00; the ruler labelled 01:00:00:00, 01:00:01:00 and on; no page errors. Still missing for the row: picture.
+
+### picture in step with the transport (PT-26, done)
+- refers-to: frontend src/ui/picture.ts; src/styles/shell.css :: .fw-picture; src/main.ts
+- kind: explainer
+- logged: v1.79.0 (in progress) · 2026-10-04
+
+A Picture toggle in the tool tray's View group opens a floating panel that shows a local video, muted (the session's sound is what plays), its start at the session's start: stopped, the frame at the playhead (within half a frame); playing, it plays alongside and is set back in step whenever it drifts more than 80 ms. Verified in Chromium (sidecar verification/verify_picture.py, a 4 s VP8 test video): stopped at 1.5 s the video sat at 1.5 s, paused; after 1.2 s of playing it read 2.712 s against the transport's 2.673 s (39 ms, inside the correction threshold and the transport's own reporting interval); stopping paused it; no page errors. With drop-frame, the timecode start and the timecode ruler, PT-26 is done.

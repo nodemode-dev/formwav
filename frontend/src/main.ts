@@ -25,6 +25,7 @@ import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
 import { mountOutputMeter, mountTrackMeters } from "./ui/meter";
 import { mountDrawTool } from "./ui/draw-tool";
+import { mountPicture } from "./ui/picture";
 import { mountMidiInput } from "./ui/midi-input";
 import { mountMixer } from "./ui/mixer";
 import { mountMediaPane } from "./ui/media-pane";
@@ -114,6 +115,7 @@ if (host) {
     if (line && line.textContent !== text) line.textContent = text;
   });
   mountDrawTool(host, engine); // AU-13: the Draw tool, drawing samples in the lanes at sample zoom
+  mountPicture(host, engine); // PT-26: a video in step with the transport, for sound to picture
   mountPianoRoll(host, engine);
   mountSpectrum(host, engine, player);
   mountEnvelopeEdit(host, engine);
