@@ -177,6 +177,9 @@ export interface Track {
   /** PT-16: MIDI effects before the instrument, in order; a note clip keeps the notes as played and is rendered from
    *  the notes after them, and live MIDI on the track passes through them too. */
   midiFx?: MidiFx[];
+  /** RX-32, RX-66: a stem separated from another track (`of`, its id) and which part it is (vocals, drums, bass,
+   *  other), so the Stems view can rebalance the group. */
+  stem?: { of: string; part: string };
   /** Volume (dB) and pan automation; when present each replaces the track's static fader or pan. */
   automation?: { volume?: AutoPoint[]; pan?: AutoPoint[] };
   id: string;
@@ -330,7 +333,7 @@ export interface SessionView {
 }
 
 export type Command =
-  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[] }
+  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[]; stem?: { of: string; part: string } }
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
   | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
@@ -934,6 +937,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         mute: false,
         solo: false,
         clips: [clip],
+        ...(cmd.stem ? { stem: { of: cmd.stem.of, part: cmd.stem.part } } : {}),
       };
       return { ...doc, sampleRate, media, tracks: [...doc.tracks, track] };
     }

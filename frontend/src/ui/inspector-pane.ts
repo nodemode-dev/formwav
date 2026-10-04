@@ -1,6 +1,7 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import type { FadeShape, MidiFx, TrackFx } from "../engine/document";
 import { renderNotes } from "../audio/notes";
+import { importFile } from "../io/media-client";
 import { PALETTE } from "../engine/document";
 
 const COLOURS = PALETTE.map((k) => `<option value="${k}">${k[0].toUpperCase()}${k.slice(1)}</option>`).join("");
@@ -101,6 +102,7 @@ const BODY = `
   <div class="fw-rtfx-list" data-scope="track"></div>
   <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument (Pro Tools' MIDI effect plugins): its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
   <div data-midifx-list></div>
+  <div data-stems></div>
   <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="reverb">Reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-clipfx">
@@ -174,6 +176,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   let drawPadRef: ((pos: { x: number; y: number } | null) => void) | null = null;
   // PT-16: the MIDI effects list's drawing, set once mounted
   let midiFxRef: ((track: Track) => void) | null = null;
+  // RX-32, RX-66: the Stems view's drawing, set once mounted
+  let stemsRef: ((track: Track) => void) | null = null;
   const render = () => {
     const doc = engine.get("document");
     const hit = find(doc);
@@ -272,6 +276,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (formatPick && document.activeElement !== formatPick && formatPick.value !== (doc.spatialFormat ?? "5.1")) formatPick.value = doc.spatialFormat ?? "5.1";
     drawPadRef?.(track.surround ? { x: track.surround.x, y: track.surround.y } : null);
     midiFxRef?.(track);
+    stemsRef?.(track);
     fillInputs();
     const automated = track.automation;
     const volume = field<HTMLInputElement>("volume");
@@ -890,6 +895,58 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     engine.dispatch({ type: "set-surround-fold", on });
     if (notice) setText(notice, on ? "Hearing the 5.1 as a stereo fold-down, in playback and the stereo mix" : "Playback and the stereo mix back to each track's own pan");
   });
+  // RX-32, RX-66: the Stems view: a separated group's parts (shown on any of them or on the track they came from), each
+  // with its level (heard as it moves, the realtime rebalance), mute and solo, and Render rebalance mixing the group at
+  // those settings into one clip on a new track, the stems muted, one undo step
+  const stemsBox = body.querySelector<HTMLElement>("[data-stems]");
+  let stemsSig = "";
+  const stemGroup = (track: Track) => {
+    const doc = engine.get("document");
+    const of = track.stem?.of ?? (doc.tracks.some((t) => t.stem?.of === track.id) ? track.id : null);
+    return of ? doc.tracks.filter((t) => t.stem?.of === of) : [];
+  };
+  stemsRef = (track) => {
+    if (!stemsBox) return;
+    const group = stemGroup(track);
+    const sig = JSON.stringify(group.map((t) => [t.id, t.stem?.part, t.gainDb, t.mute, t.solo]));
+    if (sig === stemsSig || stemsBox.contains(document.activeElement)) return;
+    stemsSig = sig;
+    stemsBox.innerHTML = group.length
+      ? `<div class="fw-insp-head">Stems</div>` +
+        group
+          .map((t) => `<div class="fw-analyze-buttons"><span>${t.stem?.part ?? ""}</span><label class="fw-sam-opt"><span>${t.gainDb.toFixed(1)} dB</span><input type="range" min="-60" max="12" step="0.5" value="${t.gainDb}" data-stem-gain="${t.id}" aria-label="${t.stem?.part ?? "stem"} level"></label><button type="button" class="fw-ibtn" data-stem-mute="${t.id}" aria-pressed="${t.mute}">Mute</button><button type="button" class="fw-ibtn" data-stem-solo="${t.id}" aria-pressed="${t.solo}">Solo</button></div>`)
+          .join("") +
+        `<div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-stems-render>Render rebalance</button></div>`
+      : "";
+  };
+  stemsBox?.addEventListener("input", (e) => {
+    const r = (e.target as HTMLElement).closest<HTMLInputElement>("[data-stem-gain]");
+    if (r?.dataset.stemGain) engine.dispatch({ type: "set-track-gain", trackId: r.dataset.stemGain, gainDb: Number(r.value) });
+  });
+  stemsBox?.addEventListener("click", async (e) => {
+    const el = e.target as HTMLElement;
+    const mute = el.closest<HTMLElement>("[data-stem-mute]")?.dataset.stemMute;
+    const solo = el.closest<HTMLElement>("[data-stem-solo]")?.dataset.stemSolo;
+    const doc = engine.get("document");
+    if (mute) engine.dispatch({ type: "set-track-mute", trackId: mute, mute: !doc.tracks.find((t) => t.id === mute)?.mute });
+    if (solo) engine.dispatch({ type: "set-track-solo", trackId: solo, solo: !doc.tracks.find((t) => t.id === solo)?.solo });
+    if (!el.closest("[data-stems-render]")) return;
+    const hit = find(doc);
+    const group = hit ? stemGroup(hit.track) : [];
+    if (!group.length) return;
+    const ids = new Set(group.map((t) => t.id));
+    setText(notice, "Rendering the rebalanced stems...");
+    try {
+      const res = await fetch("/api/render?format=wav&what=mix", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...doc, tracks: doc.tracks.filter((t) => ids.has(t.id)) }) });
+      if (!res.ok) throw new Error(`the engine answered ${res.status}`);
+      const media = await importFile(new File([await res.blob()], "rebalanced.wav", { type: "audio/wav" }), doc.sampleRate);
+      engine.dispatch({ type: "batch", commands: [{ type: "import-media", media, at: 0 }, ...group.map((t) => ({ type: "set-track-mute" as const, trackId: t.id, mute: true }))] } as Parameters<Engine["dispatch"]>[0]);
+      setText(notice, "Rendered the rebalance onto a new track; the stems are muted (undo brings them back)");
+    } catch (err) {
+      setText(notice, `Could not render the rebalance: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
   // PT-16: the selected track's MIDI effects, each with its settings and a Remove; a change re-renders its note clips
   const midiList = body.querySelector<HTMLElement>("[data-midifx-list]");
   let midiSig = "";
@@ -1463,7 +1520,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown } | { source: string; media: MediaRef }[];
       if (!res.ok || !Array.isArray(out)) throw new Error(!Array.isArray(out) && typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       const commands = [
-        ...out.map((s) => ({ type: "import-media" as const, media: s.media, at: hit.clip.start })),
+        ...out.map((s) => ({ type: "import-media" as const, media: s.media, at: hit.clip.start, ...(kind === "separate" ? { stem: { of: hit.track.id, part: s.source } } : {}) })),
         { type: "set-track-mute" as const, trackId: hit.track.id, mute: true },
       ];
       engine.dispatch({ type: "batch", commands } as Parameters<Engine["dispatch"]>[0]);
