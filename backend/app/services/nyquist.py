@@ -79,9 +79,11 @@ def _tokens(s: str) -> list[str]:
     return out
 
 
-def _depth(s: str) -> int:
-    """Brackets a line leaves open (quotes skipped): a header line over 0 goes on over the next lines."""
-    d, quoted, k = 0, False, 0
+def _scan(s: str, quoted: bool = False) -> tuple[int, bool]:
+    """Brackets a line opens (or closes, below 0) outside quotes, and whether a quote is still open at its end: a
+    label can be quoted over two lines (Limiter's "Input Gain (dB)\\nmono/Left"), which a count line by line lost,
+    taking the rest of the plug-in's code for header and leaving it out."""
+    d, k = 0, 0
     while k < len(s):
         c = s[k]
         if quoted:
@@ -96,7 +98,12 @@ def _depth(s: str) -> int:
         elif c == ")":
             d -= 1
         k += 1
-    return d
+    return d, quoted
+
+
+def _depth(s: str) -> int:
+    """Brackets a line (or joined lines) leaves open, quotes skipped."""
+    return _scan(s)[0]
 
 
 def _text(token: str) -> str:
@@ -269,11 +276,12 @@ def run(media_id: str, code: str | None = None, plugin: str | None = None, value
         # a version 4 header's lines start with $, which Lisp does not take as a comment: they would be evaluated
         # (errors on $CONTROL and the like, as my first run found); Audacity leaves them out, here they become comments
         # (with the lines a header's open brackets carry on to: a choice list's later items were evaluated otherwise)
-        src_lines, kept, open_brackets = path.read_text(encoding="utf-8", errors="replace").splitlines(), [], 0
+        src_lines, kept, open_brackets, quoted = path.read_text(encoding="utf-8", errors="replace").splitlines(), [], 0, False
         for ln in src_lines:
-            if open_brackets > 0 or ln.lstrip().startswith("$"):
-                if not ln.lstrip().startswith(";"):
-                    open_brackets = max(0, open_brackets + _depth(ln))
+            if open_brackets > 0 or quoted or ln.lstrip().startswith("$"):
+                if quoted or not ln.lstrip().startswith(";"):
+                    d, quoted = _scan(ln, quoted)  # a quote can run on to the next line (a two-line label)
+                    open_brackets = max(0, open_brackets + d)
                 kept.append(";" + ln)
             else:
                 kept.append(ln)
