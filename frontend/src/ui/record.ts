@@ -1,7 +1,7 @@
 import type { Engine, TransportState } from "../engine";
 import type { Player } from "../audio/player";
 import { encodeWav, startMonitoring, startRecording, type Recording, type Take } from "../audio/recorder";
-import { onMonitorChanged, trackInput, trackMonitor } from "./inputs";
+import { onMonitorChanged, trackChannels, trackInput, trackMonitor } from "./inputs";
 import { importFile } from "../io/media-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { addRecordingTrack, armedTrack, armedTracks, recordingTrack, setRecordingTrack } from "./arm";
@@ -180,13 +180,13 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       if (rollFrom !== position) player.seek(rollFrom);
       lastPosition = rollFrom;
       stopPreview();
-      active = await startRecording(player, rollFrom, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false);
+      active = await startRecording(player, rollFrom, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false, true, armed ? trackChannels(armed.id) : null);
       const missed: string[] = [];
       for (const id of armedTracks().slice(1)) {
         const track = doc.tracks.find((t) => t.id === id);
         if (!track) continue;
         try {
-          extras.push({ trackId: id, rec: await startRecording(player, rollFrom, laneLevel(id), trackInput(id), trackMonitor(id), false) });
+          extras.push({ trackId: id, rec: await startRecording(player, rollFrom, laneLevel(id), trackInput(id), trackMonitor(id), false, trackChannels(id)) });
           addRecordingTrack(id);
         } catch {
           missed.push(track.name);

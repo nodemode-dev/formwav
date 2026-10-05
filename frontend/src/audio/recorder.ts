@@ -72,7 +72,7 @@ async function openInput(deviceId: string): Promise<MediaStream> {
     return shared.stream;
   }
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
+    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 32 }, ...(deviceId ? { deviceId: { exact: deviceId } } : {}) },
   });
   inputs.set(deviceId, { stream, source: null, users: 1 });
   return stream;
@@ -126,12 +126,14 @@ export async function startMonitoring(player: Player, deviceId = ""): Promise<{ 
   };
 }
 
-export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = "", monitor = false, playAlong = true): Promise<Recording> {
+export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = "", monitor = false, playAlong = true, pick: number[] | null = null): Promise<Recording> {
   const stream = await openInput(deviceId);
   try {
     const ctx = await player.context();
     await ctx.audioWorklet.addModule(recorderUrl);
-    const channels = Math.min(2, Math.max(1, stream.getAudioTracks()[0]?.getSettings().channelCount ?? 1));
+    const deviceChannels = Math.max(1, stream.getAudioTracks()[0]?.getSettings().channelCount ?? 1);
+    const picked = (pick ?? []).filter((c) => c >= 0 && c < deviceChannels);
+    const channels = picked.length ? picked.length : Math.min(2, deviceChannels);
     const shared = inputs.get(deviceId);
     const source = shared?.source ?? ctx.createMediaStreamSource(stream);
     if (shared && !shared.source) shared.source = source;
@@ -141,9 +143,15 @@ export async function startRecording(player: Player, startPosition: number, onLe
       outputChannelCount: [1],
       channelCount: channels,
       channelCountMode: "explicit",
-      channelInterpretation: "speakers",
+      channelInterpretation: picked.length ? "discrete" : "speakers",
     });
-    source.connect(node);
+    const split = picked.length ? ctx.createChannelSplitter(deviceChannels) : null;
+    const feed: AudioNode = split ? ctx.createChannelMerger(picked.length) : source;
+    if (split) {
+      source.connect(split);
+      picked.forEach((c, i) => split.connect(feed, c, i));
+    }
+    feed.connect(node);
     node.connect(ctx.destination);
     const chunks: Float32Array[][] = [];
     let startFrame = -1;
@@ -166,7 +174,10 @@ export async function startRecording(player: Player, startPosition: number, onLe
       stop: () =>
         new Promise<Take>((resolve) => {
           onStopped = () => {
-            source.disconnect(node);
+            if (split) {
+              source.disconnect(split);
+              feed.disconnect();
+            } else source.disconnect(node);
             node.disconnect();
             closeInput(deviceId);
             resolve({ ...assemble(chunks, channels, ctx.sampleRate), startFrame });

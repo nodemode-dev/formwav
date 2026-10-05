@@ -14,6 +14,19 @@ export function setTrackInput(trackId: string, deviceId: string): void {
   else chosen.delete(trackId);
 }
 
+/** The comparison's Multitrack recording row: the channels of its device a track records (zero-based), or null for
+ * the device's first one or two as before. */
+const channelChoice = new Map<string, number[]>();
+
+export function trackChannels(trackId: string): number[] | null {
+  return channelChoice.get(trackId) ?? null;
+}
+
+export function setTrackChannels(trackId: string, channels: number[] | null): void {
+  if (channels && channels.length) channelChoice.set(trackId, channels);
+  else channelChoice.delete(trackId);
+}
+
 const monitored = new Set<string>();
 const monitorListeners = new Set<(trackId: string, on: boolean) => void>();
 
