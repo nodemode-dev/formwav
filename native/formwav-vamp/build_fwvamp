@@ -21,7 +21,7 @@ done
 [ "$build/acsymbols.o" -nt "$here/sdk/src/vamp-hostsdk/acsymbols.c" ] || ${CC:-cc} -O2 -fPIC -w $INC -c "$here/sdk/src/vamp-hostsdk/acsymbols.c" -o "$build/acsymbols.o"
 case "$(uname -s)" in
   # Windows (MSYS2): one self-contained .exe, and no libdl (the Vamp SDK loads plugins with LoadLibrary there)
-  MINGW*|MSYS*) LINK="-static $(pkg-config --static --libs sndfile)" ;;
+  MINGW*|MSYS*) LINK="-static $(pkg-config --static --cflags --libs sndfile) -lpthread -lshlwapi" ;; # FLAC's .pc omits pthread
   *) LINK="$LIBS -lsndfile -ldl" ;;
 esac
 ${CXX:-c++} -O2 -w $INC "$here/fwvamp.cpp" $objs "$build/acsymbols.o" $LINK -o "$here/fwvamp"

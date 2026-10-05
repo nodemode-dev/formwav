@@ -7,7 +7,13 @@ here=$(cd "$(dirname "$0")" && pwd)
 L="$here/libnyquist/nyquist"
 build="$here/build"
 mkdir -p "$build"
-INC="-I$here/libnyquist -I$L/cmt -I$L/cmupv/src -I$L/ffts/src -I$L/nyqsrc -I$L/nyqstk -I$L/nyqstk/include -I$L/tran -I$L/xlisp -I$L/sys/unix"
+# the platform's system headers: sys/unix, or on Windows (MSYS2) Audacity 2.4.2's sys/win/msvc (switches.h defines
+# WINDOWS for the shared headers); with them every source compiles under MinGW-w64, as checked by cross-compiling
+case "$(uname -s)" in
+  MINGW*|MSYS*) SYS="$L/sys/win/msvc $(pkg-config --cflags sndfile portaudio-2.0)" ;;
+  *) SYS="$L/sys/unix" ;;
+esac
+INC="-I$here/libnyquist -I$L/cmt -I$L/cmupv/src -I$L/ffts/src -I$L/nyqsrc -I$L/nyqstk -I$L/nyqstk/include -I$L/tran -I$L/xlisp -I$SYS"
 LIBS=""
 # macOS: libsndfile and portaudio from Homebrew, and -fno-common as Audacity's build uses on Darwin
 if command -v brew >/dev/null 2>&1; then
@@ -34,7 +40,9 @@ for s in $(grep -v '^#' "$here/sources.txt"); do
 done
 ar rcs "$build/libnyquist.a" $objs
 case "$(uname -s)" in
-  MINGW*|MSYS*) LINK="-static $(pkg-config --static --libs sndfile portaudio-2.0) -lstdc++" ;; # Windows: one self-contained .exe
+  # Windows: one self-contained .exe. MSYS2's pkg-config files leave out the system libraries a static link needs
+  # (portaudio's declares none; FLAC's omits pthreads), found by cross-linking: named here
+  MINGW*|MSYS*) LINK="-static $(pkg-config --static --libs sndfile portaudio-2.0) -lstdc++ -lpthread -lwinmm -lole32 -luuid -lsetupapi -lksuser -ldsound -lshlwapi" ;;
   *) LINK="$LIBS -lsndfile -lportaudio $CXXLIB" ;;
 esac
 ${CC:-cc} -O2 -w "$here/fwnyq.c" -I"$here/libnyquist" $INC "$build/libnyquist.a" $LINK -lm -lpthread -o "$here/fwnyq"

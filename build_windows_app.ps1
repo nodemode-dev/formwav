@@ -83,6 +83,10 @@ InMsys "native/formwav-nyquist/build_fwnyq && native/formwav-vamp/build_fwvamp &
 foreach ($pair in @(@("formwav-nyquist", "fwnyq"), @("formwav-vamp", "fwvamp"), @("formwav-lv2", "fwlv2"))) {
   Copy-Item (Join-Path $Root "native\$($pair[0])\$($pair[1]).exe") (Join-Path $Bin "$($pair[1])-$Triple.exe") -Force
 }
+# fwlv2 links lilv, serd, sord, sratom and zix as DLLs (MSYS2 ships no static ones); the installer places them beside
+# it (src-tauri\tauri.windows.conf.json), where Windows looks first. fwnyq and fwvamp are self-contained.
+New-Item -ItemType Directory -Force -Path (Join-Path $Bin "dlls") | Out-Null
+Copy-Item (Join-Path $Root "native\formwav-lv2\dlls\*.dll") (Join-Path $Bin "dlls") -Force
 Get-ChildItem $Bin | ForEach-Object { Write-Host "sidecar: src-tauri\binaries\$($_.Name)" }
 
 Say "Generating app icons"
