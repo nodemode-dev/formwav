@@ -156,6 +156,28 @@ def media_list(query: str = "", limit: int = 100, offset: int = 0) -> dict:
     return media.list_media(query, limit, offset)
 
 
+@router.post("/media/{media_id}/nyquist", status_code=201)
+def media_nyquist(media_id: str, payload: dict) -> dict:
+    """AU-28: {"code"} (a Nyquist Prompt) or {"plugin", "values"} (one of Audacity's bundled Nyquist plug-ins and its
+    controls) run on the clip by Audacity's own Nyquist (services/nyquist.py); a sound comes back as new media."""
+    from ..services import nyquist
+
+    try:
+        return nyquist.run(media_id, payload.get("code"), payload.get("plugin"), payload.get("values") or {})
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
+@router.get("/nyquist/plugins")
+def nyquist_plugins() -> list[dict]:
+    """AU-28: Audacity's bundled Nyquist plug-ins that process audio, with their controls."""
+    from ..services import nyquist
+
+    return nyquist.list_plugins()
+
+
 @router.post("/media/{media_id}/debleed", status_code=201)
 def media_debleed(media_id: str, reference: str, offset: int = 0, amount: float = 100.0, pathMs: float | None = None) -> dict:
     """The recording with what leaked into it from the reference subtracted (services/effects.py: debleed); pathMs
