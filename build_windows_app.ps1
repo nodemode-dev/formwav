@@ -89,10 +89,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Bin "dlls") | Out-Null
 Copy-Item (Join-Path $Root "native\formwav-lv2\dlls\*.dll") (Join-Path $Bin "dlls") -Force
 Get-ChildItem $Bin | ForEach-Object { Write-Host "sidecar: src-tauri\binaries\$($_.Name)" }
 
-Say "Generating app icons"
-Push-Location $Root
-Run $Tauri[0] (@($Tauri[1..($Tauri.Length - 1)]) + @("icon", "src-tauri\icons\icon.png"))
-Pop-Location
+# the icons are committed in src-tauri\icons (regenerating them each build rewrote tracked files)
 
 Say "Building the app bundle (this compiles Rust; the first run takes a while)"
 Push-Location (Join-Path $Root "src-tauri")

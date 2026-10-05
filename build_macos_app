@@ -80,8 +80,7 @@ native/formwav-lv2/build_fwlv2
 cp native/formwav-lv2/fwlv2 "src-tauri/binaries/fwlv2-$TRIPLE"
 echo "sidecar: src-tauri/binaries/fwlv2-$TRIPLE"
 
-say "Generating app icons"
-cargo tauri icon src-tauri/icons/icon.png
+# the icons are committed in src-tauri/icons (regenerating them each build rewrote tracked files)
 
 say "Building the app bundle (this compiles Rust; the first run takes a while)"
 cd src-tauri
