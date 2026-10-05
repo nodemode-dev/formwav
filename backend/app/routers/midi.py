@@ -50,6 +50,47 @@ class RenderRequest(BaseModel):
     plugin: str | None = None
 
 
+@router.get("/devices")
+def midi_devices() -> dict:
+    """AU-37: the MIDI inputs the engine can read (for the desktop app, whose WebView has no Web MIDI), and the reason
+    when there are none."""
+    from ..services import midi_live
+
+    return midi_live.devices()
+
+
+@router.get("/stream")
+async def midi_stream(device: str, request: Request):
+    """AU-37: the device's messages as server-sent events; the device is opened first, so a missing one is answered
+    with 404 (or 503 when MIDI itself fails) rather than an empty stream."""
+    from fastapi.responses import StreamingResponse
+
+    from ..services import midi_live
+
+    try:
+        poll, close = midi_live.open_reader(device)
+    except LookupError as err:
+        raise HTTPException(404, str(err)) from err
+    except RuntimeError as err:
+        raise HTTPException(503, f"MIDI: {err}") from err
+    return StreamingResponse(
+        midi_live.events(poll, close, request.is_disconnected),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/test")
+def midi_test(payload: dict) -> dict:
+    """AU-37 tests only: a message for the test keyboard, present when the engine runs with FORMWAV_MIDI_TEST=1."""
+    from ..services import midi_live
+
+    if not midi_live.testing():
+        raise HTTPException(404, "not found")
+    midi_live.send_test(list(payload.get("data") or []))
+    return {"queued": True}
+
+
 @router.get("/instruments")
 def list_instruments() -> list[dict]:
     """PT-15: the CLAP instruments in the plugin folder, for a note track's Instrument choice."""

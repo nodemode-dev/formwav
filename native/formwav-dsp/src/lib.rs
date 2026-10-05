@@ -7,6 +7,8 @@ pub mod peaks;
 mod python;
 #[cfg(feature = "native")]
 pub mod native;
+#[cfg(feature = "native")]
+pub mod midi;
 pub mod render;
 pub mod synth;
 pub mod wav;

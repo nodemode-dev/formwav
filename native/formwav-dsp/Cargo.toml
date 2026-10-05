@@ -12,7 +12,7 @@ crate-type = ["rlib", "cdylib"]
 [features]
 python = ["dep:pyo3"]
 # Native audio output (cpal) for the engine and the desktop app; never in the wasm build.
-native = ["dep:cpal", "dep:serde", "dep:serde_json"]
+native = ["dep:cpal", "dep:serde", "dep:serde_json", "dep:midir"]
 # AU-23, opt-in: ASIO devices on Windows through cpal's ASIO host. Building with it needs Steinberg's ASIO SDK
 # (CPAL_ASIO_DIR pointing at it) and links it under its own licence (GPLv3 or Steinberg's); the default build leaves it
 # out and stays Apache-2.0.
@@ -21,5 +21,7 @@ asio = ["native", "cpal/asio"]
 [dependencies]
 pyo3 = { version = "0.29.2", features = ["extension-module", "abi3-py310"], optional = true }
 cpal = { version = "0.18", optional = true }
+# AU-37: MIDI devices read by the engine itself (the macOS app's WebKit has no Web MIDI); MIT licence
+midir = { version = "0.11", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }

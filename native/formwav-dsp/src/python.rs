@@ -281,10 +281,42 @@ impl PyNativeOutput {
     }
 }
 
+/// AU-37: a MIDI input device read by the engine (crate::midi): MidiInput(name) opens it, poll() drains what arrived
+/// (midir's timestamp in microseconds and the message's bytes), close() lets it go; MidiInput.inputs() lists devices.
+#[cfg(feature = "native")]
+#[pyclass(name = "MidiInput")]
+struct PyMidiInput {
+    inner: Option<crate::midi::MidiListener>,
+}
+
+#[cfg(feature = "native")]
+#[pymethods]
+impl PyMidiInput {
+    #[new]
+    fn new(name: &str) -> PyResult<Self> {
+        crate::midi::MidiListener::open(name).map(|l| PyMidiInput { inner: Some(l) }).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+    }
+
+    fn poll(&self) -> Vec<(u64, Vec<u8>)> {
+        self.inner.as_ref().map(|l| l.drain()).unwrap_or_default()
+    }
+
+    fn close(&mut self) {
+        self.inner = None;
+    }
+
+    #[staticmethod]
+    fn inputs() -> PyResult<Vec<String>> {
+        crate::midi::inputs().map_err(pyo3::exceptions::PyRuntimeError::new_err)
+    }
+}
+
 #[pymodule]
 fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "native")]
     m.add_class::<PyNativeOutput>()?;
+    #[cfg(feature = "native")]
+    m.add_class::<PyMidiInput>()?;
     m.add_function(wrap_pyfunction!(probe, m)?)?;
     m.add_function(wrap_pyfunction!(render_notes, m)?)?;
     m.add_function(wrap_pyfunction!(render_sampled, m)?)?;

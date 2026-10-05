@@ -81,7 +81,11 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
   };
 
   const access = (navigator as Navigator & { requestMIDIAccess?: () => Promise<MIDIAccess> }).requestMIDIAccess;
-  if (typeof access !== "function") return; // no Web MIDI in this browser: the on-screen keys still play
+  if (typeof access !== "function") {
+    // AU-37: no Web MIDI here (the desktop app's WebKit): the engine reads the MIDI devices itself
+    listenThroughEngine(onMessage, notice);
+    return;
+  }
   access
     .call(navigator)
     .then((midi) => {
@@ -99,4 +103,46 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
     .catch(() => {
       // MIDI refused or absent: nothing to listen to
     });
+}
+
+/** AU-37: MIDI through the engine, where the page has no Web MIDI (the desktop app's WebKit): the engine lists the
+ *  devices it can read (CoreMIDI on macOS) and streams each one's messages as server-sent events, every message going
+ *  to the same handler Web MIDI feeds. Devices are looked for again every 5 s, so a keyboard plugged in later is heard
+ *  and one unplugged is let go. */
+function listenThroughEngine(onMessage: (data: Uint8Array) => void, notice?: (text: string) => void): void {
+  const open = new Map<string, EventSource>();
+  const look = async () => {
+    try {
+      const res = await fetch("/api/midi/devices");
+      if (!res.ok) return;
+      const { devices } = (await res.json()) as { devices: string[]; error: string | null };
+      for (const name of devices) {
+        if (open.has(name)) continue;
+        const source = new EventSource(`/api/midi/stream?device=${encodeURIComponent(name)}`);
+        source.onmessage = (e) => {
+          try {
+            const m = JSON.parse(e.data) as { data: number[] };
+            if (Array.isArray(m.data) && m.data.length) onMessage(new Uint8Array(m.data));
+          } catch {
+            // not a message
+          }
+        };
+        source.onerror = () => {
+          if (source.readyState === EventSource.CLOSED) open.delete(name); // looked for again on the next round
+        };
+        open.set(name, source);
+        notice?.(`MIDI: listening to ${name}`);
+      }
+      for (const [name, source] of open) {
+        if (!devices.includes(name)) {
+          source.close();
+          open.delete(name);
+        }
+      }
+    } catch {
+      // the engine not reachable: nothing to listen to this round
+    }
+  };
+  void look();
+  window.setInterval(() => void look(), 5000);
 }
