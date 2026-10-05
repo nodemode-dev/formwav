@@ -1,0 +1,12 @@
+#!/bin/sh
+# Builds fwlv2 (AU-27): formwav's LV2 host, one C file, linked against lilv (the LV2 reference host library, ISC
+# licence) and libsndfile. Needs their development files: on macOS brew install lilv libsndfile (pkg-config finds
+# them), on Debian or Ubuntu apt install liblilv-dev libsndfile1-dev. Output: ./fwlv2
+set -e
+here=$(cd "$(dirname "$0")" && pwd)
+if ! pkg-config --exists lilv-0 sndfile; then
+  echo "fwlv2 needs lilv and libsndfile (macOS: brew install lilv libsndfile; Debian/Ubuntu: apt install liblilv-dev libsndfile1-dev)" >&2
+  exit 1
+fi
+${CC:-cc} -O2 "$here/fwlv2.c" $(pkg-config --cflags --libs lilv-0 sndfile) -lm -o "$here/fwlv2"
+echo "fwlv2 built: $here/fwlv2"

@@ -13,6 +13,11 @@ xcode-select -p >/dev/null 2>&1 || { echo "Xcode command line tools are required
 cargo tauri --version >/dev/null 2>&1 || { say "Installing tauri-cli"; cargo install tauri-cli --version '^2' --locked; }
 command -v ffmpeg >/dev/null || echo "Note: formwav reads and writes most formats through ffmpeg, which it finds on your PATH and never bundles: brew install ffmpeg"
 command -v rubberband >/dev/null || echo "Note: time-stretch and pitch features use the rubberband command on your PATH: brew install rubberband"
+# the native helpers link Homebrew's libraries: libsndfile and portaudio (Nyquist, Vamp), lilv (LV2), found by pkg-config
+command -v pkg-config >/dev/null || { echo "pkg-config is required to find the helpers' libraries: brew install pkgconf"; exit 1; }
+for lib in sndfile portaudio-2.0 lilv-0; do
+  pkg-config --exists "$lib" || { echo "The native helpers need $lib: brew install libsndfile portaudio lilv"; exit 1; }
+done
 
 say "Building the interface"
 cd frontend
@@ -68,6 +73,10 @@ echo "sidecar: src-tauri/binaries/fwnyq-$TRIPLE"
 native/formwav-vamp/build_fwvamp
 cp native/formwav-vamp/fwvamp "src-tauri/binaries/fwvamp-$TRIPLE"
 echo "sidecar: src-tauri/binaries/fwvamp-$TRIPLE"
+# AU-27: the LV2 host (lilv); plugins are found in ~/Library/Audio/Plug-Ins/LV2 and /Library/Audio/Plug-Ins/LV2, or LV2_PATH
+native/formwav-lv2/build_fwlv2
+cp native/formwav-lv2/fwlv2 "src-tauri/binaries/fwlv2-$TRIPLE"
+echo "sidecar: src-tauri/binaries/fwlv2-$TRIPLE"
 
 say "Generating app icons"
 cargo tauri icon src-tauri/icons/icon.png

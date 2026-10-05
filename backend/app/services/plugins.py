@@ -47,7 +47,36 @@ def scan(refresh: bool = False) -> list[dict]:
             _scanned = json.loads(done.stdout or b"[]") if done.returncode == 0 else []
         except (media.MediaError, subprocess.TimeoutExpired, ValueError, OSError):
             _scanned = []
+        _scanned = _scanned + _lv2_scan()
     return _scanned
+
+
+def lv2_binary() -> str:
+    """AU-27: fwlv2 (native/formwav-lv2), the LV2 host; FORMWAV_FWLV2 names it in the desktop app."""
+    return os.environ.get("FORMWAV_FWLV2") or str(Path(__file__).resolve().parents[3] / "native" / "formwav-lv2" / "fwlv2")
+
+
+_lv2_listing: dict[str, dict] = {}
+
+
+def _lv2_scan() -> list[dict]:
+    """AU-27: the LV2 plugins lilv finds (LV2_PATH, else its default places), as scan entries (format lv2, path the
+    plugin's URI); one fwlv2 cannot host is listed with the reason, as an unreadable CLAP or VST3 plugin is."""
+    if not Path(lv2_binary()).is_file():
+        return []
+    try:
+        done = subprocess.run([lv2_binary(), "list"], capture_output=True, timeout=120)
+        rows = json.loads(done.stdout or b"[]") if done.returncode == 0 else []
+    except (subprocess.TimeoutExpired, ValueError, OSError):
+        return []
+    entries = []
+    for r in rows:
+        _lv2_listing[r["uri"]] = r
+        entry = {"format": "lv2", "path": r["uri"], "name": r["name"] or r["uri"].rsplit("/", 1)[-1], "instrument": r["audio_in"] == 0}
+        if not r.get("supported"):
+            entry["error"] = r.get("reason", "not hostable")
+        entries.append(entry)
+    return entries
 
 
 def catalogue_group() -> list[dict]:
@@ -112,6 +141,14 @@ def params(name: str) -> list[dict]:
     """A plugin's parameters as the Inspector's controls (ids p<id>, beside the Tail control), listed by the host the
     first time they are asked for and kept: never during a scan, which would instantiate every installed plugin."""
     fmt, path, _ = _installed(name)
+    if fmt == "lv2":  # AU-27: the control inputs fwlv2 listed, by port index; integer and toggled ones step by 1
+        controls = []
+        for c in _lv2_listing.get(path, {}).get("controls", [])[:64]:
+            lo = c["min"] if c["min"] is not None else 0.0
+            hi = c["max"] if c["max"] is not None else max(1.0, lo + 1.0)
+            step = 1 if (c.get("integer") or c.get("toggled")) else ((hi - lo) / 1000 if hi > lo else 0.001)
+            controls.append({"id": f"p{c['index']}", "label": c["name"] or c["symbol"], "min": lo, "max": hi, "default": c["default"], "unit": "", "step": step})
+        return controls
     if name not in _params:
         try:
             done = subprocess.run([host_binary(), "params", fmt, path], capture_output=True, timeout=120)
@@ -143,9 +180,12 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     with tempfile.TemporaryDirectory(prefix="formwav-plugin-") as tmp:
         out = Path(tmp) / "out.wav"
         try:
-            command = [host_binary(), "process", fmt, path, str(source), str(out), f"{tail:g}"]
-            if values:
-                command.append(json.dumps(values))
+            if fmt == "lv2":  # AU-27: fwlv2, controls by port index, the tail as seconds of silence after the clip
+                command = [lv2_binary(), "run", path, str(source), str(out), "--tail", f"{tail:g}"] + [f"{k}={v:g}" for k, v in values.items()]
+            else:
+                command = [host_binary(), "process", fmt, path, str(source), str(out), f"{tail:g}"]
+                if values:
+                    command.append(json.dumps(values))
             done = subprocess.run(command, capture_output=True, timeout=900)
         except subprocess.TimeoutExpired as err:
             raise media.MediaError(f"{plugin['name']} did not finish within 15 minutes") from err
