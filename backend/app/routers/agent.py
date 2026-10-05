@@ -34,7 +34,9 @@ def _post(url: str, payload: dict, key: str) -> tuple[int, bytes]:
 async def agent_step(request: Request) -> dict:
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not key:
-        raise HTTPException(503, "The agent needs an Anthropic API key: put ANTHROPIC_API_KEY=... in backend/.env and restart formwav.")
+        from ..services.providers import env_file
+
+        raise HTTPException(503, f"The agent needs an Anthropic API key: put ANTHROPIC_API_KEY=... in {env_file()} and restart formwav.")
     try:
         body = await request.json()
         messages = body["messages"]

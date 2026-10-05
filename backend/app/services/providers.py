@@ -47,10 +47,21 @@ class ProviderError(Exception):
         self.status = status
 
 
+def env_file() -> str:
+    """The .env the running engine reads its keys from: in the desktop app, the one in its data folder (on a Mac
+    ~/Library/Application Support/ai.nodemode.formwav/.env); run from the source tree, backend/.env."""
+    import sys
+
+    data = os.environ.get("FORMWAV_DATA_DIR", "")
+    if getattr(sys, "frozen", False) and data:
+        return os.path.join(data, ".env")
+    return "backend/.env"
+
+
 def _key(name: str, provider: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
-        raise ProviderError(503, f"{provider} needs a key: put {name}=... in backend/.env and restart formwav.")
+        raise ProviderError(503, f"{provider} needs a key: put {name}=... in {env_file()} and restart formwav.")
     return value
 
 

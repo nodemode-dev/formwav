@@ -57,6 +57,16 @@ formwav.bat
 
 The engine reads `backend/.env`, which is never committed; `backend/.env.example` is the template.
 
+The desktop app (formwav.app) reads `.env` in its data folder instead: on a Mac `~/Library/Application Support/ai.nodemode.formwav/.env`, on Windows `%APPDATA%\ai.nodemode.formwav\.env`, on Linux `~/.local/share/ai.nodemode.formwav/.env`. Create the file, one `NAME=value` a line, and restart formwav. Keys stay in the engine and are never sent to the page. Missing-key messages name the file the running engine reads.
+
+| Key | What it unlocks |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | The Agent (the in-app co-editor); `FORMWAV_AGENT_MODEL` picks its model |
+| `ELEVENLABS_API_KEY` | Speech in a voice, sound effects and dubbing (the Models section), and the agent's and the MCP server's use of them |
+| `FAL_KEY` | Music and the other fal models (the Models section) |
+
+With no key set, everything else works; the features above say which key they need.
+
 | Variable | Purpose |
 | --- | --- |
 | `HOST` | Engine bind address; loopback when unset |
