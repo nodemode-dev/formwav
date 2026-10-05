@@ -111,11 +111,16 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
  *  and one unplugged is let go. */
 function listenThroughEngine(onMessage: (data: Uint8Array) => void, notice?: (text: string) => void): void {
   const open = new Map<string, EventSource>();
+  let told = false; // the engine's reason for having no MIDI, told once rather than not at all
   const look = async () => {
     try {
       const res = await fetch("/api/midi/devices");
       if (!res.ok) return;
-      const { devices } = (await res.json()) as { devices: string[]; error: string | null };
+      const { devices, error } = (await res.json()) as { devices: string[]; error: string | null };
+      if (!devices.length && error && !told) {
+        told = true;
+        notice?.(`MIDI: ${error}`);
+      }
       for (const name of devices) {
         if (open.has(name)) continue;
         const source = new EventSource(`/api/midi/stream?device=${encodeURIComponent(name)}`);

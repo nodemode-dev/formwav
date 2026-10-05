@@ -26,7 +26,9 @@ python3 -m venv .venv-package
 . .venv-package/bin/activate
 pip install --upgrade pip >/dev/null
 pip install -r requirements_desktop.txt
-rm -rf wheels && maturin build --release -m ../native/formwav-dsp/Cargo.toml --features python -o wheels
+# python AND native: a --features flag replaces pyproject.toml's list, and with python alone every desktop build up to
+# v1.91.0 left out native audio output and MIDI input (the selfcheck below now fails without them)
+rm -rf wheels && maturin build --release -m ../native/formwav-dsp/Cargo.toml --features python,native -o wheels
 pip install wheels/*.whl
 pyinstaller --clean --noconfirm --onefile --name formwav-engine \
   --collect-all uvicorn --collect-all formwav_dsp --collect-all app \
