@@ -128,6 +128,7 @@ FORMWAV_CHAINS = {
     "reverb": "asplit=3[d][s][m];[s]atrim=0:1.5,aeval=(random(0)*2-1)*exp(-t/0.8):c=same[ir];[m][ir]afir=dry=1:wet=1:gtype=rms[w];[d][w]amix=inputs=2:weights=0.7 0.3:normalize=0",
     "ramp": "rubberband=tempo=1:pitch=1",
     "dereverb": "anull",
+    "dereverb-restore": "anull",  # RX-12: WPE, done in numpy
     "spot-heal": "anull",
     "wow-flutter": "anull",
     "pitch-correct": "anull",
@@ -145,7 +146,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("paulstretch", "Paulstretch..."), ("ramp", "Ramp tempo and pitch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour..."), ("azimuth-measured", "Azimuth (measured)"), ("dc-measured", "DC offset (measured)"), ("breath-control", "Breath control..."), ("de-hum-adaptive", "De-hum (adaptive)..."), ("de-ess-spectral", "De-ess (spectral)..."), ("spectral-recovery", "Spectral recovery..."), ("spectral-repair", "Spectral repair..."), ("dialogue-leveler", "Leveler (dialogue)...")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("dereverb-restore", "De-reverb: restore dry..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour..."), ("azimuth-measured", "Azimuth (measured)"), ("dc-measured", "DC offset (measured)"), ("breath-control", "Breath control..."), ("de-hum-adaptive", "De-hum (adaptive)..."), ("de-ess-spectral", "De-ess (spectral)..."), ("spectral-recovery", "Spectral recovery..."), ("spectral-repair", "Spectral repair..."), ("dialogue-leveler", "Leveler (dialogue)...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("downmix-mono", "Downmix to mono"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -293,7 +294,12 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
         lambda v: "rubberband=tempo=1:pitch=1",
     ),
     "dereverb": (
-        {"amount": ("Amount", 0, 100, 70, "%"), "rt60": ("Reverb time", 0.2, 3, 0.8, "s"), "floor": ("Floor", 6, 30, 18, "dB")},
+        {"amount": ("Amount", 0, 100, 70, "%"), "rt60": ("Reverb time (0 estimates it)", 0, 3, 0.8, "s"), "floor": ("Floor", 6, 30, 18, "dB")},
+        lambda v: "anull",
+    ),
+    # RX-12: the dry sound restored by weighted prediction error (WPE), the reverb time estimated from the audio at 0
+    "dereverb-restore": (
+        {"amount": ("Amount", 0, 100, 100, "%"), "rt60": ("Reverb time (0 estimates it)", 0, 3, 0, "s")},
         lambda v: "anull",
     ),
     "spot-heal": (
@@ -412,7 +418,8 @@ def _dereverb(x, rate: int, v: dict):
     amount = v["amount"] / 100.0
     floor2 = 10 ** (-v["floor"] / 10)
     tail = max(1, round(0.05 * rate / hop))
-    decay = math.exp(-2 * (3 * math.log(10) / v["rt60"]) * tail * hop / rate)
+    rt60 = float(v["rt60"]) or _estimate_rt60(x, rate)  # RX-12: 0 reads the room's time from the audio
+    decay = math.exp(-2 * (3 * math.log(10) / rt60) * tail * hop / rate)
     y = np.zeros(x.shape, dtype=np.float32)
     for c in range(x.shape[1]):
         sig = np.concatenate([np.zeros(n), x[:, c].astype(np.float64), np.zeros(n)])
@@ -438,6 +445,96 @@ def _dereverb(x, rate: int, v: dict):
                 out[at : at + n] += back[k]
             history = prev[-tail:]
         y[:, c] = (out[n : n + len(x)] / ola).astype(np.float32)
+    return y
+
+
+def _estimate_rt60(x, rate: int) -> float:
+    """RX-12: the room's reverb time read from the recording itself. In 10 ms frames of the energy above 100 Hz, every
+    free decay (energy falling at least 15 dB over at least 80 ms from a local peak) has its slope fitted between 5
+    and 25 dB below the peak; a room can only stretch a decay, never hasten it, so the room's own decay is the fastest
+    the recording shows, read as the 20th percentile of the decays' times (robust against one stray steep fall)."""
+    import numpy as np
+
+    mono = np.asarray(x, dtype=np.float64).mean(axis=1) if np.ndim(x) > 1 else np.asarray(x, dtype=np.float64)
+    spec = np.fft.rfft(mono)
+    spec[: int(100 * len(mono) / rate)] = 0  # rumble out
+    hp = np.fft.irfft(spec, len(mono))
+    f = max(1, int(0.01 * rate))
+    nf = len(hp) // f
+    if nf < 20:
+        return 0.8
+    # smoothed over 30 ms: a reverberant tail's 10 ms energies scatter by a few dB, which ended long decays early
+    e = 10 * np.log10(np.convolve((hp[: nf * f] ** 2).reshape(nf, f).mean(axis=1), np.ones(3) / 3, mode="same") + 1e-20)
+    times = []
+    i = 1
+    while i < nf - 8:
+        if e[i] >= e[i - 1] and e[i] > e[i + 1]:
+            j = i
+            while j + 1 < nf and e[j + 1] <= e[j] + 1.5:  # falling, 1.5 dB of ripple allowed
+                j += 1
+            if e[i] - e[j] >= 12 and (j - i) >= 8:
+                seg = np.arange(i, j + 1)
+                # from 8 dB below the peak (the direct sound stops at once, and its own drop of a few dB read as a faster
+                # room) as far as the decay goes, to 30 dB: a long room between speech's short pauses only shows part
+                sel = seg[(e[seg] <= e[i] - 8) & (e[seg] >= e[i] - 30)]
+                if len(sel) >= 4:
+                    slope = np.polyfit(sel * 0.01, e[sel], 1)[0]  # dB a second
+                    if slope < -1:
+                        times.append(-60.0 / slope)
+            i = max(j, i + 1)
+        else:
+            i += 1
+    if len(times) < 3:
+        return 0.8
+    return float(np.clip(np.percentile(times, 20), 0.1, 5.0))
+
+
+def _dereverb_wpe(x, rate: int, v: dict):
+    """RX-12: the dry sound restored by weighted prediction error (WPE, Nakatani et al.): in each frequency bin of a
+    short-time spectrum, the late reverberation of a frame is predicted from the frames before it (a delay of 3
+    frames, so the direct sound and early reflections stay, then up to 40 frames, as many as the reverb time needs),
+    the prediction filter fitted three times weighted by the inverse of the restored power so the dry sound's
+    sparseness decides it, and `amount` of the prediction subtracted. Reverb time 0 estimates it from the audio."""
+    import numpy as np
+
+    n = 2048 if rate > 32000 else 1024
+    hop = n // 4
+    win = np.sqrt(0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n))  # analysis and synthesis, overlap-adding to 2
+    rt60 = float(v.get("rt60") or 0) or _estimate_rt60(x, rate)
+    delay = 3
+    taps = int(np.clip(round(rt60 * rate / hop) - delay, 4, 60))  # the prediction spans the reverb time (up to 60 frames)
+    amount = float(v.get("amount", 100)) / 100.0
+    y = np.zeros(x.shape, dtype=np.float32)
+    for c in range(x.shape[1]):
+        sig = np.concatenate([np.zeros(n), x[:, c].astype(np.float64), np.zeros(n)])
+        frames = np.lib.stride_tricks.sliding_window_view(sig, n)[::hop]
+        Y = np.fft.rfft(frames * win, axis=1).T.astype(np.complex128)  # bins by frames
+        F, T = Y.shape
+        X = Y.copy()
+        for f0 in range(0, F, 64):  # a few bins at a time, so the stacked past frames stay small
+            Yb = Y[f0 : f0 + 64]
+            past = np.zeros(Yb.shape + (taps,), dtype=np.complex128)
+            for k in range(taps):
+                s = delay + k
+                past[:, s:, k] = Yb[:, : T - s]
+            lam = np.maximum(np.abs(Yb) ** 2, 1e-10 * float(np.mean(np.abs(Yb) ** 2)) + 1e-20)
+            Xb = Yb
+            for _ in range(3):
+                # batched matrix products (BLAS): the weighted covariance of the past frames and their correlation with now
+                wpast_t = np.transpose(past / lam[:, :, None], (0, 2, 1))
+                Rm = wpast_t @ past.conj()
+                Pv = (wpast_t @ Yb.conj()[:, :, None])[:, :, 0]
+                Rm += 1e-6 * np.trace(Rm, axis1=1, axis2=2)[:, None, None] / taps * np.eye(taps)[None]
+                g = np.linalg.solve(Rm, Pv[:, :, None])[:, :, 0]
+                pred = (past @ g.conj()[:, :, None])[:, :, 0]
+                Xb = Yb - pred
+                lam = np.maximum(np.abs(Xb) ** 2, 1e-10 * float(np.mean(np.abs(Yb) ** 2)) + 1e-20)
+            X[f0 : f0 + 64] = Yb - amount * (Yb - Xb)
+        back = np.fft.irfft(X.T, n, axis=1) * win
+        out = np.zeros(len(sig))
+        for k in range(len(back)):
+            out[k * hop : k * hop + n] += back[k]
+        y[:, c] = (out[n : n + len(x)] / 2.0).astype(np.float32)
     return y
 
 
@@ -1540,7 +1637,7 @@ def _peak_normalize(x, rate: int, v: dict):
     return (y * gains).astype(np.float32)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
+NUMPY_EFFECTS = {"dereverb": _dereverb, "dereverb-restore": _dereverb_wpe, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
                  "azimuth-measured": _azimuth_measured, "dc-measured": _dc_measured, "breath-control": _breath_control,
                  "de-hum-adaptive": _de_hum_adaptive, "de-ess-spectral": _de_ess_spectral, "spectral-recovery": _spectral_recovery,
                  "spectral-repair": _spectral_repair, "dialogue-leveler": _dialogue_leveler, "dynamics-curve": _dynamics_curve}
