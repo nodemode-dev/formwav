@@ -72,7 +72,7 @@ export function parseSubRip(text: string): Cue[] {
   return out;
 }
 
-function download(name: string, text: string, type: string): void {
+export function download(name: string, text: string, type: string): void {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement("a");
   a.href = url;

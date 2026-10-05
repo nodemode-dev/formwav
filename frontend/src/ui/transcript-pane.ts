@@ -1,6 +1,8 @@
 import type { Player } from "../audio/player";
 import type { Engine, MediaRef, SessionDoc } from "../engine";
 import { setText } from "../vendor/nodemode/dom-stable";
+import { download } from "./labels-pane";
+import { subtitleCues, toSubRip, toWebVtt } from "./subtitles";
 
 /** A word in its media file's own seconds, as the engine's transcript returns it. */
 interface MediaWord {
@@ -214,6 +216,7 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
   <button type="button" class="fw-ibtn" data-t="gaps">Shorten gaps</button>
   <button type="button" class="fw-ibtn" data-t="retakes">Remove retakes</button><button type="button" class="fw-ibtn" data-t="speakers" title="Tell the speakers apart inside each transcribed recording, by their voices, and label the words">Tell speakers apart</button>
   <button type="button" class="fw-ibtn" data-t="clip">Make a clip from selected words</button>
+  <button type="button" class="fw-ibtn" data-t="srt" title="The transcript as subtitles in session time: 42 characters a line, two lines a cue, fillers left out">Subtitles (SubRip)</button><button type="button" class="fw-ibtn" data-t="vtt" title="The same subtitles as WebVTT">Subtitles (WebVTT)</button>
   <div class="fw-word-timing" hidden><label class="fw-sam-opt"><span>Start</span><input type="number" data-wt="start" step="0.01" min="0" aria-label="The selected word's start in seconds"> s</label><label class="fw-sam-opt"><span>End</span><input type="number" data-wt="end" step="0.01" min="0" aria-label="The selected word's end in seconds"> s</label><button type="button" class="fw-ibtn" data-t="timing" title="Move the selected word's start and end; deleting the word then removes exactly that span">Set word timing</button><label class="fw-sam-opt"><span>Gap after</span><input type="number" data-wt="gap" step="0.05" min="0" aria-label="The gap after the selected word in seconds"> s</label><button type="button" class="fw-ibtn" data-t="gap" title="Shorten the gap to the next word to this length, closing up everything after it">Set gap</button></div>
 </div>
 <div class="fw-transcript-text" role="listbox" aria-multiselectable="true" aria-label="Transcript"></div>`;
@@ -451,6 +454,18 @@ export function mountTranscriptPane(host: HTMLElement, engine: Engine, player: P
       return;
     }
     const action = target.closest<HTMLElement>("[data-t]")?.dataset.t;
+    if (action === "srt" || action === "vtt") {
+      // the comparison's Captions row: the transcript as a subtitle file, its cues in session time
+      const cues = subtitleCues(words, engine.get("document").sampleRate);
+      if (!cues.length) {
+        setText(notice, "No transcribed words to make subtitles from.");
+        return;
+      }
+      if (action === "srt") download("formwav-transcript.srt", toSubRip(cues), "application/x-subrip");
+      else download("formwav-transcript.vtt", toWebVtt(cues), "text/vtt");
+      setText(notice, `Subtitles: ${cues.length} cues, ${action === "srt" ? "SubRip" : "WebVTT"}.`);
+      return;
+    }
     if (action === "timing" || action === "gap") {
       const one = selected.size === 1 ? words.findIndex((w) => selected.has(w.key)) : -1;
       if (one < 0) {
