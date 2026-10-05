@@ -1370,3 +1370,10 @@ The engine runs a Nyquist Prompt's code, or one of Audacity's bundled plug-ins w
 - logged: v1.84.0 (in progress) · 2026-10-04
 
 Five cases, four of Audacity's bundled Nyquist plug-ins with their settings given explicitly (Adjustable Fade up, and down with a mid-fade curve of 30; Clip Fix at 95 per cent and -9 dB on a tone clipped at 0.7; Limiter, soft, at -6 dB with a 10 ms hold on a swelling tone; High-Pass at 1 kHz and 12 dB an octave), each run in Audacity 2.4.2 headless (dither off, exported at 16 bits) and in formwav: every case equal in every one of its 44100 samples (sidecar verification/nyquist_vs_audacity). Found by the comparison: Limiter's input-gain labels are quoted over two lines, and the header removal, counting brackets line by line, lost the quote at the line's end and took the rest of the plug-in's code for header (the plug-in returned 0); the bracket scanner now carries an open quote to the next line.
+
+### Nyquist in the Inspector: the Prompt and Audacity's plug-ins (AU-28, done)
+- refers-to: frontend src/ui/inspector-pane.ts (the clip section's Nyquist row: the plug-in menu, its controls, the code box, Apply)
+- kind: explainer
+- logged: v1.84.0 (in progress) · 2026-10-04
+
+The clip section gains a Nyquist row: Nyquist Prompt or one of Audacity's bundled plug-ins; a plug-in's controls are drawn from its header (number fields with their ranges and units, menus for choices, text for strings), the Prompt's code box shown otherwise; Apply runs it on the selected clip and swaps the clip's audio as one undo step, or tells a result that is not a sound on the notice line, or Nyquist's own error. Verified in Chromium (sidecar verification/verify_nyquist_ui.py): the Prompt (mult *track* 0.5) left the clip exactly half of itself; Adjustable Fade drew its six controls and hid the code box, and with Fade Down chosen faded the clip down (gains 0.899, 0.499, 0.099 at 10, 50 and 90 per cent); the Prompt (+ 1 2) told "Nyquist returned int: 3"; no page errors. With fwnyq built from the vendored libnyquist and its output equal to Audacity 2.4.2's in every sample on five cases, AU-28 is done.

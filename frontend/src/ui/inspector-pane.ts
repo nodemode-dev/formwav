@@ -31,6 +31,9 @@ const BODY = `
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Point</span><input type="number" data-env="db" min="-60" max="12" step="0.5" value="-12" aria-label="Level of the envelope point in dB"> dB</label><button type="button" class="fw-ibtn" data-clip-act="env-add" title="Add a gain point at the playhead inside this clip; its level follows straight lines between points">Add point at playhead</button><button type="button" class="fw-ibtn" data-clip-act="env-clear">Clear envelope</button></div>
   <p class="fw-empty-note fw-env-readout" data-env-out>No gain envelope</p>
   <div class="fw-insp-head">De-bleed</div>
+  <div class="fw-analyze-buttons" title="Nyquist (Audacity's own interpreter): a Nyquist Prompt's code or one of Audacity's bundled Nyquist plug-ins, run on this clip"><label class="fw-sam-opt"><span>Nyquist</span><select data-nyq="plugin" aria-label="Nyquist plug-in or prompt"><option value="">Nyquist Prompt</option></select></label><button type="button" class="fw-ibtn" data-nyq="apply">Apply</button></div>
+  <div data-nyq="controls"></div>
+  <textarea data-nyq="code" rows="3" spellcheck="false" aria-label="Nyquist code (the clip is *track*)" placeholder="(mult *track* 0.5)"></textarea>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><label class="fw-sam-opt" title="How long the leak's path rings after its delay: 0 for a direct leak (2.7 ms), up to 500 ms for a room between the source and the mic"><span>Path</span><input type="number" data-debleed="path" min="0" max="500" step="10" value="0" aria-label="The leak's path length, in milliseconds"> ms</label><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Guide</span><select data-align="guide" aria-label="The original line this replacement take should follow"><option value="">no other clip overlaps</option></select></label><button type="button" class="fw-ibtn" data-clip-act="align" title="Re-time this replacement take to follow the guide word for word, and set it in the guide's place (automatic speech alignment)">Align to guide</button></div>
   <div class="fw-insp-head" title="Say what this clip is, then run its type's tasks or a preset (Audition's Essential Sound)">Essential sound</div>
@@ -901,6 +904,70 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     engine.dispatch({ type: "set-surround-fold", on });
     if (notice) setText(notice, on ? "Hearing the 5.1 as a stereo fold-down, in playback and the stereo mix" : "Playback and the stereo mix back to each track's own pan");
   });
+  // AU-28: Nyquist by Audacity's own interpreter: a Nyquist Prompt's code, or one of Audacity's bundled plug-ins with
+  // its controls drawn from its header; Apply runs it on the selected clip and swaps the clip's audio (one undo step),
+  // or tells a result that is not a sound (a number, a string, labels) on the notice line
+  type NyqControl = { var: string; label: string; type: string; unit?: string; default?: number | string | null; min?: number | null; max?: number | null; choices?: string[] };
+  const nyqSel = body.querySelector<HTMLSelectElement>('[data-nyq="plugin"]');
+  const nyqControls = body.querySelector<HTMLElement>('[data-nyq="controls"]');
+  const nyqCode = body.querySelector<HTMLTextAreaElement>('[data-nyq="code"]');
+  const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch] ?? ch);
+  let nyqPlugins: { id: string; name: string; controls: NyqControl[] }[] = [];
+  fetch("/api/nyquist/plugins")
+    .then((r) => (r.ok ? r.json() : []))
+    .then((list: typeof nyqPlugins) => {
+      nyqPlugins = list;
+      for (const p of list) {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = p.name;
+        nyqSel?.append(o);
+      }
+    })
+    .catch(() => undefined);
+  nyqSel?.addEventListener("change", () => {
+    const p = nyqPlugins.find((x) => x.id === nyqSel.value);
+    if (nyqCode) nyqCode.hidden = !!p;
+    if (!nyqControls) return;
+    nyqControls.innerHTML = (p?.controls ?? [])
+      .map((c) => {
+        const head = `<label class="fw-sam-opt"><span>${esc(c.label)}</span>`;
+        if (c.type === "choice") return `${head}<select data-nyq-var="${esc(c.var)}">${(c.choices ?? []).map((ch, i) => `<option value="${i}"${i === Number(c.default ?? 0) ? " selected" : ""}>${esc(ch)}</option>`).join("")}</select></label>`;
+        if (c.type === "string" || c.type === "file") return `${head}<input type="text" data-nyq-var="${esc(c.var)}" value="${esc(c.default)}"></label>`;
+        return `${head}<input type="number" step="any" data-nyq-var="${esc(c.var)}" value="${esc(c.default ?? 0)}"${c.min != null ? ` min="${c.min}"` : ""}${c.max != null ? ` max="${c.max}"` : ""}>${c.unit ? ` ${esc(c.unit)}` : ""}</label>`;
+      })
+      .join("");
+  });
+  body.querySelector<HTMLButtonElement>('[data-nyq="apply"]')?.addEventListener("click", async (e) => {
+    const hit = find(engine.get("document"));
+    if (!hit) return;
+    const button = e.currentTarget as HTMLButtonElement;
+    const p = nyqPlugins.find((x) => x.id === nyqSel?.value);
+    const values: Record<string, number | string> = {};
+    for (const el of nyqControls?.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-nyq-var]") ?? []) {
+      const c = p?.controls.find((x) => x.var === el.dataset.nyqVar);
+      values[el.dataset.nyqVar ?? ""] = c && (c.type === "string" || c.type === "file") ? el.value : Number(el.value);
+    }
+    button.disabled = true;
+    setText(notice, `Running ${p ? p.name : "the Nyquist Prompt"}...`);
+    try {
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/nyquist`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(p ? { plugin: p.id, values } : { code: nyqCode?.value ?? "" }) });
+      const out = (await res.json().catch(() => ({}))) as Partial<MediaRef> & { detail?: unknown; result?: { type: string; value?: unknown; labels?: unknown[] } };
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      if (out.id) {
+        engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as MediaRef });
+        setText(notice, `${p ? p.name : "Nyquist Prompt"} applied (undo puts it back)`);
+      } else {
+        const r = out.result;
+        setText(notice, `Nyquist returned ${r?.type === "labels" ? `${r.labels?.length ?? 0} labels` : `${r?.type}: ${String(r?.value ?? "")}`}`);
+      }
+    } catch (err) {
+      setText(notice, `Nyquist: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   // RX-32, RX-66: the Stems view: a separated group's parts (shown on any of them or on the track they came from), each
   // with its level (heard as it moves, the realtime rebalance), mute and solo, and Render rebalance mixing the group at
   // those settings into one clip on a new track, the stems muted, one undo step
