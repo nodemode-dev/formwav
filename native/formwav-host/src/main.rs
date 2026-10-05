@@ -21,9 +21,15 @@ use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::entry::clap_plugin_entry;
 use clap_sys::events::{clap_event_header, clap_input_events, clap_output_events};
 use clap_sys::ext::audio_ports::{clap_plugin_audio_ports, CLAP_EXT_AUDIO_PORTS};
-use clap_sys::ext::gui::{clap_host_gui, clap_plugin_gui, clap_window, clap_window_handle, CLAP_EXT_GUI, CLAP_WINDOW_API_X11};
-use clap_sys::ext::posix_fd_support::{clap_host_posix_fd_support, clap_plugin_posix_fd_support, CLAP_EXT_POSIX_FD_SUPPORT, CLAP_POSIX_FD_ERROR, CLAP_POSIX_FD_READ, CLAP_POSIX_FD_WRITE};
-use clap_sys::ext::timer_support::{clap_host_timer_support, clap_plugin_timer_support, CLAP_EXT_TIMER_SUPPORT};
+use clap_sys::ext::gui::{clap_host_gui, CLAP_EXT_GUI};
+#[cfg(unix)]
+use clap_sys::ext::gui::{clap_plugin_gui, clap_window, clap_window_handle, CLAP_WINDOW_API_X11};
+use clap_sys::ext::posix_fd_support::{clap_host_posix_fd_support, CLAP_EXT_POSIX_FD_SUPPORT};
+#[cfg(unix)]
+use clap_sys::ext::posix_fd_support::{clap_plugin_posix_fd_support, CLAP_POSIX_FD_ERROR, CLAP_POSIX_FD_READ, CLAP_POSIX_FD_WRITE};
+use clap_sys::ext::timer_support::{clap_host_timer_support, CLAP_EXT_TIMER_SUPPORT};
+#[cfg(unix)]
+use clap_sys::ext::timer_support::clap_plugin_timer_support;
 use clap_sys::factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
 use clap_sys::host::clap_host;
 use clap_sys::process::{clap_process, CLAP_PROCESS_ERROR};
@@ -59,6 +65,7 @@ impl IHostApplicationTrait for HostApplication {
 
 // The VST3 editor's frame, which on Linux is also its run loop: the view registers its X11 descriptor and its timers
 // here, and the host calls them back (Steinberg::Linux::IRunLoop, queried from the IPlugFrame).
+#[cfg_attr(windows, allow(dead_code))]
 struct EditorFrame {
     handlers: std::cell::RefCell<Vec<(vst3::ComPtr<vst3::Steinberg::Linux::IEventHandler>, i32)>>,
     timers: std::cell::RefCell<Vec<(vst3::ComPtr<vst3::Steinberg::Linux::ITimerHandler>, u64, std::time::Instant)>>,
