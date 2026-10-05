@@ -31,6 +31,16 @@ def user_data_dir() -> Path:
     return Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share")) / APP_ID
 
 
+def tool_path() -> None:
+    """An app opened from Finder gets a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin), without Homebrew's tools, so the
+    engine would not find ffmpeg (imports of MP3, AAC and video, MP3 export) or rubberband (time-stretch), although the
+    same build run from a terminal does. Homebrew's usual places are added, where they exist and are not already there."""
+    have = os.environ.get("PATH", "").split(os.pathsep)
+    extra = [d for d in ("/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin") if os.path.isdir(d) and d not in have]
+    if extra:
+        os.environ["PATH"] = os.pathsep.join([p for p in have if p] + extra)
+
+
 def load_env(path: Path) -> None:
     if not path.is_file():
         return
@@ -76,6 +86,7 @@ def main() -> int:
                 os._exit(0)
 
         threading.Thread(target=exit_with_shell, daemon=True).start()
+    tool_path()
     data = user_data_dir()
     data.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("FORMWAV_DATA_DIR", str(data))

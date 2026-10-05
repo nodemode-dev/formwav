@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Merged by the Tauri CLI into the app's Info.plist. macOS refuses microphone access (and can end the app) for an
+       app that does not say why it records: formwav records into its tracks. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>formwav records audio from your microphone or audio interface into its tracks.</string>
+</dict>
+</plist>
