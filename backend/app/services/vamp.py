@@ -8,9 +8,11 @@ SDK's defaults (on a Mac ~/Library/Audio/Plug-Ins/Vamp and /Library/Audio/Plug-I
 
 from __future__ import annotations
 
+import glob
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from . import media
@@ -25,8 +27,16 @@ def binary() -> str:
 def _run(args: list[str], timeout: float):
     if not Path(binary()).is_file():
         raise media.MediaError("Vamp hosting is not built here (native/formwav-vamp/build_fwvamp makes fwvamp)")
+    env = os.environ.copy()
+    if sys.platform.startswith("linux") and not env.get("VAMP_PATH"):
+        # Debian and Ubuntu install Vamp plugins in a multiarch directory (/usr/lib/x86_64-linux-gnu/vamp), which the
+        # SDK's own default path leaves out (their packaged SDK is patched for it, the vendored one is not): the
+        # installed Linux app found none. The SDK's defaults, then every multiarch directory there is.
+        home = os.path.expanduser("~")
+        dirs = [f"{home}/vamp", f"{home}/.vamp", "/usr/local/lib/vamp", "/usr/lib/vamp"] + sorted(glob.glob("/usr/lib/*-linux-gnu/vamp"))
+        env["VAMP_PATH"] = ":".join(dirs)
     try:
-        done = subprocess.run([binary(), *args], capture_output=True, timeout=timeout)
+        done = subprocess.run([binary(), *args], capture_output=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired as err:
         raise media.MediaError("the Vamp plugin did not finish in time") from err
     if done.returncode != 0:

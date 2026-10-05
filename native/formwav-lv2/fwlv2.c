@@ -334,8 +334,9 @@ static int run(int argc, char **argv) {
                     break;
                 case ATOM_IN:
                 case ATOM_OUT:
-                    I->atoms[i] = aligned_alloc(64, ATOM_CAPACITY);
-                    memset(I->atoms[i], 0, ATOM_CAPACITY);
+                    /* calloc, not aligned_alloc (Windows' C runtime has none): atoms need 8-byte alignment, which
+                       calloc's 16 provides */
+                    I->atoms[i] = calloc(1, ATOM_CAPACITY);
                     lilv_instance_connect_port(I->inst, i, I->atoms[i]);
                     break;
                 default:

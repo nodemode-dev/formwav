@@ -33,5 +33,9 @@ for s in $(grep -v '^#' "$here/sources.txt"); do
   objs="$objs $o"
 done
 ar rcs "$build/libnyquist.a" $objs
-${CC:-cc} -O2 -w "$here/fwnyq.c" -I"$here/libnyquist" $INC "$build/libnyquist.a" $LIBS -lsndfile -lportaudio $CXXLIB -lm -lpthread -o "$here/fwnyq"
+case "$(uname -s)" in
+  MINGW*|MSYS*) LINK="-static $(pkg-config --static --libs sndfile portaudio-2.0) -lstdc++" ;; # Windows: one self-contained .exe
+  *) LINK="$LIBS -lsndfile -lportaudio $CXXLIB" ;;
+esac
+${CC:-cc} -O2 -w "$here/fwnyq.c" -I"$here/libnyquist" $INC "$build/libnyquist.a" $LINK -lm -lpthread -o "$here/fwnyq"
 echo "fwnyq built: $here/fwnyq"
