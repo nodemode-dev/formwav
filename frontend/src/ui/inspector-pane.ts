@@ -80,6 +80,8 @@ const BODY = `
   <label class="fw-field"><span>Sensitivity</span><input type="number" min="0" max="1" step="0.05" value="0.5" data-an-sens aria-label="Transient sensitivity, 0 strong attacks only to 1 subtle ones"><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="split-transients" title="Cut this clip at each transient">Split at transients</button></div>
   <ul class="fw-mic-findings" hidden></ul>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-repair-act="analyse" title="Type the clip's material, find its problems and propose a repair chain at three intensities">Repair assistant</button><button type="button" class="fw-ibtn" data-repair-act="light" disabled>Light</button><button type="button" class="fw-ibtn" data-repair-act="medium" disabled>Medium</button><button type="button" class="fw-ibtn" data-repair-act="heavy" disabled>Heavy</button></div>
+  <ul class="fw-mic-findings fw-repair-findings" aria-live="polite"><li class="fw-finding is-ok"><span>Analyse the clip to see what it needs.</span></li></ul>
   <dl class="fw-stats"></dl>
   <img class="fw-spectrogram" alt="Spectrogram of the selected clip" hidden>
 </div>
@@ -3135,9 +3137,65 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
+  const repairList = body.querySelector<HTMLElement>(".fw-repair-findings");
+  const repairButtons = [...body.querySelectorAll<HTMLButtonElement>("[data-repair-act]")].filter((b) => b.dataset.repairAct !== "analyse");
+  let repairFor = "";
+  const repairItem = (level: string, text: string) => {
+    const li = document.createElement("li");
+    li.className = `fw-finding is-${level}`;
+    const span = document.createElement("span");
+    span.textContent = text;
+    li.append(span);
+    return li;
+  };
+  const resetRepair = () => {
+    if (!repairFor || !repairList) return;
+    repairFor = "";
+    repairList.replaceChildren(repairItem("ok", "Analyse the clip to see what it needs."));
+    for (const b of repairButtons) b.disabled = true;
+  };
+  body.addEventListener("click", async (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>("[data-repair-act]")?.dataset.repairAct;
+    const hit = find(engine.get("document"));
+    if (!act || !repairList || !hit) return;
+    if (act === "analyse") {
+      setText(notice, "Analysing the clip...");
+      try {
+        const res = await fetch(`/api/media/${hit.clip.mediaId}/repair-assistant`);
+        const report = (await res.json()) as { detail?: unknown; material: string; findings: { problem: string; detail: string }[]; chains: Record<string, { effect: string }[]> };
+        if (!res.ok) throw new Error(typeof report.detail === "string" ? report.detail : `the engine answered ${res.status}`);
+        const found = report.findings.map((f) => repairItem("warn", `${f.problem[0].toUpperCase()}${f.problem.slice(1)}: ${f.detail}`));
+        repairList.replaceChildren(repairItem("ok", `Material: ${report.material}`), ...(found.length ? found : [repairItem("ok", "Nothing to repair.")]));
+        for (const b of repairButtons) {
+          const steps = report.chains[b.dataset.repairAct ?? ""] ?? [];
+          b.disabled = !steps.length;
+          b.title = steps.length ? steps.map((s) => s.effect).join(" then ") : "Nothing to repair";
+        }
+        repairFor = hit.clip.mediaId;
+        setText(notice, found.length ? `Repair assistant: ${found.length} to fix on this ${report.material} clip` : `Repair assistant: nothing to fix on this ${report.material} clip`);
+      } catch (err) {
+        setText(notice, `Could not analyse the clip: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+    if (repairFor !== hit.clip.mediaId) return;
+    setText(notice, `Repairing (${act})...`);
+    try {
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/repair-assistant?intensity=${act}`, { method: "POST" });
+      const out = (await res.json()) as { detail?: unknown; media: MediaRef; steps: { effect: string }[] };
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "batch", commands: [{ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out.media }] });
+      resetRepair();
+      setText(notice, `Repaired (${act}): ${out.steps.map((s) => s.effect).join(", ")}. Undo brings the original back.`);
+    } catch (err) {
+      setText(notice, `Could not repair the clip: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
   host.addEventListener("fw-selection", (e) => {
     selected = (e as CustomEvent<string[]>).detail;
     render();
+    if (repairFor && find(engine.get("document"))?.clip.mediaId !== repairFor) resetRepair();
   });
   engine.subscribe("document", render);
   render();

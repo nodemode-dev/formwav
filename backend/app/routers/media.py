@@ -150,6 +150,30 @@ def media_mic_check(media_id: str) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.get("/media/{media_id}/repair-assistant")
+def media_repair_assistant(media_id: str) -> dict:
+    from ..services import repair_assistant
+
+    try:
+        return repair_assistant.analyse(media_id)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
+@router.post("/media/{media_id}/repair-assistant")
+def media_repair_assistant_apply(media_id: str, intensity: str = "medium") -> dict:
+    from ..services import repair_assistant
+
+    try:
+        return repair_assistant.apply(media_id, intensity)
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media")
 def media_list(query: str = "", limit: int = 100, offset: int = 0) -> dict:
     """The stored media, newest first, a page at a time (services/media.py: list_media)."""

@@ -155,6 +155,7 @@
 .fw-fx-search { inline-size: 100%; padding: 4px 8px; font: inherit; font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 .fw-mic-findings { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
 .fw-mic-findings[hidden] { display: none; }
+.fw-repair-findings { height: 112px; overflow-y: auto; align-content: start; }
 .fw-finding { display: grid; gap: 4px; padding: 6px 8px; border-inline-start: 3px solid var(--border-color); border-radius: 4px; background: var(--bg-tertiary); }
 .fw-finding.is-ok { border-inline-start-color: var(--ok); }
 .fw-finding.is-warn { border-inline-start-color: var(--accent-color); }
