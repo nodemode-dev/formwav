@@ -10,7 +10,7 @@ class RenderError(ValueError):
 
 
 #: Track effect kinds, as the core's stage codes (formwav-dsp fx.rs).
-FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11}
+FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11, "tremolo": 12, "gate": 13, "phaser": 14, "flanger": 15}
 
 
 def _stage(f: dict) -> tuple | None:
@@ -25,6 +25,14 @@ def _stage(f: dict) -> tuple | None:
         return (10, float(f.get("rateHz", 0.8)), float(f.get("depthMs", 3)), float(f.get("mix", 0.5)), 0.0, 0.0)
     if kind == 11:
         return (11, float(f.get("ceilingDb", -1)), float(f.get("releaseMs", 80)), 0.0, 0.0, 0.0)
+    if kind == 12:
+        return (12, float(f.get("rateHz", 4)), float(f.get("depth", 0.5)), float(f.get("spread", 0)), 0.0, 0.0)
+    if kind == 13:
+        return (13, float(f.get("thresholdDb", -40)), float(f.get("releaseMs", 100)), float(f.get("rangeDb", -60)), 0.0, 0.0)
+    if kind == 14:
+        return (14, float(f.get("rateHz", 0.5)), float(f.get("depth", 1)), float(f.get("feedback", 0.5)), 0.0, 0.0)
+    if kind == 15:
+        return (15, float(f.get("rateHz", 0.25)), float(f.get("depthMs", 3)), float(f.get("feedback", 0.5)), 0.0, 0.0)
     if kind == 8:  # PT-22: the realtime reverb, room size, damping, mix and width (each 0 to 1)
         return (8, float(f.get("room", 0.6)), float(f.get("damping", 0.5)), float(f.get("mix", 0.25)), float(f.get("width", 1.0)), 0.0)
     if kind == 7:  # RX-24, RX-40, RX-49: the denoiser, its reduction and sensitivity where filters carry frequency and gain

@@ -155,7 +155,38 @@ export interface LimiterFx {
   bypass?: boolean;
 }
 
-export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx;
+/** Core kinds 12 to 15: a tremolo (rate, depth, stereo spread), a gate (threshold, release, range), a phaser (rate,
+ * depth in decades, feedback) and a flanger (rate, depth, feedback). */
+export interface TremoloFx {
+  kind: "tremolo";
+  rateHz: number;
+  depth: number;
+  spread: number;
+  bypass?: boolean;
+}
+export interface GateFx {
+  kind: "gate";
+  thresholdDb: number;
+  releaseMs: number;
+  rangeDb: number;
+  bypass?: boolean;
+}
+export interface PhaserFx {
+  kind: "phaser";
+  rateHz: number;
+  depth: number;
+  feedback: number;
+  bypass?: boolean;
+}
+export interface FlangerFx {
+  kind: "flanger";
+  rateHz: number;
+  depthMs: number;
+  feedback: number;
+  bypass?: boolean;
+}
+
+export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx | TremoloFx | GateFx | PhaserFx | FlangerFx;
 
 /** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
@@ -164,7 +195,7 @@ export type Instrument = { kind: "sampler"; media: string; root: number } | { ki
 
 export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocity"; scale: number; offset: number } | { kind: "quantize"; beats: number; strength: number };
 
-const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter"]);
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger"]);
 
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
@@ -184,6 +215,18 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
       }
       if (f.kind === "limiter") {
         return { kind: "limiter", ceilingDb: clamp(f.ceilingDb, -30, 0, -1), releaseMs: clamp(f.releaseMs, 1, 1000, 80), ...bypass };
+      }
+      if (f.kind === "tremolo") {
+        return { kind: "tremolo", rateHz: clamp(f.rateHz, 0.05, 20, 4), depth: clamp(f.depth, 0, 1, 0.5), spread: clamp(f.spread, 0, 1, 0), ...bypass };
+      }
+      if (f.kind === "gate") {
+        return { kind: "gate", thresholdDb: clamp(f.thresholdDb, -80, 0, -40), releaseMs: clamp(f.releaseMs, 1, 2000, 100), rangeDb: clamp(f.rangeDb, -80, 0, -60), ...bypass };
+      }
+      if (f.kind === "phaser") {
+        return { kind: "phaser", rateHz: clamp(f.rateHz, 0.05, 10, 0.5), depth: clamp(f.depth, 0, 1, 1), feedback: clamp(f.feedback, 0, 0.9, 0.5), ...bypass };
+      }
+      if (f.kind === "flanger") {
+        return { kind: "flanger", rateHz: clamp(f.rateHz, 0.05, 5, 0.25), depthMs: clamp(f.depthMs, 0, 5, 3), feedback: clamp(f.feedback, -0.9, 0.9, 0.5), ...bypass };
       }
       if (f.kind === "reverb") {
         // PT-22: room size, damping, mix and width, each 0 to 1
@@ -719,7 +762,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-fx-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
         const target = t.fx?.[cmd.fxIndex];
-        if (!t.fx || !target || target.kind === "compressor" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter") return t;
+        if (!t.fx || !target || target.kind === "compressor" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter" || target.kind === "tremolo" || target.kind === "gate" || target.kind === "phaser" || target.kind === "flanger") return t;
         const { [cmd.param]: _old, ...others } = target.automation ?? {};
         const automation = cmd.points.length ? { ...others, [cmd.param]: cmd.points } : others;
         const next = cleanFx(t.fx.map((f, i) => (i === cmd.fxIndex ? { ...target, automation } : f)));

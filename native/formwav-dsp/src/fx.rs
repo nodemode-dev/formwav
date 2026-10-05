@@ -565,6 +565,198 @@ impl Limiter {
     }
 }
 
+pub const TREMOLO: u8 = 12;
+pub const GATE: u8 = 13;
+pub const PHASER: u8 = 14;
+pub const FLANGER: u8 = 15;
+
+/// A tremolo: the gain swung between 1 and 1 - depth at `rate`; the right channel's swing `spread` of half a turn
+/// behind the left's (at 1, an auto-pan).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Tremolo {
+    phase: f32,
+    step: f32,
+    depth: f32,
+    spread: f32,
+}
+
+impl Tremolo {
+    pub fn design(rate_hz: f32, depth: f32, spread: f32, rate: f32) -> Option<Tremolo> {
+        if !(rate > 0.0 && (0.05..=20.0).contains(&rate_hz) && (0.0..=1.0).contains(&depth) && (0.0..=1.0).contains(&spread)) {
+            return None;
+        }
+        Some(Tremolo { phase: 0.0, step: rate_hz / rate, depth, spread })
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let tau = 2.0 * std::f32::consts::PI;
+        let gl = 1.0 - self.depth * (0.5 - 0.5 * (tau * self.phase).sin());
+        let gr = 1.0 - self.depth * (0.5 - 0.5 * (tau * (self.phase + 0.5 * self.spread)).sin());
+        self.phase += self.step;
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+        }
+        (l * gl, r * gr)
+    }
+
+    pub fn reset(&mut self) {
+        self.phase = 0.0;
+    }
+}
+
+/// A gate, the channels linked: open (unity) while the signal's peak, held 10 ms, is at or over the threshold,
+/// opening in 1 ms and closing with the release down to `range` dB.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Gate {
+    threshold: f32,
+    floor: f32,
+    hold: f32,
+    open: f32,
+    close: f32,
+    env: f32,
+    gain: f32,
+}
+
+impl Gate {
+    pub fn design(threshold_db: f32, release_ms: f32, range_db: f32, rate: f32) -> Option<Gate> {
+        if !(rate > 0.0 && (-80.0..=0.0).contains(&threshold_db) && (1.0..=2000.0).contains(&release_ms) && (-80.0..=0.0).contains(&range_db)) {
+            return None;
+        }
+        let coef = |ms: f32| (-1.0 / (ms / 1000.0 * rate)).exp();
+        Some(Gate { threshold: 10f32.powf(threshold_db / 20.0), floor: 10f32.powf(range_db / 20.0), hold: coef(10.0), open: coef(1.0), close: coef(release_ms), env: 0.0, gain: 1.0 })
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let peak = l.abs().max(r.abs());
+        self.env = if peak > self.env { peak } else { self.env * self.hold };
+        let target = if self.env >= self.threshold { 1.0 } else { self.floor };
+        let coef = if target > self.gain { self.open } else { self.close };
+        self.gain = target + (self.gain - target) * coef;
+        (l * self.gain, r * self.gain)
+    }
+
+    pub fn reset(&mut self) {
+        self.env = 0.0;
+        self.gain = 1.0;
+    }
+}
+
+/// A phaser: four first-order all-pass stages whose turnover sweeps from 200 Hz up by `depth` decades (at 1, to
+/// 2 kHz) at `rate`, their output fed back and mixed half and half with the dry signal.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Phaser {
+    phase: f32,
+    step: f32,
+    depth: f32,
+    feedback: f32,
+    rate: f32,
+    x1: [[f32; 4]; 2],
+    y1: [[f32; 4]; 2],
+    last: [f32; 2],
+}
+
+impl Phaser {
+    pub fn design(rate_hz: f32, depth: f32, feedback: f32, rate: f32) -> Option<Phaser> {
+        if !(rate > 0.0 && (0.05..=10.0).contains(&rate_hz) && (0.0..=1.0).contains(&depth) && (0.0..=0.9).contains(&feedback)) {
+            return None;
+        }
+        Some(Phaser { phase: 0.0, step: rate_hz / rate, depth, feedback, rate, x1: [[0.0; 4]; 2], y1: [[0.0; 4]; 2], last: [0.0; 2] })
+    }
+
+    /// The all-pass stages' turnover now, in Hz.
+    pub fn turnover(&self) -> f32 {
+        200.0 * 10f32.powf(self.depth * (0.5 - 0.5 * (2.0 * std::f32::consts::PI * self.phase).cos()))
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let t = (std::f32::consts::PI * self.turnover() / self.rate).tan();
+        let a = (t - 1.0) / (t + 1.0);
+        let mut out = [0.0f32; 2];
+        for (ch, (o, dry)) in out.iter_mut().zip([l, r]).enumerate() {
+            let mut x = dry + self.feedback * self.last[ch];
+            for k in 0..4 {
+                let y = a * x + self.x1[ch][k] - a * self.y1[ch][k];
+                self.x1[ch][k] = x;
+                self.y1[ch][k] = y;
+                x = y;
+            }
+            self.last[ch] = x;
+            *o = 0.5 * (dry + x);
+        }
+        self.phase += self.step;
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+        }
+        (out[0], out[1])
+    }
+
+    pub fn reset(&mut self) {
+        self.x1 = [[0.0; 4]; 2];
+        self.y1 = [[0.0; 4]; 2];
+        self.last = [0.0; 2];
+        self.phase = 0.0;
+    }
+}
+
+/// A flanger: a delay swept from 1 ms up by `depth` ms at `rate`, read between samples, fed back, and mixed half and
+/// half with the dry signal.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Flanger {
+    buf: [Vec<f32>; 2],
+    pos: usize,
+    phase: f32,
+    step: f32,
+    base: f32,
+    depth: f32,
+    feedback: f32,
+}
+
+impl Flanger {
+    pub fn design(rate_hz: f32, depth_ms: f32, feedback: f32, rate: f32) -> Option<Flanger> {
+        if !(rate > 0.0 && (0.05..=5.0).contains(&rate_hz) && (0.0..=5.0).contains(&depth_ms) && (-0.9..=0.9).contains(&feedback)) {
+            return None;
+        }
+        let base = 0.001 * rate;
+        let depth = depth_ms / 1000.0 * rate;
+        let len = (base + depth).ceil() as usize + 4;
+        Some(Flanger { buf: [vec![0.0; len], vec![0.0; len]], pos: 0, phase: 0.0, step: rate_hz / rate, base, depth, feedback })
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let len = self.buf[0].len();
+        let back = self.base + self.depth * (0.5 - 0.5 * (2.0 * std::f32::consts::PI * self.phase).cos());
+        let at = self.pos as f32 - back + len as f32;
+        let i = at.floor();
+        let frac = at - i;
+        let mut out = [0.0f32; 2];
+        for (ch, (o, dry)) in out.iter_mut().zip([l, r]).enumerate() {
+            let a = self.buf[ch][i as usize % len];
+            let b = self.buf[ch][(i as usize + 1) % len];
+            let delayed = a + (b - a) * frac;
+            self.buf[ch][self.pos] = dry + self.feedback * delayed;
+            *o = 0.5 * (dry + delayed);
+        }
+        self.pos = (self.pos + 1) % len;
+        self.phase += self.step;
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+        }
+        (out[0], out[1])
+    }
+
+    pub fn reset(&mut self) {
+        for b in &mut self.buf {
+            b.iter_mut().for_each(|v| *v = 0.0);
+        }
+        self.pos = 0;
+        self.phase = 0.0;
+    }
+}
+
 /// One stage of a bus or master chain: a filter, a compressor, the de-noiser or a reverb, run a stereo frame at a
 /// time. The reverb's delay lines live behind a box, so a filter stage stays small.
 #[derive(Debug, Clone, PartialEq)]
@@ -576,6 +768,10 @@ pub enum Stage {
     Echo(Box<Echo>),
     Chorus(Box<Chorus>),
     Limit(Limiter),
+    Tremolo(Tremolo),
+    Gate(Gate),
+    Phaser(Box<Phaser>),
+    Flanger(Box<Flanger>),
 }
 
 impl Stage {
@@ -595,6 +791,14 @@ impl Stage {
             Chorus::design(a, b, c, rate).map(|x| Stage::Chorus(Box::new(x)))
         } else if kind == LIMITER {
             Limiter::design(a, b, rate).map(Stage::Limit)
+        } else if kind == TREMOLO {
+            Tremolo::design(a, b, c, rate).map(Stage::Tremolo)
+        } else if kind == GATE {
+            Gate::design(a, b, c, rate).map(Stage::Gate)
+        } else if kind == PHASER {
+            Phaser::design(a, b, c, rate).map(|x| Stage::Phaser(Box::new(x)))
+        } else if kind == FLANGER {
+            Flanger::design(a, b, c, rate).map(|x| Stage::Flanger(Box::new(x)))
         } else {
             Biquad::design(kind, a, b, c, rate).map(Stage::Filter)
         }
@@ -610,6 +814,10 @@ impl Stage {
             Stage::Echo(x) => x.process(l, r),
             Stage::Chorus(x) => x.process(l, r),
             Stage::Limit(x) => x.process(l, r),
+            Stage::Tremolo(x) => x.process(l, r),
+            Stage::Gate(x) => x.process(l, r),
+            Stage::Phaser(x) => x.process(l, r),
+            Stage::Flanger(x) => x.process(l, r),
         }
     }
 
@@ -622,6 +830,10 @@ impl Stage {
             Stage::Echo(x) => x.reset(),
             Stage::Chorus(x) => x.reset(),
             Stage::Limit(x) => x.reset(),
+            Stage::Tremolo(x) => x.reset(),
+            Stage::Gate(x) => x.reset(),
+            Stage::Phaser(x) => x.reset(),
+            Stage::Flanger(x) => x.reset(),
         }
     }
 }

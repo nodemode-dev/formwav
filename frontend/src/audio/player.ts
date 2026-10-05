@@ -35,6 +35,10 @@ export function flatFx(fx: readonly TrackFx[] | undefined): number[] {
     if (f.kind === "echo") return [9, f.delayMs, f.feedback, f.mix];
     if (f.kind === "chorus") return [10, f.rateHz, f.depthMs, f.mix];
     if (f.kind === "limiter") return [11, f.ceilingDb, f.releaseMs, 0];
+    if (f.kind === "tremolo") return [12, f.rateHz, f.depth, f.spread];
+    if (f.kind === "gate") return [13, f.thresholdDb, f.releaseMs, f.rangeDb];
+    if (f.kind === "phaser") return [14, f.rateHz, f.depth, f.feedback];
+    if (f.kind === "flanger") return [15, f.rateHz, f.depthMs, f.feedback];
     return [codes[f.kind], f.freq, f.gainDb, f.q];
   });
 }
@@ -46,7 +50,7 @@ export function flatFxAuto(fx: readonly TrackFx[] | undefined): { stage: number;
   let stage = 0;
   for (const f of fx ?? []) {
     if (f.bypass || f.kind === "compressor" || f.kind === "reverb") continue;
-    if (f.kind === "denoise" || f.kind === "echo" || f.kind === "chorus" || f.kind === "limiter") {
+    if (f.kind === "denoise" || f.kind === "echo" || f.kind === "chorus" || f.kind === "limiter" || f.kind === "tremolo" || f.kind === "gate" || f.kind === "phaser" || f.kind === "flanger") {
       stage++; // a place in the chain, nothing to automate
       continue;
     }
@@ -72,6 +76,10 @@ export function flatStages(fx: readonly TrackFx[] | undefined): number[] {
     if (f.kind === "echo") return [9, f.delayMs, f.feedback, f.mix, 0, 0];
     if (f.kind === "chorus") return [10, f.rateHz, f.depthMs, f.mix, 0, 0];
     if (f.kind === "limiter") return [11, f.ceilingDb, f.releaseMs, 0, 0, 0];
+    if (f.kind === "tremolo") return [12, f.rateHz, f.depth, f.spread, 0, 0];
+    if (f.kind === "gate") return [13, f.thresholdDb, f.releaseMs, f.rangeDb, 0, 0];
+    if (f.kind === "phaser") return [14, f.rateHz, f.depth, f.feedback, 0, 0];
+    if (f.kind === "flanger") return [15, f.rateHz, f.depthMs, f.feedback, 0, 0];
     return [codes[f.kind], f.freq, f.gainDb, f.q, 0, 0];
   });
 }
