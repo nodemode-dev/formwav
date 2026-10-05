@@ -15,6 +15,16 @@ import { mountCurveEditor } from "./curve-editor";
 import { mountEssentialSound } from "./essential-sound";
 
 const BODY = `
+<div class="fw-insp-section fw-insp-master">
+  <div class="fw-insp-head">Master effects</div>
+  <div class="fw-rtfx-list" data-scope="master"></div>
+  <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="reverb">Reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-insp-head">Time track</div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Playback speed at the session's start, in percent"><span>Start</span><input type="number" data-tt="from" min="25" max="400" step="1" value="100" aria-label="Time track speed at the start in percent"> %</label><label class="fw-sam-opt" title="Playback speed at the end of the session's audio, in percent"><span>End</span><input type="number" data-tt="to" min="25" max="400" step="1" value="100" aria-label="Time track speed at the end in percent"> %</label></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-tt="apply" title="Playback speed moves from Start to End across the session's audio, pitch following speed (Audacity's time track), in playback and exports">Set time track</button>
+  <div class="fw-tt-curve" data-tt-curve>${[1, 2, 3, 4, 5].map((k) => `<input type="range" hidden data-param="t${k}" min="0" max="100" step="0.5" value="${(k - 1) * 25}"><input type="range" hidden data-param="s${k}" min="25" max="400" step="1" value="100">`).join("")}</div>
+  <label class="fw-sam-opt" title="Speed changes at a steady ratio between points instead of a steady step"><input type="checkbox" data-tt="log"> Logarithmic</label><button type="button" class="fw-ibtn" data-tt="apply-curve" title="Set the time track to the curve drawn above (place in the session across, speed up)">Apply curve</button><button type="button" class="fw-ibtn" data-tt="clear" title="Play at the transport's speed again">Clear</button></div>
+</div>
 <p class="fw-empty-note fw-insp-empty"></p>
 <div class="fw-insp-section fw-insp-clip" hidden>
   <div class="fw-insp-head">Clip</div>
@@ -126,16 +136,6 @@ const BODY = `
   <div class="fw-rtfx-list" data-scope="bus"></div>
   <div class="fw-analyze-buttons" data-scope="bus"><select data-rtfx="kind" aria-label="Realtime effect to add to the bus"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="reverb">Reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
-<div class="fw-insp-section fw-insp-master" hidden>
-  <div class="fw-insp-head">Master effects</div>
-  <div class="fw-rtfx-list" data-scope="master"></div>
-  <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="reverb">Reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
-  <div class="fw-insp-head">Time track</div>
-  <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Playback speed at the session's start, in percent"><span>Start</span><input type="number" data-tt="from" min="25" max="400" step="1" value="100" aria-label="Time track speed at the start in percent"> %</label><label class="fw-sam-opt" title="Playback speed at the end of the session's audio, in percent"><span>End</span><input type="number" data-tt="to" min="25" max="400" step="1" value="100" aria-label="Time track speed at the end in percent"> %</label></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-tt="apply" title="Playback speed moves from Start to End across the session's audio, pitch following speed (Audacity's time track), in playback and exports">Set time track</button>
-  <div class="fw-tt-curve" data-tt-curve>${[1, 2, 3, 4, 5].map((k) => `<input type="range" hidden data-param="t${k}" min="0" max="100" step="0.5" value="${(k - 1) * 25}"><input type="range" hidden data-param="s${k}" min="25" max="400" step="1" value="100">`).join("")}</div>
-  <label class="fw-sam-opt" title="Speed changes at a steady ratio between points instead of a steady step"><input type="checkbox" data-tt="log"> Logarithmic</label><button type="button" class="fw-ibtn" data-tt="apply-curve" title="Set the time track to the curve drawn above (place in the session across, speed up)">Apply curve</button><button type="button" class="fw-ibtn" data-tt="clear" title="Play at the transport's speed again">Clear</button></div>
-</div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
   <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><label class="fw-q-field" title="The timecode the session starts at (Pro Tools' session start), read in the clock's timecode rate">TC start <input type="text" size="11" placeholder="00:00:00:00" data-tc-start aria-label="Session timecode start"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button><label class="fw-q-field">Length <input type="number" min="0.1" step="0.1" data-q="target" placeholder="s" aria-label="Target length in seconds"></label><button type="button" class="fw-ibtn" data-an="fit-length" title="Re-time this clip to the length typed, keeping pitch (half to double its length)">Fit to length</button><button type="button" class="fw-ibtn" data-an="remix-length" title="Re-arrange this song on its beats to the length typed, cutting or repeating whole bars where they sound alike rather than stretching it (Audition's Remix)">Remix to length</button></div>
@@ -197,6 +197,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     show(body.querySelector(".fw-insp-empty"), !hit);
     show(body.querySelector(".fw-insp-clip"), !!hit);
     show(body.querySelector(".fw-insp-track"), !!hit);
+    show(body.querySelector(".fw-insp-clipfx"), !!hit);
     // PT-14: the Playlists section follows the last track a clip was selected on and stays when its playlist is empty
     // (no clip left to select), so another playlist can always be switched back in
     if (hit) playlistTrackId = hit.track.id;
@@ -2443,7 +2444,6 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     { scope: "bus", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="bus"]'), sig: "" },
     { scope: "master", list: body.querySelector<HTMLElement>('.fw-rtfx-list[data-scope="master"]'), sig: "" },
   ];
-  const masterSection = body.querySelector<HTMLElement>(".fw-insp-master");
   const drawCanvas = body.querySelector<HTMLCanvasElement>("[data-draw]");
   const drawApply = body.querySelector<HTMLButtonElement>('[data-draw-act="apply"]');
   const drawRevert = body.querySelector<HTMLButtonElement>('[data-draw-act="revert"]');
@@ -2668,8 +2668,6 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   };
   const renderRtfx = (force = false) => {
     for (const entry of fxLists) renderFxList(entry, force);
-    const show = engine.get("document").tracks.length > 0;
-    if (masterSection && masterSection.hidden === show) masterSection.hidden = !show;
     const tt = engine.get("document").timeTrack;
     if (tt?.length) {
       const fromV = String(Math.round(tt[0].speed * 100));
