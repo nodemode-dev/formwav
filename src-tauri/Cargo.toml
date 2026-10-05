@@ -18,3 +18,9 @@ regex = "1"
 [profile.release]
 strip = true
 lto = true
+
+# Build scripts and proc macros run on the build machine and never ship: left unstripped. On macOS 27 with Xcode 27,
+# stripping one leaves its LINKEDIT string pool misaligned, dyld refuses to load it, and rustc reports the macro's crate
+# as missing (the owner's build: "can't find crate for `phf_macros`"). The app's own binary is stripped as before.
+[profile.release.build-override]
+strip = false
