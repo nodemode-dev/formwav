@@ -110,7 +110,7 @@
 .fw-pane-tab.is-active { color: var(--text-on-accent); background: var(--accent-color); }
 .fw-pane-body[hidden],
 .fw-field[hidden] { display: none; }
-.fw-pane-media:is([data-tab="voice"], [data-tab="transcript"], [data-tab="labels"]) .fw-media-empty { display: none; }
+.fw-media-list:not([data-empty=""])[data-empty]::before { content: attr(data-empty); display: block; padding: 4px 0 8px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 .fw-pane-media:is([data-tab="voice"], [data-tab="transcript"], [data-tab="labels"]) :is(.fw-pane-meta, .fw-pane-end) { display: none; }
 .fw-pane-media .fw-pane-header { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
 .fw-pane-media .fw-pane-tabs { grid-column: 1 / -1; gap: 1px; }

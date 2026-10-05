@@ -29,10 +29,7 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
   importButton.addEventListener("click", () => host.querySelector<HTMLInputElement>(".fw-file")?.click());
   end?.append(importButton);
 
-  const empty = document.createElement("p");
-  empty.className = "fw-empty-note fw-media-empty";
-  empty.textContent = "Imported and recorded audio appears here. Add any file to a new track with its + button.";
-  list.before(empty);
+  const emptyText = "Imported and recorded audio appears here. Add any file to a new track with its + button.";
 
   const gen = document.createElement("section");
   gen.className = "fw-insp-section fw-generate";
@@ -150,7 +147,8 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
 
   const render = (doc: SessionDoc) => {
     const items = Object.values(doc.media);
-    if (empty.hidden !== items.length > 0) empty.hidden = items.length > 0;
+    const placeholder = items.length ? "" : emptyText;
+    if (list.dataset.empty !== placeholder) list.dataset.empty = placeholder;
     setText(meta, items.length ? `${items.length} file${items.length === 1 ? "" : "s"}` : "");
     patchList(list, items, {
       key: (m) => m.id,
