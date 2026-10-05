@@ -5,6 +5,7 @@
 //!
 //! The buffer is 100 ms of a 1 kHz sine at -12 dBFS on both channels at 48 kHz; the report is one JSON line.
 
+mod au;
 mod instrument;
 mod ladspa;
 #[cfg(target_os = "macos")]
@@ -661,6 +662,10 @@ fn main() {
         (Some("clap-gui"), Some(path)) => run_clap_gui(path, args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0)),
         (Some("vst3-gui"), Some(path)) => run_vst3_gui(path, args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0)),
         (Some("params"), Some(format)) if args.len() >= 4 => params::list(format, std::path::Path::new(&args[3])).map(|list| println!("{}", params::to_json(&list))),
+        (Some("au-check"), _) => {
+            println!("{}", au::check());
+            Ok(())
+        }
         (Some("scan"), _) => {
             let dirs: Vec<std::path::PathBuf> = if args.len() > 2 { args[2..].iter().map(std::path::PathBuf::from).collect() } else { offline::default_dirs() };
             println!("[{}]", offline::scan(&dirs).join(",\n "));

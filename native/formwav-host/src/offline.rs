@@ -250,6 +250,7 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
             Err(e) => out.push(format!("{{\"format\": \"{format}\", \"path\": \"{p}\", \"error\": \"{}\"}}", json(&e))),
         }
     }
+    out.extend(crate::au::list().into_iter().map(|(id, name)| format!("{{\"format\": \"au\", \"path\": \"{}\", \"id\": \"{}\", \"name\": \"{}\"}}", json(&id), json(&id), json(&name))));
     out
 }
 
@@ -274,6 +275,7 @@ pub fn process(format: &str, plugin: &Path, input: &Audio, tail_s: f64, values: 
         match format {
             "clap" => clap_process(plugin, rate, &left, &right, &mut out, values)?,
             "vst3" => vst3_process(plugin, rate, &left, &right, &mut out, values)?,
+            "au" => crate::au::process(&plugin.to_string_lossy(), rate, &left, &right, &mut out, values)?,
             other => return Err(format!("unknown plugin format {other}")),
         }
     }
