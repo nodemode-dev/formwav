@@ -129,6 +129,7 @@ FORMWAV_CHAINS = {
     "ramp": "rubberband=tempo=1:pitch=1",
     "dereverb": "anull",
     "dereverb-restore": "anull",  # RX-12: WPE, done in numpy
+    "derustle": "anull",  # RX-13: done in numpy
     "spot-heal": "anull",
     "wow-flutter": "anull",
     "pitch-correct": "anull",
@@ -146,7 +147,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
     ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("paulstretch", "Paulstretch..."), ("ramp", "Ramp tempo and pitch...")]),
-    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("dereverb-restore", "De-reverb: restore dry..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour..."), ("azimuth-measured", "Azimuth (measured)"), ("dc-measured", "DC offset (measured)"), ("breath-control", "Breath control..."), ("de-hum-adaptive", "De-hum (adaptive)..."), ("de-ess-spectral", "De-ess (spectral)..."), ("spectral-recovery", "Spectral recovery..."), ("spectral-repair", "Spectral repair..."), ("dialogue-leveler", "Leveler (dialogue)...")]),
+    ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("dereverb-restore", "De-reverb: restore dry..."), ("derustle", "De-rustle..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour..."), ("azimuth-measured", "Azimuth (measured)"), ("dc-measured", "DC offset (measured)"), ("breath-control", "Breath control..."), ("de-hum-adaptive", "De-hum (adaptive)..."), ("de-ess-spectral", "De-ess (spectral)..."), ("spectral-recovery", "Spectral recovery..."), ("spectral-repair", "Spectral repair..."), ("dialogue-leveler", "Leveler (dialogue)...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("downmix-mono", "Downmix to mono"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
 ]
@@ -295,6 +296,12 @@ PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]
     ),
     "dereverb": (
         {"amount": ("Amount", 0, 100, 70, "%"), "rt60": ("Reverb time (0 estimates it)", 0, 3, 0.8, "s"), "floor": ("Floor", 6, 30, 18, "dB")},
+        lambda v: "anull",
+    ),
+    # RX-13: lavalier rustle found by its learned shape and burstiness and cut where it is (Learn from/to: a stretch of
+    # the rustle alone, in seconds of the clip's audio)
+    "derustle": (
+        {"amount": ("Amount", 0, 100, 90, "%"), "sensitivity": ("Sensitivity", 0, 100, 50, "%"), "floor": ("Floor", 6, 36, 24, "dB"), "from": ("Learn from", 0, 36000, 0, "s"), "to": ("Learn to", 0, 36000, 0, "s")},
         lambda v: "anull",
     ),
     # RX-12: the dry sound restored by weighted prediction error (WPE), the reverb time estimated from the audio at 0
@@ -534,6 +541,76 @@ def _dereverb_wpe(x, rate: int, v: dict):
         out = np.zeros(len(sig))
         for k in range(len(back)):
             out[k * hop : k * hop + n] += back[k]
+        y[:, c] = (out[n : n + len(x)] / 2.0).astype(np.float32)
+    return y
+
+
+def _derustle(x, rate: int, v: dict):
+    """RX-13: lavalier clothing rustle found and taken out. The rustle's spectral shape is learned from a stretch of it
+    (From and To, in seconds; with none, a broad 1 to 8 kHz rise stands in); in a short-time spectrum each frame is
+    scored by how close its shape above 500 Hz is to the learned one (cosine of their log spectra) and how far its
+    energy jumps over the last 200 ms (rustle comes in bursts); a frame passing both has the learned shape, scaled to
+    the frame's own level where it is strongest, subtracted (`amount`, floored at `floor` dB), the gain smoothed over
+    neighbouring frames so the cuts do not click."""
+    import numpy as np
+
+    n = 2048 if rate > 32000 else 1024
+    hop = n // 4
+    win = np.sqrt(0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n))
+    freqs = np.fft.rfftfreq(n, 1.0 / rate)
+    band = freqs >= 500
+    amount = float(v.get("amount", 80)) / 100.0
+    floor = 10 ** (-float(v.get("floor", 18)) / 20)
+    sensitivity = float(v.get("sensitivity", 50)) / 100.0
+    y = np.zeros(x.shape, dtype=np.float32)
+    for c in range(x.shape[1]):
+        sig = np.concatenate([np.zeros(n), x[:, c].astype(np.float64), np.zeros(n)])
+        frames = np.lib.stride_tricks.sliding_window_view(sig, n)[::hop]
+        S = np.fft.rfft(frames * win, axis=1)
+        P = np.abs(S) ** 2 + 1e-20
+        a, b = float(v.get("from", 0) or 0), float(v.get("to", 0) or 0)
+        if b > a:
+            i0, i1 = int((a * rate + n) / hop), int((b * rate + n) / hop) + 1
+            profile = P[max(0, i0) : max(i0 + 1, min(len(P), i1))].mean(axis=0)
+        else:
+            profile = np.where(freqs < 1000, 0.1, np.where(freqs < 8000, 1.0, 0.3))  # a broad rustle stand-in
+        # shapes compared over 24 log-spaced bands above 500 Hz: one frame's power per bin scatters by about 5.6 dB, which
+        # left a rustle frame's cosine with the profile (0.68) below a speech frame's (0.72); over bands it reads 0.96
+        bi = np.digitize(freqs, np.geomspace(500, rate / 2, 25))
+        bands = [bi == k for k in range(1, 25) if np.any(bi == k)]
+        PB = np.stack([P[:, m].mean(axis=1) for m in bands], axis=1)
+        lp = np.log(np.array([profile[m].mean() for m in bands]) + 1e-20)
+        lp -= lp.mean()
+        lf = np.log(PB + 1e-20)
+        lf -= lf.mean(axis=1, keepdims=True)
+        shape = np.nan_to_num((lf @ lp) / (np.linalg.norm(lf, axis=1) * np.linalg.norm(lp) + 1e-20))  # cosine; silence 0
+        e = 10 * np.log10(P[:, band].sum(axis=1))
+        k = max(1, round(0.2 * rate / hop))
+        recent = np.array([np.median(e[max(0, i - k) : i]) if i > 0 else e[0] for i in range(len(e))])
+        jump = e - recent
+        # sensitivity 50: a frame shaped like the rustle (band cosine over 0.85) rising 6 dB over its last 200 ms
+        found = (shape > 0.95 - 0.2 * sensitivity) & (jump > 12 - 12 * sensitivity)
+        found = np.convolve(found.astype(float), np.ones(3), mode="same") > 0  # a frame either side too (the burst's edges)
+        # the learned shape scaled to the frame where the rustle is strongest relative to it, so it takes no more than
+        # is there; speech's harmonics, far above the rustle in their own bins, keep most of their level
+        # the rustle's level in the frame from the band ratios (each band averages many bins): the 25th percentile of the
+        # per-bin ratios read a noise bin's power at 0.29 of its mean, so only a quarter of the rustle went; the bands'
+        # 40th percentile leans low where speech fills some bands, so it takes no more than the rustle
+        pb = np.array([profile[m].mean() for m in bands])
+        scale = np.percentile(PB / pb[None, :], 40, axis=1)[:, None]
+        # the cut worked out per band from band powers and applied to all its bins: per bin, a noise bin's random highs
+        # (most of a rustle's energy) kept a gain near 1, and detected rustle-dominated frames lost only 3.6 dB
+        gb = np.sqrt(np.maximum(1.0 - amount * (scale * pb[None, :]) / PB, floor**2))
+        g = np.ones(P.shape)
+        for k, m in enumerate(bands):
+            g[:, m] = gb[:, k : k + 1]
+        g[~found] = 1.0
+        g = np.minimum(1.0, (np.roll(g, 1, axis=0) + 2 * g + np.roll(g, -1, axis=0)) / 4)  # smoothed over frames
+        g[~found & ~np.roll(found, 1) & ~np.roll(found, -1)] = 1.0
+        back = np.fft.irfft(S * g, n, axis=1) * win
+        out = np.zeros(len(sig))
+        for i in range(len(back)):
+            out[i * hop : i * hop + n] += back[i]
         y[:, c] = (out[n : n + len(x)] / 2.0).astype(np.float32)
     return y
 
@@ -1637,7 +1714,7 @@ def _peak_normalize(x, rate: int, v: dict):
     return (y * gains).astype(np.float32)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "dereverb-restore": _dereverb_wpe, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
+NUMPY_EFFECTS = {"dereverb": _dereverb, "dereverb-restore": _dereverb_wpe, "derustle": _derustle, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
                  "azimuth-measured": _azimuth_measured, "dc-measured": _dc_measured, "breath-control": _breath_control,
                  "de-hum-adaptive": _de_hum_adaptive, "de-ess-spectral": _de_ess_spectral, "spectral-recovery": _spectral_recovery,
                  "spectral-repair": _spectral_repair, "dialogue-leveler": _dialogue_leveler, "dynamics-curve": _dynamics_curve}
