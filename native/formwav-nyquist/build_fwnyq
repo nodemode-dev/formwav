@@ -23,7 +23,13 @@ objs=""
 for s in $(grep -v '^#' "$here/sources.txt"); do
   o="$build/$(echo "$s" | tr '/' '_' | sed 's/\.cpp$/.o/;s/\.c$/.o/')"
   case "$s" in *.cpp) cc=${CXX:-c++} ;; *) cc=${CC:-cc} ;; esac
-  [ "$o" -nt "$here/libnyquist/$s" ] || $cc -O2 -fPIC -w -DCMTSTUFF -DEXT $INC -c "$here/libnyquist/$s" -o "$o"
+  extra=""
+  # Apple's clang (and clang 16 on) refuses C's old implicit int, which three K&R definitions here use (midifile.c,
+  # handlers.c): allowed again, they mean int as they always did. Implicit function declarations stay errors (they
+  # truncate returned pointers); security.c's getcwd gets its prototype (it includes unistd.h only for __APPLE__ or UNIX)
+  case "$s" in *.c) extra="-Wno-error=implicit-int" ;; esac
+  case "$s" in */xlisp/security.c) extra="$extra -include unistd.h" ;; esac
+  [ "$o" -nt "$here/libnyquist/$s" ] || $cc -O2 -fPIC -w -DCMTSTUFF -DEXT $INC $extra -c "$here/libnyquist/$s" -o "$o"
   objs="$objs $o"
 done
 ar rcs "$build/libnyquist.a" $objs
