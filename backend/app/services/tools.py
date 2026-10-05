@@ -493,7 +493,31 @@ def mic_check(media_id: str) -> dict:
         findings.append({"level": "warn", "text": f"Mains hum at {mains} Hz: {worst:.1f} dB against the whole signal.", "suggest": "hum-remover"})
     if abs(dc) > 0.001:
         findings.append({"level": "warn", "text": f"DC offset {dc:.4f}.", "suggest": "dc-offset"})
-    return {"name": info["name"], "lufs": lufs, "peakDb": peak, "clippedSamples": clipped, "noiseFloorDb": noise, "humDb": hum, "dcOffset": dc, "findings": findings}
+    learned = _learned_assessment(media_id) if lufs is not None and lufs > -70 else None
+    if learned is None:
+        findings.append({"level": "ok", "text": "Learned assessment unavailable: its model (DNSMOS P.835) downloads once when online.", "suggest": None})
+    else:
+        sig, bak, ovrl = learned["sig"], learned["bak"], learned["ovrl"]
+        findings.append({"level": "ok" if ovrl >= 3 else "warn", "text": f"Learned assessment (DNSMOS P.835, 1 to 5): speech {sig:.2f}, background {bak:.2f}, overall {ovrl:.2f}.", "suggest": None})
+        if bak < 3:
+            findings.append({"level": "warn", "text": f"Background noise is audible to listeners (background {bak:.2f} of 5).", "suggest": "voice-denoise"})
+        if sig < 3:
+            findings.append({"level": "warn", "text": f"The voice itself sounds degraded (speech {sig:.2f} of 5): distortion, a poor mic or a reverberant room.", "suggest": None})
+    return {"name": info["name"], "lufs": lufs, "peakDb": peak, "clippedSamples": clipped, "noiseFloorDb": noise, "humDb": hum, "dcOffset": dc, "learned": learned, "findings": findings}
+
+
+def _learned_assessment(media_id: str) -> dict | None:
+    """AP-08: DNSMOS P.835's speech, background and overall scores for the clip at 16 kHz mono (dnsmos.py), or None
+    when the model cannot be had (offline before its one download) or the clip will not decode."""
+    from . import dnsmos
+
+    proc = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-i", str(media_dir() / f"{media_id}.wav"), "-ac", "1", "-ar", str(dnsmos.RATE), "-f", "f32le", "-"], capture_output=True, timeout=600)
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    try:
+        return dnsmos.score(np.frombuffer(proc.stdout, dtype="<f4").astype(np.float64))
+    except Exception:
+        return None
 
 
 def stats_filtered(src: str, chain: str) -> float | None:

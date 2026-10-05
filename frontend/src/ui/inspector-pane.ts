@@ -89,7 +89,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="stats">Statistics</button><button type="button" class="fw-ibtn" data-an="spectrogram">Spectrogram</button><select data-an-view aria-label="Spectrogram view" title="Spectrogram of both channels, or of a stereo clip's mid or side"><option value="both">L+R</option><option value="mid">Mid</option><option value="side">Side</option></select><button type="button" class="fw-ibtn" data-an="mic">Mic check</button><button type="button" class="fw-ibtn" data-an="transients" title="Put a marker at each transient in this clip">Transients</button></div>
   <label class="fw-field"><span>Sensitivity</span><input type="number" min="0" max="1" step="0.05" value="0.5" data-an-sens aria-label="Transient sensitivity, 0 strong attacks only to 1 subtle ones"><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="split-transients" title="Cut this clip at each transient">Split at transients</button></div>
-  <ul class="fw-mic-findings" hidden></ul>
+  <ul class="fw-mic-findings fw-repair-findings" aria-live="polite"><li class="fw-finding is-ok"><span>Check the recording to see what it needs.</span></li></ul>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-repair-act="analyse" title="Type the clip's material, find its problems and propose a repair chain at three intensities">Repair assistant</button><button type="button" class="fw-ibtn" data-repair-act="light" disabled>Light</button><button type="button" class="fw-ibtn" data-repair-act="medium" disabled>Medium</button><button type="button" class="fw-ibtn" data-repair-act="heavy" disabled>Heavy</button></div>
   <ul class="fw-mic-findings fw-repair-findings" aria-live="polite"><li class="fw-finding is-ok"><span>Analyse the clip to see what it needs.</span></li></ul>
   <dl class="fw-stats"></dl>
@@ -3100,10 +3100,16 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
 
   // Mic check (Adobe Podcast's mic analysis, RX's Repair Assistant): findings with the effect that addresses each.
   const findingsList = body.querySelector<HTMLElement>(".fw-mic-findings");
+  const micPlaceholder = () => {
+    const li = document.createElement("li");
+    li.className = "fw-finding is-ok";
+    li.innerHTML = "<span>Check the recording to see what it needs.</span>";
+    return li;
+  };
   host.addEventListener("fw-selection", () => {
-    if (findingsList && !findingsList.hidden) {
-      findingsList.hidden = true;
-      findingsList.replaceChildren();
+    if (findingsList && findingsList.dataset.checked) {
+      delete findingsList.dataset.checked;
+      findingsList.replaceChildren(micPlaceholder());
     }
   });
   body.addEventListener("click", async (e) => {
@@ -3148,7 +3154,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
           return item;
         }),
       );
-      findingsList.hidden = false;
+      findingsList.dataset.checked = "1";
       const open = report.findings.filter((f) => f.level !== "ok").length;
       setText(notice, open ? `Mic check: ${open} thing${open === 1 ? "" : "s"} to look at` : "Mic check: the recording looks good");
     } catch (err) {
