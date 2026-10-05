@@ -175,6 +175,12 @@
 .fw-folder-icon { display: inline-flex; color: var(--text-secondary); }
 .fw-folder-icon svg { inline-size: 14px; block-size: 14px; }
 .fw-rtfx-list { display: grid; gap: 6px; align-content: start; block-size: 150px; overflow-y: auto; }
+.fw-steps-grid { display: grid; gap: 4px; margin-block-end: 6px; }
+.fw-steps-row { display: flex; align-items: center; gap: 2px; }
+.fw-steps-row input { inline-size: 44px; margin-inline-end: 4px; padding: 2px 4px; font: inherit; font-size: 11px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; }
+.fw-step { inline-size: 12px; block-size: 18px; padding: 0; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 3px; cursor: pointer; }
+.fw-step:nth-of-type(4n + 1) { border-color: var(--text-muted); }
+.fw-step[aria-pressed="true"] { background: var(--accent-color); border-color: var(--accent-color); }
 .fw-rtfx-list:empty::before { content: "No realtime effects yet"; padding: 4px 0; color: var(--text-muted); font-size: 12px; }
 .fw-rtfx-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-tertiary); }
 .fw-rtfx-name { flex-basis: 100%; font-weight: 600; }
