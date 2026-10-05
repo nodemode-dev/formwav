@@ -14,3 +14,7 @@ vst3 = "0.3"
 libloading = "0.8"
 x11rb = "0.13"
 libc = "0.2"
+
+# Not stripped, for the same reason as the core's (macOS 27's dyld refuses a Mach-O whose LINKEDIT strip misaligned)
+[profile.release]
+strip = false

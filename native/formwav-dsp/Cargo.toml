@@ -25,3 +25,10 @@ cpal = { version = "0.18", optional = true }
 midir = { version = "0.11", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
+
+# Not stripped: on macOS 27 with Xcode 27, strip (which Cargo's default release profile runs, strip = "debuginfo") can
+# leave a library's LINKEDIT string pool misaligned, and dyld then refuses to load it; the owner's engine could not
+# import this core ("mis-aligned LINKEDIT string pool"). The WebAssembly build keeps its stripping (frontend/oc_install
+# sets CARGO_PROFILE_RELEASE_STRIP=debuginfo for it: 156 kB rather than 1.8 MB).
+[profile.release]
+strip = false

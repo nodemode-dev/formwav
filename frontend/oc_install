@@ -7,6 +7,8 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 1
 fi
 rustup target add wasm32-unknown-unknown >/dev/null 2>&1 || true
-cargo build --release --locked --target wasm32-unknown-unknown --lib --manifest-path ../native/formwav-dsp/Cargo.toml
+# stripped of debug info here only: the core's release profile no longer strips (macOS 27's dyld refuses the native
+# library Xcode 27's strip misaligns), and unstripped this WebAssembly would be 1.8 MB rather than 156 kB
+CARGO_PROFILE_RELEASE_STRIP=debuginfo cargo build --release --locked --target wasm32-unknown-unknown --lib --manifest-path ../native/formwav-dsp/Cargo.toml
 mkdir -p public/core
 cp ../native/formwav-dsp/target/wasm32-unknown-unknown/release/formwav_dsp.wasm public/core/formwav_dsp.wasm

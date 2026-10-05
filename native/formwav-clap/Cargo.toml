@@ -15,3 +15,5 @@ formwav-dsp = { path = "../formwav-dsp" }
 
 [profile.release]
 panic = "abort"
+# not stripped: hosts load this library, and macOS 27's dyld refuses one whose LINKEDIT Xcode 27's strip misaligned
+strip = false

@@ -67,14 +67,19 @@ def selfcheck() -> int:
     info["ffmpeg_on_path"] = bool(shutil.which("ffmpeg"))
     # the core's native features (native audio output, MIDI input for the desktop app's WebView, which has no Web
     # MIDI): every desktop build up to v1.91.0 left them out unnoticed, so a build without them now fails here
+    load_error = None
     try:
         import formwav_dsp
 
         info["native_output"] = hasattr(formwav_dsp, "NativeOutput")
         info["midi_input"] = hasattr(formwav_dsp, "MidiInput")
-    except Exception:
+    except Exception as exc:  # the core could not be loaded at all (macOS 27 refused a misaligned strip, say)
+        load_error = str(exc)
         info["native_output"] = info["midi_input"] = False
     print(json.dumps(info))
+    if load_error:
+        print(f"selfcheck: the audio core could not be loaded: {load_error[:400]}", file=sys.stderr)
+        return 1
     if not (info["native_output"] and info["midi_input"]):
         print("selfcheck: the audio core was built without its native features (maturin --features python,native)", file=sys.stderr)
         return 1

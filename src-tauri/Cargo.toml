@@ -16,11 +16,14 @@ tauri-plugin-dialog = "2"
 regex = "1"
 
 [profile.release]
-strip = true
+# not stripped: on macOS 27 Xcode 27's strip can misalign a Mach-O's LINKEDIT, which dyld refuses; this binary loaded
+# by luck while the engine's core did not ("mis-aligned LINKEDIT string pool"), so nothing here relies on that luck
+strip = false
 lto = true
 
 # Build scripts and proc macros run on the build machine and never ship: left unstripped. On macOS 27 with Xcode 27,
 # stripping one leaves its LINKEDIT string pool misaligned, dyld refuses to load it, and rustc reports the macro's crate
-# as missing (the owner's build: "can't find crate for `phf_macros`"). The app's own binary is stripped as before.
+# as missing (the owner's build: "can't find crate for `phf_macros`"). Since v1.94.0 the app's own binary is not
+# stripped either (above).
 [profile.release.build-override]
 strip = false
