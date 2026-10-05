@@ -57,6 +57,8 @@ export interface Clip {
   fx?: TrackFx[];
   /** A note clip's notes, the truth its media renders (the built-in instrument); absent on audio clips. */
   notes?: readonly NoteEvent[];
+  /** Written by the clip launcher (a launched loop's repeat); Stop ends only clips so marked. */
+  launched?: boolean;
   /** A palette key for this clip alone, over its track's colour; absent follows the track. */
   color?: string;
   /** The media this clip held before any effect replaced it (RX-61's Restore original); absent until one does. */
@@ -463,6 +465,8 @@ export type Command =
   | { type: "add-clip"; trackId: string; mediaId: string; start: number; sourceIn: number; length: number }
   | { type: "paste-clip"; trackId: string; clip: Omit<Clip, "id"> }
   | { type: "remove-clip"; trackId: string; clipId: string }
+  | { type: "launch-clip"; trackId: string; mediaId: string; at: number; repeats: number }
+  | { type: "stop-launched"; trackId: string; at: number }
   | { type: "set-clip-fades"; trackId: string; clipId: string; fadeIn: number; fadeOut: number; shape?: FadeShape }
   | { type: "crossfade"; trackId: string; leftClipId: string; rightClipId: string; shape?: FadeShape }
   | { type: "set-loop"; start: number; end: number; enabled: boolean }
@@ -506,6 +510,15 @@ export function documentLength(doc: SessionDoc): number {
   let longest = 0;
   for (const track of doc.tracks) for (const clip of track.clips) longest = Math.max(longest, clip.start + clip.length);
   return longest;
+}
+
+/** A track's clips with its launched material ended at `at`: launched clips starting at or after it removed, one
+ * crossing it shortened to end there; clips placed by hand untouched. */
+function endLaunched(clips: readonly Clip[], at: number): Clip[] {
+  return clips.flatMap((c) => {
+    if (!c.launched || c.start + c.length <= at) return [c];
+    return c.start >= at ? [] : [{ ...c, length: at - c.start }];
+  });
 }
 
 function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): SessionDoc {
@@ -1292,6 +1305,19 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       return mapTrack(doc, cmd.trackId, (t) => {
         const clips = t.clips.filter((c) => c.id !== cmd.clipId);
         return clips.length === t.clips.length ? t : { ...t, clips };
+      });
+    case "launch-clip": {
+      const media = doc.media[cmd.mediaId];
+      const frames = media?.frames ?? 0;
+      if (!media || frames < 1 || cmd.repeats < 1) return doc;
+      const at = Math.max(0, Math.round(cmd.at));
+      const copies: Clip[] = Array.from({ length: Math.min(256, Math.round(cmd.repeats)) }, (_, i) => ({ id: newId(), mediaId: cmd.mediaId, start: at + i * frames, length: frames, sourceIn: 0, gainDb: 0, launched: true }));
+      return mapTrack(doc, cmd.trackId, (t) => ({ ...t, clips: [...endLaunched(t.clips, at), ...copies].sort((a, b) => a.start - b.start) }));
+    }
+    case "stop-launched":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const clips = endLaunched(t.clips, Math.max(0, Math.round(cmd.at)));
+        return clips.length === t.clips.length && clips.every((c, i) => c === t.clips[i]) ? t : { ...t, clips };
       });
     case "set-clip-fades":
       return mapTrack(doc, cmd.trackId, (t) => {

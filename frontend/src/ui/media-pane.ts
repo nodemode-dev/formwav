@@ -1,6 +1,7 @@
 import type { Engine, MediaRef, SessionDoc } from "../engine";
 import { icon as fcIcon } from "../vendor/formcut/icons";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
+import { mountLauncher } from "./launcher";
 import { mountStepSequencer } from "./step-sequencer";
 
 const length = (m: MediaRef) => {
@@ -48,6 +49,7 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
 <button type="button" class="fw-ibtn" data-g="go">Add on a new track</button>`;
   (host.querySelector<HTMLElement>(".fw-create-body") ?? list).append(gen);
   mountStepSequencer(host.querySelector<HTMLElement>(".fw-create-body") ?? list, engine, document.querySelector<HTMLElement>(".fw-notice"));
+  mountLauncher(host.querySelector<HTMLElement>(".fw-create-body") ?? list, engine, document.querySelector<HTMLElement>(".fw-notice"));
   const lib = document.createElement("section");
   lib.className = "fw-insp-section fw-library";
   lib.innerHTML = `<div class="fw-insp-head">Library</div>

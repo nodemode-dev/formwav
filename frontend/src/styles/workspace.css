@@ -176,6 +176,13 @@
 .fw-folder-icon svg { inline-size: 14px; block-size: 14px; }
 .fw-rtfx-list { display: grid; gap: 6px; align-content: start; block-size: 150px; overflow-y: auto; }
 .fw-steps-grid { display: grid; gap: 4px; margin-block-end: 6px; }
+.fw-launch-scroll { overflow-x: scroll; margin-block-end: 6px; }
+.fw-launch-grid { border-collapse: separate; border-spacing: 2px; font-size: 11px; }
+.fw-launch-grid th { font-weight: 600; text-align: start; white-space: nowrap; }
+.fw-launch-grid td { white-space: nowrap; }
+.fw-launch-grid select { inline-size: 64px; padding: 1px 2px; font: inherit; font-size: 11px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; }
+.fw-launch-grid .fw-ibtn { padding: 1px 5px; font-size: 11px; }
+.fw-launch-name { display: inline-block; max-inline-size: 56px; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; margin-inline-end: 4px; }
 .fw-steps-row { display: flex; align-items: center; gap: 2px; }
 .fw-steps-row input { inline-size: 44px; margin-inline-end: 4px; padding: 2px 4px; font: inherit; font-size: 11px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; }
 .fw-step { inline-size: 12px; block-size: 18px; padding: 0; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 3px; cursor: pointer; }
