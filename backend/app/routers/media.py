@@ -178,6 +178,20 @@ def nyquist_plugins() -> list[dict]:
     return nyquist.list_plugins()
 
 
+@router.post("/media/{media_id}/debleed-clicks", status_code=201)
+def media_debleed_clicks(media_id: str, amount: float = 100.0) -> dict:
+    """RX-05 without a reference: a headphone click track found by its steady tempo and taken out (services/effects.py:
+    debleed_clicks); a recording with no click track is answered with 422 and left alone."""
+    from ..services import effects
+
+    try:
+        return effects.debleed_clicks(media_id, max(0.0, min(100.0, amount)))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/debleed", status_code=201)
 def media_debleed(media_id: str, reference: str, offset: int = 0, amount: float = 100.0, pathMs: float | None = None) -> dict:
     """The recording with what leaked into it from the reference subtracted (services/effects.py: debleed); pathMs

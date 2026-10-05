@@ -34,7 +34,7 @@ const BODY = `
   <div class="fw-analyze-buttons" title="Nyquist (Audacity's own interpreter): a Nyquist Prompt's code or one of Audacity's bundled Nyquist plug-ins, run on this clip"><label class="fw-sam-opt"><span>Nyquist</span><select data-nyq="plugin" aria-label="Nyquist plug-in or prompt"><option value="">Nyquist Prompt</option></select></label><button type="button" class="fw-ibtn" data-nyq="apply">Apply</button></div>
   <div data-nyq="controls"></div>
   <textarea data-nyq="code" rows="3" spellcheck="false" aria-label="Nyquist code (the clip is *track*)" placeholder="(mult *track* 0.5)"></textarea>
-  <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><label class="fw-sam-opt" title="How long the leak's path rings after its delay: 0 for a direct leak (2.7 ms), up to 500 ms for a room between the source and the mic"><span>Path</span><input type="number" data-debleed="path" min="0" max="500" step="10" value="0" aria-label="The leak's path length, in milliseconds"> ms</label><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><label class="fw-sam-opt" title="How long the leak's path rings after its delay: 0 for a direct leak (2.7 ms), up to 500 ms for a room between the source and the mic"><span>Path</span><input type="number" data-debleed="path" min="0" max="500" step="10" value="0" aria-label="The leak's path length, in milliseconds"> ms</label><button type="button" class="fw-ibtn" data-debleed="clicks" title="Remove a headphone click track that leaked into this clip, with no reference: found by its steady tempo, learned from its clicks in the pauses, taken out at every beat">Remove click bleed</button><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Guide</span><select data-align="guide" aria-label="The original line this replacement take should follow"><option value="">no other clip overlaps</option></select></label><button type="button" class="fw-ibtn" data-clip-act="align" title="Re-time this replacement take to follow the guide word for word, and set it in the guide's place (automatic speech alignment)">Align to guide</button></div>
   <div class="fw-insp-head" title="Say what this clip is, then run its type's tasks or a preset (Audition's Essential Sound)">Essential sound</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Type</span><select data-es="type" aria-label="What this clip is"><option value="">Not set</option><option value="dialogue">Dialogue</option><option value="music">Music</option><option value="effects">Sound effects</option><option value="ambience">Ambience</option></select></label><label class="fw-sam-opt"><span>Preset</span><select data-es="preset" aria-label="A preset for this type"></select></label></div>
@@ -904,6 +904,28 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     engine.dispatch({ type: "set-surround-fold", on });
     if (notice) setText(notice, on ? "Hearing the 5.1 as a stereo fold-down, in playback and the stereo mix" : "Playback and the stereo mix back to each track's own pan");
   });
+  // RX-05 without a reference: a headphone click track taken out of the selected clip (one undo step), or the reason
+  // there is none told on the notice line
+  body.querySelector<HTMLButtonElement>('[data-debleed="clicks"]')?.addEventListener("click", async (e) => {
+    const hit = find(engine.get("document"));
+    if (!hit) return;
+    const button = e.currentTarget as HTMLButtonElement;
+    const amount = Number(body.querySelector<HTMLInputElement>('[data-debleed="amount"]')?.value ?? 100);
+    button.disabled = true;
+    setText(notice, "Looking for a click track...");
+    try {
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/debleed-clicks?amount=${amount}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as Partial<MediaRef> & { detail?: unknown };
+      if (!res.ok || !out.id) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "set-clip-media", trackId: hit.track.id, clipId: hit.clip.id, media: out as MediaRef });
+      setText(notice, "Click bleed removed (undo puts it back)");
+    } catch (err) {
+      setText(notice, err instanceof Error ? err.message : String(err));
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   // AU-28: Nyquist by Audacity's own interpreter: a Nyquist Prompt's code, or one of Audacity's bundled plug-ins with
   // its controls drawn from its header; Apply runs it on the selected clip and swaps the clip's audio (one undo step),
   // or tells a result that is not a sound (a number, a string, labels) on the notice line

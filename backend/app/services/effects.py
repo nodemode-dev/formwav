@@ -1748,6 +1748,123 @@ def _levinson(r, b):
     return x
 
 
+def debleed_clicks(media_id: str, amount: float = 100.0) -> dict:
+    """RX-05 without a reference: a headphone click track (a metronome leaking into the mic) taken out with no copy of it.
+    Clicks are found as sharp rises of the energy above 1 kHz (12 dB over the 100 ms around them, at 1 ms steps); their
+    spacing gives the tempo (the median interval) and the phase (where most fall on that grid), so every beat is
+    predicted, those under the performance too, from the first click found to the last; the click's own waveform is
+    learned by averaging the clicks in quiet stretches (aligned to each other), and at every beat it is matched within
+    3 ms (the track drifting a little) and subtracted, `amount` per cent of it."""
+    import numpy as np
+
+    from .audacity import _wav_bytes
+    from .tools import _wav_view
+
+    view, rate = _wav_view(media_id)
+    x = np.asarray(view, dtype=np.float64)
+    mono = x.mean(axis=1)
+    n = len(mono)
+    spec = np.fft.rfft(mono)
+    spec[: int(1000 * n / rate)] = 0
+    hp = np.fft.irfft(spec, n)
+    ms = max(1, rate // 1000)
+    nf = n // ms
+    if nf < 200:
+        raise media.MediaError("too short to find a click track in")
+    env = 10 * np.log10((hp[: nf * ms] ** 2).reshape(nf, ms).mean(axis=1) + 1e-20)
+    local = np.array([np.median(env[max(0, i - 50) : i + 50]) for i in range(nf)])
+    rise = env - local
+    onsets = [i for i in range(1, nf - 1) if rise[i] > 12 and rise[i] >= rise[i - 1] and rise[i] > rise[i + 1]]
+    clean = []  # onsets 30 ms apart at least
+    for i in onsets:
+        if not clean or i - clean[-1] > 30:
+            clean.append(i)
+    if len(clean) < 6:
+        raise media.MediaError("no click track found (fewer than six clear clicks)")
+    # the tempo by periodicity: the period (150 ms to 2 s) at which the most onsets have another exactly one period on
+    # (within 3 ms); speech's consonants are sharp high rises too and swamped a median of intervals, so the beats followed
+    # the speech, and a clean recording was taken for a click track
+    marks = np.zeros(nf + 2100, dtype=bool)
+    marks[clean] = True
+    near = np.convolve(marks.astype(float), np.ones(7), mode="same") > 0  # within 3 ms of an onset
+    arr = np.array(clean)
+    support = np.zeros(2001)
+    for lag in range(150, 2001):
+        support[lag] = near[arr + lag].mean()
+    best = float(support.max())
+    # the shortest near-best period (not a multiple of the beat), then the centre of its plateau: within 3 ms the share
+    # holds over some 7 ms of periods, and its first point (497 ms at a 500 ms track) drifted 3 ms a beat
+    first_good = int(np.flatnonzero(support >= best - 0.05)[0])
+    plateau = np.arange(first_good, min(2001, first_good + 15))
+    plateau = plateau[support[plateau] >= best - 0.05]  # the same criterion as its start (two had emptied it)
+    lag = float(np.average(plateau, weights=support[plateau])) if len(plateau) else float(first_good)
+    # measured: a reading with a click track under it 0.41 (its period found within 2 ms), the clicks alone 0.98, the
+    # clean reading 0.11; a steady tempo also stands well above the share the other periods get (speech's is flat)
+    typical = float(np.median(support[150:]))
+    if best < 0.25 or best < 2.5 * typical:
+        raise media.MediaError(f"no click track found (at most {best:.0%} of the sharp onsets recur at a steady period)")
+    # the grid fitted to the clicks on it: their beat numbers by the period found, then tempo and phase by least squares
+    # anchored on the first onset with a partner one period before or after (a click; the first onset may be speech)
+    step = int(round(lag))
+    paired = arr[near[arr + step] | near[np.maximum(arr - step, 0)]]
+    anchor = int(paired[0]) if len(paired) else int(arr[0])
+    # numbered against the integer period found, only the clicks near the anchor fall within 6 ms (a 497 ms guess at a
+    # 500 ms track drifts 3 ms a beat), and one fit over them drifted as much; so the grid is refitted until it holds:
+    # each fit numbers and takes in the clicks it brings within 6 ms, the next fits them all
+    period, phase = float(lag), float(anchor)
+    for _ in range(12):
+        k0 = np.round((arr - phase) / period)
+        on = np.abs(arr - (phase + k0 * period)) <= 6
+        if on.sum() < 4:
+            break
+        period, phase = np.polyfit(k0[on], arr[on], 1)
+    on_grid = [int(c) for c in arr[on]]
+    first, last = min(on_grid), max(on_grid)
+    beats = [phase + k * period for k in range(int(np.floor((first - phase) / period)) - 1, int(np.ceil((last - phase) / period)) + 2)]
+    beats = [b for b in beats if first - 6 <= b <= last + 6]
+    # the click's waveform from the clicks in quiet stretches (their 200 ms around under 20 dB below the loudest)
+    L = int(0.03 * rate)
+    lead = int(0.003 * rate)
+    loud = np.percentile(env, 95)
+    # quiet before and after the click: an example inside speech (quiet only before) had pulled the mean's fit to the
+    # true click down to 0.38; the median below keeps one stray example from spoiling it either way
+    quiet = [int(round(c * ms)) for c in on_grid if c > 105 and c + 105 < nf and np.percentile(env[c - 100 : c - 5], 90) < loud - 20 and np.percentile(env[c + 15 : c + 100], 90) < loud - 20]
+    quiet = [s for s in quiet if s - lead >= 0 and s - lead + L <= n]
+    if len(quiet) < 2:
+        raise media.MediaError("no click stands clear of the performance to learn it from")
+    segs = []
+    ref = x[quiet[0] - lead : quiet[0] - lead + L]
+    for s in quiet:
+        best, best_c = 0, -np.inf
+        for d in range(-lead, lead + 1):
+            a = s - lead + d
+            if 0 <= a and a + L <= n:
+                c = float(np.sum(x[a : a + L] * ref))
+                if c > best_c:
+                    best, best_c = d, c
+        segs.append(x[s - lead + best : s - lead + best + L])
+    template = np.median(segs, axis=0)  # frames by channels; the median, robust to one stray example
+    # at every beat, the template matched within 3 ms (on its above-1 kHz part, where the click stands out) and taken away
+    t_hp = np.fft.irfft(np.where(np.fft.rfftfreq(L, 1 / rate) >= 1000, np.fft.rfft(template.mean(axis=1)), 0), L)
+    y = x.copy()
+    k = amount / 100.0
+    reach = int(0.003 * rate)
+    for b in beats:
+        s = int(round(b * ms)) - lead
+        best, best_c = 0, -np.inf
+        for d in range(-reach, reach + 1):
+            a = s + d
+            if 0 <= a and a + L <= n:
+                c = float(np.dot(hp[a : a + L], t_hp))
+                if c > best_c:
+                    best, best_c = d, c
+        a = s + best
+        if 0 <= a and a + L <= n:
+            y[a : a + L] -= k * template
+    name = str(media.media_info(media_id).get("name", "audio")).rsplit(".", 1)[0]
+    return media.import_wav(f"{name} (click bleed removed).wav", _wav_bytes([y[:, c].astype(np.float32) for c in range(y.shape[1])], rate))
+
+
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0, path_ms: float | None = None) -> dict:
     """RX's De-bleed with a reference: what leaked into a recording from another source (headphone spill, a guitar
     amp in the vocal mic) is that source through a fixed path, so the path's transfer function per frequency bin is
