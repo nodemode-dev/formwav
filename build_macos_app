@@ -32,6 +32,8 @@ pyinstaller --clean --noconfirm --onefile --name formwav-engine \
   --collect-all uvicorn --collect-all formwav_dsp --collect-all app \
   --hidden-import app.main \
   --add-data "../frontend/dist:frontend_dist" \
+  --add-data "../native/formwav-nyquist/runtime:nyquist_runtime" \
+  --add-data "../native/formwav-nyquist/plug-ins:nyquist_plugins" \
   desktop_entry.py
 ./dist/formwav-engine --selfcheck
 deactivate
@@ -46,6 +48,11 @@ echo "sidecar: src-tauri/binaries/formwav-engine-$TRIPLE"
 cargo build --release --manifest-path native/formwav-host/Cargo.toml
 cp native/formwav-host/target/release/fwhost "src-tauri/binaries/fwhost-$TRIPLE"
 echo "sidecar: src-tauri/binaries/fwhost-$TRIPLE"
+# AU-28: Nyquist's runner (Audacity's libnyquist, vendored); it needs libsndfile and portaudio (brew install libsndfile
+# portaudio), linked from Homebrew, so this app runs on Macs that have them
+native/formwav-nyquist/build_fwnyq
+cp native/formwav-nyquist/fwnyq "src-tauri/binaries/fwnyq-$TRIPLE"
+echo "sidecar: src-tauri/binaries/fwnyq-$TRIPLE"
 
 say "Generating app icons"
 cargo tauri icon src-tauri/icons/icon.png

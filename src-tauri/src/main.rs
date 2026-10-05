@@ -67,6 +67,8 @@ fn main() {
                 .env("FORMWAV_PORT", "0")
                 // Bundled binaries sit beside the app's executable (Contents/MacOS on macOS): the plugin host is there.
                 .env("FORMWAV_HOST_BIN", std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(if cfg!(windows) { "fwhost.exe" } else { "fwhost" }))).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default())
+                // AU-28: Nyquist's runner sits there too (its runtime and plug-ins travel inside the engine)
+                .env("FORMWAV_FWNYQ", std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(if cfg!(windows) { "fwnyq.exe" } else { "fwnyq" }))).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default())
                 .env("FORMWAV_EXIT_WITH_STDIN", "1")
                 .spawn()
                 .expect("the formwav engine failed to spawn");

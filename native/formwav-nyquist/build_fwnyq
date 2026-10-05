@@ -8,6 +8,17 @@ L="$here/libnyquist/nyquist"
 build="$here/build"
 mkdir -p "$build"
 INC="-I$here/libnyquist -I$L/cmt -I$L/cmupv/src -I$L/ffts/src -I$L/nyqsrc -I$L/nyqstk -I$L/nyqstk/include -I$L/tran -I$L/xlisp -I$L/sys/unix"
+LIBS=""
+# macOS: libsndfile and portaudio from Homebrew, and -fno-common as Audacity's build uses on Darwin
+if command -v brew >/dev/null 2>&1; then
+  INC="$INC -I$(brew --prefix)/include"
+  LIBS="-L$(brew --prefix)/lib"
+fi
+CXXLIB="-lstdc++"
+if [ "$(uname)" = "Darwin" ]; then
+  INC="$INC -fno-common"
+  CXXLIB="-lc++"  # Apple's toolchain has libc++, not libstdc++
+fi
 objs=""
 for s in $(grep -v '^#' "$here/sources.txt"); do
   o="$build/$(echo "$s" | tr '/' '_' | sed 's/\.cpp$/.o/;s/\.c$/.o/')"
@@ -16,5 +27,5 @@ for s in $(grep -v '^#' "$here/sources.txt"); do
   objs="$objs $o"
 done
 ar rcs "$build/libnyquist.a" $objs
-${CC:-cc} -O2 -w "$here/fwnyq.c" -I"$here/libnyquist" "$build/libnyquist.a" -lsndfile -lportaudio -lstdc++ -lm -lpthread -o "$here/fwnyq"
+${CC:-cc} -O2 -w "$here/fwnyq.c" -I"$here/libnyquist" $INC "$build/libnyquist.a" $LIBS -lsndfile -lportaudio $CXXLIB -lm -lpthread -o "$here/fwnyq"
 echo "fwnyq built: $here/fwnyq"

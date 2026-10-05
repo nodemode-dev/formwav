@@ -25,12 +25,20 @@ def binary() -> str:
     return os.environ.get("FORMWAV_FWNYQ") or str(_ROOT / "fwnyq")
 
 
+def _bundled(name: str) -> Path | None:
+    """In the packaged app the runtime and plug-ins travel inside the frozen engine (build_macos_app adds them)."""
+    import sys
+
+    base = getattr(sys, "_MEIPASS", None)
+    return Path(base) / name if base and (Path(base) / name).is_dir() else None
+
+
 def runtime_dir() -> Path:
-    return Path(os.environ.get("FORMWAV_NYQUIST_RUNTIME") or _ROOT / "runtime")
+    return Path(os.environ.get("FORMWAV_NYQUIST_RUNTIME") or _bundled("nyquist_runtime") or _ROOT / "runtime")
 
 
 def plugins_dir() -> Path:
-    return Path(os.environ.get("FORMWAV_NYQUIST_PLUGINS") or _ROOT / "plug-ins")
+    return Path(os.environ.get("FORMWAV_NYQUIST_PLUGINS") or _bundled("nyquist_plugins") or _ROOT / "plug-ins")
 
 
 def _tokens(s: str) -> list[str]:

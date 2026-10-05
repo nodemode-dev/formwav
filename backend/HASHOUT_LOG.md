@@ -1377,3 +1377,10 @@ Five cases, four of Audacity's bundled Nyquist plug-ins with their settings give
 - logged: v1.84.0 (in progress) · 2026-10-04
 
 The clip section gains a Nyquist row: Nyquist Prompt or one of Audacity's bundled plug-ins; a plug-in's controls are drawn from its header (number fields with their ranges and units, menus for choices, text for strings), the Prompt's code box shown otherwise; Apply runs it on the selected clip and swaps the clip's audio as one undo step, or tells a result that is not a sound on the notice line, or Nyquist's own error. Verified in Chromium (sidecar verification/verify_nyquist_ui.py): the Prompt (mult *track* 0.5) left the clip exactly half of itself; Adjustable Fade drew its six controls and hid the code box, and with Fade Down chosen faded the clip down (gains 0.899, 0.499, 0.099 at 10, 50 and 90 per cent); the Prompt (+ 1 2) told "Nyquist returned int: 3"; no page errors. With fwnyq built from the vendored libnyquist and its output equal to Audacity 2.4.2's in every sample on five cases, AU-28 is done.
+
+### Nyquist in the packaged app (AU-28, packaging)
+- refers-to: build_macos_app; src-tauri/tauri.conf.json (externalBin); src-tauri/src/main.rs (FORMWAV_FWNYQ); native/formwav-nyquist/build_fwnyq (Homebrew's paths, -fno-common, libc++ on macOS); backend app/services/nyquist.py :: _bundled
+- kind: explainer
+- logged: v1.84.0 (in progress) · 2026-10-04
+
+As the plugin host is, fwnyq is bundled beside the engine in the desktop app: build_macos_app builds it (libsndfile and portaudio from Homebrew; -fno-common as Audacity builds on Darwin; libc++, Apple having no libstdc++) and places it as a sidecar, the shell tells the engine where it is (FORMWAV_FWNYQ), and Nyquist's runtime and Audacity's plug-ins travel inside the frozen engine (PyInstaller data), where the service looks for them when frozen. Verified here: the build script still builds fwnyq on Linux and the shell's locked check passes with fwnyq among its external binaries; not run here: the macOS build (no Mac), which links fwnyq to Homebrew's libsndfile and portaudio, so the app needs them installed.
