@@ -156,6 +156,30 @@ def media_list(query: str = "", limit: int = 100, offset: int = 0) -> dict:
     return media.list_media(query, limit, offset)
 
 
+@router.get("/vamp/plugins")
+def vamp_plugins() -> list[dict]:
+    """AU-40: the Vamp analysis plugins on the Vamp path, with their parameters and outputs."""
+    from ..services import vamp
+
+    try:
+        return vamp.list_plugins()
+    except media.MediaError as err:
+        raise HTTPException(503, str(err)) from err
+
+
+@router.post("/media/{media_id}/vamp")
+def media_vamp(media_id: str, payload: dict) -> dict:
+    """AU-40: {"key", "params"}: the Vamp plugin run on the media (services/vamp.py); every output's features."""
+    from ..services import vamp
+
+    try:
+        return vamp.run(media_id, str(payload.get("key", "")), payload.get("params") or {})
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/nyquist", status_code=201)
 def media_nyquist(media_id: str, payload: dict) -> dict:
     """AU-28: {"code"} (a Nyquist Prompt) or {"plugin", "values"} (one of Audacity's bundled Nyquist plug-ins and its
