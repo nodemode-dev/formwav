@@ -32,6 +32,9 @@ export function flatFx(fx: readonly TrackFx[] | undefined): number[] {
     if (f.bypass || f.kind === "compressor" || f.kind === "reverb") return [];
     // RX-24, RX-40, RX-49: the denoiser rides the clip chain as kind 7, its reduction and sensitivity in the filter slots
     if (f.kind === "denoise") return [7, f.reductionDb, f.sensitivityDb, 0];
+    if (f.kind === "echo") return [9, f.delayMs, f.feedback, f.mix];
+    if (f.kind === "chorus") return [10, f.rateHz, f.depthMs, f.mix];
+    if (f.kind === "limiter") return [11, f.ceilingDb, f.releaseMs, 0];
     return [codes[f.kind], f.freq, f.gainDb, f.q];
   });
 }
@@ -43,7 +46,7 @@ export function flatFxAuto(fx: readonly TrackFx[] | undefined): { stage: number;
   let stage = 0;
   for (const f of fx ?? []) {
     if (f.bypass || f.kind === "compressor" || f.kind === "reverb") continue;
-    if (f.kind === "denoise") {
+    if (f.kind === "denoise" || f.kind === "echo" || f.kind === "chorus" || f.kind === "limiter") {
       stage++; // a place in the chain, nothing to automate
       continue;
     }
@@ -66,6 +69,9 @@ export function flatStages(fx: readonly TrackFx[] | undefined): number[] {
     if (f.kind === "compressor") return [6, f.thresholdDb, f.ratio, f.attackMs, f.releaseMs, f.makeupDb];
     if (f.kind === "denoise") return [7, f.reductionDb, f.sensitivityDb, 0, 0, 0];
     if (f.kind === "reverb") return [8, f.room, f.damping, f.mix, f.width, 0];
+    if (f.kind === "echo") return [9, f.delayMs, f.feedback, f.mix, 0, 0];
+    if (f.kind === "chorus") return [10, f.rateHz, f.depthMs, f.mix, 0, 0];
+    if (f.kind === "limiter") return [11, f.ceilingDb, f.releaseMs, 0, 0, 0];
     return [codes[f.kind], f.freq, f.gainDb, f.q, 0, 0];
   });
 }

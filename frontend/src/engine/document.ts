@@ -132,7 +132,30 @@ export interface ReverbFx {
   bypass?: boolean;
 }
 
-export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx;
+/** The comparison page's Realtime inserts row: an echo (delay, feedback, mix), a chorus (rate, depth, mix) and a
+ * peak limiter (ceiling, release), core kinds 9 to 11. */
+export interface EchoFx {
+  kind: "echo";
+  delayMs: number;
+  feedback: number;
+  mix: number;
+  bypass?: boolean;
+}
+export interface ChorusFx {
+  kind: "chorus";
+  rateHz: number;
+  depthMs: number;
+  mix: number;
+  bypass?: boolean;
+}
+export interface LimiterFx {
+  kind: "limiter";
+  ceilingDb: number;
+  releaseMs: number;
+  bypass?: boolean;
+}
+
+export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx;
 
 /** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
@@ -141,7 +164,7 @@ export type Instrument = { kind: "sampler"; media: string; root: number } | { ki
 
 export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocity"; scale: number; offset: number } | { kind: "quantize"; beats: number; strength: number };
 
-const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb"]);
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter"]);
 
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
@@ -152,6 +175,15 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
       const bypass = f.bypass ? { bypass: true } : {};
       if (f.kind === "denoise") {
         return { kind: "denoise", reductionDb: clamp(f.reductionDb, 0, 40, 12), sensitivityDb: clamp(f.sensitivityDb, -6, 12, 3), ...bypass };
+      }
+      if (f.kind === "echo") {
+        return { kind: "echo", delayMs: clamp(f.delayMs, 1, 2000, 300), feedback: clamp(f.feedback, 0, 0.95, 0.35), mix: clamp(f.mix, 0, 1, 0.4), ...bypass };
+      }
+      if (f.kind === "chorus") {
+        return { kind: "chorus", rateHz: clamp(f.rateHz, 0.05, 10, 0.8), depthMs: clamp(f.depthMs, 0, 10, 3), mix: clamp(f.mix, 0, 1, 0.5), ...bypass };
+      }
+      if (f.kind === "limiter") {
+        return { kind: "limiter", ceilingDb: clamp(f.ceilingDb, -30, 0, -1), releaseMs: clamp(f.releaseMs, 1, 1000, 80), ...bypass };
       }
       if (f.kind === "reverb") {
         // PT-22: room size, damping, mix and width, each 0 to 1
@@ -687,7 +719,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-fx-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
         const target = t.fx?.[cmd.fxIndex];
-        if (!t.fx || !target || target.kind === "compressor" || target.kind === "denoise" || target.kind === "reverb") return t;
+        if (!t.fx || !target || target.kind === "compressor" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter") return t;
         const { [cmd.param]: _old, ...others } = target.automation ?? {};
         const automation = cmd.points.length ? { ...others, [cmd.param]: cmd.points } : others;
         const next = cleanFx(t.fx.map((f, i) => (i === cmd.fxIndex ? { ...target, automation } : f)));

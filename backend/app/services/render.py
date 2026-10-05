@@ -10,7 +10,7 @@ class RenderError(ValueError):
 
 
 #: Track effect kinds, as the core's stage codes (formwav-dsp fx.rs).
-FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8}
+FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11}
 
 
 def _stage(f: dict) -> tuple | None:
@@ -19,6 +19,12 @@ def _stage(f: dict) -> tuple | None:
     kind = FX_KINDS.get(f.get("kind")) if isinstance(f, dict) else None
     if not kind or f.get("bypass"):
         return None
+    if kind == 9:
+        return (9, float(f.get("delayMs", 300)), float(f.get("feedback", 0.35)), float(f.get("mix", 0.4)), 0.0, 0.0)
+    if kind == 10:
+        return (10, float(f.get("rateHz", 0.8)), float(f.get("depthMs", 3)), float(f.get("mix", 0.5)), 0.0, 0.0)
+    if kind == 11:
+        return (11, float(f.get("ceilingDb", -1)), float(f.get("releaseMs", 80)), 0.0, 0.0, 0.0)
     if kind == 8:  # PT-22: the realtime reverb, room size, damping, mix and width (each 0 to 1)
         return (8, float(f.get("room", 0.6)), float(f.get("damping", 0.5)), float(f.get("mix", 0.25)), float(f.get("width", 1.0)), 0.0)
     if kind == 7:  # RX-24, RX-40, RX-49: the denoiser, its reduction and sensitivity where filters carry frequency and gain

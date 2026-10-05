@@ -439,6 +439,132 @@ impl Reverb {
     }
 }
 
+pub const ECHO: u8 = 9;
+pub const CHORUS: u8 = 10;
+pub const LIMITER: u8 = 11;
+
+/// An echo: a delay line per channel fed back on itself; out = dry + mix x delayed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Echo {
+    buf: [Vec<f32>; 2],
+    pos: usize,
+    feedback: f32,
+    mix: f32,
+}
+
+impl Echo {
+    pub fn design(delay_ms: f32, feedback: f32, mix: f32, rate: f32) -> Option<Echo> {
+        if !(rate > 0.0 && (1.0..=2000.0).contains(&delay_ms) && (0.0..=0.95).contains(&feedback) && (0.0..=1.0).contains(&mix)) {
+            return None;
+        }
+        let delay = ((delay_ms / 1000.0) * rate).round().max(1.0) as usize;
+        Some(Echo { buf: [vec![0.0; delay], vec![0.0; delay]], pos: 0, feedback, mix })
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let (dl, dr) = (self.buf[0][self.pos], self.buf[1][self.pos]);
+        self.buf[0][self.pos] = l + dl * self.feedback;
+        self.buf[1][self.pos] = r + dr * self.feedback;
+        self.pos = (self.pos + 1) % self.buf[0].len();
+        (l + self.mix * dl, r + self.mix * dr)
+    }
+
+    pub fn reset(&mut self) {
+        for b in &mut self.buf {
+            b.iter_mut().for_each(|v| *v = 0.0);
+        }
+        self.pos = 0;
+    }
+}
+
+/// A chorus: each channel read from a delay swinging around 15 ms by `depth` at `rate`, the channels a quarter turn
+/// apart, read between samples by linear interpolation; out = (1 - mix) x dry + mix x delayed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Chorus {
+    buf: [Vec<f32>; 2],
+    pos: usize,
+    phase: f32,
+    step: f32,
+    centre: f32,
+    depth: f32,
+    mix: f32,
+}
+
+impl Chorus {
+    pub fn design(rate_hz: f32, depth_ms: f32, mix: f32, rate: f32) -> Option<Chorus> {
+        if !(rate > 0.0 && (0.05..=10.0).contains(&rate_hz) && (0.0..=10.0).contains(&depth_ms) && (0.0..=1.0).contains(&mix)) {
+            return None;
+        }
+        let centre = 0.015 * rate;
+        let depth = depth_ms / 1000.0 * rate;
+        let len = (centre + depth).ceil() as usize + 4;
+        Some(Chorus { buf: [vec![0.0; len], vec![0.0; len]], pos: 0, phase: 0.0, step: rate_hz / rate, centre, depth, mix })
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let len = self.buf[0].len();
+        self.buf[0][self.pos] = l;
+        self.buf[1][self.pos] = r;
+        let mut out = [0.0f32; 2];
+        for (ch, o) in out.iter_mut().enumerate() {
+            let swing = (2.0 * std::f32::consts::PI * (self.phase + 0.25 * ch as f32)).sin();
+            let back = self.centre + self.depth * swing;
+            let at = self.pos as f32 - back + len as f32;
+            let i = at.floor();
+            let frac = at - i;
+            let a = self.buf[ch][i as usize % len];
+            let b = self.buf[ch][(i as usize + 1) % len];
+            *o = a + (b - a) * frac;
+        }
+        self.pos = (self.pos + 1) % len;
+        self.phase += self.step;
+        if self.phase >= 1.0 {
+            self.phase -= 1.0;
+        }
+        (l * (1.0 - self.mix) + out[0] * self.mix, r * (1.0 - self.mix) + out[1] * self.mix)
+    }
+
+    pub fn reset(&mut self) {
+        for b in &mut self.buf {
+            b.iter_mut().for_each(|v| *v = 0.0);
+        }
+        self.pos = 0;
+        self.phase = 0.0;
+    }
+}
+
+/// A peak limiter, the channels linked: the gain falls at once to keep every sample at or under the ceiling and
+/// recovers towards unity with the release.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Limiter {
+    ceiling: f32,
+    recover: f32,
+    gain: f32,
+}
+
+impl Limiter {
+    pub fn design(ceiling_db: f32, release_ms: f32, rate: f32) -> Option<Limiter> {
+        if !(rate > 0.0 && (-30.0..=0.0).contains(&ceiling_db) && (1.0..=1000.0).contains(&release_ms)) {
+            return None;
+        }
+        Some(Limiter { ceiling: 10f32.powf(ceiling_db / 20.0), recover: 1.0 - (-1.0 / (release_ms / 1000.0 * rate)).exp(), gain: 1.0 })
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let peak = l.abs().max(r.abs());
+        let allowed = if peak > self.ceiling { self.ceiling / peak } else { 1.0 };
+        self.gain = (self.gain + (1.0 - self.gain) * self.recover).min(allowed);
+        (l * self.gain, r * self.gain)
+    }
+
+    pub fn reset(&mut self) {
+        self.gain = 1.0;
+    }
+}
+
 /// One stage of a bus or master chain: a filter, a compressor, the de-noiser or a reverb, run a stereo frame at a
 /// time. The reverb's delay lines live behind a box, so a filter stage stays small.
 #[derive(Debug, Clone, PartialEq)]
@@ -447,6 +573,9 @@ pub enum Stage {
     Comp(Compressor),
     Denoise(Denoiser),
     Reverb(Box<Reverb>),
+    Echo(Box<Echo>),
+    Chorus(Box<Chorus>),
+    Limit(Limiter),
 }
 
 impl Stage {
@@ -460,6 +589,12 @@ impl Stage {
         } else if kind == REVERB {
             // PT-22: a = room size, b = damping, c = mix, d = width (each 0 to 1)
             Reverb::design(a, b, c, d, rate).map(|r| Stage::Reverb(Box::new(r)))
+        } else if kind == ECHO {
+            Echo::design(a, b, c, rate).map(|x| Stage::Echo(Box::new(x)))
+        } else if kind == CHORUS {
+            Chorus::design(a, b, c, rate).map(|x| Stage::Chorus(Box::new(x)))
+        } else if kind == LIMITER {
+            Limiter::design(a, b, rate).map(Stage::Limit)
         } else {
             Biquad::design(kind, a, b, c, rate).map(Stage::Filter)
         }
@@ -472,6 +607,9 @@ impl Stage {
             Stage::Comp(c) => c.process(l, r),
             Stage::Denoise(d) => d.process(l, r),
             Stage::Reverb(v) => v.process(l, r),
+            Stage::Echo(x) => x.process(l, r),
+            Stage::Chorus(x) => x.process(l, r),
+            Stage::Limit(x) => x.process(l, r),
         }
     }
 
@@ -481,6 +619,9 @@ impl Stage {
             Stage::Comp(c) => c.reset(),
             Stage::Denoise(d) => d.reset(),
             Stage::Reverb(v) => v.reset(),
+            Stage::Echo(x) => x.reset(),
+            Stage::Chorus(x) => x.reset(),
+            Stage::Limit(x) => x.reset(),
         }
     }
 }
