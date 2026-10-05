@@ -122,6 +122,19 @@ def render_session(document: dict = Body(...), format: str = "wav", what: str = 
 
             out = surround.render_foa(document)
             return Response(content=out["wav"], media_type="audio/wav", headers={"Content-Disposition": 'attachment; filename="ambisonic-foa.wav"', "X-Channel-Peaks": json.dumps(out["levels"])})
+        if what == "adm":
+            from ..services import adm
+
+            tracks = list(document.get("tracks") or [])
+
+            def alone(i: int) -> dict:
+                return render.render({**document, "tracks": [{**t, "solo": False, "mute": bool(t.get("mute")) if j == i else True} for j, t in enumerate(tracks)]})
+
+            try:
+                data = adm.export_session(document, alone)
+            except ValueError as err:
+                raise HTTPException(422, str(err)) from err
+            return Response(content=data, media_type="audio/wav", headers={"Content-Disposition": 'attachment; filename="objects-adm.wav"'})
         if what == "surround51":
             # PT-38, AA-11: the session as a 5.1 mix, six channels in SMPTE order (services/surround.py)
             import json

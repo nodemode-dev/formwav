@@ -15,7 +15,7 @@ export interface Mix {
 
 export interface ExportOptions {
   format?: string;
-  what?: "mix" | "stems" | "multichannel" | "surround51" | "ambisonic";
+  what?: "mix" | "stems" | "multichannel" | "surround51" | "ambisonic" | "adm";
   /** A multichannel export's channels by track number, in order, such as "2,1,3" (AU-50); empty is track order. */
   channels?: string;
 }

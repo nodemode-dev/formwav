@@ -53,6 +53,32 @@ def _chna(count: int) -> bytes:
     return body
 
 
+def _float_wav(wav: bytes) -> tuple[np.ndarray, int]:
+    i, rate, channels = 12, 0, 0
+    while i + 8 <= len(wav):
+        tag, size = wav[i : i + 4], struct.unpack_from("<I", wav, i + 4)[0]
+        if tag == b"fmt ":
+            channels, rate = struct.unpack_from("<HI", wav, i + 10)
+        elif tag == b"data" and channels:
+            return np.frombuffer(wav, "<f4", count=size // 4, offset=i + 8).reshape(-1, channels), rate
+        i += 8 + size + (size % 2)
+    raise ValueError("the render held no audio")
+
+
+def export_session(document: dict, render_alone) -> bytes:
+    objects, rate = [], 0
+    for i, track in enumerate(document.get("tracks") or []):
+        place = track.get("surround") if isinstance(track, dict) else None
+        if not isinstance(place, dict):
+            continue
+        audio, rate = _float_wav(render_alone(i)["wav"])
+        x, y = float(place.get("x", 0.0)), float(place.get("y", 1.0))
+        objects.append({"name": track.get("name") or f"Track {i + 1}", "samples": audio.mean(axis=1), "azimuth": azimuth_of(x, y), "elevation": float(place.get("el") or 0.0)})
+    if not objects:
+        raise ValueError("place at least one track on the surround pad to export it as an object")
+    return write_bwf(objects, rate)
+
+
 def write_bwf(objects: list[dict], rate: int) -> bytes:
     if not objects:
         raise ValueError("no objects to write")
