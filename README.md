@@ -67,6 +67,10 @@ The desktop app (formwav.app) reads `.env` in its data folder instead: on a Mac 
 
 With no key set, everything else works; the features above say which key they need.
 
+### ASIO on Windows (opt-in)
+
+formwav's own build leaves ASIO out and stays Apache-2.0. To use ASIO devices on Windows, build the engine's audio core with the `asio` feature against Steinberg's ASIO SDK, which you obtain yourself and which is licensed separately (GPLv3, or Steinberg's own licence): set `CPAL_ASIO_DIR` to the unpacked SDK and run `maturin build --release -m native/formwav-dsp/Cargo.toml --features python,native,asio` (cpal's ASIO support also needs LLVM's libclang for its bindings). The output device list then offers each ASIO driver as "ASIO: name" beside the WASAPI devices, written as 32-bit float, 32-bit or 16-bit integer, whichever the driver takes. A build made this way includes the SDK and carries its licence.
+
 | Variable | Purpose |
 | --- | --- |
 | `HOST` | Engine bind address; loopback when unset |

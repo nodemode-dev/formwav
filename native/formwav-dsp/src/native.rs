@@ -102,10 +102,65 @@ struct Mix {
     surround_format: u8,
 }
 
-/// The output devices of the default host, by name.
+/// AU-23: the hosts devices are offered from, each with the prefix its devices' names carry: the platform's default
+/// (Core Audio, WASAPI, ALSA) and, in a build with the opt-in `asio` feature on Windows, ASIO ("ASIO: " before its
+/// devices). The default build leaves ASIO out entirely, so it needs no ASIO SDK and stays Apache-2.0; a build that opts
+/// in links Steinberg's ASIO SDK under its own licence (GPLv3 or Steinberg's).
+fn hosts() -> Vec<(&'static str, cpal::Host)> {
+    #[cfg(all(windows, feature = "asio"))]
+    let asio: Vec<(&'static str, cpal::Host)> = cpal::host_from_id(cpal::HostId::Asio).map(|h| vec![("ASIO: ", h)]).unwrap_or_default();
+    #[cfg(not(all(windows, feature = "asio")))]
+    let asio: Vec<(&'static str, cpal::Host)> = Vec::new();
+    // ASIO first: its prefix is checked before the default host's empty one when a name is looked up
+    asio.into_iter().chain(std::iter::once(("", cpal::default_host()))).collect()
+}
+
+/// The output devices of every host offered, by name (an ASIO device's with "ASIO: " before it).
 pub fn devices() -> Vec<String> {
-    let host = cpal::default_host();
-    host.output_devices().map(|ds| ds.filter_map(|d| d.description().ok().map(|n| n.to_string())).collect()).unwrap_or_default()
+    hosts()
+        .into_iter()
+        .flat_map(|(prefix, host)| host.output_devices().map(|ds| ds.filter_map(|d| d.description().ok().map(|n| format!("{prefix}{n}"))).collect::<Vec<_>>()).unwrap_or_default())
+        .collect()
+}
+
+/// AU-23: the output stream in the device's sample type `T`: the player renders float frames as before (silence while
+/// stopped) and write_frames puts them in the buffer.
+fn build_stream<T: cpal::SizedSample + cpal::FromSample<f32>>(dev: &cpal::Device, config: cpal::StreamConfig, channels: usize, state: Arc<Mutex<Shared>>) -> Result<cpal::Stream, cpal::Error> {
+    let (mut left, mut right) = (vec![0f32; 1 << 16], vec![0f32; 1 << 16]);
+    dev.build_output_stream(
+        config,
+        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+            let frames = (data.len() / channels).min(left.len());
+            let rendered = match state.try_lock() {
+                Ok(mut s) if s.playing => {
+                    s.player.render(&mut left[..frames], &mut right[..frames]);
+                    if s.end > 0 && s.player.position() >= s.end {
+                        s.playing = false;
+                        s.ended = true;
+                    }
+                    true
+                }
+                _ => false,
+            };
+            if !rendered {
+                data.fill(<T as cpal::Sample>::EQUILIBRIUM);
+                return;
+            }
+            write_frames(data, channels, &left, &right, frames);
+        },
+        |err| eprintln!("formwav native output: {err}"),
+        None,
+    )
+}
+
+/// AU-23: the rendered stereo frames written into an output buffer of any sample type, interleaved over its channels
+/// (left on the even ones, right on the odd); ASIO drivers mostly take 32-bit integers, some devices 16-bit.
+fn write_frames<T: cpal::SizedSample + cpal::FromSample<f32>>(data: &mut [T], channels: usize, left: &[f32], right: &[f32], frames: usize) {
+    for (i, frame) in data.chunks_mut(channels).enumerate().take(frames) {
+        for (c, sample) in frame.iter_mut().enumerate() {
+            *sample = T::from_sample(if c % 2 == 0 { left[i] } else { right[i] });
+        }
+    }
 }
 
 impl NativeOutput {
@@ -121,53 +176,29 @@ impl NativeOutput {
             .name("formwav-native-output".into())
             .spawn(move || {
                 let opened = (|| -> Result<(cpal::Stream, String), String> {
-                    let host = cpal::default_host();
-                    let dev = match &device {
-                        Some(want) => host
-                            .output_devices()
-                            .map_err(|e| e.to_string())?
-                            .find(|d| d.description().map(|n| n.to_string() == *want).unwrap_or(false))
+                    // AU-23: by name across the hosts offered (an ASIO device's carries "ASIO: "), else the default
+                    let (prefix, dev) = match &device {
+                        Some(want) => hosts()
+                            .into_iter()
+                            .find_map(|(prefix, host)| {
+                                let bare = want.strip_prefix(prefix)?;
+                                host.output_devices().ok()?.find(|d| d.description().map(|n| n.to_string() == bare).unwrap_or(false)).map(|d| (prefix, d))
+                            })
                             .ok_or(format!("no output device named {want}"))?,
-                        None => host.default_output_device().ok_or("no default output device")?,
+                        None => ("", cpal::default_host().default_output_device().ok_or("no default output device")?),
                     };
-                    let name = dev.description().map(|n| n.to_string()).unwrap_or_default();
+                    let name = format!("{prefix}{}", dev.description().map(|n| n.to_string()).unwrap_or_default());
                     let base = dev.default_output_config().map_err(|e| e.to_string())?;
-                    if base.sample_format() != cpal::SampleFormat::F32 {
-                        return Err(format!("{name} does not offer 32-bit float output"));
-                    }
                     let channels = base.channels().max(1) as usize;
                     let config = cpal::StreamConfig { channels: base.channels(), sample_rate: rate, buffer_size: cpal::BufferSize::Default };
-                    let (mut left, mut right) = (vec![0f32; 1 << 16], vec![0f32; 1 << 16]);
-                    let stream = dev
-                        .build_output_stream(
-                            config,
-                            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                                let frames = (data.len() / channels).min(left.len());
-                                let rendered = match state.try_lock() {
-                                    Ok(mut s) if s.playing => {
-                                        s.player.render(&mut left[..frames], &mut right[..frames]);
-                                        if s.end > 0 && s.player.position() >= s.end {
-                                            s.playing = false;
-                                            s.ended = true;
-                                        }
-                                        true
-                                    }
-                                    _ => false,
-                                };
-                                if !rendered {
-                                    data.fill(0.0);
-                                    return;
-                                }
-                                for (i, frame) in data.chunks_mut(channels).enumerate().take(frames) {
-                                    for (c, sample) in frame.iter_mut().enumerate() {
-                                        *sample = if c % 2 == 0 { left[i] } else { right[i] };
-                                    }
-                                }
-                            },
-                            |err| eprintln!("formwav native output: {err}"),
-                            None,
-                        )
-                        .map_err(|e| format!("could not open {name} at {rate} Hz: {e}"))?;
+                    // AU-23: written in the device's own sample type (ASIO drivers mostly take 32-bit integers)
+                    let stream = match base.sample_format() {
+                        cpal::SampleFormat::F32 => build_stream::<f32>(&dev, config, channels, state.clone()),
+                        cpal::SampleFormat::I32 => build_stream::<i32>(&dev, config, channels, state.clone()),
+                        cpal::SampleFormat::I16 => build_stream::<i16>(&dev, config, channels, state.clone()),
+                        other => return Err(format!("{name} takes {other} samples, which formwav does not write")),
+                    }
+                    .map_err(|e| format!("could not open {name} at {rate} Hz: {e}"))?;
                     stream.play().map_err(|e| e.to_string())?;
                     Ok((stream, name))
                 })();
@@ -341,5 +372,29 @@ impl Drop for NativeOutput {
         if let Some(t) = self.thread.take() {
             let _ = t.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_frames;
+
+    /// AU-23: rendered frames written as 32-bit float, 32-bit and 16-bit integer samples (what ASIO drivers and some
+    /// devices take): cpal's own conversions, left on even channels and right on odd, nothing past the rendered frames.
+    #[test]
+    fn frames_are_written_in_any_sample_type() {
+        let (left, right) = ([0.5f32, -0.25, 1.0], [-0.5f32, 0.75, -1.0]);
+        let mut f = [9.0f32; 8];
+        write_frames(&mut f, 2, &left, &right, 3);
+        assert_eq!(f, [0.5, -0.5, -0.25, 0.75, 1.0, -1.0, 9.0, 9.0]);
+        let mut i16s = [7i16; 6];
+        write_frames(&mut i16s, 2, &left, &right, 3);
+        assert_eq!(i16s, [16384, -16384, -8192, 24576, 32767, -32768]);
+        let mut i32s = [7i32; 4];
+        write_frames(&mut i32s, 2, &left, &right, 2);
+        assert_eq!(i32s, [1 << 30, -(1 << 30), -(1 << 29), 3 << 29]);
+        let mut wide = [0i16; 8];
+        write_frames(&mut wide, 4, &left, &right, 2); // four channels: left, right, left, right
+        assert_eq!(wide, [16384, -16384, 16384, -16384, -8192, 24576, -8192, 24576]);
     }
 }

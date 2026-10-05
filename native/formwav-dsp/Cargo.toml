@@ -13,6 +13,10 @@ crate-type = ["rlib", "cdylib"]
 python = ["dep:pyo3"]
 # Native audio output (cpal) for the engine and the desktop app; never in the wasm build.
 native = ["dep:cpal", "dep:serde", "dep:serde_json"]
+# AU-23, opt-in: ASIO devices on Windows through cpal's ASIO host. Building with it needs Steinberg's ASIO SDK
+# (CPAL_ASIO_DIR pointing at it) and links it under its own licence (GPLv3 or Steinberg's); the default build leaves it
+# out and stays Apache-2.0.
+asio = ["native", "cpal/asio"]
 
 [dependencies]
 pyo3 = { version = "0.29.2", features = ["extension-module", "abi3-py310"], optional = true }
