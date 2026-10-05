@@ -1349,3 +1349,10 @@ De-rustle learns the rustle's spectral shape from a stretch of it (Learn from an
 - logged: v1.84.0 (in progress) · 2026-10-04
 
 AU-28 needs Nyquist. Rather than a new interpreter, formwav runs Audacity's own: libnyquist (Nyquist 3.15 and XLISP, BSD-style licences) from the Audacity 2.4.2 tag, built from the 209 sources its build file lists uncommented for Unix (defines CMTSTUFF and EXT), and a small driver over its nyx embedding API. Found on the way: my first source list read Audacity's commented-out lines and took instr.cpp for instr.c; the runtime's init.lsp aliases _, which Audacity defines in C for gettext (formwav's runtime copy makes it the identity, its one change); and nyx_get_audio returns TRUE on success where its callbacks return 0, which my first driver had inverted. Verified: Nyquist 3.15 starts clean on formwav's runtime, (+ 1 2) returns 3, print reaches stderr, and (mult *track* 0.5) on a 44100-frame tone returns exactly half of it (largest difference 0). Next: libnyquist's sources vendored and built with the driver, an engine route, and Audacity's plug-ins compared with Audacity 2.4.2's own output.
+
+### libnyquist vendored, fwnyq built from formwav alone (AU-28)
+- refers-to: native/formwav-nyquist/libnyquist (Audacity 2.4.2's lib-src/libnyquist without its classic Mac and Windows sources), plug-ins (Audacity 2.4.2's bundled Nyquist plug-ins), sources.txt, build_fwnyq, .gitignore
+- kind: explainer
+- logged: v1.84.0 (in progress) · 2026-10-04
+
+formwav carries Audacity 2.4.2's libnyquist (Nyquist 3.15 and XLISP, BSD-style licences; 5.3 MB) as Audacity does, and its bundled Nyquist plug-ins beside the runtime; build_fwnyq compiles the 209 sources Audacity's build lists uncommented for Unix (sources.txt) with its defines into a static library and links the driver against it, libsndfile and portaudio (their development files needed, as for Audacity). Verified: built from formwav's tree alone, fwnyq ran (mult *track* 0.5) on the tone as before.

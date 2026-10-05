@@ -1,0 +1,20 @@
+#!/bin/sh
+# Builds fwnyq (AU-28): libnyquist (Audacity 2.4.2's Nyquist 3.15, vendored in libnyquist/) compiled from sources.txt
+# with Audacity's defines (CMTSTUFF, EXT), then the driver linked against it, libsndfile and portaudio.
+# Needs a C and C++ compiler and libsndfile's and portaudio's development files. Output: ./fwnyq
+set -e
+here=$(cd "$(dirname "$0")" && pwd)
+L="$here/libnyquist/nyquist"
+build="$here/build"
+mkdir -p "$build"
+INC="-I$here/libnyquist -I$L/cmt -I$L/cmupv/src -I$L/ffts/src -I$L/nyqsrc -I$L/nyqstk -I$L/nyqstk/include -I$L/tran -I$L/xlisp -I$L/sys/unix"
+objs=""
+for s in $(grep -v '^#' "$here/sources.txt"); do
+  o="$build/$(echo "$s" | tr '/' '_' | sed 's/\.cpp$/.o/;s/\.c$/.o/')"
+  case "$s" in *.cpp) cc=${CXX:-c++} ;; *) cc=${CC:-cc} ;; esac
+  [ "$o" -nt "$here/libnyquist/$s" ] || $cc -O2 -fPIC -w -DCMTSTUFF -DEXT $INC -c "$here/libnyquist/$s" -o "$o"
+  objs="$objs $o"
+done
+ar rcs "$build/libnyquist.a" $objs
+${CC:-cc} -O2 -w "$here/fwnyq.c" -I"$here/libnyquist" "$build/libnyquist.a" -lsndfile -lportaudio -lstdc++ -lm -lpthread -o "$here/fwnyq"
+echo "fwnyq built: $here/fwnyq"
