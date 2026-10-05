@@ -34,6 +34,8 @@ const BODY = `
   <div class="fw-analyze-buttons" title="Nyquist (Audacity's own interpreter): a Nyquist Prompt's code or one of Audacity's bundled Nyquist plug-ins, run on this clip"><label class="fw-sam-opt"><span>Nyquist</span><select data-nyq="plugin" aria-label="Nyquist plug-in or prompt"><option value="">Nyquist Prompt</option></select></label><button type="button" class="fw-ibtn" data-nyq="apply">Apply</button></div>
   <div data-nyq="controls"></div>
   <textarea data-nyq="code" rows="3" spellcheck="false" aria-label="Nyquist code (the clip is *track*)" placeholder="(mult *track* 0.5)"></textarea>
+  <div class="fw-analyze-buttons" title="Vamp analysis plugins (as Audacity's Analyze menu runs them): the chosen output's features become markers, or regions where they have a duration, as one undo step"><label class="fw-sam-opt"><span>Vamp</span><select data-vamp="plugin" aria-label="Vamp plugin and output"></select></label><button type="button" class="fw-ibtn" data-vamp="run">Analyze</button></div>
+  <div data-vamp="params"></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><label class="fw-sam-opt" title="How long the leak's path rings after its delay: 0 for a direct leak (2.7 ms), up to 500 ms for a room between the source and the mic"><span>Path</span><input type="number" data-debleed="path" min="0" max="500" step="10" value="0" aria-label="The leak's path length, in milliseconds"> ms</label><button type="button" class="fw-ibtn" data-debleed="clicks" title="Remove a headphone click track that leaked into this clip, with no reference: found by its steady tempo, learned from its clicks in the pauses, taken out at every beat">Remove click bleed</button><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Guide</span><select data-align="guide" aria-label="The original line this replacement take should follow"><option value="">no other clip overlaps</option></select></label><button type="button" class="fw-ibtn" data-clip-act="align" title="Re-time this replacement take to follow the guide word for word, and set it in the guide's place (automatic speech alignment)">Align to guide</button></div>
   <div class="fw-insp-head" title="Say what this clip is, then run its type's tasks or a preset (Audition's Essential Sound)">Essential sound</div>
@@ -985,6 +987,103 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       }
     } catch (err) {
       setText(notice, `Nyquist: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  // AU-40: Vamp analysis plugins: the chosen plugin runs on the selected clip's media and its chosen output's features
+  // become markers, or regions where they have a duration, placed where they fall in the clip (outside its trimmed span
+  // left out), as one undo step; the plugin's parameters are drawn from its descriptors
+  type VampParam = { id: string; name: string; unit: string; min: number | null; max: number | null; default: number | null; quantize: number | null; choices: string[] };
+  type VampPlugin = { key: string; name: string; parameters: VampParam[]; outputs: { id: string; name: string; unit: string }[] };
+  type VampFeature = { frame: number; duration?: number; values: (number | null)[]; label: string };
+  const vampSel = body.querySelector<HTMLSelectElement>('[data-vamp="plugin"]');
+  const vampParams = body.querySelector<HTMLElement>('[data-vamp="params"]');
+  let vampPlugins: VampPlugin[] = [];
+  const vampChosen = () => {
+    const [key, output] = (vampSel?.value ?? "").split("|");
+    return { plugin: vampPlugins.find((p) => p.key === key), output };
+  };
+  const drawVampParams = () => {
+    if (!vampParams) return;
+    vampParams.innerHTML = (vampChosen().plugin?.parameters ?? [])
+      .map((d) => {
+        const head = `<label class="fw-sam-opt"><span>${esc(d.name)}</span>`;
+        if (d.choices.length) {
+          const value = (i: number) => (d.min ?? 0) + i * (d.quantize ?? 1);
+          return `${head}<select data-vamp-param="${esc(d.id)}">${d.choices.map((c, i) => `<option value="${value(i)}"${value(i) === d.default ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
+        }
+        return `${head}<input type="number" data-vamp-param="${esc(d.id)}" value="${esc(d.default ?? 0)}"${d.min != null ? ` min="${d.min}"` : ""}${d.max != null ? ` max="${d.max}"` : ""} step="${d.quantize ?? "any"}">${d.unit ? ` ${esc(d.unit)}` : ""}</label>`;
+      })
+      .join("");
+  };
+  fetch("/api/vamp/plugins")
+    .then((r) => (r.ok ? r.json() : []))
+    .then((list: VampPlugin[]) => {
+      vampPlugins = Array.isArray(list) ? list : [];
+      if (!vampSel) return;
+      if (!vampPlugins.length) {
+        const o = document.createElement("option");
+        o.value = "";
+        o.textContent = "No Vamp plugins found";
+        vampSel.append(o);
+        return;
+      }
+      for (const p of vampPlugins) {
+        for (const out of p.outputs) {
+          const o = document.createElement("option");
+          o.value = `${p.key}|${out.id}`;
+          o.textContent = `${p.name}: ${out.name}`;
+          vampSel.append(o);
+        }
+      }
+      drawVampParams();
+    })
+    .catch(() => undefined);
+  vampSel?.addEventListener("change", drawVampParams);
+  body.querySelector<HTMLButtonElement>('[data-vamp="run"]')?.addEventListener("click", async (e) => {
+    const hit = find(engine.get("document"));
+    const { plugin, output } = vampChosen();
+    if (!hit || !plugin) return;
+    const button = e.currentTarget as HTMLButtonElement;
+    const params: Record<string, number> = {};
+    for (const el of vampParams?.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-vamp-param]") ?? []) params[el.dataset.vampParam ?? ""] = Number(el.value);
+    button.disabled = true;
+    setText(notice, `Running ${plugin.name}...`);
+    try {
+      const res = await fetch(`/api/media/${hit.clip.mediaId}/vamp`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: plugin.key, params }) });
+      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; rate?: number; outputs?: { id: string; unit: string; features: VampFeature[] }[] };
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      const o = out.outputs?.find((x) => x.id === output);
+      const docRate = engine.get("document").sampleRate;
+      const scale = docRate / (out.rate || docRate); // the media's frames to the session's
+      const { clip } = hit;
+      const commands: { type: string; [k: string]: unknown }[] = [];
+      let markers = 0;
+      let regions = 0;
+      for (const f of o?.features ?? []) {
+        const src = Math.round(f.frame * scale);
+        if (src < clip.sourceIn || src >= clip.sourceIn + clip.length) continue; // outside the clip's trimmed span
+        const at = clip.start + (src - clip.sourceIn);
+        const text = f.label || f.values.slice(0, 3).map((v) => (v == null ? "?" : String(Number(v.toPrecision(4))))).join(" ") + (o?.unit ? ` ${o.unit}` : "");
+        if (f.duration && f.duration > 0) {
+          commands.push({ type: "add-region", start: at, end: Math.min(clip.start + clip.length, at + Math.max(1, Math.round(f.duration * docRate))), label: text });
+          regions++;
+        } else {
+          commands.push({ type: "add-marker", at, label: text });
+          markers++;
+        }
+        if (commands.length >= 5000) break;
+      }
+      if (!commands.length) {
+        setText(notice, `${plugin.name}: no features in this clip`);
+        return;
+      }
+      engine.dispatch({ type: "batch", commands } as Parameters<Engine["dispatch"]>[0]);
+      setText(notice, `${plugin.name}: ${markers} markers, ${regions} regions${commands.length >= 5000 ? " (the first 5000)" : ""} (undo removes them)`);
+    } catch (err) {
+      setText(notice, `Vamp: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       button.disabled = false;
     }

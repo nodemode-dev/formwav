@@ -53,6 +53,11 @@ echo "sidecar: src-tauri/binaries/fwhost-$TRIPLE"
 native/formwav-nyquist/build_fwnyq
 cp native/formwav-nyquist/fwnyq "src-tauri/binaries/fwnyq-$TRIPLE"
 echo "sidecar: src-tauri/binaries/fwnyq-$TRIPLE"
+# AU-40: the Vamp host (the Vamp SDK's host library, vendored); plugins are found in ~/Library/Audio/Plug-Ins/Vamp and
+# /Library/Audio/Plug-Ins/Vamp, or VAMP_PATH
+native/formwav-vamp/build_fwvamp
+cp native/formwav-vamp/fwvamp "src-tauri/binaries/fwvamp-$TRIPLE"
+echo "sidecar: src-tauri/binaries/fwvamp-$TRIPLE"
 
 say "Generating app icons"
 cargo tauri icon src-tauri/icons/icon.png
