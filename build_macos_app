@@ -16,8 +16,16 @@ command -v rubberband >/dev/null || echo "Note: time-stretch and pitch features 
 
 say "Building the interface"
 cd frontend
-[ -d node_modules ] || npm install
+# the page's audio core (WebAssembly: playback, recording, the live instrument) is built and placed in public/core by
+# oc_install, which installs the packages too; every desktop build up to v1.92.0 skipped it, and the app answered
+# Record with "the audio core is missing (404)"
+./oc_install
 npm run build
+if [ ! -s dist/core/formwav_dsp.wasm ]; then
+  echo "The interface was built without its audio core (dist/core/formwav_dsp.wasm): stopping." >&2
+  exit 1
+fi
+echo "audio core: dist/core/formwav_dsp.wasm ($(wc -c < dist/core/formwav_dsp.wasm) bytes)"
 cd ..
 
 say "Building the engine (Python -> one binary)"

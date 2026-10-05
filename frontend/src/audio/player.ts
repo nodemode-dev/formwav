@@ -546,7 +546,7 @@ export class Player {
   private core(): Promise<ArrayBuffer> {
     if (!this.module) {
       this.module = fetch(CORE_URL).then((res) => {
-        if (!res.ok) throw new Error(`the audio core is missing (${res.status}); run ./formwav_oc_install`);
+        if (!res.ok) throw new Error(`the audio core is missing (${res.status}); build it with frontend/oc_install (build_macos_app runs it)`);
         return res.arrayBuffer();
       });
       this.module.catch(() => (this.module = null));
