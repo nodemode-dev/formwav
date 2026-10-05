@@ -1,0 +1,23 @@
+#!/bin/sh
+# Builds fwvamp (AU-40): the Vamp SDK's host library (vendored in sdk/, Vamp plugin SDK 2.10, MIT-style licence) and the
+# host itself, linked against libsndfile. Needs a C and C++ compiler and libsndfile's development files (on macOS:
+# brew install libsndfile). Output: ./fwvamp
+set -e
+here=$(cd "$(dirname "$0")" && pwd)
+build="$here/build"
+mkdir -p "$build"
+INC="-I$here/sdk"
+LIBS=""
+if command -v brew >/dev/null 2>&1; then
+  INC="$INC -I$(brew --prefix)/include"
+  LIBS="-L$(brew --prefix)/lib"
+fi
+objs=""
+for s in Files PluginHostAdapter RealTime PluginBufferingAdapter PluginChannelAdapter PluginInputDomainAdapter PluginLoader PluginSummarisingAdapter PluginWrapper host-c; do
+  o="$build/$s.o"
+  [ "$o" -nt "$here/sdk/src/vamp-hostsdk/$s.cpp" ] || ${CXX:-c++} -O2 -fPIC -w $INC -c "$here/sdk/src/vamp-hostsdk/$s.cpp" -o "$o"
+  objs="$objs $o"
+done
+[ "$build/acsymbols.o" -nt "$here/sdk/src/vamp-hostsdk/acsymbols.c" ] || ${CC:-cc} -O2 -fPIC -w $INC -c "$here/sdk/src/vamp-hostsdk/acsymbols.c" -o "$build/acsymbols.o"
+${CXX:-c++} -O2 -w $INC "$here/fwvamp.cpp" $objs "$build/acsymbols.o" $LIBS -lsndfile -ldl -o "$here/fwvamp"
+echo "fwvamp built: $here/fwvamp"
