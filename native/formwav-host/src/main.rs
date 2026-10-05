@@ -300,6 +300,7 @@ fn run_clap(path: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(unix)]
 fn run_clap_gui(path: &str, seconds: f64) -> Result<(), String> {
     use std::time::{Duration, Instant};
     use x11rb::connection::Connection;
@@ -411,6 +412,18 @@ fn run_clap_gui(path: &str, seconds: f64) -> Result<(), String> {
     }
 }
 
+/// Plugin editor windows are X11 windows driven by Unix event polling; on Windows (native windows: not built yet) both
+/// editor commands answer so rather than failing to build.
+#[cfg(windows)]
+fn run_clap_gui(_path: &str, _seconds: f64) -> Result<(), String> {
+    Err("plugin editor windows are not available on Windows yet; the plugin itself processes audio".into())
+}
+#[cfg(windows)]
+fn run_vst3_gui(_path: &str, _seconds: f64) -> Result<(), String> {
+    Err("plugin editor windows are not available on Windows yet; the plugin itself processes audio".into())
+}
+
+#[cfg(unix)]
 fn run_vst3_gui(path: &str, seconds: f64) -> Result<(), String> {
     use std::time::{Duration, Instant};
     use vst3::Steinberg::Linux::{IEventHandlerTrait, ITimerHandlerTrait};
@@ -543,6 +556,15 @@ fn vst3_binary(path: &str) -> Result<std::path::PathBuf, String> {
     if bundle.is_file() {
         return Ok(bundle.to_path_buf());
     }
+    if cfg!(windows) {
+        // Windows: Contents/x86_64-win/<name>.vst3, a DLL with the .vst3 extension (the VST3 SDK's bundle layout)
+        let dir = bundle.join("Contents").join(format!("{}-win", std::env::consts::ARCH));
+        return std::fs::read_dir(&dir)
+            .map_err(|e| format!("{} is not a VST3 bundle with a Windows binary: {e}", path))?
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .find(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("vst3")))
+            .ok_or_else(|| format!("no .vst3 binary in {}", dir.display()));
+    }
     let dir = if cfg!(target_os = "macos") { bundle.join("Contents").join("MacOS") } else { bundle.join("Contents").join(format!("{}-linux", std::env::consts::ARCH)) };
     std::fs::read_dir(&dir)
         .map_err(|e| format!("{} is not a VST3 bundle with a Linux binary: {e}", path))?
@@ -554,14 +576,7 @@ fn vst3_binary(path: &str) -> Result<std::path::PathBuf, String> {
 fn run_vst3(path: &str) -> Result<(), String> {
     unsafe {
         let binary = vst3_binary(path)?;
-        let lib = libloading::os::unix::Library::new(&binary).map_err(|e| format!("could not load {}: {e}", binary.display()))?;
-        let handle = lib.into_raw();
-        let lib = libloading::os::unix::Library::from_raw(handle);
-        if let Ok(entry) = lib.get::<unsafe extern "C" fn(*mut c_void) -> bool>(b"ModuleEntry\0") {
-            if !entry(handle) {
-                return Err("the module refused to enter".into());
-            }
-        }
+        let lib = offline::vst3_enter(&binary)?;
         let get_factory = lib.get::<unsafe extern "C" fn() -> *mut IPluginFactory>(b"GetPluginFactory\0").map_err(|e| format!("no GetPluginFactory: {e}"))?;
         let factory = ComPtr::from_raw(get_factory()).ok_or("GetPluginFactory returned nothing")?;
         let classes = factory.countClasses();
@@ -631,9 +646,7 @@ fn run_vst3(path: &str) -> Result<(), String> {
         drop(processor);
         drop(component);
         drop(factory);
-        if let Ok(exit) = lib.get::<unsafe extern "C" fn() -> bool>(b"ModuleExit\0") {
-            exit();
-        }
+        offline::vst3_leave(&lib);
         let id: String = cid.iter().map(|b| format!("{:02X}", *b as u8)).collect();
         report("vst3", &id, &name, classes as u32, ports, ok, &input, &output);
         Ok(())

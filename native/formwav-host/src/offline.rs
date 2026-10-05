@@ -94,9 +94,50 @@ pub(crate) unsafe fn clap_open(path: &Path) -> Result<(libloading::Library, *con
     Ok((lib, entry))
 }
 
-/// What keeps a loaded VST3 module alive: the dlopened library on Linux, the CFBundle on macOS.
+/// What keeps a loaded VST3 module alive: the loaded library on Linux and Windows, the CFBundle on macOS.
 #[cfg(not(target_os = "macos"))]
-pub(crate) type Vst3Module = libloading::os::unix::Library;
+pub(crate) type Vst3Module = Vst3Library;
+
+/// A VST3 module's binary as loaded: dlopen'd on Unix, LoadLibrary'd on Windows.
+#[cfg(unix)]
+pub(crate) type Vst3Library = libloading::os::unix::Library;
+#[cfg(windows)]
+pub(crate) type Vst3Library = libloading::os::windows::Library;
+
+/// Loads a VST3 module's binary and enters it as the VST3 SDK specifies for the platform: ModuleEntry with the
+/// library's handle on Unix, InitDll on Windows (each optional: a module without it is entered by loading).
+pub(crate) unsafe fn vst3_enter(binary: &Path) -> Result<Vst3Library, String> {
+    #[cfg(unix)]
+    {
+        let lib = libloading::os::unix::Library::new(binary).map_err(|e| format!("could not load {}: {e}", binary.display()))?;
+        let handle = lib.into_raw();
+        let lib = libloading::os::unix::Library::from_raw(handle);
+        if let Ok(entry) = lib.get::<unsafe extern "C" fn(*mut c_void) -> bool>(b"ModuleEntry\0") {
+            if !entry(handle) {
+                return Err("the module refused to enter".into());
+            }
+        }
+        Ok(lib)
+    }
+    #[cfg(windows)]
+    {
+        let lib = libloading::os::windows::Library::new(binary).map_err(|e| format!("could not load {}: {e}", binary.display()))?;
+        if let Ok(init) = lib.get::<unsafe extern "system" fn() -> bool>(b"InitDll\0") {
+            if !init() {
+                return Err("the module refused to initialise (InitDll)".into());
+            }
+        }
+        Ok(lib)
+    }
+}
+
+/// Leaves a VST3 module as the SDK specifies: ModuleExit on Unix, ExitDll on Windows.
+pub(crate) unsafe fn vst3_leave(lib: &Vst3Library) {
+    let name: &[u8] = if cfg!(windows) { b"ExitDll\0" } else { b"ModuleExit\0" };
+    if let Ok(exit) = lib.get::<unsafe extern "C" fn() -> bool>(name) {
+        exit();
+    }
+}
 #[cfg(target_os = "macos")]
 pub(crate) type Vst3Module = crate::mac::Bundle;
 
@@ -133,14 +174,7 @@ pub(crate) unsafe fn vst3_close(bundle: Vst3Module) {
 #[cfg(not(target_os = "macos"))]
 pub(crate) unsafe fn vst3_open(path: &Path) -> Result<(Vst3Module, ComPtr<IPluginFactory>), String> {
     let binary = crate::vst3_binary(&path.to_string_lossy())?;
-    let lib = libloading::os::unix::Library::new(&binary).map_err(|e| format!("could not load {}: {e}", binary.display()))?;
-    let handle = lib.into_raw();
-    let lib = libloading::os::unix::Library::from_raw(handle);
-    if let Ok(entry) = lib.get::<unsafe extern "C" fn(*mut c_void) -> bool>(b"ModuleEntry\0") {
-        if !entry(handle) {
-            return Err("the module refused to enter".into());
-        }
-    }
+    let lib = vst3_enter(&binary)?;
     let get_factory = lib.get::<unsafe extern "C" fn() -> *mut IPluginFactory>(b"GetPluginFactory\0").map_err(|e| format!("no GetPluginFactory: {e}"))?;
     let factory = ComPtr::from_raw(get_factory()).ok_or("GetPluginFactory returned nothing")?;
     Ok((lib, factory))
@@ -148,9 +182,7 @@ pub(crate) unsafe fn vst3_open(path: &Path) -> Result<(Vst3Module, ComPtr<IPlugi
 
 #[cfg(not(target_os = "macos"))]
 pub(crate) unsafe fn vst3_close(lib: Vst3Module) {
-    if let Ok(exit) = lib.get::<unsafe extern "C" fn() -> bool>(b"ModuleExit\0") {
-        exit();
-    }
+    vst3_leave(&lib);
 }
 
 pub(crate) unsafe fn vst3_effects(factory: &ComPtr<IPluginFactory>) -> Vec<(TUID, String)> {
