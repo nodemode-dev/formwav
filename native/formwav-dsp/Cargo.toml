@@ -1,6 +1,6 @@
 [package]
 name = "formwav-dsp"
-version = "1.97.0"
+version = "1.98.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "formwav audio core: the mixer and renderer, realtime effects, loudness, onsets and peaks, synthesis, native audio output and MIDI input; built native, as a Python module and to wasm32"
