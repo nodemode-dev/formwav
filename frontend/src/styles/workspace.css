@@ -174,7 +174,8 @@
 .fw-folder-toggle:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
 .fw-folder-icon { display: inline-flex; color: var(--text-secondary); }
 .fw-folder-icon svg { inline-size: 14px; block-size: 14px; }
-.fw-rtfx-list { display: grid; gap: 6px; }
+.fw-rtfx-list { display: grid; gap: 6px; align-content: start; block-size: 150px; overflow-y: auto; }
+.fw-rtfx-list:empty::before { content: "No realtime effects yet"; padding: 4px 0; color: var(--text-muted); font-size: 12px; }
 .fw-rtfx-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-tertiary); }
 .fw-rtfx-name { flex-basis: 100%; font-weight: 600; }
 .fw-rtfx-row label { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); }
