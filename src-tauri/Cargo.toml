@@ -1,6 +1,6 @@
 [package]
 name = "formwav-desktop"
-version = "2.11.1"
+version = "2.11.2"
 description = "formwav desktop app: a thin Tauri shell over the formwav engine sidecar"
 authors = ["nodemode-ai"]
 license = "Apache-2.0"
