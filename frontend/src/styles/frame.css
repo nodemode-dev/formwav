@@ -6,10 +6,10 @@
  */
 
 :root {
-  --fw-titlebar-h: 40px;
+  --fw-titlebar-h: 44px;
   --fw-options-h: 40px;
   --fw-transport-h: 44px;
-  --fw-status-h: 28px;
+  --fw-status-h: 58px;
   --fw-group-head-h: 36px;
   --fw-resizer-w: 6px;
 }
@@ -33,7 +33,7 @@
 .fw-topbar .fw-tools .fw-ibtn { block-size: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: var(--fs-12); }
 .fw-topbar .fw-tools .fw-ibtn:hover:not(:disabled) { background: var(--bg-tertiary); color: var(--text-primary); }
 .fw-topbar .fw-tools .fw-ibtn-icon { inline-size: 28px; padding: 0; justify-content: center; }
-.fw-topbar-mid { display: flex; justify-content: center; min-inline-size: 0; }
+.fw-topbar-mid { display: flex; align-items: center; gap: 16px; min-inline-size: 0; }
 .fw-topbar .fw-session-name {
   inline-size: clamp(160px, 28vw, 320px);
   block-size: 28px;
@@ -101,15 +101,28 @@
 .fw-tool-tray .fw-mode[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
 .fw-tool-tray select { block-size: 28px; border-radius: 8px; }
 
-/* Transport row: above the status bar, its buttons title-tool squares, the clock the one large readout. */
-.fw-pane-timeline .fw-transport {
-  flex: none;
-  min-block-size: var(--fw-transport-h);
-  gap: 14px;
-  padding: 0 12px;
-  background: var(--surface-1);
-  border-block-start: 1px solid var(--line-0);
-}
+/* The bottom bar, after the approved target (research/ui_reference): the transport at the left with play the one
+ * accent-filled control and the clock the largest readout on screen, the meters after it, and the status at the right
+ * in two lines. The timeline's old transport row stays as the dock anchor that bottom panels insert before. */
+.fw-dock-anchor { display: none; }
+.fw-status .fw-transport { display: flex; flex: none; align-items: center; gap: 10px; min-inline-size: 0; }
+.fw-status .fw-tbtn[data-action="play"] { inline-size: 40px; block-size: 40px; border-radius: 10px; border-color: var(--accent-color); background: var(--accent-color); color: var(--text-on-accent); }
+.fw-status .fw-tbtn[data-action="play"]:hover:not(:disabled) { background: var(--accent-color-hover); color: var(--text-on-accent); }
+.fw-status .fw-clock { min-inline-size: 11ch; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; cursor: pointer; }
+.fw-status .fw-speed-btn { padding: 0 8px; font-family: var(--font-mono); font-size: var(--fs-12); }
+.fw-st-info { flex: 1 1 0; min-inline-size: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding-inline-start: 14px; border-inline-start: 1px solid var(--line-1); container-type: inline-size; }
+.fw-st-line { display: flex; align-items: center; gap: 12px; min-inline-size: 0; overflow: hidden; }
+.fw-st-line .fw-engine, .fw-st-line .fw-st-rate, .fw-st-line .fw-st-tracks, .fw-st-line .fw-st-length { min-inline-size: 0; flex: none; }
+.fw-st-line .fw-st-output select { max-inline-size: 168px; }
+@container (max-width: 460px) { .fw-st-line .fw-st-tracks, .fw-st-line .fw-st-length { display: none; } }
+.fw-topbar .fw-session-name { inline-size: 200px; flex: 0 1 200px; min-inline-size: 110px; }
+.fw-topbar-actions > .fw-ibtn:has(svg):not(.fw-btn-export) { inline-size: 28px; padding: 0; justify-content: center; font-size: 0; }
+.fw-theme-menu { display: flex; align-items: center; gap: 10px; margin-inline-end: 6px; }
+.fw-theme-pick { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12); color: var(--text-secondary); }
+.fw-theme-pick select { block-size: 28px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-primary); font: inherit; }
+.fw-swatches { display: flex; align-items: center; gap: 2px; }
+.fw-swatch { inline-size: 24px; block-size: 24px; display: grid; place-items: center; padding: 0; border: 2px solid transparent; border-radius: 50%; background: transparent; cursor: pointer; }
+.fw-swatch[aria-pressed="true"] { border-color: var(--text-primary); }
 .fw-transport-controls { gap: 4px; }
 .fw-tbtn { inline-size: 30px; block-size: 30px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-secondary); }
 .fw-tbtn:hover:not(:disabled) { background: var(--surface-raised); color: var(--text-primary); }
@@ -253,7 +266,7 @@
 .fw-piano-canvas { display: block; inline-size: 100%; block-size: 100%; min-block-size: 0; cursor: crosshair; outline: none; }
 
 /* The title bar's notice never pushes the actions: it keeps one line and truncates. */
-.fw-topbar .fw-notice { max-inline-size: 26vw; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-status .fw-notice { flex: none; min-block-size: 1.3em; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); font-size: var(--fs-12); }
 
 /* Rotary controls (AU-14): the knob drawn before its range input, which stays focusable (keyboard) but invisible. */
 .fw-knob { display: inline-grid; place-items: center; inline-size: 30px; block-size: 30px; margin-inline: auto; border-radius: 50%; cursor: ns-resize; touch-action: none; }

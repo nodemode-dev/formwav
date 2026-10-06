@@ -47,7 +47,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   dock.hidden = true;
   dock.setAttribute("aria-label", "Agent");
   dock.innerHTML = `<div class="fw-term-head"><span class="fw-term-title">Agent</span><span class="fw-term-state" aria-live="polite"></span><button type="button" class="fw-ibtn" data-agent="undo" disabled>Undo run</button><button type="button" class="fw-ibtn" data-agent="hide">Hide</button></div><div class="fw-agent-body"><ol class="fw-agent-log" aria-live="polite"></ol><div class="fw-agent-ask"><textarea rows="2" placeholder="Tell the assistant what to do with this session" aria-label="Instruction for the assistant"></textarea><button type="button" class="fw-ibtn fw-agent-run" data-agent="run">Run</button><button type="button" class="fw-ibtn" data-agent="stop" disabled>Stop</button></div></div>`;
-  const transport = host.querySelector<HTMLElement>(".fw-transport");
+  const transport = host.querySelector<HTMLElement>(".fw-dock-anchor");
   if (transport) transport.before(dock);
   else host.append(dock);
   const log = dock.querySelector<HTMLOListElement>(".fw-agent-log") as HTMLOListElement;

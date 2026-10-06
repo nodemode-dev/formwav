@@ -25,7 +25,7 @@ export function mountTerminal(host: HTMLElement): void {
   dock.hidden = true;
   dock.setAttribute("aria-label", "Terminal");
   dock.innerHTML = `<div class="fw-term-head"><span class="fw-term-title">Terminal</span><span class="fw-term-state" aria-live="polite"></span><button type="button" class="fw-ibtn" data-term="restart">Restart</button><button type="button" class="fw-ibtn" data-term="hide">Hide</button></div><div class="fw-term-body"></div>`;
-  const transport = host.querySelector<HTMLElement>(".fw-transport");
+  const transport = host.querySelector<HTMLElement>(".fw-dock-anchor");
   if (transport) transport.before(dock);
   else host.append(dock);
   const body = dock.querySelector<HTMLElement>(".fw-term-body") as HTMLElement;

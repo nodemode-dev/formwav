@@ -41,7 +41,7 @@ interface Docked {
 
 export function mountDock(host: HTMLElement): void {
   const pane = host.querySelector<HTMLElement>(".fw-pane-timeline");
-  const transport = pane?.querySelector<HTMLElement>(".fw-transport");
+  const transport = pane?.querySelector<HTMLElement>(".fw-dock-anchor");
   if (!pane || !transport) return;
   const dock = document.createElement("section");
   dock.className = "fw-dock";

@@ -42,7 +42,6 @@ function shellHtml(): string {
     </div>
     <div class="fw-topbar-mid">
       <input class="fw-session-name" type="text" value="Untitled session" aria-label="Session name" maxlength="80" spellcheck="false" autocomplete="off">
-      <span class="fw-notice" role="status" aria-live="polite"></span>
     </div>
     <div class="fw-topbar-actions">
       <button type="button" class="fw-panel-toggle" data-pane="media" aria-pressed="true" aria-label="Media pane" title="Show or hide the Media pane">${fvIcon("collapseLeft", 16)}</button>
@@ -71,14 +70,7 @@ function shellHtml(): string {
         <div class="fw-lanes"></div>
         <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi,.mxf,.aup,.aup3,.zip,.mid,.midi,.aaf,.edl" multiple hidden>
       </main>
-      <footer class="fw-transport">
-        <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>
-        <output class="fw-clock" role="button" tabindex="0" data-mode="time" title="Click to switch the clock between time and timecode at 24, 25 or 30 frames per second">00:00:00.000</output>
-        <label class="fw-speed" title="Play at speed: 0.25 to 4 times, pitch following (playback only); double-click for 1×">Speed <input type="range" data-speed min="-2" max="2" step="0.01" value="0" data-default="0" aria-label="Playback speed, as a power of two"><output data-speed-out>1.00×</output></label>
-        <button type="button" class="fw-ibtn fw-rec-btn" popovertarget="fw-rec-pop" title="Recording settings: latency compensation, Measure, pre-roll" aria-label="Recording settings">Rec</button>
-        <div id="fw-rec-pop" class="fw-rec-pop" popover><label class="fw-speed" title="Recording latency compensation: each take lands this many milliseconds earlier, undoing the round trip from playback to your microphone. Measure it once with a loopback cable (the Measure button beside this field) and type it here; 0 leaves takes where they were recorded">Latency <input type="number" data-latency min="0" max="500" step="1" value="0" aria-label="Recording latency compensation in milliseconds"> ms</label>
-        <label class="fw-speed" title="Pre-roll: recording rolls this long before the punch point (or the playhead) so you hear the lead-in; only what follows that point is kept">Pre-roll <input type="number" data-preroll min="0" max="10" step="0.5" value="0" aria-label="Pre-roll in seconds"> s</label></div>
-      </footer>
+      <footer class="fw-dock-anchor" aria-hidden="true"></footer>
     </section>
     <div class="fw-pane-divider" data-side="inspector" role="separator" aria-orientation="vertical" aria-label="Resize the Inspector pane" tabindex="0"></div>
     <aside class="fw-pane fw-pane-inspector" aria-label="Inspector">
@@ -87,13 +79,27 @@ function shellHtml(): string {
       <div class="fw-insp-strip"><button type="button" class="fw-panel-toggle fw-strip-expand" data-pane="inspector" aria-label="Show the Inspector" title="Show the Inspector">${fvIcon("collapseLeft", 16)}</button><span class="fw-strip-label" aria-hidden="true">Inspector</span></div>
     </aside>
   </div>
-  <footer class="fw-status" aria-label="Status">
-    <span class="fw-engine" data-state="pending" role="status" aria-live="polite"><span class="fw-engine-dot"></span><span class="fw-engine-text"></span></span>
-    <span class="fw-st-rate" title="The session's sample rate"></span>
-    <span class="fw-st-tracks"></span>
-    <span class="fw-st-length" title="The session's length"></span>
-    <label class="fw-st-output" title="Where playback is heard: the browser's own audio, or the engine's native output on a device">Output <select data-output aria-label="Output"></select></label>
-    <span class="fw-st-hint"></span>
+  <footer class="fw-status" aria-label="Transport and status">
+    <div class="fw-transport" role="group" aria-label="Transport and meters">
+      <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>
+      <output class="fw-clock" role="button" tabindex="0" data-mode="time" title="Click to switch the clock between time and timecode at 24, 25 or 30 frames per second">00:00:00.000</output>
+      <button type="button" class="fw-ibtn fw-speed-btn" popovertarget="fw-speed-pop" title="Playback speed (0.25 to 4 times, pitch following, playback only)" aria-label="Playback speed"><output data-speed-out>1.00×</output></button>
+      <div id="fw-speed-pop" class="fw-rec-pop" popover><label class="fw-speed" title="Play at speed: 0.25 to 4 times, pitch following (playback only); double-click for 1×">Speed <input type="range" data-speed min="-2" max="2" step="0.01" value="0" data-default="0" aria-label="Playback speed, as a power of two"></label></div>
+      <button type="button" class="fw-ibtn fw-rec-btn" popovertarget="fw-rec-pop" title="Recording settings: latency compensation, Measure, pre-roll" aria-label="Recording settings">Rec</button>
+      <div id="fw-rec-pop" class="fw-rec-pop" popover><label class="fw-speed" title="Recording latency compensation: each take lands this many milliseconds earlier, undoing the round trip from playback to your microphone. Measure it once with a loopback cable (the Measure button beside this field) and type it here; 0 leaves takes where they were recorded">Latency <input type="number" data-latency min="0" max="500" step="1" value="0" aria-label="Recording latency compensation in milliseconds"> ms</label>
+      <label class="fw-speed" title="Pre-roll: recording rolls this long before the punch point (or the playhead) so you hear the lead-in; only what follows that point is kept">Pre-roll <input type="number" data-preroll min="0" max="10" step="0.5" value="0" aria-label="Pre-roll in seconds"> s</label></div>
+    </div>
+    <div class="fw-st-info">
+      <span class="fw-notice" role="status" aria-live="polite"></span>
+      <div class="fw-st-line">
+        <span class="fw-engine" data-state="pending" role="status" aria-live="polite"><span class="fw-engine-dot"></span><span class="fw-engine-text"></span></span>
+        <span class="fw-st-rate" title="The session's sample rate"></span>
+        <span class="fw-st-tracks"></span>
+        <span class="fw-st-length" title="The session's length"></span>
+        <label class="fw-st-output" title="Where playback is heard: the browser's own audio, or the engine's native output on a device">Output <select data-output aria-label="Output"></select></label>
+        <span class="fw-st-hint"></span>
+      </div>
+    </div>
   </footer>
 </div>`;
 }

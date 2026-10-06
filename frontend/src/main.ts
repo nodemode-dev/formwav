@@ -40,6 +40,7 @@ import { mountRecord } from "./ui/record";
 import { mountLatencyProbe } from "./ui/latency-probe";
 import { mountStatusBar } from "./ui/status-bar";
 import { mountFileMenu } from "./ui/file-menu";
+import { mountThemeMenu } from "./ui/theme-menu";
 import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
@@ -132,6 +133,7 @@ if (host) {
   mountStatusBar(host, engine);
   mountOutputSelect(host, player);
   mountFileMenu(host);
+  mountThemeMenu(host);
   mountDock(host);
   mountProjects(host, engine, player);
 }

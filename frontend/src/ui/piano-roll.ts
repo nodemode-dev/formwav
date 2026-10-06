@@ -23,7 +23,7 @@ const black = (p: number) => [1, 3, 6, 8, 10].includes(p % 12);
 
 export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   const pane = host.querySelector<HTMLElement>(".fw-pane-timeline");
-  const transport = pane?.querySelector<HTMLElement>(".fw-transport");
+  const transport = pane?.querySelector<HTMLElement>(".fw-dock-anchor");
   const view = host.querySelector<HTMLElement>('.fw-tool-tray [data-group="view"]') ?? host.querySelector<HTMLElement>(".fw-tool-tray");
   if (!pane || !transport || !view) return;
   const toggle = document.createElement("button");

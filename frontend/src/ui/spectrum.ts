@@ -14,7 +14,7 @@ const FFTS = [512, 1024, 2048, 4096, 8192, 16384, 32768];
 
 export function mountSpectrum(host: HTMLElement, engine: Engine, player: Player): void {
   const pane = host.querySelector<HTMLElement>(".fw-pane-timeline");
-  const transport = pane?.querySelector<HTMLElement>(".fw-transport");
+  const transport = pane?.querySelector<HTMLElement>(".fw-dock-anchor");
   const view = host.querySelector<HTMLElement>('.fw-tool-tray [data-group="view"]') ?? host.querySelector<HTMLElement>(".fw-tool-tray");
   if (!pane || !transport || !view) return;
   const toggle = document.createElement("button");
