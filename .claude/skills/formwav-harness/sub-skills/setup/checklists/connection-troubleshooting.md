@@ -22,7 +22,7 @@ Work in order.
 **5. Are the tool names right**
 - [ ] The client lists 28 tools whose names start with formwav_
 - [ ] Every name used matches `sub-skills/tools/references/tools.md` exactly, case included
-- [ ] `formwav_status` reports the version the reference was generated for; regenerate it if not
+- [ ] The client's tool list matches the reference's 28; a different count means the server changed and the reference needs regenerating
 
 **6. Only now, is it the workflow**
 - [ ] Each step's inputs come from an earlier step's results

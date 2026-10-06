@@ -1,6 +1,6 @@
 # formwav's MCP tools
 
-Generated from the server's own listing (28 tools, server version 2.12.1) by the harness's generator; regenerate after any tool change rather than editing by hand. Names are exact and case sensitive.
+Generated from the server's own listing (28 tools) by the harness's generator; regenerate after any tool change rather than editing by hand (the generator refuses when this grouping and the server disagree). Names are exact and case sensitive.
 
 ## Contents
 
