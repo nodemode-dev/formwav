@@ -34,7 +34,8 @@ export function mountShare(host: HTMLElement, engine: Engine): void {
   chip.className = "fw-share-chip";
   chip.dataset.off = "";
   chip.textContent = "Shared";
-  host.querySelector(".fw-status")?.append(chip);
+  // In the menu bar's middle, beside the session's name: the status bar has no width to spare beside the transport
+  host.querySelector(".fw-topbar-mid")?.append(chip);
   const drawPeople = (people: Person[]) => {
     const here = people.filter((p) => p.online);
     setText(chip, `Shared · ${here.length} editing`);
