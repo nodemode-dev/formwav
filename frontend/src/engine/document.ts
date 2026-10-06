@@ -265,13 +265,20 @@ export interface DeClickFx {
   maxMs: number;
   bypass?: boolean;
 }
+/** L6: reverberation taken down while playing (kind 19), about 21 ms behind, compensated. */
+export interface DeReverbFx {
+  kind: "dereverb";
+  t60: number;
+  reductionDb: number;
+  bypass?: boolean;
+}
 export interface VoiceFx {
   kind: "voice";
   strength: number;
   bypass?: boolean;
 }
 
-export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx | TremoloFx | GateFx | PhaserFx | FlangerFx | VoiceFx | DeHumFx | DeClickFx;
+export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx | TremoloFx | GateFx | PhaserFx | FlangerFx | VoiceFx | DeHumFx | DeClickFx | DeReverbFx;
 
 /** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
@@ -280,7 +287,7 @@ export type Instrument = { kind: "sampler"; media: string; root: number } | { ki
 
 export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocity"; scale: number; offset: number } | { kind: "quantize"; beats: number; strength: number };
 
-const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice", "dehum", "declick"]);
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice", "dehum", "declick", "dereverb"]);
 
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
@@ -315,6 +322,9 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
       }
       if (f.kind === "dehum") {
         return { kind: "dehum", baseHz: clamp(f.baseHz, 20, 400, 60), harmonics: Math.round(clamp(f.harmonics, 1, 16, 8)), q: clamp(f.q, 1, 200, 30), ...bypass };
+      }
+      if (f.kind === "dereverb") {
+        return { kind: "dereverb", t60: clamp(f.t60, 0.2, 3, 0.8), reductionDb: clamp(f.reductionDb, 0, 30, 6), ...bypass };
       }
       if (f.kind === "declick") {
         return { kind: "declick", sensitivity: clamp(f.sensitivity, 3, 30, 8), maxMs: clamp(f.maxMs, 0.1, 2, 1), ...bypass };
@@ -872,7 +882,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-fx-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
         const target = t.fx?.[cmd.fxIndex];
-        if (!t.fx || !target || target.kind === "compressor" || target.kind === "dehum" || target.kind === "declick" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter" || target.kind === "tremolo" || target.kind === "gate" || target.kind === "phaser" || target.kind === "flanger" || target.kind === "voice") return t;
+        if (!t.fx || !target || target.kind === "compressor" || target.kind === "dehum" || target.kind === "declick" || target.kind === "dereverb" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter" || target.kind === "tremolo" || target.kind === "gate" || target.kind === "phaser" || target.kind === "flanger" || target.kind === "voice") return t;
         const { [cmd.param]: _old, ...others } = target.automation ?? {};
         const automation = cmd.points.length ? { ...others, [cmd.param]: cmd.points } : others;
         const next = cleanFx(t.fx.map((f, i) => (i === cmd.fxIndex ? { ...target, automation } : f)));

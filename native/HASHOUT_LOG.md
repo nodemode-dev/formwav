@@ -45,6 +45,13 @@ native/
 
 ## formwav-dsp/Cargo.toml {#cargo-toml}
 
+### De-reverb in the live rack, and an FFT in the core
+- refers-to: native/formwav-dsp/src/fx.rs (Fft; DeReverb, kind 19; tests); backend/app/services/render.py; frontend/src/engine/document.ts, src/audio/player.ts, src/ui/lanes.ts, src/ui/inspector-pane.ts, src/ui/editor-tabs.ts, src/ui/browser-effects.ts; sidecar verification/verify_dereverb.py
+- kind: explainer
+- logged: v2.11.5 (in progress) · 2026-10-06
+
+The rest of L6. The core had no FFT, so it gained one (iterative radix-2, in place) and a short-time stage on it: late reverberation suppression (Lebart et al. 2001, Habets 2007). Reverb decays at a known rate for a reverb time, so the late reverberation in a band is predicted from the band's power 50 ms before, decayed by that much; a spectral gain takes it out, floored at the reduction allowed, smoothed over time, one gain for both channels; 1024-point frames 256 apart with square-root Hann windows, 1023 samples behind, reported as latency. Rust tests: the FFT against a direct transform; at no reduction the input back delayed within 1e-4 (the first run failed by 1.08, a frame written N places along its ring, found and fixed); bursts in a 1 s room, the tail over 6 dB down and the bursts within 2 dB. Through the export renderer on the JFK speech in a synthetic room (T60 0.8 s, direct and reverberant energy equal), swept: at most 6 dB was the one setting that improved every reading (the tail in the pauses from -23.4 to -25.6 dB against the speech, SI-SDR from -1.7 to -0.5 dB, DNSMOS overall 2.24 to 2.28, background 2.85 to 3.02, speech 2.94 to 2.92), and is the default; at 12 dB the tail went to -26.5 dB but speech quality fell (overall 2.19), as spectral subtraction trades. Wired as de-hum and de-click were; a default edit's guard caught Denoise's export default sharing the line's text and left it alone. In Chromium: 19 effects, De-reverb in all four add lists, a session played with it, no layout shift, no page error.
+
 ### Restoration in the live rack: de-hum and de-click while playing
 - refers-to: native/formwav-dsp/src/fx.rs (DeHum, kind 17; DeClick, kind 18; tests); backend/app/services/render.py; frontend/src/engine/document.ts, src/audio/player.ts, src/ui/lanes.ts, src/ui/inspector-pane.ts, src/ui/editor-tabs.ts, src/ui/browser-effects.ts; sidecar verification/verify_live_restoration.py
 - kind: explainer

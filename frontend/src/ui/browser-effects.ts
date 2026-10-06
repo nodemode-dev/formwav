@@ -12,7 +12,7 @@ const GROUPS: Array<[string, string[]]> = [
   ["EQ and filters", ["highpass", "lowpass", "peak", "lowshelf", "highshelf"]],
   ["Dynamics", ["compressor", "limiter", "gate"]],
   ["Space and movement", ["reverb", "echo", "chorus", "flanger", "phaser", "tremolo"]],
-  ["Repair", ["denoise", "dehum", "declick", "voice"]],
+  ["Repair", ["denoise", "dehum", "declick", "dereverb", "voice"]],
 ];
 
 export function mountBrowserEffects(host: HTMLElement, engine: Engine): void {
