@@ -100,6 +100,23 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   const obj = (properties: Json, required: string[] = []) => ({ type: "object", properties, required });
   const id = (what: string) => ({ type: "string", description: `The ${what}'s id from get_session` });
 
+  // 3.3: engine calls and placement for the tools that make sound: media lands on a new track (one undo step), and the
+  // new track and clip are reported so the next tool can work on them
+  const postJson = (url: string, body: unknown) => engineJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const at = (seconds: unknown) => (seconds === undefined || seconds === null ? engine.get("transport").positionSamples : samples(num(seconds, "at_seconds", 0, 86400)));
+  const place = (media: MediaRef, where: number) => {
+    engine.dispatch({ type: "import-media", media, at: where });
+    const t = engine.get("document").tracks.find((x) => x.clips.some((c) => c.mediaId === media.id && c.start === where));
+    const c = t?.clips.find((x) => x.mediaId === media.id && x.start === where);
+    return { track_id: t?.id, clip_id: c?.id, name: media.name, seconds: Math.round((media.frames / media.sampleRate) * 1000) / 1000 };
+  };
+  // a clip's span in its media's seconds: sourceIn counts the media's samples, length the session's
+  const range = (c: { mediaId: string; sourceIn: number; length: number }) => {
+    const mediaRate = engine.get("document").media[c.mediaId]?.sampleRate ?? rate();
+    const inS = c.sourceIn / mediaRate;
+    return { inS, outS: inS + c.length / rate(), mediaRate };
+  };
+
   // The transcripts the agent's word tools read, kept per media as the Transcript tab keeps them
   const transcripts = new Map<string, MediaWord[]>();
   const allWords = async () => {
@@ -371,6 +388,110 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
           ...later.map((x) => ({ type: "move-clip" as const, trackId: t.id, clipId: x.id, start: x.start + delta })),
         ] });
         return { replaced_s: sec(b.end - a.start), inserted_s: out.inserted_s, engine: which, later_clips_moved: later.length };
+      },
+    },
+    // 3.3: what the MCP server reaches, done in the open session: results land on tracks and regions, each an undo step
+    {
+      name: "local_models_status",
+      description: "What can make sound here: the local speech engines and whether each is installed, the dubbing languages installed, and which providers (ElevenLabs, ACE-Step, fal) are ready. Call it before generating and choose an engine that is ready.",
+      input_schema: obj({}),
+      run: async () => {
+        const speech = (await engineJson("/api/providers/local-speech")).engines as { id: string; installed: boolean }[];
+        const dub = (await engineJson("/api/providers/local-dub")) as { languages: { code: string; installed: boolean }[] };
+        const prov = (await engineJson("/api/providers")).providers as { id: string; ready: boolean; needs: string }[];
+        return { local_speech: speech.map((e) => ({ engine: e.id, installed: e.installed })), dubbing_languages: dub.languages.filter((l) => l.installed).map((l) => l.code), providers: prov.map((x) => ({ id: x.id, ready: x.ready, needs: x.needs })) };
+      },
+    },
+    {
+      name: "list_voices",
+      description: "The voices generate_speech accepts for an engine: kokoro (on this machine, once installed) or elevenlabs (needs ELEVENLABS_API_KEY).",
+      input_schema: obj({ engine: { type: "string", enum: ["kokoro", "elevenlabs"] } }, ["engine"]),
+      run: async (i) =>
+        i.engine === "elevenlabs"
+          ? ((await engineJson("/api/providers/elevenlabs/voices")).voices as { voice_id: string; name: string }[]).map((v) => ({ voice: v.voice_id, name: v.name }))
+          : (await engineJson("/api/providers/local-speech/kokoro/voices")).voices,
+    },
+    {
+      name: "generate_speech",
+      description: "Speech from text on a new track at at_seconds (default the playhead): engine kokoro (on this machine) or elevenlabs (a voice_id, needs ELEVENLABS_API_KEY). Returns the new track and clip ids.",
+      input_schema: obj({ text: { type: "string" }, engine: { type: "string", enum: ["kokoro", "elevenlabs"] }, voice: { type: "string", description: "From list_voices; empty for the default" }, at_seconds: { type: "number" } }, ["text"]),
+      run: async (i) => {
+        const media = i.engine === "elevenlabs" ? await postJson("/api/providers/elevenlabs/speech", { text: i.text, voice_id: i.voice ?? "" }) : await postJson("/api/providers/local-speech/kokoro/speak", { text: i.text, voice: i.voice ?? "" });
+        return place(media, at(i.at_seconds));
+      },
+    },
+    {
+      name: "generate_music",
+      description: "Music or a song (lyrics sung when given) on a new track at at_seconds (default the playhead): engine elevenlabs (needs ELEVENLABS_API_KEY) or acestep (ACE-Step's server on this machine). Returns the new track and clip ids.",
+      input_schema: obj({ prompt: { type: "string" }, lyrics: { type: "string" }, seconds: { type: "number" }, engine: { type: "string", enum: ["elevenlabs", "acestep"] }, at_seconds: { type: "number" } }, ["prompt"]),
+      run: async (i) => {
+        const seconds = i.seconds === undefined ? 30 : num(i.seconds, "seconds", 3, 600);
+        const media = i.engine === "acestep" ? await postJson("/api/providers/acestep/generate", { task: "text2music", prompt: i.prompt, lyrics: i.lyrics ?? "", seconds }) : await postJson("/api/providers/elevenlabs/music", { prompt: i.prompt, lyrics: i.lyrics ?? "", seconds });
+        return place(media, at(i.at_seconds));
+      },
+    },
+    {
+      name: "generate_sound_effect",
+      description: "A sound effect from a description on a new track at at_seconds (default the playhead), 0.5 to 30 s, looping when asked (ElevenLabs, needs ELEVENLABS_API_KEY).",
+      input_schema: obj({ description: { type: "string" }, seconds: { type: "number" }, loop: { type: "boolean" }, at_seconds: { type: "number" } }, ["description"]),
+      run: async (i) => place(await postJson("/api/providers/elevenlabs/sound", { text: i.description, duration_s: i.seconds === undefined ? 5 : num(i.seconds, "seconds", 0.5, 30), loop: !!i.loop }), at(i.at_seconds)),
+    },
+    {
+      name: "mark_speech",
+      description: "Marks where people speak in a clip as Speech regions on the timeline (Silero VAD on this machine, under music too). Returns the stretches in session seconds.",
+      input_schema: obj({ track_id: id("track"), clip_id: id("clip") }, ["track_id", "clip_id"]),
+      run: async (i) => {
+        const { c } = clipOf(i.track_id, i.clip_id);
+        const { inS, outS } = range(c);
+        const regions = ((await engineJson(`/api/media/${c.mediaId}/speech`)).regions as { start: number; end: number }[]).map((r) => ({ start: Math.max(r.start, inS), end: Math.min(r.end, outS) })).filter((r) => r.end > r.start);
+        const marks = regions.map((r) => ({ type: "add-region" as const, start: c.start + samples(r.start - inS), end: c.start + samples(r.end - inS), label: "Speech" }));
+        if (marks.length) engine.dispatch({ type: "batch", commands: marks });
+        return { regions: marks.map((m) => ({ start: sec(m.start), end: sec(m.end) })) };
+      },
+    },
+    {
+      name: "separate_clip",
+      description: "Splits a clip into speech, music and ambience on three new tracks under it that add up to it exactly (on this machine); the original track is muted when the clip is alone on it. Returns the three tracks.",
+      input_schema: obj({ track_id: id("track"), clip_id: id("clip") }, ["track_id", "clip_id"]),
+      run: async (i) => {
+        const { t, c } = clipOf(i.track_id, i.clip_id);
+        const { inS, outS } = range(c);
+        const out = await postJson(`/api/media/${c.mediaId}/three-way`, { start: inS, end: outS });
+        const parts = (["speech", "music", "ambience"] as const).map((k) => ({ part: k, ...place(out[k], c.start) }));
+        if (t.clips.length === 1) engine.dispatch({ type: "set-track-mute", trackId: t.id, mute: true });
+        return { parts, original_muted: t.clips.length === 1 };
+      },
+    },
+    {
+      name: "dub_clip",
+      description: "Dubs a clip's speech into another language on a new track under it, each sentence where it was said: engine local (Whisper, Argos Translate and Kokoro on this machine; es, fr, it or pt once installed) or elevenlabs (needs ELEVENLABS_API_KEY; waits for the job).",
+      input_schema: obj({ track_id: id("track"), clip_id: id("clip"), language: { type: "string", description: "es, fr, it or pt" }, engine: { type: "string", enum: ["local", "elevenlabs"] } }, ["track_id", "clip_id", "language"]),
+      run: async (i) => {
+        const { c } = clipOf(i.track_id, i.clip_id);
+        const lang = String(i.language);
+        if (i.engine === "elevenlabs") {
+          const job = await postJson("/api/providers/elevenlabs/dub", { media_id: c.mediaId, target_lang: lang });
+          for (let k = 0; k < 240; k++) {
+            const st = await engineJson(`/api/providers/elevenlabs/dub/${encodeURIComponent(job.job)}?lang=${encodeURIComponent(lang)}`);
+            if (st.status === "dubbed") return place(st.media, c.start);
+            if (st.status === "failed" || st.status === "error") throw new Error(`ElevenLabs could not dub it: ${st.error ?? st.status}`);
+            await new Promise((r) => setTimeout(r, 5000));
+          }
+          throw new Error("ElevenLabs had not finished after 20 minutes");
+        }
+        const { inS, outS } = range(c);
+        const out = await postJson(`/api/providers/local-dub/${encodeURIComponent(lang)}`, { media_id: c.mediaId, start: inS, end: outS });
+        return { ...place(out.media, c.start), sentences: (out.sentences as { start: number; translated?: string }[]).map((x) => ({ at: x.start, translated: x.translated })) };
+      },
+    },
+    {
+      name: "transcribe_with_speakers",
+      description: "A clip's words with who said each and sounds such as laughter, through ElevenLabs Scribe v2 (needs ELEVENLABS_API_KEY); times in the media's seconds. get_transcript is the free, on-machine way to the words alone.",
+      input_schema: obj({ track_id: id("track"), clip_id: id("clip"), speakers: { type: "integer", description: "How many speakers, when known" } }, ["track_id", "clip_id"]),
+      run: async (i) => {
+        const { c } = clipOf(i.track_id, i.clip_id);
+        const out = await postJson("/api/providers/elevenlabs/transcribe", { media_id: c.mediaId, speakers: i.speakers || undefined });
+        return { language: out.language, words: out.words };
       },
     },
   ];

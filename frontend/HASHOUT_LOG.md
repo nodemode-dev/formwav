@@ -109,6 +109,13 @@ frontend/
 
 ## index.html {#index-html}
 
+### The in-app agent does what the MCP server does, in the open session
+- refers-to: frontend/src/ui/agent-pane.ts (local_models_status, list_voices, generate_speech, generate_music, generate_sound_effect, mark_speech, separate_clip, dub_clip, transcribe_with_speakers; place, range, postJson); CLAUDE.md; AGENTS.md
+- kind: explainer
+- logged: v2.12.4 (in progress) · 2026-10-06
+
+PLAN_v11's 3.3. The MCP server works on media and saved sessions from outside; the Agent column works on the open session through the same commands as the interface. Nine tools give it what the server gained, each placing its result in the session as one undo step: the models' status and the voices; speech, music and sound effects on a new track at the playhead or a given time; a clip's speech as Speech regions; a clip split into speech, music and ambience on three tracks under it (its track muted when it was alone there); a clip dubbed into es, fr, it or pt under it (here, or through ElevenLabs with its job polled); and Scribe's words with speakers. Each tool that makes sound reports the new track and clip, so the next tool can work on them, and clip spans are read in the media's own samples (sourceIn) and the session's (length). Checked with a scripted model in Chromium, each step built from the last result: the status (Kokoro installed), a Kokoro sentence on a new track, its Speech region 0.128 to 2.848 s, its three parts with the original muted, its Spanish dub, and ElevenLabs music failing with the key's instruction; five tracks added, one undo taking back only the dub, no page error. The agent's tools: 30.
+
 ### Settings > Agents moved what was below it as its clients arrived
 - refers-to: frontend/src/styles/workspace.css (.fw-agents-list)
 - kind: fix
