@@ -676,6 +676,7 @@ fn main() {
             Ok(())
         }
         (Some("ara-check"), Some(path)) => ara::check(std::path::Path::new(path)).map(|json| println!("{json}")),
+        (Some("ara-analyze"), Some(path)) if args.len() >= 4 => wav::read(&args[3]).and_then(|input| ara::analyze(std::path::Path::new(path), input)).map(|json| println!("{json}")),
         (Some("scan"), _) => {
             let dirs: Vec<std::path::PathBuf> = if args.len() > 2 { args[2..].iter().map(std::path::PathBuf::from).collect() } else { offline::default_dirs() };
             println!("[{}]", offline::scan(&dirs).join(",\n "));

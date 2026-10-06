@@ -108,6 +108,328 @@ unsafe fn factory_json(f: &ARAFactory, plugin_id: &str) -> String {
     )
 }
 
+// ---- The host side of an ARA document (the SDK's MiniHost.c, ported): what the plug-in calls back into ----
+
+/// The audio a document's one audio source stands for, read by the plug-in through the host's audio readers.
+struct Source {
+    channels: Vec<Vec<f32>>,
+}
+
+struct Reader {
+    source: *const Source,
+    use64: bool,
+}
+
+static PROGRESS_EVENTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static CONTENT_EVENTS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+unsafe extern "C" fn create_audio_reader(_: ARAAudioAccessControllerHostRef, source: ARAAudioSourceHostRef, use64: ARABool) -> ARAAudioReaderHostRef {
+    Box::into_raw(Box::new(Reader { source: source as *const Source, use64: use64 != 0 })) as ARAAudioReaderHostRef
+}
+
+/// Copies the asked range into the plug-in's buffers, one per channel, in 32- or 64-bit floats as it asked; what lies
+/// outside the audio reads as silence.
+unsafe extern "C" fn read_audio_samples(_: ARAAudioAccessControllerHostRef, reader: ARAAudioReaderHostRef, position: ARASamplePosition, count: ARASampleCount, buffers: *const *mut core::ffi::c_void) -> ARABool {
+    let reader = &*(reader as *const Reader);
+    let source = &*reader.source;
+    for (ch, data) in source.channels.iter().enumerate() {
+        let out = *buffers.add(ch);
+        for i in 0..count.max(0) as usize {
+            let at = position + i as i64;
+            let v = if at >= 0 && (at as usize) < data.len() { data[at as usize] } else { 0.0 };
+            if reader.use64 {
+                *(out as *mut f64).add(i) = f64::from(v);
+            } else {
+                *(out as *mut f32).add(i) = v;
+            }
+        }
+    }
+    1
+}
+
+unsafe extern "C" fn destroy_audio_reader(_: ARAAudioAccessControllerHostRef, reader: ARAAudioReaderHostRef) {
+    drop(Box::from_raw(reader as *mut Reader));
+}
+
+unsafe extern "C" fn get_archive_size(_: ARAArchivingControllerHostRef, _: ARAArchiveReaderHostRef) -> ARASize {
+    0
+}
+unsafe extern "C" fn read_bytes_from_archive(_: ARAArchivingControllerHostRef, _: ARAArchiveReaderHostRef, _: ARASize, _: ARASize, _: *mut ARAByte) -> ARABool {
+    0
+}
+unsafe extern "C" fn write_bytes_to_archive(_: ARAArchivingControllerHostRef, _: ARAArchiveWriterHostRef, _: ARASize, _: ARASize, _: *const ARAByte) -> ARABool {
+    0
+}
+unsafe extern "C" fn archiving_progress(_: ARAArchivingControllerHostRef, _: f32) {}
+unsafe extern "C" fn get_document_archive_id(_: ARAArchivingControllerHostRef, _: ARAArchiveReaderHostRef) -> ARAPersistentID {
+    std::ptr::null()
+}
+
+// The host offers no musical or audio content of its own (no tempo, signatures or notes): every query says so.
+unsafe extern "C" fn musical_context_content_available(_: ARAContentAccessControllerHostRef, _: ARAMusicalContextHostRef, _: ARAContentType) -> ARABool {
+    0
+}
+unsafe extern "C" fn musical_context_content_grade(_: ARAContentAccessControllerHostRef, _: ARAMusicalContextHostRef, _: ARAContentType) -> ARAContentGrade {
+    kARAContentGradeInitial as ARAContentGrade
+}
+unsafe extern "C" fn musical_context_content_reader(_: ARAContentAccessControllerHostRef, _: ARAMusicalContextHostRef, _: ARAContentType, _: *const ARAContentTimeRange) -> ARAContentReaderHostRef {
+    std::ptr::null_mut()
+}
+unsafe extern "C" fn audio_source_content_available(_: ARAContentAccessControllerHostRef, _: ARAAudioSourceHostRef, _: ARAContentType) -> ARABool {
+    0
+}
+unsafe extern "C" fn audio_source_content_grade(_: ARAContentAccessControllerHostRef, _: ARAAudioSourceHostRef, _: ARAContentType) -> ARAContentGrade {
+    kARAContentGradeInitial as ARAContentGrade
+}
+unsafe extern "C" fn audio_source_content_reader(_: ARAContentAccessControllerHostRef, _: ARAAudioSourceHostRef, _: ARAContentType, _: *const ARAContentTimeRange) -> ARAContentReaderHostRef {
+    std::ptr::null_mut()
+}
+unsafe extern "C" fn content_reader_event_count(_: ARAContentAccessControllerHostRef, _: ARAContentReaderHostRef) -> ARAInt32 {
+    0
+}
+unsafe extern "C" fn content_reader_data(_: ARAContentAccessControllerHostRef, _: ARAContentReaderHostRef, _: ARAInt32) -> *const core::ffi::c_void {
+    std::ptr::null()
+}
+unsafe extern "C" fn destroy_content_reader(_: ARAContentAccessControllerHostRef, _: ARAContentReaderHostRef) {}
+
+unsafe extern "C" fn analysis_progress(_: ARAModelUpdateControllerHostRef, _: ARAAudioSourceHostRef, _: ARAAnalysisProgressState, _: f32) {
+    PROGRESS_EVENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+unsafe extern "C" fn audio_source_content_changed(_: ARAModelUpdateControllerHostRef, _: ARAAudioSourceHostRef, _: *const ARAContentTimeRange, _: ARAContentUpdateFlags) {
+    CONTENT_EVENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+unsafe extern "C" fn audio_modification_content_changed(_: ARAModelUpdateControllerHostRef, _: ARAAudioModificationHostRef, _: *const ARAContentTimeRange, _: ARAContentUpdateFlags) {}
+unsafe extern "C" fn playback_region_content_changed(_: ARAModelUpdateControllerHostRef, _: ARAPlaybackRegionHostRef, _: *const ARAContentTimeRange, _: ARAContentUpdateFlags) {}
+unsafe extern "C" fn document_data_changed(_: ARAModelUpdateControllerHostRef) {}
+
+/// One plug-in's ARA factory opened from its CLAP entry; the library stays loaded while this lives.
+struct Opened {
+    /// Held, not read: the plug-in's code stays loaded while its factory and document are in use.
+    _lib: libloading::Library,
+    deinit: Option<unsafe extern "C" fn()>,
+    factory: *const ARAFactory,
+    plugin_id: String,
+}
+
+impl Drop for Opened {
+    fn drop(&mut self) {
+        if let Some(deinit) = self.deinit {
+            unsafe { deinit() };
+        }
+    }
+}
+
+unsafe fn open(path: &Path) -> Result<Opened, String> {
+    let lib = libloading::Library::new(path).map_err(|e| format!("cannot load {}: {e}", path.display()))?;
+    let entry: libloading::Symbol<*const clap_plugin_entry> = lib.get(b"clap_entry\0").map_err(|e| format!("no clap_entry: {e}"))?;
+    let entry = &**entry;
+    let cpath = CString::new(path.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
+    if !(entry.init.ok_or("entry without init")?)(cpath.as_ptr()) {
+        return Err("the plug-in's entry refused to initialise".into());
+    }
+    let deinit = entry.deinit;
+    let get = entry.get_factory.ok_or("entry without get_factory")?;
+    let mut ara = get(CLAP_EXT_ARA_FACTORY.as_ptr()) as *const clap_ara_factory;
+    if ara.is_null() {
+        ara = get(CLAP_EXT_ARA_FACTORY_COMPAT.as_ptr()) as *const clap_ara_factory;
+    }
+    let factory = if ara.is_null() { std::ptr::null() } else { (*ara).get_ara_factory.map(|g| g(ara, 0)).unwrap_or(std::ptr::null()) };
+    let plugin_id = if ara.is_null() { String::new() } else { (*ara).get_plugin_id.map(|g| text(g(ara, 0))).unwrap_or_default() };
+    let opened = Opened { _lib: lib, deinit, factory, plugin_id };
+    if opened.factory.is_null() {
+        return Err("the plug-in offers no ARA factory".into());
+    }
+    Ok(opened)
+}
+
+/// `fwhost ara-analyze <plugin.clap> <in.wav>`: an ARA document built round the file (a musical context, a region
+/// sequence, the file as an audio source, an audio modification and a playback region, as the SDK's MiniHost builds
+/// it), its samples opened to the plug-in, note analysis requested and waited for (model updates delivered while it
+/// runs), and the notes it found read back, as JSON.
+pub fn analyze(path: &Path, input: crate::wav::Audio) -> Result<String, String> {
+    unsafe {
+        let opened = open(path)?;
+        let f = &*opened.factory;
+        let generation = kARAAPIGeneration_2_0_Final as ARAAPIGeneration;
+        if { f.lowestSupportedApiGeneration } > generation || { f.highestSupportedApiGeneration } < generation {
+            return Err("the plug-in does not speak ARA 2.0".into());
+        }
+        let config = ARAInterfaceConfiguration { structSize: std::mem::size_of::<ARAInterfaceConfiguration>() as ARASize, desiredApiGeneration: generation, assertFunctionAddress: std::ptr::null_mut() };
+        (f.initializeARAWithConfiguration.ok_or("no initializeARAWithConfiguration")?)(&config);
+
+        let audio_access = ARAAudioAccessControllerInterface {
+            structSize: std::mem::size_of::<ARAAudioAccessControllerInterface>() as ARASize,
+            createAudioReaderForSource: Some(create_audio_reader),
+            readAudioSamples: Some(read_audio_samples),
+            destroyAudioReader: Some(destroy_audio_reader),
+        };
+        let archiving = ARAArchivingControllerInterface {
+            structSize: std::mem::size_of::<ARAArchivingControllerInterface>() as ARASize,
+            getArchiveSize: Some(get_archive_size),
+            readBytesFromArchive: Some(read_bytes_from_archive),
+            writeBytesToArchive: Some(write_bytes_to_archive),
+            notifyDocumentArchivingProgress: Some(archiving_progress),
+            notifyDocumentUnarchivingProgress: Some(archiving_progress),
+            getDocumentArchiveID: Some(get_document_archive_id),
+        };
+        let content_access = ARAContentAccessControllerInterface {
+            structSize: std::mem::size_of::<ARAContentAccessControllerInterface>() as ARASize,
+            isMusicalContextContentAvailable: Some(musical_context_content_available),
+            getMusicalContextContentGrade: Some(musical_context_content_grade),
+            createMusicalContextContentReader: Some(musical_context_content_reader),
+            isAudioSourceContentAvailable: Some(audio_source_content_available),
+            getAudioSourceContentGrade: Some(audio_source_content_grade),
+            createAudioSourceContentReader: Some(audio_source_content_reader),
+            getContentReaderEventCount: Some(content_reader_event_count),
+            getContentReaderDataForEvent: Some(content_reader_data),
+            destroyContentReader: Some(destroy_content_reader),
+        };
+        let model_update = ARAModelUpdateControllerInterface {
+            structSize: std::mem::size_of::<ARAModelUpdateControllerInterface>() as ARASize,
+            notifyAudioSourceAnalysisProgress: Some(analysis_progress),
+            notifyAudioSourceContentChanged: Some(audio_source_content_changed),
+            notifyAudioModificationContentChanged: Some(audio_modification_content_changed),
+            notifyPlaybackRegionContentChanged: Some(playback_region_content_changed),
+            notifyDocumentDataChanged: Some(document_data_changed),
+        };
+        // The host refs are opaque to the plug-in; the controllers need none of their own, so they are a token
+        let token = 1usize as *mut core::ffi::c_void;
+        let host = ARADocumentControllerHostInstance {
+            structSize: std::mem::size_of::<ARADocumentControllerHostInstance>() as ARASize,
+            audioAccessControllerHostRef: token as _,
+            audioAccessControllerInterface: &audio_access,
+            archivingControllerHostRef: token as _,
+            archivingControllerInterface: &archiving,
+            contentAccessControllerHostRef: token as _,
+            contentAccessControllerInterface: &content_access,
+            modelUpdateControllerHostRef: token as _,
+            modelUpdateControllerInterface: &model_update,
+            playbackControllerHostRef: std::ptr::null_mut(),
+            playbackControllerInterface: std::ptr::null(),
+        };
+        let doc_props = ARADocumentProperties { structSize: std::mem::size_of::<ARADocumentProperties>() as ARASize, name: c"formwav".as_ptr() };
+        let instance = (f.createDocumentControllerWithDocument.ok_or("no createDocumentControllerWithDocument")?)(&host, &doc_props);
+        if instance.is_null() {
+            return Err("the plug-in made no document controller".into());
+        }
+        let ctrl = { (*instance).documentControllerRef };
+        let dc = &*{ (*instance).documentControllerInterface };
+        macro_rules! call {
+            ($name:ident $(, $arg:expr)*) => { ({ dc.$name }.ok_or(concat!("no ", stringify!($name)))?)(ctrl $(, $arg)*) };
+        }
+
+        let frames = input.channels.first().map(|c| c.len()).unwrap_or(0);
+        let source = Source { channels: input.channels };
+        let channel_count = source.channels.len();
+        call!(beginEditing);
+        let context_props = ARAMusicalContextProperties { structSize: std::mem::size_of::<ARAMusicalContextProperties>() as ARASize, name: std::ptr::null(), orderIndex: 0, color: std::ptr::null() };
+        let context = call!(createMusicalContext, token as _, &context_props);
+        let sequence_props = ARARegionSequenceProperties { structSize: std::mem::size_of::<ARARegionSequenceProperties>() as ARASize, name: c"Track".as_ptr(), orderIndex: 0, musicalContextRef: context, color: std::ptr::null() };
+        let sequence = call!(createRegionSequence, token as _, &sequence_props);
+        let source_props = ARAAudioSourceProperties {
+            structSize: std::mem::size_of::<ARAAudioSourceProperties>() as ARASize,
+            name: c"Clip".as_ptr(),
+            persistentID: c"formwav.clip.1".as_ptr(),
+            sampleCount: frames as ARASampleCount,
+            sampleRate: f64::from(input.rate),
+            channelCount: channel_count as ARAChannelCount,
+            merits64BitSamples: 0,
+            channelArrangementDataType: 0,
+            channelArrangement: std::ptr::null(),
+        };
+        let audio_source = call!(createAudioSource, &source as *const Source as ARAAudioSourceHostRef, &source_props);
+        let modification_props = ARAAudioModificationProperties { structSize: std::mem::size_of::<ARAAudioModificationProperties>() as ARASize, name: c"Clip".as_ptr(), persistentID: c"formwav.clip.1.edit".as_ptr() };
+        let modification = call!(createAudioModification, audio_source, token as _, &modification_props);
+        let seconds = frames as f64 / f64::from(input.rate.max(1));
+        let region_props = ARAPlaybackRegionProperties {
+            structSize: std::mem::size_of::<ARAPlaybackRegionProperties>() as ARASize,
+            transformationFlags: kARAPlaybackTransformationNoChanges as ARAPlaybackTransformationFlags,
+            startInModificationTime: 0.0,
+            durationInModificationTime: seconds,
+            startInPlaybackTime: 0.0,
+            durationInPlaybackTime: seconds,
+            musicalContextRef: context,
+            regionSequenceRef: sequence,
+            name: c"Clip".as_ptr(),
+            color: std::ptr::null(),
+        };
+        let region = call!(createPlaybackRegion, modification, token as _, &region_props);
+        call!(endEditing);
+        call!(enableAudioSourceSamplesAccess, audio_source, 1);
+
+        PROGRESS_EVENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+        CONTENT_EVENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+        let notes_type = kARAContentTypeNotes as ARAContentType;
+        call!(requestAudioSourceContentAnalysis, audio_source, 1, &notes_type);
+        let started = std::time::Instant::now();
+        let mut finished = false;
+        while started.elapsed().as_secs_f64() < 120.0 {
+            call!(notifyModelUpdates);
+            if call!(isAudioSourceContentAnalysisIncomplete, audio_source, notes_type) == 0 {
+                finished = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        call!(notifyModelUpdates);
+        let analysis_seconds = started.elapsed().as_secs_f64();
+
+        let mut notes = Vec::new();
+        let available = call!(isAudioSourceContentAvailable, audio_source, notes_type) != 0;
+        if available {
+            let reader = call!(createAudioSourceContentReader, audio_source, notes_type, std::ptr::null());
+            if !reader.is_null() {
+                let count = call!(getContentReaderEventCount, reader);
+                for i in 0..count {
+                    let p = call!(getContentReaderDataForEvent, reader, i) as *const ARAContentNote;
+                    if p.is_null() {
+                        continue;
+                    }
+                    let n = std::ptr::read_unaligned(p);
+                    notes.push(format!(
+                        "{{\"frequency\": {}, \"pitch\": {}, \"volume\": {:.6}, \"start_s\": {:.6}, \"duration_s\": {:.6}, \"signal_s\": {:.6}}}",
+                        { n.frequency },
+                        { n.pitchNumber },
+                        { n.volume },
+                        { n.startPosition },
+                        { n.noteDuration },
+                        { n.signalDuration }
+                    ));
+                }
+                call!(destroyContentReader, reader);
+            }
+        }
+
+        call!(enableAudioSourceSamplesAccess, audio_source, 0);
+        call!(beginEditing);
+        call!(destroyPlaybackRegion, region);
+        call!(destroyAudioModification, modification);
+        call!(destroyAudioSource, audio_source);
+        call!(destroyRegionSequence, sequence);
+        call!(destroyMusicalContext, context);
+        call!(endEditing);
+        call!(destroyDocumentController);
+        if let Some(uninit) = f.uninitializeARA {
+            uninit();
+        }
+        let plugin_id = opened.plugin_id.clone();
+        drop(opened);
+        Ok(format!(
+            "{{\"plugin_id\": \"{}\", \"frames\": {}, \"rate\": {}, \"channels\": {}, \"analysis\": {{\"finished\": {}, \"seconds\": {:.3}, \"progress_events\": {}, \"content_events\": {}, \"notes_available\": {}, \"notes\": [{}]}}}}",
+            esc(&plugin_id),
+            frames,
+            input.rate,
+            channel_count,
+            finished,
+            analysis_seconds,
+            PROGRESS_EVENTS.load(std::sync::atomic::Ordering::Relaxed),
+            CONTENT_EVENTS.load(std::sync::atomic::Ordering::Relaxed),
+            available,
+            notes.join(", ")
+        ))
+    }
+}
+
 /// `fwhost ara-check <plugin.clap>`: the plug-in's ARA factories as JSON (`ara` false when it offers none).
 pub fn check(path: &Path) -> Result<String, String> {
     unsafe {
