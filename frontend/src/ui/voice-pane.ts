@@ -20,7 +20,7 @@ const LANGUAGES = ["English", "Chinese", "Japanese", "Korean", "German", "French
 const modelLabel = (id: string) => id.replace(/^Qwen\/Qwen3-TTS-12Hz-/, "Qwen3-TTS ").replace(/-/g, " ");
 
 const BODY = `
-<p class="fw-empty-note fw-voice-state"></p>
+<p class="fw-empty-note fw-voice-state">Checking the voice engine…</p>
 <section class="fw-insp-section">
   <div class="fw-insp-head">Model</div>
   <label class="fw-field"><span>Checkpoint</span><select data-v="model"></select><button type="button" class="fw-ibtn" data-v="load">Load</button></label>

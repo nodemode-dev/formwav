@@ -1748,3 +1748,10 @@ The engine lists the installed ARA plug-ins (each CLAP plug-in its scan found as
 - logged: v2.10.6 (in progress) · 2026-10-06
 
 The release gate now measures layout shifts across its whole interface run, and found three entries after the browser's tabs (0.0244, 0.0244, 0.0558) that its own labels had wrongly put on the tab switch: traced with each action labelled and the moving elements recorded, the tab switches made none, and two later steps did. An agent run moved its conversation 34 px down and back (0.0042 and 0.0244): v2.9.0 had let the agent column's header wrap, so the state text that appears while the agent works (Thinking...) pushed its buttons onto a second line; the header now stays one line, the state text ellipsed between the title and the buttons (fitting the 284 px column at 45 px, both buttons whole). Opening the docked Mixer moved it from nowhere to its place (0.0323): v2.10.0's rule giving the docked mixer display: flex overrode its hidden flag, so a hidden mixer sat in the layout at zero size; a hidden mixer is now out of the layout. Re-run under 4x throttling, an agent run, the Mixer opened and the Clip tab returned to made no layout-shift entry; no page error.
+
+### The Voice tab no longer shifts its sections as it loads
+- refers-to: frontend/src/ui/voice-pane.ts (BODY's state line); src/styles/frame.css (.fw-voice-state)
+- kind: explainer
+- logged: v2.10.7 (in progress) · 2026-10-06
+
+Recorded at v2.10.6 as an inherited fault: opening the browser's Voice tab dropped its sections about 126 px (0.0146) as the engine's status message filled an empty paragraph above them. The paragraph now starts with a line of its own (Checking the voice engine...) and holds a fixed height that fits the engine's longest message whole (144 px, the message measured at 138), scrolling one longer. Opened twice under 4x throttling at 1288 by 683: no layout-shift entry, the message fitting its box (144 of 144 px); the design audit clean. The BUILD_NOTES entry, its criterion met, is removed.

@@ -265,6 +265,7 @@
 
 /* The browser's rows and tabs, after the approved target */
 .fw-pane-media .fw-media-list { flex: none; block-size: 196px; overflow-y: auto; }
+.fw-voice-state { box-sizing: border-box; block-size: 12em; margin-block-end: 8px; overflow-y: auto; }
 .fw-media-list .fw-media-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 6px; row-gap: 1px; padding: 7px 8px; border-radius: 8px; }
 .fw-media-list .fw-media-item:hover { background: var(--surface-2); }
 .fw-media-list .fw-media-name { grid-area: 1 / 1; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
