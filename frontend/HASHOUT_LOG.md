@@ -109,6 +109,13 @@ frontend/
 
 ## index.html {#index-html}
 
+### Recording through native capture: tracks on an interface's channels, each take on its own track
+- refers-to: frontend/src/ui/inputs.ts (native interfaces in the list); src/audio/recorder.ts (startNativeRecordings); src/ui/record.ts; src/ui/lanes.ts (the arm button's title)
+- kind: explainer
+- logged: v2.10.8 (in progress) · 2026-10-06
+
+The input list now offers the engine's native interfaces beside the browser's, labelled with their width and that they record through the engine (ALSA's null device, which is no input, left out). Armed tracks whose input is such an interface record through one engine take per interface, each with the channels it names, and each gets a Recording of the usual shape, so the take is placed as a browser take is (latency, punch, loops); the engine records one interface at a time. Checked in Chromium against the virtual eight-channel interface (verification/native_capture), the engine and page started with it defined: two tracks set to the interface's channels 1 and 2 and armed (a click, then a Shift-click), recorded and stopped: each track's take carried its own channel's tone (the 200 and 300 Hz channels, read as 187.5 and 281.2 Hz through that unclocked device), with the clicks on the same frames, the same length and the same start, and the notice naming both takes; no page error. Found on the way: arming several tracks takes Shift, which nothing said; the arm button's title now does. The harness's own select helper had picked the wrong option once, which set both tracks to one channel; set as the page sets a select, each kept its own.
+
 ### Track inputs saved with the session, and why a browser cannot record more than two channels of one interface
 - refers-to: frontend/src/engine/document.ts (TrackInput, Track.input, set-track-input); src/ui/inputs.ts (bindInputs, the maps rebuilt from the document); src/main.ts
 - kind: explainer

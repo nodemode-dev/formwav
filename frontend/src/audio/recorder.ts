@@ -190,3 +190,56 @@ export async function startRecording(player: Player, startPosition: number, onLe
     throw err;
   }
 }
+
+
+/**
+ * Native capture (the engine's /api/audio/record routes): armed tracks whose input is an interface the engine captures
+ * in full, one engine take per interface (the engine records one interface at a time). Each track gets a Recording of
+ * the usual shape: stop() ends the engine's take once and hands back that track's channels as an ordinary Take, so
+ * placing it (latency, punch, loops) is the same as for a browser take.
+ */
+export async function startNativeRecordings(
+  player: Player,
+  startPosition: number,
+  wants: { trackId: string; device: string; channels: number[]; name: string; width?: number }[],
+  playAlong: boolean,
+  rate: number,
+): Promise<Map<string, Recording>> {
+  const out = new Map<string, Recording>();
+  const byDevice = new Map<string, typeof wants>();
+  for (const w of wants) {
+    const list = byDevice.get(w.device) ?? [];
+    list.push(w);
+    byDevice.set(w.device, list);
+  }
+  for (const [device, list] of byDevice) {
+    const res = await fetch("/api/audio/record/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device, rate, deviceChannels: list[0].width ?? null, tracks: list.map((w) => ({ trackId: w.trackId, channels: w.channels, name: w.name })) }),
+    });
+    const started = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof started.detail === "string" ? started.detail : `the engine answered ${res.status}`);
+    let stopping: Promise<Map<string, string>> | null = null;
+    const stopOnce = () =>
+      (stopping ??= fetch("/api/audio/record/stop", { method: "POST" })
+        .then((r) => r.json())
+        .then((d: { takes: { trackId: string; media: { id: string } }[] }) => new Map(d.takes.map((t) => [t.trackId, t.media.id]))));
+    for (const w of list) {
+      out.set(w.trackId, {
+        startPosition,
+        setMonitor: () => undefined, // the interface's own monitoring; the engine does not loop input back
+        stop: async () => {
+          const id = (await stopOnce()).get(w.trackId);
+          if (!id) return { sampleRate: rate, channels: [], frames: 0 };
+          const ctx = await player.context();
+          const audio = await ctx.decodeAudioData(await (await fetch(`/api/media/${id}/audio`)).arrayBuffer());
+          const channels = Array.from({ length: audio.numberOfChannels }, (_, c) => audio.getChannelData(c));
+          return { sampleRate: audio.sampleRate, channels, frames: audio.length };
+        },
+      });
+    }
+  }
+  if (playAlong) await player.play(true);
+  return out;
+}

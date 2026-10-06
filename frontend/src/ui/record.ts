@@ -1,7 +1,7 @@
 import type { Engine, TransportState } from "../engine";
 import type { Player } from "../audio/player";
-import { encodeWav, startMonitoring, startRecording, type Recording, type Take } from "../audio/recorder";
-import { onMonitorChanged, trackChannels, trackInput, trackMonitor } from "./inputs";
+import { encodeWav, startMonitoring, startRecording, type Recording, type Take, startNativeRecordings } from "../audio/recorder";
+import { onMonitorChanged, trackChannels, trackInput, trackMonitor, inputDevices } from "./inputs";
 import { importFile } from "../io/media-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { addRecordingTrack, armedTrack, armedTracks, recordingTrack, setRecordingTrack } from "./arm";
@@ -180,13 +180,29 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       if (rollFrom !== position) player.seek(rollFrom);
       lastPosition = rollFrom;
       stopPreview();
-      active = await startRecording(player, rollFrom, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false, true, armed ? trackChannels(armed.id) : null);
+      // Tracks on an interface the engine captures in full (native inputs) record through the engine, one take per
+      // interface; the rest through the browser as before
+      const natives = armedTracks().filter((id) => trackInput(id).startsWith("native:"));
+      const nativeRecs = natives.length
+        ? await startNativeRecordings(
+            player,
+            rollFrom,
+            natives.map((id) => {
+              const device = trackInput(id).slice("native:".length);
+              return { trackId: id, device, channels: trackChannels(id) ?? [0], name: doc.tracks.find((t) => t.id === id)?.name ?? "", width: inputDevices().find((d) => d.id === trackInput(id))?.channels };
+            }),
+            !!armed && natives.includes(armed.id),
+            doc.sampleRate,
+          )
+        : new Map<string, Recording>();
+      const primaryNative = armed ? nativeRecs.get(armed.id) : undefined;
+      active = primaryNative ?? await startRecording(player, rollFrom, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false, true, armed ? trackChannels(armed.id) : null);
       const missed: string[] = [];
       for (const id of armedTracks().slice(1)) {
         const track = doc.tracks.find((t) => t.id === id);
         if (!track) continue;
         try {
-          extras.push({ trackId: id, rec: await startRecording(player, rollFrom, laneLevel(id), trackInput(id), trackMonitor(id), false, trackChannels(id)) });
+          extras.push({ trackId: id, rec: nativeRecs.get(id) ?? await startRecording(player, rollFrom, laneLevel(id), trackInput(id), trackMonitor(id), false, trackChannels(id)) });
           addRecordingTrack(id);
         } catch {
           missed.push(track.name);

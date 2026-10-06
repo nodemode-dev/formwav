@@ -1,5 +1,6 @@
 import type { Engine } from "../engine";
-export type InputDevice = { id: string; label: string };
+/** A browser input, or (native) an interface the engine captures in full: a browser takes at most two channels of one. */
+export type InputDevice = { id: string; label: string; channels?: number; native?: boolean };
 
 const chosen = new Map<string, string>();
 let devices: InputDevice[] = [];
@@ -107,9 +108,18 @@ export async function refreshInputs(askPermission = false): Promise<InputDevice[
   }
   const all = await navigator.mediaDevices.enumerateDevices();
   let n = 0;
-  const next = all
+  const next: InputDevice[] = all
     .filter((d) => d.kind === "audioinput" && d.deviceId !== "default" && d.deviceId !== "communications")
     .map((d) => ({ id: d.deviceId, label: d.label || `Input ${++n}` }));
+  try {
+    const listed = (await (await fetch("/api/audio/inputs")).json()) as { native: boolean; inputs: { name: string; channels: number }[] };
+    for (const i of listed.native ? listed.inputs : []) {
+      if (i.name.startsWith("Discard all samples")) continue; // ALSA's null device is no input
+      next.push({ id: `native:${i.name}`, label: `${i.name} · ${i.channels} in, through the engine`, channels: i.channels, native: true });
+    }
+  } catch {
+    /* an engine without native capture, or away: browser inputs only */
+  }
   const sig = next.map((d) => `${d.id}|${d.label}`).join("\n");
   if (sig !== signature) {
     devices = next;
