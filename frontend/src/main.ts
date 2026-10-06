@@ -55,6 +55,7 @@ import { mountCloud } from "./ui/cloud";
 import { bindInputs } from "./ui/inputs";
 import { mountRoom } from "./ui/room";
 import { mountShare } from "./ui/share";
+import { mountAgents } from "./ui/agents";
 import { Player, type OutputChoice } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
 import { applyTheme } from "./vendor/formvis/themes";
@@ -151,6 +152,7 @@ if (host) {
   mountCloud(host, engine);
   mountRoom(host, engine);
   mountShare(host, engine);
+  mountAgents(host);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
 activateAll(engine);

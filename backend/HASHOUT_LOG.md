@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### Settings > Agents: formwav added to Claude Code, Codex, Cursor or Claude Desktop in one click
+- refers-to: backend/app/routers/agents.py; backend/app/main.py; frontend/src/ui/agents.ts; src/main.ts; src/styles/workspace.css (.fw-agents-*); .claude/skills/formwav-harness/sub-skills/setup/SUB-SKILL.md; sidecar verification/verify_agents.py
+- kind: explainer
+- logged: v2.12.3 (in progress) · 2026-10-06
+
+PLAN_v11's 3.2, ported from formcut's agent_connect.py (the same author's). The engine answers with the command an MCP client runs for this copy of formwav (backend/formwav_mcp/serve; on Windows the server's Python with the module and PYTHONPATH) and each client's exact text and file, with whether formwav is in it already; it adds formwav in one click to Claude Code (through claude mcp add, when claude is installed), Codex, Cursor and Claude Desktop. Where formcut wrote Codex's file and showed the rest, formwav also merges into Cursor's and Claude Desktop's JSON, keeping every other server, leaving the previous file as a backup, and refusing a file that is not valid rather than overwriting it; a request through the network listener is refused, these being the person's own files. Checked against a scratch home folder: six clients shown and the command present; Codex's TOML still valid with its setting and its other server kept, a second add not duplicating, a backup left; Cursor's GitHub server kept beside formwav; Claude Desktop's file made; a broken file refused and left byte for byte; Claude Code without claude answered plainly; a paired device refused; and the command Cursor's written file names started by the MCP SDK's client, formwav_status answering. In Chromium (a scratch engine whose home is temporary): Settings > Agents lists the six, three Add buttons here (Claude Code's waits for claude), Copy puts formwav's entry on the clipboard, Add to Cursor writes it and the row reads formwav added, no layout shift, no page error, the real home untouched. The harness skill's setup sub-skill now names this path first.
+
 ### The formwav-harness skill, CLAUDE.md and AGENTS.md
 - refers-to: .claude/skills/formwav-harness (SKILL.md, five sub-skills, references and checklists, EVALS.json); CLAUDE.md; AGENTS.md; README.md (Connect an agent); sidecar harness/ (the tools-reference generator, the trigger phrases, dist/formwav-harness.skill)
 - kind: explainer
