@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.config import cors_origins
 from .core.security import LocalOnly
 from .core.version import VERSION
-from .routers import agent, health, media, midi, native_audio, presets, projects, providers, render, terminal
+from .routers import agent, cloud, health, media, midi, native_audio, presets, projects, providers, render, terminal
 
 app = FastAPI(title="formwav engine", version=VERSION)
 app.add_middleware(
@@ -27,6 +27,7 @@ app.include_router(native_audio.router)
 app.include_router(midi.router)
 app.include_router(agent.router, prefix="/api")
 app.include_router(providers.router, prefix="/api")
+app.include_router(cloud.router, prefix="/api")  # cloud projects: Google Drive and Dropbox, ported from formcut
 
 # formwave's generative voice (app/voice): optional, as it needs numpy and soundfile to import and torch and the Qwen
 # packages to load a model. Its runtime module goes first so its MPS settings apply before torch loads.
