@@ -7,6 +7,8 @@ export interface MediaRef {
   format: string;
   /** AP-02: present when this audio was imported from a video, the kept video's file suffix, to write audio back. */
   video?: string;
+  /** DS-14: a catalogue recording's credit (title, author, licence and source), kept with the session. */
+  credit?: string;
 }
 
 /** Fade shape names and the core's codes for them (native/formwav-dsp/src/render.rs `fade_curve`). */

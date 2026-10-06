@@ -266,6 +266,17 @@
 /* The browser's rows and tabs, after the approved target */
 .fw-pane-media .fw-media-list { flex: none; block-size: 196px; overflow-y: auto; }
 .fw-voice-state { box-sizing: border-box; block-size: 12em; margin-block-end: 8px; overflow-y: auto; }
+.fw-cat-head { margin-block-start: 12px; }
+.fw-cat-search { display: flex; gap: 6px; }
+.fw-cat-search input { flex: 1 1 auto; min-inline-size: 0; block-size: 28px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-0); color: var(--text-primary); font: inherit; font-size: var(--fs-12); }
+.fw-cat-results { box-sizing: border-box; block-size: 176px; margin: 6px 0 0; padding: 0; overflow-y: auto; list-style: none; }
+.fw-cat-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "title play add" "meta play add"; align-items: center; column-gap: 4px; padding: 5px 6px; border-radius: 7px; }
+.fw-cat-item:hover { background: var(--surface-2); }
+.fw-cat-title { grid-area: title; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-12); font-weight: 600; }
+.fw-cat-meta { grid-area: meta; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-11); color: var(--text-muted); }
+.fw-cat-item [data-c="play"] { grid-area: play; }
+.fw-cat-item [data-c="add"] { grid-area: add; }
+.fw-library .fw-cat-note { box-sizing: border-box; block-size: 2.9em; overflow: hidden; }
 .fw-media-list .fw-media-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 6px; row-gap: 1px; padding: 7px 8px; border-radius: 8px; }
 .fw-media-list .fw-media-item:hover { background: var(--surface-2); }
 .fw-media-list .fw-media-name { grid-area: 1 / 1; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }

@@ -42,6 +42,42 @@ def library_catalogue() -> list[dict]:
     return library.catalogue()
 
 
+@router.get("/library/catalogue/search")
+def catalogue_search(q: str, limit: int = 20) -> dict:
+    """DS-14: recorded sound effects and music on Wikimedia Commons matching the words, royalty-free licences only
+    (public domain, CC0, CC BY), each with its credit (services/catalogue.py)."""
+    from ..services import catalogue
+
+    try:
+        return {"results": catalogue.search(q, max(1, min(50, limit)))}
+    except media.MediaError as err:
+        raise HTTPException(status_code=502, detail=str(err)) from err
+
+
+@router.get("/library/catalogue/preview")
+def catalogue_preview(url: str) -> Response:
+    """DS-14: a catalogue file's bytes for the interface to play before adding, from Commons' upload host only."""
+    from ..services import catalogue
+
+    try:
+        data, kind = catalogue.preview(url)
+    except media.MediaError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+    return Response(content=data, media_type=kind)
+
+
+@router.post("/library/catalogue/import", status_code=201)
+def catalogue_import(body: dict = Body(...), rate: int | None = None) -> dict:
+    """DS-14: a catalogue file imported as media ({"url", "title", "credit"}), its credit kept on the media for the
+    session."""
+    from ..services import catalogue
+
+    try:
+        return catalogue.import_item(str(body.get("url", "")), str(body.get("title", "")), str(body.get("credit", "")), rate)
+    except media.MediaError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+
+
 @router.get("/library/{item}/preview.wav")
 def library_preview(item: str) -> Response:
     from ..services import library

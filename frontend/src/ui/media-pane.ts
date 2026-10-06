@@ -56,7 +56,11 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-field fw-field-stack"><span>Sound</span><select data-l="item" aria-label="Library sound"></select></label>
 <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-l="preview" disabled>Preview</button><button type="button" class="fw-ibtn" data-l="add" disabled>Add on a new track</button></div>
 <audio data-l="audio" preload="none" hidden></audio>
-<p class="fw-empty-note fw-library-note">Synthesised by the engine, so free to use anywhere.</p>`;
+<p class="fw-empty-note fw-library-note">Synthesised by the engine, so free to use anywhere.</p>
+<div class="fw-insp-head fw-cat-head">Recorded sounds and music</div>
+<div class="fw-cat-search"><input type="search" data-c="q" placeholder="Search Wikimedia Commons, e.g. rain or piano" aria-label="Search recorded sounds and music"><button type="button" class="fw-ibtn" data-c="search">Search</button></div>
+<ol class="fw-cat-results" aria-label="Recorded sounds and music"></ol>
+<p class="fw-empty-note fw-cat-note" aria-live="polite">Public domain, CC0 and CC BY only, so free to use anywhere; each keeps its credit.</p>`;
   gen.after(lib);
   const libPick = lib.querySelector<HTMLSelectElement>('[data-l="item"]') as HTMLSelectElement;
   const libAudio = lib.querySelector<HTMLAudioElement>('[data-l="audio"]') as HTMLAudioElement;
@@ -100,6 +104,68 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
       setText(notice, `Added ${body.name} on a new track at the playhead`);
     } catch (err) {
       setText(notice, `Could not add the sound: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  // DS-14: recorded sound effects and music from Wikimedia Commons, royalty-free licences only, each keeping its credit
+  type CatItem = { title: string; url: string; license: string; author: string; credit: string };
+  const catResults = lib.querySelector<HTMLOListElement>(".fw-cat-results") as HTMLOListElement;
+  const catNote = lib.querySelector<HTMLElement>(".fw-cat-note");
+  let catItems: CatItem[] = [];
+  const catSearch = async () => {
+    const q = (lib.querySelector<HTMLInputElement>('[data-c="q"]')?.value ?? "").trim();
+    if (!q) return;
+    setText(catNote, `Searching Wikimedia Commons for ${q}...`);
+    try {
+      const res = await fetch(`/api/library/catalogue/search?q=${encodeURIComponent(q)}&limit=20`);
+      const body = (await res.json().catch(() => ({}))) as { detail?: unknown; results?: CatItem[] };
+      if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `the engine answered ${res.status}`);
+      catItems = body.results ?? [];
+      catResults.replaceChildren(
+        ...catItems.map((it, i) => {
+          const li = document.createElement("li");
+          li.className = "fw-cat-item";
+          li.title = it.credit;
+          li.innerHTML = `<span class="fw-cat-title"></span><span class="fw-cat-meta"></span><button type="button" class="fw-ibtn" data-c="play" data-i="${i}">Preview</button><button type="button" class="fw-ibtn" data-c="add" data-i="${i}">Add</button>`;
+          setText(li.querySelector(".fw-cat-title"), it.title);
+          setText(li.querySelector(".fw-cat-meta"), `${it.license} · ${it.author}`);
+          return li;
+        }),
+      );
+      setText(catNote, catItems.length ? `${catItems.length} royalty-free ${catItems.length === 1 ? "recording" : "recordings"} for ${q}; each keeps its credit.` : `Nothing royalty-free found for ${q}.`);
+    } catch (err) {
+      setText(catNote, `The catalogue could not be searched: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  lib.addEventListener("keydown", (e) => {
+    if ((e.target as HTMLElement).matches('[data-c="q"]') && e.key === "Enter") {
+      e.preventDefault();
+      void catSearch();
+    }
+  });
+  lib.addEventListener("click", async (e) => {
+    const button = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-c]");
+    if (!button) return;
+    if (button.dataset.c === "search") return void catSearch();
+    const it = catItems[Number(button.dataset.i)];
+    if (!it) return;
+    const notice = host.querySelector<HTMLElement>(".fw-notice");
+    if (button.dataset.c === "play") {
+      libAudio.src = `/api/library/catalogue/preview?url=${encodeURIComponent(it.url)}`;
+      libAudio.play().catch(() => setText(notice, "The browser would not play the preview"));
+      return;
+    }
+    button.disabled = true;
+    try {
+      const doc = engine.get("document");
+      const res = await fetch(`/api/library/catalogue/import?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: it.url, title: it.title, credit: it.credit }) });
+      const body = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : `the engine answered ${res.status}`);
+      engine.dispatch({ type: "import-media", media: body as unknown as MediaRef, at: engine.get("transport").positionSamples });
+      setText(notice, `Added ${it.title} on a new track; credit: ${it.credit}`);
+    } catch (err) {
+      setText(notice, `Could not add the recording: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       button.disabled = false;
     }
