@@ -42,6 +42,9 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-models-row" data-field="keyterms">Key terms<input class="fw-models-keyterms" placeholder="names and words to get right, comma-separated"></label>
 <label class="fw-models-row" data-field="lines">Lines<textarea rows="3" class="fw-models-lines" placeholder="Rachel: Where were you?&#10;Adam: [laughs] Right here."></textarea></label>
 <label class="fw-models-row" data-field="preview">Preview<select class="fw-models-preview"><option value="">Design a voice first</option></select></label>
+<label class="fw-models-row" data-field="strength">Strength<input type="number" min="0" max="1" step="0.05" value="0.5" class="fw-models-strength" title="How far the cover departs from the clip: lower keeps more of it"></label>
+<label class="fw-models-row" data-field="from">From (s)<input type="number" min="0" step="0.1" class="fw-models-from" placeholder="the selection's start"></label>
+<label class="fw-models-row" data-field="to">To (s)<input type="number" min="0" step="0.1" class="fw-models-to" placeholder="the selection's end"></label>
 <label class="fw-models-row fw-models-check" data-field="loop"><input type="checkbox" class="fw-models-loop"> Loop seamlessly</label>
 <label class="fw-models-row fw-models-check" data-field="instrumental"><input type="checkbox" class="fw-models-instrumental"> Instrumental only</label>
 <label class="fw-models-row fw-models-check" data-field="denoise"><input type="checkbox" class="fw-models-denoise"> Remove background noise first</label>
@@ -206,6 +209,37 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
           return { done: `Saved the ${lastDub.lang} subtitles as dub-${lastDub.lang}.srt` };
         } });
     }
+    // ACE-Step 1.5 on this machine (the v11 plan's 1.6), through its own REST server
+    const ace = p.providers.find((x) => x.id === "acestep");
+    if (ace) {
+      const aceRun = async (body: Record<string, unknown>) => post("/api/providers/acestep/generate", body);
+      const clipFor = (v: Record<string, string>, what: string) => {
+        const [trackId, clipId] = v.clip.split("/");
+        const c = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((x) => x.id === clipId);
+        if (!c) throw new Error(`Choose a clip ${what}`);
+        return c;
+      };
+      choices.push({ id: "ace-song", label: "A song from a prompt and lyrics (ACE-Step, this machine)", ready: ace.ready, needs: ace.needs, fields: ["prompt", "lyrics", "duration"],
+        run: async (v) => ({ media: await aceRun({ task: "text2music", prompt: v.prompt, lyrics: v.lyrics, seconds: Number(v.duration) || undefined }) }) });
+      choices.push({ id: "ace-cover", label: "Cover a clip in another style (ACE-Step)", ready: ace.ready, needs: ace.needs, fields: ["clip", "prompt", "strength"],
+        run: async (v) => { const c = clipFor(v, "to cover"); return { media: await aceRun({ task: "cover", media_id: c.mediaId, prompt: v.prompt, strength: Number(v.strength) }), at: c.start }; } });
+      choices.push({ id: "ace-repaint", label: "Repaint part of a clip (ACE-Step)", ready: ace.ready, needs: ace.needs, fields: ["clip", "prompt", "from", "to"],
+        run: async (v) => {
+          const c = clipFor(v, "to repaint");
+          const rate = engine.get("document").sampleRate;
+          const sel = engine.get("selection");
+          // the From and To fields, else the time selection where it falls on the clip (seconds into the clip)
+          const from = v.from !== "" ? Number(v.from) : sel ? Math.max(0, (sel.start - c.start) / rate) : 0;
+          const to = v.to !== "" ? Number(v.to) : sel ? Math.min(c.length, sel.end - c.start) / rate : -1;
+          return { media: await aceRun({ task: "repaint", media_id: c.mediaId, prompt: v.prompt, repaint_start: from + c.sourceIn / rate, repaint_end: to > 0 ? to + c.sourceIn / rate : -1 }), at: c.start };
+        } });
+      choices.push({ id: "ace-lego", label: "Add a layer to a clip (ACE-Step)", ready: ace.ready, needs: ace.needs, fields: ["clip", "prompt"],
+        run: async (v) => { const c = clipFor(v, "to add a layer to"); return { media: await aceRun({ task: "lego", media_id: c.mediaId, prompt: v.prompt }), at: c.start }; } });
+      choices.push({ id: "ace-extract", label: "Extract a part of a clip (ACE-Step)", ready: ace.ready, needs: ace.needs, fields: ["clip", "prompt"],
+        run: async (v) => { const c = clipFor(v, "to extract from"); return { media: await aceRun({ task: "extract", media_id: c.mediaId, prompt: v.prompt }), at: c.start }; } });
+      choices.push({ id: "ace-complete", label: "Complete a clip (ACE-Step)", ready: ace.ready, needs: ace.needs, fields: ["clip", "prompt"],
+        run: async (v) => { const c = clipFor(v, "to complete"); return { media: await aceRun({ task: "complete", media_id: c.mediaId, prompt: v.prompt }), at: c.start }; } });
+    }
     for (const preset of fal?.presets ?? []) {
       choices.push({ id: `fal:${preset.model}`, label: `${preset.label} (fal)`, ready: !!fal?.ready, needs: fal?.needs ?? "FAL_KEY", fields: preset.fields, run: async (v) => ({ media: await post("/api/providers/fal/generate", { model: preset.model, input: Object.fromEntries(preset.fields.map((f) => [f, f === "duration" ? Number(v.duration) : v[f]])) }) }) });
     }
@@ -275,7 +309,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     const c = choices.find((x) => x.id === kind.value);
     if (!c?.ready) return;
     const v: Record<string, string> = {};
-    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language", "musicmodel", "stems", "speakers", "keyterms", "lines", "preview", "loop", "instrumental", "denoise"]) v[f] = value(f);
+    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language", "musicmodel", "stems", "speakers", "keyterms", "lines", "preview", "loop", "instrumental", "denoise", "strength", "from", "to"]) v[f] = value(f);
     go.disabled = true;
     setText(state, `Making it with ${c.label}...`);
     try {

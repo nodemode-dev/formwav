@@ -128,3 +128,21 @@ def elevenlabs_align(body: dict = Body(...)) -> dict:
 @router.get("/providers/elevenlabs/dub/{job}/transcript")
 def elevenlabs_dub_transcript(job: str, lang: str, format: str = "srt") -> dict:
     return {"subtitles": _run(prov.elevenlabs_dub_transcript, job, lang, format)}
+
+
+
+# ACE-Step 1.5 on this machine (the v11 plan's 1.6), through its own REST server
+@router.get("/providers/acestep")
+def acestep_status() -> dict:
+    from ..services import acestep
+
+    return acestep.status()
+
+
+@router.post("/providers/acestep/generate", status_code=201)
+def acestep_generate(body: dict = Body(...)) -> dict:
+    from ..services import acestep
+
+    num = lambda k: float(body[k]) if body.get(k) not in (None, "") else None
+    return _run(acestep.generate, str(body.get("task") or "text2music"), str(body.get("prompt") or ""), str(body.get("lyrics") or ""), num("seconds"), str(body.get("media_id") or ""),
+                num("repaint_start"), num("repaint_end"), num("strength"), int(body["bpm"]) if body.get("bpm") else None, str(body.get("key") or ""), str(body.get("model") or ""), str(body.get("instruction") or ""))

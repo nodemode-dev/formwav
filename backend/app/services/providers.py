@@ -105,12 +105,20 @@ def local_models() -> list[dict]:
     return [e for e in entries if isinstance(e, dict) and e.get("id") and e.get("command")]
 
 
+def _acestep_entry() -> dict:
+    from . import acestep
+
+    st = acestep.status()
+    return {"id": "acestep", "label": "ACE-Step 1.5 (this machine)", "ready": st["ready"], "needs": f"ACE-Step's server at {st['url']} (uv run acestep-api)", "offers": ["music", "cover", "repaint", "lego", "extract", "complete"], "models": st["models"]}
+
+
 def providers() -> dict:
     """What can generate here: each provider, whether its key or models are set up, and what it offers."""
     return {
         "providers": [
-            {"id": "elevenlabs", "label": "ElevenLabs", "ready": bool(os.environ.get("ELEVENLABS_API_KEY", "").strip()), "needs": "ELEVENLABS_API_KEY", "offers": ["speech", "sound-effects", "dubbing"]},
+            {"id": "elevenlabs", "label": "ElevenLabs", "ready": bool(os.environ.get("ELEVENLABS_API_KEY", "").strip()), "needs": "ELEVENLABS_API_KEY", "offers": ["speech", "voice-changer", "music", "stems", "isolation", "sound-effects", "transcription", "voice-design", "dialogue", "alignment", "dubbing"]},
             {"id": "fal", "label": "fal", "ready": bool(os.environ.get("FAL_KEY", "").strip()), "needs": "FAL_KEY", "offers": ["music", "audio"], "presets": FAL_PRESETS},
+            _acestep_entry(),
             {"id": "local", "label": "On this machine", "ready": bool(local_models()), "needs": "backend/models/local_models.json", "offers": ["music", "audio", "speech"], "models": [{k: e.get(k) for k in ("id", "label", "kind", "fields")} for e in local_models()]},
         ]
     }
