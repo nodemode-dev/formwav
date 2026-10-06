@@ -52,6 +52,7 @@ import { mountSpectrum } from "./ui/spectrum";
 import { mountEnvelopeEdit } from "./ui/envelope-edit";
 import { mountProjects } from "./ui/projects";
 import { mountCloud } from "./ui/cloud";
+import { mountRoom } from "./ui/room";
 import { Player, type OutputChoice } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
 import { applyTheme } from "./vendor/formvis/themes";
@@ -145,6 +146,7 @@ if (host) {
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();
   mountProjects(host, engine, player);
   mountCloud(host, engine);
+  mountRoom(host, engine);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
 activateAll(engine);

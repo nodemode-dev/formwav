@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core.config import cors_origins
 from .core.security import LocalOnly
 from .core.version import VERSION
-from .routers import agent, cloud, health, remote, media, midi, native_audio, presets, projects, providers, render, terminal
+from .routers import agent, cloud, health, remote, room, media, midi, native_audio, presets, projects, providers, render, terminal
 
 app = FastAPI(title="formwav engine", version=VERSION)
 app.add_middleware(
@@ -30,6 +30,8 @@ app.include_router(providers.router, prefix="/api")
 app.include_router(cloud.router, prefix="/api")  # cloud projects: Google Drive and Dropbox, ported from formcut
 app.include_router(remote.router)  # devices on the local network, paired; ported from formcut (its routes carry /api and /pair)
 remote.resume(app)  # reopen the network listener at start if it was left on
+app.include_router(room.router, prefix="/api")  # remote recording: a track per guest
+app.include_router(room.page_router)  # /room, the guests' page
 
 # formwave's generative voice (app/voice): optional, as it needs numpy and soundfile to import and torch and the Qwen
 # packages to load a model. Its runtime module goes first so its MPS settings apply before torch loads.

@@ -251,7 +251,7 @@ document.getElementById("pair").addEventListener("submit", async (event) => {
   const note = document.getElementById("note");
   const body = JSON.stringify({ code: document.getElementById("code").value, name: document.getElementById("name").value });
   const reply = await fetch("/api/remote/pair", { method: "POST", headers: { "content-type": "application/json", "x-formwav-local": "1" }, body });
-  if (reply.ok) location.href = "/";
+  if (reply.ok) location.href = "/room";
   else note.textContent = (await reply.json()).detail || "Pairing failed";
 });
 </script></body></html>"""
