@@ -36,6 +36,7 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     field("Fade out (s)", `<input type="number" data-f="fadeOut" min="0" step="0.01">`),
     field("Fade shape", `<select data-f="shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
     `<div class="fw-cf fw-cf-wide"><span class="fw-cf-label">Colour</span><div class="fw-cf-colors" role="group" aria-label="Clip colour"><button type="button" class="fw-cf-color" data-color="" aria-label="The track's colour" title="The track's colour"></button>${COLORS.map((c) => `<button type="button" class="fw-cf-color" data-color="${c}" aria-label="${c}" title="${c}" style="color: var(--fw-color-${c})"></button>`).join("")}</div></div>`,
+    `<div class="fw-cf fw-cf-wide fw-cf-three"><span class="fw-cf-label">Separate</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-three>Speech, music and ambience to three tracks</button></div><output class="fw-cf-ara-state" data-three-state>Three tracks that add up to this clip exactly: their faders set the balance.</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-speech"><span class="fw-cf-label">Speech</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-speech>Mark where people speak</button></div><output class="fw-cf-ara-state" data-speech-state>Finds speech in this clip, under music too, and marks it as regions.</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-sync"><span class="fw-cf-label">Line up by sound</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-sync>Line up other tracks' takes to this one</button></div><output class="fw-cf-ara-state" data-sync-state>Takes on other tracks that overlap this clip move to match its sound, to a fraction of a sample.</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-ara"><span class="fw-cf-label">ARA plug-in</span><div class="fw-cf-ara-row"><select data-ara-plugin aria-label="ARA plug-in"><option value="">Looking for ARA plug-ins</option></select><button type="button" class="fw-ibtn" data-ara="analyze" disabled>Analyse</button><button type="button" class="fw-ibtn" data-ara="render" disabled>Render</button></div><output class="fw-cf-ara-state" data-ara-state></output></div>`,
@@ -135,6 +136,35 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     engine.dispatch({ type: "set-clip-color", trackId: hit.track.id, clipId: hit.clip.id, color: b.dataset.color ?? "" });
   });
 
+  // Speech, music and ambience (services/three_way.py): three tracks under the clip that sum to it exactly, one undo step
+  panel.addEventListener("click", async (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-three]");
+    const hit = b ? find(engine.get("document")) : null;
+    if (!b || !hit) return;
+    const state = panel.querySelector("[data-three-state]");
+    const doc = engine.get("document");
+    const { clip, track } = hit;
+    const mediaRate = doc.media[clip.mediaId]?.sampleRate ?? doc.sampleRate;
+    const start = clip.sourceIn / mediaRate;
+    b.disabled = true;
+    setText(state, "Separating speech, music and ambience...");
+    try {
+      const res = await fetch(`/api/media/${clip.mediaId}/three-way`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ start, end: start + clip.length / doc.sampleRate }) });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      const alone = track.clips.length === 1;
+      engine.dispatch({ type: "batch", commands: [
+        ...(["speech", "music", "ambience"] as const).map((k) => ({ type: "import-media" as const, media: out[k], at: clip.start })),
+        ...(alone ? [{ type: "set-track-mute" as const, trackId: track.id, mute: true }] : []),
+      ] });
+      setText(state, alone ? "Speech, music and ambience are on three new tracks, the original muted: their faders set the balance." : "Speech, music and ambience are on three new tracks; lower or mute the original clip, which shares its track with others.");
+    } catch (err) {
+      setText(state, err instanceof Error ? err.message : String(err));
+    } finally {
+      b.disabled = false;
+    }
+  });
+
   // Where people speak (services/vad.py, Silero VAD ported from formcut): the clip's speech marked as regions, in one undo step
   panel.addEventListener("click", async (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-speech]");
@@ -149,8 +179,10 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
       const res = await fetch(`/api/media/${clip.mediaId}/speech`);
       const out = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
-      const inS = clip.sourceIn / rate;
-      const outS = (clip.sourceIn + clip.length) / rate;
+      // sourceIn counts the media's samples, length the session's: a 44.1 kHz file in a 48 kHz session differs
+      const mediaRate = engine.get("document").media[clip.mediaId]?.sampleRate ?? rate;
+      const inS = clip.sourceIn / mediaRate;
+      const outS = inS + clip.length / rate;
       const marks = (out.regions as { start: number; end: number }[])
         .map((r) => ({ start: Math.max(r.start, inS), end: Math.min(r.end, outS) }))
         .filter((r) => r.end > r.start)

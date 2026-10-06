@@ -109,6 +109,13 @@ frontend/
 
 ## index.html {#index-html}
 
+### Speech regions misplaced on media at another rate than the session's
+- refers-to: frontend/src/ui/clip-tab.ts (Mark where people speak)
+- kind: fix
+- logged: v2.11.4 (in progress) · 2026-10-06
+
+Found while writing the three-way split: a clip's sourceIn counts the media's samples and its length the session's (sessionWords in the transcript pane reads them so), and Mark where people speak (1.7, v2.11.1) divided both by the session's rate. For a 44.1 kHz file in a 48 kHz session every region would have been stretched by 8.8 percent; the JFK check, 48 kHz in 48 kHz, could not show it. Now each is read in its own rate. Checked in Chromium: the JFK speech resampled to 44.1 kHz in a 48 kHz session marks the same four stretches as the 48 kHz original, to the hundredth of a second.
+
 ### Shared editing: one session edited from several devices at once
 - refers-to: backend/app/routers/share.py; backend/app/main.py; frontend/src/ui/share.ts; src/engine/index.ts (share hooks, applyShared, reportHistory); src/engine/document.ts (RestorePatch, computeRestore, restore); src/main.ts; src/styles/workspace.css (.fw-share-chip); sidecar verification/verify_share.md
 - kind: explainer
