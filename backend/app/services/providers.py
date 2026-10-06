@@ -201,10 +201,13 @@ def _splice(media_id: str, a: int, b: int, spoken_id: str) -> dict:
     s = np.asarray(sview[0 : int(sview.shape[0])], dtype=np.float64)
     s = np.repeat(s.mean(axis=1, keepdims=True), ch, axis=1) if s.shape[1] != ch else s
     n = int(s.shape[0])
-    f = max(1, min(int(0.010 * rate), a, frames - b, n // 2))
-    ramp = np.linspace(0.0, np.pi / 2, f, endpoint=False)[:, None]
-    fade_in, fade_out = np.sin(ramp), np.cos(ramp)
-    out = np.concatenate([x[: a - f], x[a - f : a] * fade_out + s[:f] * fade_in, s[f : n - f], s[n - f :] * fade_out + x[b : b + f] * fade_in, x[b + f :]])
+    # each end its own crossfade, none where there is nothing to fade from: at the very start (a = 0) or end (b = frames) a
+    # shared fade forced to one frame made x[: a - 1] read as x[:-1], the whole recording, and doubled the new media
+    fh = min(int(0.010 * rate), a, n // 2)
+    ft = min(int(0.010 * rate), frames - b, n // 2)
+    ramp_h = np.linspace(0.0, np.pi / 2, fh, endpoint=False)[:, None]
+    ramp_t = np.linspace(0.0, np.pi / 2, ft, endpoint=False)[:, None]
+    out = np.concatenate([x[: a - fh], x[a - fh : a] * np.cos(ramp_h) + s[:fh] * np.sin(ramp_h), s[fh : n - ft], s[n - ft :] * np.cos(ramp_t) + x[b : b + ft] * np.sin(ramp_t), x[b + ft :]])
     info = media.media_info(media_id)
     stem = str(info.get("name", "clip")).rsplit(".", 1)[0]
     new = media.import_wav(f"{stem} (regenerated).wav", _wav_bytes([out[:, c].astype(np.float32) for c in range(ch)], rate))
