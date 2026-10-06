@@ -46,7 +46,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   dock.className = "fw-term fw-agent";
   dock.hidden = !host.querySelector(".fw-agent-anchor");
   dock.setAttribute("aria-label", "Agent");
-  dock.innerHTML = `<div class="fw-term-head"><span class="fw-term-title">Agent</span><span class="fw-term-state" aria-live="polite"></span><button type="button" class="fw-ibtn" data-agent="undo" disabled>Undo run</button><button type="button" class="fw-ibtn" data-agent="hide">Hide</button></div><div class="fw-agent-body"><ol class="fw-agent-log" aria-live="polite"></ol><div class="fw-agent-ask"><textarea rows="2" placeholder="Tell the assistant what to do with this session" aria-label="Instruction for the assistant"></textarea><button type="button" class="fw-ibtn fw-agent-run" data-agent="run">Run</button><button type="button" class="fw-ibtn" data-agent="stop" disabled>Stop</button></div></div>`;
+  dock.innerHTML = `<div class="fw-term-head"><span class="fw-term-title">Agent</span><span class="fw-term-state" aria-live="polite"></span><button type="button" class="fw-ibtn" data-agent="undo" disabled>Undo run</button><button type="button" class="fw-ibtn" data-agent="hide">Hide</button></div><div class="fw-agent-body"><ol class="fw-agent-log" aria-live="polite"></ol><div class="fw-agent-suggest" role="group" aria-label="Suggestions"><button type="button" class="fw-agent-chip" data-suggest="Clean up the dialogue on the selected track">Clean up the dialogue</button><button type="button" class="fw-agent-chip" data-suggest="Cut the ums and long pauses">Cut the ums</button><button type="button" class="fw-agent-chip" data-suggest="Make the session ready for a podcast at -16 LUFS">Podcast-ready loudness</button></div><div class="fw-agent-ask"><textarea rows="2" placeholder="Tell the assistant what to do with this session" aria-label="Instruction for the assistant"></textarea><button type="button" class="fw-ibtn fw-agent-run" data-agent="run">Run</button><button type="button" class="fw-ibtn" data-agent="stop" disabled>Stop</button></div></div>`;
   const transport = host.querySelector<HTMLElement>(".fw-agent-anchor") ?? host.querySelector<HTMLElement>(".fw-dock-anchor");
   if (transport) transport.before(dock);
   else host.append(dock);
@@ -54,6 +54,12 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   const log = dock.querySelector<HTMLOListElement>(".fw-agent-log") as HTMLOListElement;
   const ask = dock.querySelector<HTMLTextAreaElement>("textarea") as HTMLTextAreaElement;
   const state = dock.querySelector<HTMLElement>(".fw-term-state");
+  dock.querySelector(".fw-agent-suggest")?.addEventListener("click", (e) => {
+    const chip = (e.target as HTMLElement).closest<HTMLElement>("[data-suggest]");
+    if (!chip) return;
+    ask.value = chip.dataset.suggest ?? "";
+    ask.focus();
+  });
   const control = (name: string) => dock.querySelector<HTMLButtonElement>(`[data-agent="${name}"]`) as HTMLButtonElement;
 
   const rate = () => engine.get("document").sampleRate;

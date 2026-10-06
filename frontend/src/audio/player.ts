@@ -608,11 +608,22 @@ export class Player {
   private latestPosition: Extract<WorkletReply, { type: "position" }> | null = null;
   private positionTimer: ReturnType<typeof setTimeout> | null = null;
 
+  private idleQuiet: ReturnType<typeof setTimeout> | null = null;
+
   private handlePosition(reply: Extract<WorkletReply, { type: "position" }>): void {
     this.engine.setTransport({ positionSamples: reply.position });
     this.lastIntegrated = reply.loudness[2];
     if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks, reply.loudness, reply.busPeaks, reply.correlation ?? null);
-    else this.emitLevel(0, 0, [], [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, reply.loudness[2]]);
+    else {
+      // AU-37: the live instrument played with the transport stopped, measured by the core's idle render; the
+      // worklet reports only while it sounds, so the meter falls to silence a moment after its last report
+      this.emitLevel(reply.peakLeft, reply.peakRight, [], [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, reply.loudness[2]]);
+      if (this.idleQuiet !== null) clearTimeout(this.idleQuiet);
+      this.idleQuiet = setTimeout(() => {
+        this.idleQuiet = null;
+        if (!this.engine.get("transport").playing) this.emitLevel(0, 0, [], [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, this.lastIntegrated]);
+      }, 200);
+    }
     const six = this.engine.get("transport").playing && reply.surroundPeaks?.length === 6 ? reply.surroundPeaks : null;
     for (const listener of this.surroundListeners) listener(six);
   }
