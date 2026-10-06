@@ -569,6 +569,94 @@ pub const TREMOLO: u8 = 12;
 pub const GATE: u8 = 13;
 pub const PHASER: u8 = 14;
 pub const FLANGER: u8 = 15;
+/// RX-16: the dialogue isolate as a realtime stage (a = strength, 0 to 1).
+pub const VOICE: u8 = 16;
+/// The Voice stage's frame and so its latency: RNNoise's 10 ms at 48 kHz.
+pub const VOICE_FRAME: usize = nnnoiseless::DenoiseState::FRAME_SIZE;
+
+/// RX-16: RNNoise's trained suppressor (through nnnoiseless, its network and weights in pure Rust) keeping the voice,
+/// one network per channel on frames of VOICE_FRAME samples. The stage delays by two frames, one of buffering and one
+/// of RNNoise's own (its overlapping analysis windows; measured, not assumed), which the mixer reads ahead to cancel
+/// (Stage::latency). Strength blends the cleaned signal with the original held equally far back, 1 fully cleaned.
+/// Trained at 48 kHz; at other rates it runs on frames of the same length.
+pub struct Voice {
+    states: [Box<nnnoiseless::DenoiseState<'static>>; 2],
+    input: [[f32; VOICE_FRAME]; 2],
+    wet: [[f32; VOICE_FRAME]; 2],
+    /// The frame before the last, as heard (what the cleaned frame corresponds to), and the last frame as heard.
+    dry: [[f32; VOICE_FRAME]; 2],
+    prev: [[f32; VOICE_FRAME]; 2],
+    pos: usize,
+    strength: f32,
+}
+
+impl Voice {
+    pub fn design(strength: f32) -> Option<Voice> {
+        if !strength.is_finite() || !(0.0..=1.0).contains(&strength) {
+            return None;
+        }
+        Some(Voice {
+            states: [nnnoiseless::DenoiseState::new(), nnnoiseless::DenoiseState::new()],
+            input: [[0.0; VOICE_FRAME]; 2],
+            wet: [[0.0; VOICE_FRAME]; 2],
+            dry: [[0.0; VOICE_FRAME]; 2],
+            prev: [[0.0; VOICE_FRAME]; 2],
+            pos: 0,
+            strength,
+        })
+    }
+
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let p = self.pos;
+        let (s, d) = (self.strength, 1.0 - self.strength);
+        let out = (self.wet[0][p] * s + self.dry[0][p] * d, self.wet[1][p] * s + self.dry[1][p] * d);
+        // RNNoise works in 16-bit sample units
+        self.input[0][p] = l * 32768.0;
+        self.input[1][p] = r * 32768.0;
+        self.pos += 1;
+        if self.pos == VOICE_FRAME {
+            self.pos = 0;
+            for ch in 0..2 {
+                let mut cleaned = [0.0f32; VOICE_FRAME];
+                self.states[ch].process_frame(&mut cleaned, &self.input[ch]);
+                for i in 0..VOICE_FRAME {
+                    self.wet[ch][i] = cleaned[i] / 32768.0;
+                    self.dry[ch][i] = self.prev[ch][i];
+                    self.prev[ch][i] = self.input[ch][i] / 32768.0;
+                }
+            }
+        }
+        out
+    }
+
+    pub fn reset(&mut self) {
+        self.states = [nnnoiseless::DenoiseState::new(), nnnoiseless::DenoiseState::new()];
+        self.input = [[0.0; VOICE_FRAME]; 2];
+        self.wet = [[0.0; VOICE_FRAME]; 2];
+        self.dry = [[0.0; VOICE_FRAME]; 2];
+        self.prev = [[0.0; VOICE_FRAME]; 2];
+        self.pos = 0;
+    }
+}
+
+/// A copy starts afresh (a network's state is not copied), as a newly designed stage does.
+impl Clone for Voice {
+    fn clone(&self) -> Voice {
+        Voice::design(self.strength).expect("a designed Voice has a valid strength")
+    }
+}
+
+impl PartialEq for Voice {
+    fn eq(&self, other: &Voice) -> bool {
+        self.strength == other.strength
+    }
+}
+
+impl std::fmt::Debug for Voice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Voice").field("strength", &self.strength).finish()
+    }
+}
 
 /// A tremolo: the gain swung between 1 and 1 - depth at `rate`; the right channel's swing `spread` of half a turn
 /// behind the left's (at 1, an auto-pan).
@@ -772,9 +860,19 @@ pub enum Stage {
     Gate(Gate),
     Phaser(Box<Phaser>),
     Flanger(Box<Flanger>),
+    Voice(Box<Voice>),
 }
 
 impl Stage {
+    /// The samples this stage delays its signal by (RX-16): a mixer reading a chain's input that far ahead cancels it.
+    /// Every stage but Voice runs without delay.
+    pub fn latency(&self) -> usize {
+        match self {
+            Stage::Voice(_) => 2 * VOICE_FRAME,
+            _ => 0,
+        }
+    }
+
     /// Kinds 1 to 5 are filters (a = freq, b = gain dB, c = Q); kind 6 is a compressor (a = threshold dB, b = ratio,
     /// c = attack ms, d = release ms, e = makeup dB). None for an unknown kind.
     pub fn design(kind: u8, a: f32, b: f32, c: f32, d: f32, e: f32, rate: f32) -> Option<Stage> {
@@ -799,6 +897,8 @@ impl Stage {
             Phaser::design(a, b, c, rate).map(|x| Stage::Phaser(Box::new(x)))
         } else if kind == FLANGER {
             Flanger::design(a, b, c, rate).map(|x| Stage::Flanger(Box::new(x)))
+        } else if kind == VOICE {
+            Voice::design(a).map(|x| Stage::Voice(Box::new(x)))
         } else {
             Biquad::design(kind, a, b, c, rate).map(Stage::Filter)
         }
@@ -818,6 +918,7 @@ impl Stage {
             Stage::Gate(x) => x.process(l, r),
             Stage::Phaser(x) => x.process(l, r),
             Stage::Flanger(x) => x.process(l, r),
+            Stage::Voice(x) => x.process(l, r),
         }
     }
 
@@ -834,6 +935,7 @@ impl Stage {
             Stage::Gate(x) => x.reset(),
             Stage::Phaser(x) => x.reset(),
             Stage::Flanger(x) => x.reset(),
+            Stage::Voice(x) => x.reset(),
         }
     }
 }

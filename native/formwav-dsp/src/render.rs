@@ -120,6 +120,10 @@ pub struct Player {
     /// Each bus's chain, parallel to `buses`, run on the bus's sum before its gain and pan: a track holding a
     /// nonlinear stage (a compressor) plays through a bus of its own so its whole chain sees the track's sum.
     bus_fx: Vec<Vec<crate::fx::Stage>>,
+    /// RX-16: whether each bus's chain has heard the samples its latency reads ahead (cleared on a seek, a loop's wrap
+    /// and a new stage), and the scratch it is primed through, kept between calls.
+    bus_primed: Vec<bool>,
+    prime_scratch: [Vec<f32>; 2],
     /// PT-38, AA-11: the 5.1 render's groups, clips sharing a placement (a track) mixed together and then spread by
     /// their speaker gains in SMPTE order (L R C LFE Ls Rs), each with its LFE send's fourth-order 120 Hz low-pass.
     surround_groups: Vec<(Vec<usize>, [f32; 6], [crate::fx::Biquad; 2])>,
@@ -332,10 +336,13 @@ impl Player {
             return false;
         };
         chain.push(s);
+        // RX-16: a chain that changed hears its read-ahead again before it next plays
+        self.bus_primed.clear();
         true
     }
 
     fn reset_fx(&mut self) {
+        self.bus_primed.clear();
         for f in self.clip_fx.iter_mut().chain(self.meter_fx.iter_mut()).flatten() {
             f.reset();
         }
@@ -743,11 +750,36 @@ impl Player {
             bus_peaks.resize(self.buses.len(), (0.0, 0.0));
         }
         let mut bus_fx = std::mem::take(&mut self.bus_fx);
+        let mut primed = std::mem::take(&mut self.bus_primed);
+        primed.resize(self.buses.len(), false);
+        let mut prime = std::mem::take(&mut self.prime_scratch);
         for (k, bus) in self.buses.iter().enumerate() {
             scratch_left[..n].fill(0.0);
             scratch_right[..n].fill(0.0);
             let id = bus.id;
-            self.mix(fx, &mut scratch_left[..n], &mut scratch_right[..n], from, |c| c.bus == id);
+            // RX-16: a chain that delays (the live dialogue isolate) reads its bus's clips that far ahead, so what it
+            // plays lands on time; after a seek, a loop's wrap or a new stage it first hears the samples it reads past
+            let ahead = bus_fx.get(k).map(|c| c.iter().map(|s| s.latency()).sum::<usize>()).unwrap_or(0);
+            if ahead > 0 && !primed[k] {
+                for ch in prime.iter_mut() {
+                    ch.clear();
+                    ch.resize(ahead, 0.0);
+                }
+                let [prime_left, prime_right] = &mut prime;
+                self.mix(fx, &mut prime_left[..ahead], &mut prime_right[..ahead], from, |c| c.bus == id);
+                if let Some(chain) = bus_fx.get_mut(k) {
+                    for i in 0..ahead {
+                        let (mut l, mut r) = (prime_left[i], prime_right[i]);
+                        for s in chain.iter_mut() {
+                            (l, r) = s.process(l, r);
+                        }
+                    }
+                }
+            }
+            if ahead > 0 {
+                primed[k] = true;
+            }
+            self.mix(fx, &mut scratch_left[..n], &mut scratch_right[..n], from + ahead as u64, |c| c.bus == id);
             if let Some(chain) = bus_fx.get_mut(k).filter(|c| !c.is_empty()) {
                 for i in 0..n {
                     let (mut l, mut r) = (scratch_left[i], scratch_right[i]);
@@ -772,6 +804,8 @@ impl Player {
             }
         }
         self.bus_fx = bus_fx;
+        self.bus_primed = primed;
+        self.prime_scratch = prime;
         self.bus_peaks = bus_peaks;
         self.scratch_left = scratch_left;
         self.scratch_right = scratch_right;
