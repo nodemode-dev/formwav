@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### Objects that move and a bed, checked in the EBU's own renderer
+- refers-to: backend/app/services/adm.py (paths as block sequences, a 5.1 bed on the common definitions, an explicit CHNA); frontend/src/engine/document.ts (surround.path, surround.bed); src/ui/inspector-pane.ts (Add point at playhead, Clear path, Bed); sidecar verification/verify_adm_ear.py, ear_share.py, earvenv (EAR 2.1.0)
+- kind: explainer
+- logged: v2.12.0 (in progress) · 2026-10-06
+
+The comparison's L2 in part. formwav's ADM BWF export wrote one still block per object and no bed. A track's surround now carries a path (points of time and place, set from the inspector: Add point at playhead takes the dot's place, Clear path, the pad's drag and the controls keeping the path) and a bed flag. The export writes a moving object as blocks: still until its first point (or for 1 ms when it starts at zero), then one block per segment whose position is the segment's end, which a renderer reaches by interpolating over the block; bed tracks are mixed by render_51, as formwav's 5.1 export mixes them, and written as six DirectSpeakers channels on BS.2094's common definitions (AP_00010003). Checked in the EBU ADM Renderer (EAR 2.1.0, BSD-3-Clause-Clear, run in its own venv): the export as it was placed static objects exactly (+30, -30 and 0 degrees in M+030, M-030 and M+000, all 100 percent), so the structure was sound; a moving object first stayed at its destination throughout, since a renderer interpolates from the previous block and the first point had none, and the 1 ms block fixed it (99 percent left at the start, 50 and 50 midway, 100 percent right after); the bed's centre and left surround 100 percent in M+000 and M+110. End to end from the interface: a path built with the buttons and the pad, a track ticked Bed, the file from the export route, the same figures in EAR, no layout shift, no page error. That test's first run measured nothing real: /api/generate takes freq, not hz, and gave two 440 Hz tones; the file itself was right. Not yet: hearing the objects inside formwav through a renderer, and an OMF reader.
+
 ### The claims audit: the README's counts checked against the code, and kept checked
 - refers-to: README.md; backend/app/services/local_speech.py (engine sizes); sidecar verification/audit_claims.py (in the release gate from v2.11.8)
 - kind: fix

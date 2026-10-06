@@ -104,6 +104,7 @@ const BODY = `
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
   <div class="fw-analyze-buttons" title="Where this track sits in a 5.1 export: left to right and back to front from -1 to 1 (front centre is 0 and 1), and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback stays stereo for now"><label class="fw-sam-opt"><input type="checkbox" data-sur="on"> 5.1 position</label><label class="fw-sam-opt"><span>Left to right</span><input type="number" min="-1" max="1" step="0.05" value="0" data-sur="x"></label><label class="fw-sam-opt"><span>Back to front</span><input type="number" min="-1" max="1" step="0.05" value="1" data-sur="y"></label><label class="fw-sam-opt"><span>LFE dB</span><input type="number" min="-80" max="10" step="1" value="-80" data-sur="lfe"></label><label class="fw-sam-opt" title="Elevation in degrees, for ambisonics: 90 overhead, -90 below (5.1 has no height and ignores it)"><span>Elev°</span><input type="number" min="-90" max="90" step="5" value="0" data-sur="el"></label><label class="fw-sam-opt" title="The session's spatial format: 5.1 speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for 360 video and binaural or speaker decoding later)"><span>Format</span><select data-sur-format><option value="5.1">5.1</option><option value="foa">Ambisonics (FOA)</option></select></label><label class="fw-sam-opt" title="Hear the session's 5.1 as an ITU stereo fold-down (centre and surrounds at -3 dB), in playback and in the stereo mix export; off, the 5.1 position shapes only the 5.1 export"><input type="checkbox" data-sur-fold> Hear the fold-down</label></div>
   <canvas class="fw-surround-pad" data-sur-pad width="168" height="168" aria-label="The track's place in the 5.1 room: drag the dot; front is up, the five speakers marked"></canvas>
+  <div class="fw-analyze-buttons" title="L2: the object moves through the points along the session in an ADM export; a bed track goes into the 5.1 bed instead"><button type="button" class="fw-ibtn" data-sur-path="add">Add point at playhead</button><button type="button" class="fw-ibtn" data-sur-path="clear">Clear path</button><label class="fw-sam-opt"><input type="checkbox" data-sur-bed> Bed</label><output data-sur-path-n>No path</output></div>
   <label class="fw-field"><span>Colour</span><select data-track-color aria-label="Track colour"><option value="">Green</option>${COLOURS.replace('<option value="green">Green</option>', "")}</select><span></span></label>
   <label class="fw-field"><span>Input</span><select data-track-input aria-label="Input device for recording on this track"><option value="">System default</option></select><span></span></label>
   <label class="fw-field" title="Which channels of its input device this track records; other tracks on the same device can take others"><span>Channels in</span><select data-track-inch aria-label="Input channels this track records"><option value="">As the device gives</option><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option><option value="4">5</option><option value="5">6</option><option value="6">7</option><option value="7">8</option><option value="0,1">1 and 2</option><option value="2,3">3 and 4</option><option value="4,5">5 and 6</option><option value="6,7">7 and 8</option></select><span></span></label>
@@ -829,7 +830,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (!track) return;
     const value = (name: string) => Number(body.querySelector<HTMLInputElement>(`[data-sur="${name}"]`)?.value ?? 0);
     const on = body.querySelector<HTMLInputElement>('[data-sur="on"]')?.checked === true;
-    engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: on ? { x: value("x"), y: value("y"), lfeDb: value("lfe"), el: value("el") } : null });
+    engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: on ? { x: value("x"), y: value("y"), lfeDb: value("lfe"), el: value("el"), path: track.surround?.path, bed: track.surround?.bed } : null });
     if (notice) setText(notice, on ? `${track.name} placed in 5.1 at ${value("x")}, ${value("y")}${value("lfe") > -80 ? `, LFE ${value("lfe")} dB` : ""}` : `${track.name} back to stereo in 5.1 exports`);
   });
   // PT-38, AA-11: the two-dimensional panner, the room from above with the front up and the five speakers on a circle at
@@ -897,8 +898,34 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (!hit || !pos) return;
     const lfe = Number(body.querySelector<HTMLInputElement>('[data-sur="lfe"]')?.value ?? -80);
     const el = Number(body.querySelector<HTMLInputElement>('[data-sur="el"]')?.value ?? 0);
-    engine.dispatch({ type: "set-track-surround", trackId: hit.track.id, surround: { x: pos.x, y: pos.y, lfeDb: lfe, el } });
+    engine.dispatch({ type: "set-track-surround", trackId: hit.track.id, surround: { x: pos.x, y: pos.y, lfeDb: lfe, el, path: hit.track.surround?.path, bed: hit.track.surround?.bed } });
     if (notice) setText(notice, `${hit.track.name} placed in 5.1 at ${pos.x}, ${pos.y}`);
+  });
+  // L2: the track's path in the room (Add point takes the dot's place at the playhead) and whether it is part of the bed
+  body.addEventListener("click", (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>("[data-sur-path]")?.dataset.surPath;
+    if (!act) return;
+    const track = find(engine.get("document"))?.track;
+    if (!track?.surround) return void (notice && setText(notice, "Place the track on the surround pad first"));
+    const s = track.surround;
+    const at = engine.get("transport").positionSamples;
+    const path = act === "clear" ? [] : [...(s.path ?? []).filter((p) => p.at !== at), { at, x: s.x, y: s.y, ...(s.el ? { el: s.el } : {}) }];
+    engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: { ...s, path } });
+    if (notice) setText(notice, act === "clear" ? `${track.name}: path cleared, the object stays where the dot is` : `${track.name}: point ${path.length} at ${(at / engine.get("document").sampleRate).toFixed(2)} s`);
+  });
+  body.addEventListener("change", (e) => {
+    const box = (e.target as HTMLElement).closest<HTMLInputElement>("[data-sur-bed]");
+    const track = box ? find(engine.get("document"))?.track : null;
+    if (!box || !track?.surround) return;
+    engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: { ...track.surround, bed: box.checked } });
+    if (notice) setText(notice, box.checked ? `${track.name} goes into the 5.1 bed of an ADM export` : `${track.name} is an object again`);
+  });
+  engine.subscribe("document", () => {
+    const track = find(engine.get("document"))?.track;
+    const n = track?.surround?.path?.length ?? 0;
+    setText(body.querySelector<HTMLElement>("[data-sur-path-n]"), n ? `${n} point${n === 1 ? "" : "s"}` : "No path");
+    const bed = body.querySelector<HTMLInputElement>("[data-sur-bed]");
+    if (bed) bed.checked = !!track?.surround?.bed;
   });
   body.querySelector<HTMLSelectElement>("[data-sur-format]")?.addEventListener("change", (e) => {
     const format = (e.target as HTMLSelectElement).value === "foa" ? "foa" : "5.1";

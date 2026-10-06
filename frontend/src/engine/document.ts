@@ -389,7 +389,17 @@ export interface Track {
   playlists?: readonly { name: string; clips: readonly Clip[] }[];
   /** PT-38, AA-11: where the track sits in a 5.1 mix, x from -1 (left) to 1 (right) and y from -1 (behind) to 1 (in
    *  front), with a send to the LFE channel in dB; absent, its stereo image goes to L and R. */
-  surround?: { x: number; y: number; lfeDb?: number; /** PT-42: elevation in degrees, for ambisonics (90 overhead) */ el?: number };
+  surround?: {
+    x: number;
+    y: number;
+    lfeDb?: number;
+    /** PT-42: elevation in degrees, for ambisonics (90 overhead) */
+    el?: number;
+    /** L2: where the object is along the session (samples), for ADM export: it moves from point to point */
+    path?: { at: number; x: number; y: number; el?: number }[];
+    /** L2: part of the channel bed (5.1 in the ADM export) rather than an object */
+    bed?: boolean;
+  };
   clips: readonly Clip[];
 }
 
@@ -558,7 +568,7 @@ export type Command =
   | { type: "set-clip-envelope"; trackId: string; clipId: string; points: { at: number; db: number }[] }
   | { type: "set-clip-type"; trackId: string; clipId: string; soundType: "dialogue" | "music" | "effects" | "ambience" | null }
   | { type: "new-playlist"; trackId: string; duplicate: boolean }
-  | { type: "set-track-surround"; trackId: string; surround: { x: number; y: number; lfeDb?: number; el?: number } | null }
+  | { type: "set-track-surround"; trackId: string; surround: { x: number; y: number; lfeDb?: number; el?: number; path?: { at: number; x: number; y: number; el?: number }[]; bed?: boolean } | null }
   | { type: "set-surround-fold"; on: boolean }
   | { type: "set-spatial-format"; format: "5.1" | "foa" }
   | { type: "set-track-midi-fx"; trackId: string; midiFx: MidiFx[] }
@@ -981,7 +991,11 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         if (!s) return rest;
         const lfe = s.lfeDb !== undefined && Number.isFinite(s.lfeDb) && s.lfeDb > -80 ? { lfeDb: clamp(s.lfeDb, -80, 10) } : {};
         const el = s.el !== undefined && Number.isFinite(s.el) && s.el !== 0 ? { el: clamp(s.el, -90, 90) } : {};
-        return { ...rest, surround: { x: clamp(s.x, -1, 1), y: clamp(s.y, -1, 1), ...lfe, ...el } };
+        // L2: a path's points held in the room, in order, at most 512; the bed flag kept only when set
+        const path = Array.isArray(s.path) && s.path.length
+          ? { path: s.path.filter((p) => Number.isFinite(p.at) && p.at >= 0).slice(0, 512).map((p) => ({ at: Math.round(p.at), x: clamp(p.x, -1, 1), y: clamp(p.y, -1, 1), ...(p.el ? { el: clamp(p.el, -90, 90) } : {}) })).sort((a, b) => a.at - b.at) }
+          : {};
+        return { ...rest, surround: { x: clamp(s.x, -1, 1), y: clamp(s.y, -1, 1), ...lfe, ...el, ...path, ...(s.bed ? { bed: true } : {}) } };
       });
     }
     case "new-playlist": {
