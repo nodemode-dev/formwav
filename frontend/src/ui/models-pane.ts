@@ -17,7 +17,8 @@ interface Choice {
   run: (v: Record<string, string>) => Promise<{ media: MediaRef; at?: number } | { done: string }>;
 }
 type LocalEngine = { id: string; name: string; installed: boolean; installing: string; clones: boolean; size: string; license: string };
-type Providers = { localSpeech?: LocalEngine[]; providers: { id: string; ready: boolean; needs: string; presets?: { model: string; label: string; fields: string[] }[]; models?: { id: string; label: string; fields?: string[] }[] }[] };
+type LocalDub = { kokoro: boolean; translator: boolean; languages: { code: string; name: string; installed: boolean; installing: string }[] };
+type Providers = { localDub?: LocalDub; localSpeech?: LocalEngine[]; providers: { id: string; ready: boolean; needs: string; presets?: { model: string; label: string; fields: string[] }[]; models?: { id: string; label: string; fields?: string[] }[] }[] };
 
 export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   let lastDub: { job: string; lang: string } | null = null;
@@ -48,6 +49,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-models-row" data-field="to">To (s)<input type="number" min="0" step="0.1" class="fw-models-to" placeholder="the selection's end"></label>
 <label class="fw-models-row" data-field="localvoice">Voice<select class="fw-models-localvoice"><option value="af_heart">af_heart</option></select></label>
 <label class="fw-models-row" data-field="localengine">Engine<select class="fw-models-localengine"></select></label>
+<label class="fw-models-row" data-field="dublang">Into<select class="fw-models-dublang"></select></label>
 <label class="fw-models-row fw-models-check" data-field="loop"><input type="checkbox" class="fw-models-loop"> Loop seamlessly</label>
 <label class="fw-models-row fw-models-check" data-field="instrumental"><input type="checkbox" class="fw-models-instrumental"> Instrumental only</label>
 <label class="fw-models-row fw-models-check" data-field="denoise"><input type="checkbox" class="fw-models-denoise"> Remove background noise first</label>
@@ -73,6 +75,10 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   };
   const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
   const choices: Choice[] = [];
+  // the dubbing language list follows the chosen task (installed ones to dub into, the others to install); one listener,
+  // reading the lists the latest build left, since build runs again after every install
+  let dubLists: { ready: LocalDub["languages"]; missing: LocalDub["languages"]; fill: (l: LocalDub["languages"]) => void } | null = null;
+  kind.addEventListener("change", () => dubLists?.fill(kind.value === "ld-install" ? dubLists.missing : dubLists.ready));
   // The clip under the time selection (on a selected track, or any), and the selection in its source's own seconds.
   const regenTarget = () => {
     const sel = engine.get("selection");
@@ -308,6 +314,44 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
           }
         } });
     }
+    // Dubbing on this machine (PLAN_v11 2.M5): Whisper's words, Argos Translate's models, Kokoro's voices
+    const dubbing = p.localDub;
+    if (dubbing) {
+      const ready = dubbing.languages.filter((l) => l.installed);
+      const missing = dubbing.languages.filter((l) => !l.installed);
+      const pick = box.querySelector<HTMLSelectElement>(".fw-models-dublang") as HTMLSelectElement;
+      const fill = (langs: LocalDub["languages"]) => pick.replaceChildren(...langs.map((l) => new Option(l.name, l.code)));
+      const needs = !dubbing.kokoro ? "Kokoro installed on this machine: choose Install a speech engine on this machine" : "a dubbing language installed: choose Install a dubbing language on this machine";
+      choices.push({ id: "ld-dub", label: "Dub a clip on this machine (Whisper, Argos Translate, Kokoro)", ready: dubbing.kokoro && dubbing.translator && ready.length > 0, needs, fields: ["clip", "dublang"],
+        run: async (v) => {
+          const [trackId, clipId] = v.clip.split("/");
+          const doc = engine.get("document");
+          const c = doc.tracks.find((t) => t.id === trackId)?.clips.find((x) => x.id === clipId);
+          if (!c) throw new Error("Choose the clip to dub");
+          const mediaRate = doc.media[c.mediaId]?.sampleRate ?? doc.sampleRate;
+          const start = c.sourceIn / mediaRate;
+          const out = await post(`/api/providers/local-dub/${v.dublang}`, { media_id: c.mediaId, start, end: start + c.length / doc.sampleRate });
+          return { media: out.media, at: c.start };
+        } });
+      choices.push({ id: "ld-install", label: "Install a dubbing language on this machine", ready: dubbing.kokoro && missing.length > 0, needs: dubbing.kokoro ? "nothing: every dubbing language is installed" : "Kokoro installed first", fields: ["dublang"],
+        run: async (v) => {
+          await post(`/api/providers/local-dub/${v.dublang}/install`, null);
+          for (;;) {
+            await sleep(3000);
+            const st = (await (await fetch("/api/providers/local-dub")).json()) as LocalDub;
+            const l = st.languages.find((x) => x.code === v.dublang);
+            if (!l) throw new Error("that language went missing");
+            if (l.installing.startsWith("failed")) throw new Error(`${l.name}: ${l.installing}`);
+            if (l.installed && !l.installing) {
+              window.setTimeout(load, 0);
+              return { done: `Dubbing into ${l.name} is installed on this machine` };
+            }
+            setText(state, `${l.name}: ${l.installing || "installing"}...`);
+          }
+        } });
+      dubLists = { ready, missing, fill };
+      fill(ready.length ? ready : missing);
+    }
     for (const preset of fal?.presets ?? []) {
       choices.push({ id: `fal:${preset.model}`, label: `${preset.label} (fal)`, ready: !!fal?.ready, needs: fal?.needs ?? "FAL_KEY", fields: preset.fields, run: async (v) => ({ media: await post("/api/providers/fal/generate", { model: preset.model, input: Object.fromEntries(preset.fields.map((f) => [f, f === "duration" ? Number(v.duration) : v[f]])) }) }) });
     }
@@ -377,7 +421,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     const c = choices.find((x) => x.id === kind.value);
     if (!c?.ready) return;
     const v: Record<string, string> = {};
-    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language", "musicmodel", "stems", "speakers", "keyterms", "lines", "preview", "loop", "instrumental", "denoise", "strength", "from", "to", "localvoice", "localengine"]) v[f] = value(f);
+    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language", "musicmodel", "stems", "speakers", "keyterms", "lines", "preview", "loop", "instrumental", "denoise", "strength", "from", "to", "localvoice", "localengine", "dublang"]) v[f] = value(f);
     go.disabled = true;
     setText(state, `Making it with ${c.label}...`);
     try {
@@ -403,9 +447,10 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     Promise.all([
       fetch("/api/providers").then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))),
       fetch("/api/providers/local-speech").then((r) => (r.ok ? r.json() : { engines: [] }), () => ({ engines: [] })),
+      fetch("/api/providers/local-dub").then((r) => (r.ok ? r.json() : null), () => null),
     ])
-      .then(([prov, local]: [Providers, { engines: LocalEngine[] }]) => {
-        const p: Providers = { ...prov, localSpeech: local.engines };
+      .then(([prov, local, dub]: [Providers, { engines: LocalEngine[] }, LocalDub | null]) => {
+        const p: Providers = { ...prov, localSpeech: local.engines, localDub: dub ?? undefined };
         if (kindRow) kindRow.hidden = false;
         go.hidden = false;
         setText(state, "");

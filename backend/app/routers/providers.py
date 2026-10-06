@@ -183,3 +183,27 @@ def local_speech_regenerate(engine: str, body: dict = Body(...)) -> dict:
     from ..services import local_speech
 
     return _run(local_speech.regenerate, engine, str(body.get("media_id", "")), float(body.get("start_s", 0)), float(body.get("end_s", 0)), str(body.get("text", "")))
+
+
+
+# Dubbing on this machine (PLAN_v11 2.M5): Whisper, Argos Translate's models through CTranslate2, Kokoro
+@router.get("/providers/local-dub")
+def local_dub_status() -> dict:
+    from ..services import local_dub
+
+    return local_dub.status()
+
+
+@router.post("/providers/local-dub/{lang}/install", status_code=202)
+def local_dub_install(lang: str) -> dict:
+    from ..services import local_dub
+
+    return _run(local_dub.install, lang)
+
+
+@router.post("/providers/local-dub/{lang}", status_code=201)
+def local_dub_run(lang: str, body: dict = Body(...)) -> dict:
+    from ..services import local_dub
+
+    end = body.get("end")
+    return _run(local_dub.dub, str(body.get("media_id", "")), lang, float(body.get("start") or 0), float(end) if end is not None else None, str(body.get("voice") or ""))

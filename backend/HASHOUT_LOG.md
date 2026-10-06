@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### Dubbing made on this machine: Whisper's words, Argos Translate's models, Kokoro's voices
+- refers-to: backend/app/services/local_dub.py; app/routers/providers.py (/api/providers/local-dub...); frontend/src/ui/models-pane.ts; sidecar verification/verify_local_dub.py
+- kind: explainer
+- logged: v2.11.6 (in progress) · 2026-10-06
+
+The comparison's open-weight paths (PLAN_v11 2.M5): dubbing needed ElevenLabs. Now the clip's transcript (Whisper) is grouped into whole sentences, translated by Argos Translate's model for the pair (a CTranslate2 model and its SentencePiece tokenizer, run in the speech runtime with ctranslate2 and sentencepiece alone, since the argostranslate package brings stanza and PyTorch; the model's README names its training data, the OPUS corpora, and states no licence, so none is claimed), spoken by Kokoro in a voice of the language, and each sentence placed where it began, sped up with ffmpeg's pitch-keeping atempo by at most 1.35 times when it would run into the next. Spanish, French, Italian and Portuguese install on request (about 90 MB each). Measured on the JFK speech into Spanish, in 8.6 s here: the translation against the standard human rendering, word F1 0.93; the dub transcribed back by a multilingual Whisper told the language, word F1 0.90 against what was to be said; placed at 0.00 s, no speed-up or cut needed, the length the source's to the millisecond. The first run split the sentence at JFK's 1.4 s pause after "my fellow Americans": the second half, translated alone, came back in the informal singular (F1 0.65); sentences are now whole (end punctuation, a break over 1.5 s, or past 15 s). In the Create tab's Models: Dub a clip on this machine and Install a dubbing language, the language list following the task; in Chromium the clip dubbed onto a new track at its start and of its length, no layout shift, no page error.
+
 ### Speech, music and ambience as three faders
 - refers-to: backend/app/services/three_way.py; app/routers/media.py (POST /api/media/{id}/three-way); frontend/src/ui/clip-tab.ts (Speech, music and ambience to three tracks); sidecar verification/verify_three_way.py
 - kind: explainer
