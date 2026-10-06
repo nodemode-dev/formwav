@@ -127,7 +127,7 @@ if (host) {
   mountPianoRoll(host, engine);
   mountSpectrum(host, engine, player);
   mountEnvelopeEdit(host, engine);
-  mountMediaPane(host, engine);
+  mountMediaPane(host, engine, player);
   mountModelsPane(host, engine);
   mountInspector(host, engine);
   mountVoicePane(host, engine);

@@ -456,6 +456,14 @@ export interface StepPattern {
   swing: number;
 }
 
+/** L10: the session view's slots, kept with the session: a media per scene and track (null an empty slot), how many
+ *  scenes, and where a launch lands (now, the next beat, bar, two bars or four bars). */
+export interface LauncherState {
+  scenes: number;
+  slots: Record<string, (string | null)[]>;
+  quantize: "none" | "beat" | "bar" | "2bars" | "4bars";
+}
+
 export interface SessionDoc {
   sampleRate: number;
   /** PT-38, AA-11: hear the 5.1 placement as an ITU stereo fold-down, in playback and in the stereo mix export alike;
@@ -487,6 +495,7 @@ export interface SessionDoc {
   markers: readonly Marker[];
   regions?: readonly Region[];
   patterns?: readonly StepPattern[];
+  launcher?: LauncherState;
   loop?: LoopRange;
   buses?: readonly Bus[];
   /** VCA masters (Pro Tools' VCA mixing): group faders that scale their member tracks without carrying audio. */
@@ -576,6 +585,8 @@ export type Command =
   | { type: "set-track-input"; trackId: string; input: TrackInput | null }
   | { type: "restore"; patch: RestorePatch }
   | { type: "save-pattern"; pattern: StepPattern }
+  | { type: "set-launcher-slot"; trackId: string; scene: number; mediaId: string | null }
+  | { type: "set-launcher"; scenes?: number; quantize?: LauncherState["quantize"] }
   | { type: "delete-pattern"; id: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
@@ -1203,6 +1214,17 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           return color ? { ...rest, color } : rest;
         }),
       }));
+    }
+    case "set-launcher-slot": {
+      const l = doc.launcher ?? { scenes: 4, slots: {}, quantize: "bar" as const };
+      const row = [...(l.slots[cmd.trackId] ?? [])];
+      while (row.length <= cmd.scene) row.push(null);
+      row[cmd.scene] = cmd.mediaId;
+      return { ...doc, launcher: { ...l, slots: { ...l.slots, [cmd.trackId]: row } } };
+    }
+    case "set-launcher": {
+      const l = doc.launcher ?? { scenes: 4, slots: {}, quantize: "bar" as const };
+      return { ...doc, launcher: { ...l, ...(cmd.scenes !== undefined ? { scenes: Math.max(1, Math.min(16, Math.round(cmd.scenes))) } : {}), ...(cmd.quantize ? { quantize: cmd.quantize } : {}) } };
     }
     case "save-pattern": {
       const kept = (doc.patterns ?? []).filter((x) => x.id !== cmd.pattern.id);

@@ -16,7 +16,7 @@ function fill(row: HTMLElement, m: MediaRef): void {
 }
 
 /** The session's audio files, as formcut's media pane lists a project's media. */
-export function mountMediaPane(host: HTMLElement, engine: Engine): void {
+export function mountMediaPane(host: HTMLElement, engine: Engine, player?: { play(open?: boolean): Promise<void> }): void {
   const list = host.querySelector<HTMLElement>(".fw-media-list");
   const meta = host.querySelector<HTMLElement>(".fw-pane-media .fw-pane-meta");
   const end = host.querySelector<HTMLElement>(".fw-pane-media .fw-pane-end");
@@ -49,7 +49,7 @@ export function mountMediaPane(host: HTMLElement, engine: Engine): void {
 <button type="button" class="fw-ibtn" data-g="go">Add on a new track</button>`;
   (host.querySelector<HTMLElement>(".fw-create-body") ?? list).append(gen);
   mountStepSequencer(host.querySelector<HTMLElement>(".fw-create-body") ?? list, engine, document.querySelector<HTMLElement>(".fw-notice"));
-  mountLauncher(host.querySelector<HTMLElement>(".fw-create-body") ?? list, engine, document.querySelector<HTMLElement>(".fw-notice"));
+  mountLauncher(host.querySelector<HTMLElement>(".fw-create-body") ?? list, engine, document.querySelector<HTMLElement>(".fw-notice"), player);
   const lib = document.createElement("section");
   lib.className = "fw-insp-section fw-library";
   lib.innerHTML = `<div class="fw-insp-head">Library</div>

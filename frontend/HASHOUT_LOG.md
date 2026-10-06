@@ -109,6 +109,13 @@ frontend/
 
 ## index.html {#index-html}
 
+### A session view that plays: slots kept with the session, launch quantize choices, launching starts playback
+- refers-to: frontend/src/ui/launcher.ts; src/engine/document.ts (LauncherState, launcher, set-launcher-slot, set-launcher); src/ui/media-pane.ts and src/main.ts (the player passed to the launcher); src/styles/workspace.css (a playing slot)
+- kind: explainer
+- logged: v2.11.9 (in progress) · 2026-10-06
+
+The comparison's L10. The clip launcher had four scenes, its slots only in the page's lists (lost on reload), every launch on the next bar, and nothing playing until the transport was started. Now the slots, the number of scenes (1 to 16) and the quantize choice are kept in the session (set-launcher-slot and set-launcher, each an undo step); a launch lands now, on the next beat, bar, two bars or four bars; launching while stopped starts playback; a slot is lit while its launched loop is under the playhead. Launches are still written into the arrangement as launched repeats (as a session performance is recorded), and a new launch on a track ends that track's previous loop where it lands, so the player, exports and undo treat them as clips. Checked in Chromium at 120 BPM from a playhead at 1.30 s: landing at 62,400 (now), 72,000 (beat), 96,000 (bar), 192,000 (two bars) and 384,000 (four bars), playback started each time; six scenes and two slots kept through a reload of the document and shown in the cells; a scene launched from zero lighting both its slots while playing, none once stopped; no layout shift without input, no page error. The first scene check counted one lit slot after five launches and undos, the quantize changes being undo steps too; a clean run lights both.
+
 ### Patterns that play: rows, velocity and swing per step, kept with the session, heard before placing
 - refers-to: frontend/src/ui/step-sequencer.ts; src/engine/document.ts (StepPattern, patterns, save-pattern, delete-pattern); src/styles/workspace.css (.fw-step velocity levels)
 - kind: explainer
