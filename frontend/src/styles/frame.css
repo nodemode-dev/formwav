@@ -143,7 +143,7 @@
 .fw-tool-tray :is([data-inspector], .fw-mode[data-piano], .fw-mode[data-spectrum], .fw-mode[title^="Show the mixer"]) { display: none; }
 .fw-tool-tray { overflow-x: auto; }
 .fw-pane-media .fw-pane-tabs { flex-wrap: nowrap; overflow-x: auto; padding-block: 0; }
-.fw-pane-media .fw-pane-tab { padding: 0 6px; font-size: var(--fs-12); }
+.fw-pane-media .fw-pane-tab { padding: 0 4px; font-size: var(--fs-11); }
 
 /* The editor's Effects, Synth and Pads tabs (editor-tabs.ts), after the approved target */
 .fw-dock .fw-editor-panel { display: flex; min-block-size: 0; block-size: 100%; }
@@ -185,6 +185,42 @@
 .fw-touch { position: relative; flex: 1 1 auto; min-block-size: 0; padding: 0; overflow: hidden; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-0); cursor: crosshair; touch-action: none; }
 .fw-touch-dot { position: absolute; left: 42%; top: 42%; inline-size: 18px; block-size: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--accent-color); box-shadow: 0 0 0 6px var(--accent-soft); pointer-events: none; }
 .fw-touch[aria-pressed="true"] .fw-touch-dot { inline-size: 26px; block-size: 26px; margin: -13px 0 0 -13px; }
+
+/* The arrangement after the approved target: each track a colour by its place, through the lanes' existing colour
+ * variable (a colour set on the track or the clip still wins, being set on the element), the clip's name on a chip
+ * over its waveform. */
+.fw-lanes > .fw-lane:nth-of-type(8n + 1) { --fw-lane-color: var(--fw-color-cyan); }
+.fw-lanes > .fw-lane:nth-of-type(8n + 2) { --fw-lane-color: var(--fw-color-violet); }
+.fw-lanes > .fw-lane:nth-of-type(8n + 3) { --fw-lane-color: var(--fw-color-amber); }
+.fw-lanes > .fw-lane:nth-of-type(8n + 4) { --fw-lane-color: var(--fw-color-pink); }
+.fw-lanes > .fw-lane:nth-of-type(8n + 5) { --fw-lane-color: var(--fw-color-slate); }
+.fw-lanes > .fw-lane:nth-of-type(8n + 6) { --fw-lane-color: var(--fw-color-green); }
+.fw-lanes > .fw-lane:nth-of-type(8n + 7) { --fw-lane-color: var(--fw-color-blue); }
+.fw-lanes > .fw-lane:nth-of-type(8n + 8) { --fw-lane-color: var(--fw-color-red); }
+.fw-lanes .fw-lane .fw-clip { background: color-mix(in srgb, var(--fw-c) 18%, var(--surface-0)); border-color: color-mix(in srgb, var(--fw-c) 50%, transparent); }
+.fw-lanes .fw-lane .fw-clip[aria-selected="true"] { border-color: var(--accent-color); }
+.fw-lanes .fw-lane .fw-wave { color: var(--fw-c); }
+.fw-tool-tray:not(:has(.fw-mode[title^="Show clips as spectrograms"][aria-pressed="true"])) :is(.fw-mode[title^="Spectrograms on a logarithmic"], select[aria-label="Spectral selection tool"]) { display: none; }
+.fw-tool-tray .fw-mode { padding: 0 7px; }
+.fw-tool-tray select[aria-label="Workspace layout"] { max-inline-size: 104px; }
+.fw-clip-name { position: sticky; display: inline-block; top: 4px; left: calc(var(--fw-head-w) + 6px); margin: 4px 0 0 6px; z-index: var(--z-raised); max-inline-size: calc(100% - 12px); padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--surface-0) 72%, transparent); color: var(--text-primary); font-size: var(--fs-11); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.fw-clip-name:empty { display: none; }
+
+/* The toolbar in words, after the approved target: each tool's own label shown and its icon hidden, no capitalised
+ * group labels, and the editor tabs' toggles kept hidden (the tabs and the View menu trigger them). */
+.fw-tool-tray .fw-opt-group::before { display: none; }
+.fw-tool-tray .fw-mode[hidden] { display: none; }
+.fw-tool-tray [data-group] .fw-mode:has(svg) > span { display: inline; }
+.fw-tool-tray [data-group] .fw-mode > svg { display: none; }
+
+/* The browser's rows and tabs, after the approved target */
+.fw-media-list .fw-media-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 6px; row-gap: 1px; padding: 7px 8px; border-radius: 8px; }
+.fw-media-list .fw-media-item:hover { background: var(--surface-2); }
+.fw-media-list .fw-media-name { grid-area: 1 / 1; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
+.fw-media-list .fw-media-meta { grid-area: 2 / 1; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-11); color: var(--text-secondary); }
+.fw-media-list .fw-media-item > button { grid-row: 1 / span 2; }
+.fw-pane-media .fw-pane-tabs { gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-0); }
+.fw-pane-media .fw-pane-tab.is-active { background: var(--surface-raised); color: var(--text-primary); }
 
 /* The Inspector as the editor's first tab: its sections flow in columns across the editor's width, scrolling
  * sideways, instead of one tall column. */

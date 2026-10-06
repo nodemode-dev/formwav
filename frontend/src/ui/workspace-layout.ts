@@ -20,7 +20,7 @@ interface Layout {
 }
 type Side = "media" | "inspector";
 
-const DEFAULTS: Layout = { media: 240, inspector: 284, showMedia: true, showInspector: true };
+const DEFAULTS: Layout = { media: 268, inspector: 284, showMedia: true, showInspector: true };
 
 function read(): Layout {
   try {

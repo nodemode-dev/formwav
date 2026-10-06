@@ -348,7 +348,10 @@ function clipNode(): HTMLElement {
   takeBadge.className = "fw-take";
   takeBadge.hidden = true;
   takeBadge.title = "Loop-recorded takes: click to play the next one";
-  node.append(canvas, env, fadeIn, fadeOut, gain, takeBadge);
+  const name = document.createElement("span");
+  name.className = "fw-clip-name";
+  name.setAttribute("aria-hidden", "true");
+  node.append(canvas, env, fadeIn, fadeOut, gain, takeBadge, name);
   return node;
 }
 
@@ -376,6 +379,7 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
   syncWarpMarkers(node, clip, spp);
   const clipColor = clip.color ? `var(--fw-color-${clip.color})` : "";
   if (node.style.getPropertyValue("--fw-clip-color") !== clipColor) node.style.setProperty("--fw-clip-color", clipColor);
+  setText(node.querySelector(".fw-clip-name"), (doc.media[clip.mediaId]?.name ?? "").replace(/\.[a-z0-9]+$/i, ""));
   const left = `${(clip.start / spp).toFixed(2)}px`;
   const width = `${Math.max(1, clip.length / spp).toFixed(2)}px`;
   if (node.dataset.left !== left) {
