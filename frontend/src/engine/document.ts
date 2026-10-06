@@ -445,6 +445,17 @@ export interface LoopRange {
   enabled: boolean;
 }
 
+/** L12: a step pattern kept with the session (the Step sequencer's Save pattern): one pitch and sixteen velocities a row
+ *  (0 is a step off), the bars it repeats for and its swing (50 straight to 75). */
+export interface StepPattern {
+  id: string;
+  name: string;
+  pitches: number[];
+  steps: number[][];
+  bars: number;
+  swing: number;
+}
+
 export interface SessionDoc {
   sampleRate: number;
   /** PT-38, AA-11: hear the 5.1 placement as an ITU stereo fold-down, in playback and in the stereo mix export alike;
@@ -475,6 +486,7 @@ export interface SessionDoc {
   media: Readonly<Record<string, MediaRef>>;
   markers: readonly Marker[];
   regions?: readonly Region[];
+  patterns?: readonly StepPattern[];
   loop?: LoopRange;
   buses?: readonly Bus[];
   /** VCA masters (Pro Tools' VCA mixing): group faders that scale their member tracks without carrying audio. */
@@ -563,6 +575,8 @@ export type Command =
   | { type: "set-clip-ara"; trackId: string; clipId: string; ara: ClipAra | null }
   | { type: "set-track-input"; trackId: string; input: TrackInput | null }
   | { type: "restore"; patch: RestorePatch }
+  | { type: "save-pattern"; pattern: StepPattern }
+  | { type: "delete-pattern"; id: string }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
   | { type: "set-track-mute"; trackId: string; mute: boolean }
@@ -1190,6 +1204,12 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         }),
       }));
     }
+    case "save-pattern": {
+      const kept = (doc.patterns ?? []).filter((x) => x.id !== cmd.pattern.id);
+      return { ...doc, patterns: [...kept, cmd.pattern] };
+    }
+    case "delete-pattern":
+      return doc.patterns?.some((x) => x.id === cmd.id) ? { ...doc, patterns: doc.patterns.filter((x) => x.id !== cmd.id) } : doc;
     case "restore": {
       const out: Record<string, unknown> = { ...(doc as unknown as Record<string, unknown>) };
       for (const [key, change] of Object.entries(cmd.patch)) {

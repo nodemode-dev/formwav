@@ -109,6 +109,13 @@ frontend/
 
 ## index.html {#index-html}
 
+### Patterns that play: rows, velocity and swing per step, kept with the session, heard before placing
+- refers-to: frontend/src/ui/step-sequencer.ts; src/engine/document.ts (StepPattern, patterns, save-pattern, delete-pattern); src/styles/workspace.css (.fw-step velocity levels)
+- kind: explainer
+- logged: v2.11.7 (in progress) · 2026-10-06
+
+The comparison's L12: the step sequencer had four rows of on-off steps, placed only. Now 1 to 16 rows (8 by default, C6 to C3), a velocity per step (a click lights a step at 100, a Shift-click cycles it through ghost 60, accent 127 and normal 100, shown dimmer or brighter), swing on the off-beat sixteenths (50 straight to 75; 66.7 a triplet feel), Hear (rendered as Place renders, played, nothing added) and patterns kept in the session (save-pattern and delete-pattern, each one undo step, a list bringing one back). Checked in Chromium: rows 8 to 10; a ghost and an accent where Shift-clicked; at 66.7 percent swing and 120 BPM the off-beat notes at 8,004 and 20,004 samples (6,000 a sixteenth plus the 2,004 swing), the velocities 60, 100 and 127 as set; saved, cleared, and loaded back with ten rows, the swing and every level; Hear's play() resolving on the rendered pattern (7.81 s for four bars), the button Stop while it played, no track added; the save undone in one step; no layout shift without input, no page error.
+
 ### Speech regions misplaced on media at another rate than the session's
 - refers-to: frontend/src/ui/clip-tab.ts (Mark where people speak)
 - kind: fix
