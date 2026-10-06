@@ -21,7 +21,7 @@ interface Kind {
 }
 
 const FREQ: Param = ["freq", "Frequency", 20, 20000, "Hz", true];
-const KINDS: Record<string, Kind> = {
+export const KINDS: Record<string, Kind> = {
   highpass: { label: "High-pass", sub: "Cuts below", params: [FREQ, ["q", "Q", 0.1, 18, ""]], init: { freq: 100, gainDb: 0, q: 0.707 } },
   lowpass: { label: "Low-pass", sub: "Cuts above", params: [FREQ, ["q", "Q", 0.1, 18, ""]], init: { freq: 8000, gainDb: 0, q: 0.707 } },
   peak: { label: "Peak EQ", sub: "Boosts or cuts a band", params: [FREQ, ["gainDb", "Gain", -24, 24, "dB"], ["q", "Q", 0.1, 18, ""]], init: { freq: 1000, gainDb: 0, q: 1 } },

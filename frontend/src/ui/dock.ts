@@ -63,6 +63,7 @@ export function mountDock(host: HTMLElement): void {
     inspectorToggle.setAttribute("aria-pressed", String(!inspector.hidden));
   });
   const wanted: Array<[string, string, string, string]> = [
+    ["clip", "Clip", ".fw-cliptab", ".fw-tool-tray [data-cliptab]"],
     ["inspector", "Inspector", ".fw-pane-inspector", ".fw-tool-tray [data-inspector]"],
     ["effects", "Effects", ".fw-chain", ".fw-tool-tray [data-chain]"],
     ["synth", "Synth", ".fw-synth", ".fw-tool-tray [data-synth]"],

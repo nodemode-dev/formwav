@@ -200,6 +200,39 @@
 .fw-touch-dot { position: absolute; left: 42%; top: 42%; inline-size: 18px; block-size: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--accent-color); box-shadow: 0 0 0 6px var(--accent-soft); pointer-events: none; }
 .fw-touch[aria-pressed="true"] .fw-touch-dot { inline-size: 26px; block-size: 26px; margin: -13px 0 0 -13px; }
 
+/* The Clip tab (clip-tab.ts): the selected clip's settings as one grid of labelled fields */
+.fw-cliptab { flex-direction: column; padding: 12px 16px; overflow: auto; }
+.fw-cliptab-empty { display: none; margin: 0; color: var(--text-muted); font-size: var(--fs-12); }
+.fw-cliptab.is-empty .fw-cliptab-empty { display: block; }
+.fw-cliptab.is-empty .fw-cliptab-grid { display: none; }
+.fw-cliptab-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; align-content: start; }
+.fw-cf { display: flex; flex-direction: column; gap: 4px; min-inline-size: 0; }
+.fw-cf-wide { grid-column: span 2; }
+.fw-cf-label { font-size: var(--fs-11); color: var(--text-secondary); }
+.fw-cf :is(input, select, output) { block-size: 30px; min-inline-size: 0; padding: 0 8px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-0); color: var(--text-primary); font: inherit; font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
+.fw-cf output { display: flex; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-color: transparent; background: transparent; color: var(--text-secondary); }
+.fw-cf-colors { display: flex; align-items: center; gap: 6px; min-block-size: 30px; }
+.fw-cf-color { inline-size: 22px; block-size: 22px; padding: 0; border: 2px solid transparent; border-radius: 50%; background: currentColor; cursor: pointer; }
+.fw-cf-color[data-color=""] { border: 2px dashed var(--line-2); background: transparent; }
+.fw-cf-color[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--text-primary); }
+
+/* The browser's effects (browser-effects.ts), under the session's media */
+.fw-fxlib { display: flex; flex-direction: column; gap: 10px; margin-block-start: 8px; padding: 12px 8px; border-block-start: 1px solid var(--line-1); }
+.fw-fxlib-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 4px; font-size: var(--fs-12); font-weight: 700; }
+.fw-fxlib-hint { font-size: var(--fs-11); font-weight: 400; color: var(--text-muted); }
+.fw-fxlib-group { display: flex; flex-direction: column; }
+.fw-fxlib-label { padding: 4px 4px 2px; font-size: var(--fs-11); color: var(--text-muted); }
+.fw-fxlib-item { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 5px 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-12); text-align: start; cursor: pointer; }
+.fw-fxlib-item:hover { background: var(--surface-2); }
+.fw-fxlib-sub { min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-11); color: var(--text-muted); }
+
+/* The mixer inside the editor: strips taller than the editor scroll (their routing menus stay reachable), and mute and
+ * solo read M and S like the track headers (the icons hidden, the buttons, labels and pressed states unchanged) */
+.fw-dock .fw-mixer { overflow: auto; }
+.fw-mixer :is(.fw-strip-mute, .fw-strip-solo) > * { display: none; }
+.fw-mixer .fw-strip-mute::after { content: "M"; font-size: var(--fs-11); font-weight: 700; }
+.fw-mixer .fw-strip-solo::after { content: "S"; font-size: var(--fs-11); font-weight: 700; }
+
 /* The arrangement after the approved target: each track a colour by its place, through the lanes' existing colour
  * variable (a colour set on the track or the clip still wins, being set on the element), the clip's name on a chip
  * over its waveform. */

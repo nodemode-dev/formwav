@@ -42,6 +42,8 @@ import { mountStatusBar } from "./ui/status-bar";
 import { mountFileMenu } from "./ui/file-menu";
 import { mountThemeMenu } from "./ui/theme-menu";
 import { mountEditorTabs } from "./ui/editor-tabs";
+import { mountClipTab } from "./ui/clip-tab";
+import { mountBrowserEffects } from "./ui/browser-effects";
 import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
@@ -135,9 +137,11 @@ if (host) {
   mountOutputSelect(host, player);
   mountFileMenu(host);
   mountThemeMenu(host);
+  mountClipTab(host, engine);
   mountEditorTabs(host, engine, player);
+  mountBrowserEffects(host, engine);
   mountDock(host);
-  host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-inspector]")?.click();
+  host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();
   mountProjects(host, engine, player);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
