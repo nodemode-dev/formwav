@@ -2,7 +2,7 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v2.11.4
+Current build version: v2.11.5
 Last updated: 2026-09-30 · the Space group's four echoes named as echoes (the last entry below); the header had read v0.38.0 while entries ran to v0.84.0's SAM-Audio service
 
 ---
