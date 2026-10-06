@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### Takes lined up by their sound: formcut's multicam sync, refined to a fraction of a sample
+- refers-to: backend/app/services/sync.py; app/routers/media.py (POST /api/media/sync); frontend/src/ui/clip-tab.ts (Line up by sound); sidecar verification/verify_sync.py
+- kind: explainer
+- logged: v2.10.8 (in progress) · 2026-10-06
+
+The comparison's Multitrack recording row noted takes from different devices sitting about 2 ms apart, each device keeping its own clock; a remote room's takes line up by a shared clock only to the network's round trip. formcut's multicam sync (the same author's) lines camera angles up by their sound on ten-millisecond loudness envelopes, right for pictures and too coarse for audio, so it is the first stage here, ported with its sign, normalisation, confidence floor and its rule that among near-equal peaks the smallest lag wins; the second stage cross-correlates the waveforms at full rate with the phase transform, a few envelope steps either side, and places the peak between samples by a parabola. Measured against known delays through differently coloured copies of the JFK speech (another microphone: duller, half the level, its own noise): 2.317 ms found as 2.3144 (0.125 samples off), -37.5 ms as -37.4982 (0.086), 450 ms as 449.9969 (0.149), and unrelated noise refused at a match of 0.074. A first run showed every lag 0.593 ms off by the same amount; the cause was the test's colouring filter, one-sided and convolved centred, which moved the copies; a symmetric filter colours without moving. In the Clip tab, Line up by sound takes the selected clip as the reference, measures every clip on another track that overlaps it over the stretch both cover, and moves the strong matches in one undo step; a take that would cross the session's start stays at zero and slips its sound instead (clamping it there would have left the commonest case, takes started together, unmoved). In Chromium: a take 2.317 ms late slipped 111 samples at zero, one 37.5 ms early moved 1,800 samples, the noise was left and named, one undo restored all three, no page error; two layout-shift entries of 0.0001 as the clips moved, to attribute at the gate.
+
 ### boot_backend · host and port
 - refers-to: boot_backend :: the uvicorn line (last line)
 - kind: rationale

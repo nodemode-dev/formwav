@@ -42,6 +42,21 @@ def library_catalogue() -> list[dict]:
     return library.catalogue()
 
 
+@router.post("/media/sync")
+def sync_by_sound(body: dict = Body(...)) -> dict:
+    """Takes lined up by their sound (services/sync.py): {"reference": {"media", "in"}, "others": [{"media", "in"}]}, each
+    other's lag in seconds (positive: it ran late) and the match's strength."""
+    from ..services import sync
+
+    try:
+        ref, others = body["reference"], list(body.get("others", []))
+        return {"lags": sync.sync(ref, others, int(body.get("rate", 48000)), float(body.get("seconds", 120.0)))}
+    except (KeyError, TypeError) as err:
+        raise HTTPException(422, "name a reference and the other takes") from err
+    except media.MediaError as err:
+        raise HTTPException(404, str(err)) from err
+
+
 @router.get("/library/catalogue/search")
 def catalogue_search(q: str, limit: int = 20) -> dict:
     """DS-14: recorded sound effects and music on Wikimedia Commons matching the words, royalty-free licences only

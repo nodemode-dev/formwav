@@ -8,7 +8,7 @@
  * its toggle flips its hidden flag.
  */
 import type { Engine } from "../engine";
-import type { Clip, SessionDoc, Track } from "../engine/document";
+import type { Clip, Command, SessionDoc, Track } from "../engine/document";
 import type { MediaRef } from "../engine";
 import { setText } from "../vendor/nodemode/dom-stable";
 
@@ -36,6 +36,7 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     field("Fade out (s)", `<input type="number" data-f="fadeOut" min="0" step="0.01">`),
     field("Fade shape", `<select data-f="shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
     `<div class="fw-cf fw-cf-wide"><span class="fw-cf-label">Colour</span><div class="fw-cf-colors" role="group" aria-label="Clip colour"><button type="button" class="fw-cf-color" data-color="" aria-label="The track's colour" title="The track's colour"></button>${COLORS.map((c) => `<button type="button" class="fw-cf-color" data-color="${c}" aria-label="${c}" title="${c}" style="color: var(--fw-color-${c})"></button>`).join("")}</div></div>`,
+    `<div class="fw-cf fw-cf-wide fw-cf-sync"><span class="fw-cf-label">Line up by sound</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-sync>Line up other tracks' takes to this one</button></div><output class="fw-cf-ara-state" data-sync-state>Takes on other tracks that overlap this clip move to match its sound, to a fraction of a sample.</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-ara"><span class="fw-cf-label">ARA plug-in</span><div class="fw-cf-ara-row"><select data-ara-plugin aria-label="ARA plug-in"><option value="">Looking for ARA plug-ins</option></select><button type="button" class="fw-ibtn" data-ara="analyze" disabled>Analyse</button><button type="button" class="fw-ibtn" data-ara="render" disabled>Render</button></div><output class="fw-cf-ara-state" data-ara-state></output></div>`,
   ].join("")}</div>`;
   anchor.before(panel);
@@ -131,6 +132,52 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     const hit = b ? find(engine.get("document")) : null;
     if (!b || !hit) return;
     engine.dispatch({ type: "set-clip-color", trackId: hit.track.id, clipId: hit.clip.id, color: b.dataset.color ?? "" });
+  });
+
+  // The comparison's Multitrack recording row: takes from different devices (or a remote room) lined up by their sound
+  // (services/sync.py). The selected clip is the reference; every clip on another track that overlaps it is measured over
+  // the stretch both cover, and those with a strong match move, all in one undo step; weak matches are named and stay.
+  panel.addEventListener("click", async (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-sync]");
+    const hit = b ? find(engine.get("document")) : null;
+    if (!b || !hit) return;
+    const doc = engine.get("document");
+    const rate = doc.sampleRate;
+    const ref = hit.clip;
+    const others = doc.tracks.filter((t) => t.id !== hit.track.id).flatMap((t) => t.clips.filter((c) => c.start < ref.start + ref.length && ref.start < c.start + c.length).map((c) => ({ track: t, clip: c })));
+    const state = panel.querySelector("[data-sync-state]");
+    if (!others.length) return setText(state, "No clip on another track overlaps this one.");
+    b.disabled = true;
+    setText(state, `Listening to ${others.length} take${others.length === 1 ? "" : "s"}...`);
+    try {
+      const lags: { lag: number; confidence: number; aligned: boolean }[] = [];
+      for (const o of others) {
+        const from = Math.max(ref.start, o.clip.start);
+        const span = Math.min(ref.start + ref.length, o.clip.start + o.clip.length) - from;
+        const res = await fetch("/api/media/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rate, seconds: Math.min(120, span / rate), reference: { media: ref.mediaId, in: (ref.sourceIn + from - ref.start) / rate }, others: [{ media: o.clip.mediaId, in: (o.clip.sourceIn + from - o.clip.start) / rate }] }),
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        lags.push(out.lags[0]);
+      }
+      // A late take moves earlier; one that would cross the session's start stays at zero and slips its sound instead
+      const moves: Command[] = others.flatMap((o, i): Command[] => {
+        if (!lags[i].aligned) return [];
+        const to = Math.round(o.clip.start - lags[i].lag * rate);
+        if (to >= 0) return [{ type: "move-clip", trackId: o.track.id, clipId: o.clip.id, start: to }];
+        return [{ type: "set-clip-bounds", trackId: o.track.id, clipId: o.clip.id, start: 0, sourceIn: o.clip.sourceIn - to, length: Math.max(1, o.clip.length + to) }];
+      });
+      if (moves.length) engine.dispatch({ type: "batch", commands: moves });
+      const said = others.map((o, i) => (lags[i].aligned ? `${o.track.name} ${lags[i].lag >= 0 ? "earlier" : "later"} by ${(Math.abs(lags[i].lag) * 1000).toFixed(2)} ms` : `${o.track.name} left (no clear match)`));
+      setText(state, `Lined up: ${said.join("; ")}.`);
+    } catch (err) {
+      setText(state, err instanceof Error ? err.message : String(err));
+    } finally {
+      b.disabled = false;
+    }
   });
 
   // PT-24: the installed ARA plug-ins (the engine's scan, each asked whether it offers ARA); a clip analysed with one,
