@@ -3,3 +3,5 @@ uvicorn[standard]
 numpy
 maturin
 pyaaf2
+httpx
+onnxruntime

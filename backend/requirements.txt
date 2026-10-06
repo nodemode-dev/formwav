@@ -3,3 +3,7 @@ uvicorn[standard]==0.39.0
 numpy==2.5.2
 maturin==1.15.0
 pyaaf2==1.7.1
+# the cloud router imports httpx when the engine starts: without it a fresh install's engine does not start
+httpx==0.28.1
+# Silero VAD (Mark where people speak) runs its model in the engine
+onnxruntime==1.30.0

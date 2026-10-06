@@ -36,7 +36,7 @@ formwav is an open-source audio editor that runs on your own machine: record, ed
 
 ## Quick Start
 
-Requirements: Node 20.19 or newer, Python 3.12 (the tested version), Rust stable (the installer builds the audio core into the engine; get it from https://rustup.rs), git.
+Requirements: Node 20.19 or newer, Python 3.12 (the tested version), Rust stable (the installer builds the audio core into the engine; get it from https://rustup.rs), git, and ffmpeg on the PATH (the engine reads every format but WAV through it; macOS: `brew install ffmpeg`). On Linux the core's native audio builds against ALSA, so add its headers first (Debian and Ubuntu: `sudo apt-get install libasound2-dev pkg-config ffmpeg`).
 
 ### macOS & Linux
 

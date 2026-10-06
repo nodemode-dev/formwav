@@ -76,9 +76,20 @@ def selfcheck() -> int:
     except Exception as exc:  # the core could not be loaded at all (macOS 27 refused a misaligned strip, say)
         load_error = str(exc)
         info["native_output"] = info["midi_input"] = False
+    engine_error = None
+    try:
+        from app.main import app as _engine  # noqa: F401
+
+        info["engine_imports"] = True
+    except Exception as exc:
+        engine_error = str(exc)
+        info["engine_imports"] = False
     print(json.dumps(info))
     if load_error:
         print(f"selfcheck: the audio core could not be loaded: {load_error[:400]}", file=sys.stderr)
+        return 1
+    if engine_error:
+        print(f"selfcheck: the engine could not be imported: {engine_error[:400]}", file=sys.stderr)
         return 1
     if not (info["native_output"] and info["midi_input"]):
         print("selfcheck: the audio core was built without its native features (maturin --features python,native)", file=sys.stderr)

@@ -14,6 +14,8 @@ backend/
 ├── .env.example                 env names with local defaults, copied to .env (never committed)
 ├── requirements.txt             pinned set · Linux, Windows, servers (includes maturin)
 ├── requirements_macos.txt       same membership, unpinned · Apple Silicon
+├── requirements_desktop.txt     the frozen engine's set, for the desktop builds on all three platforms
+├── desktop_entry.py             the desktop app's engine entry; --selfcheck gates the builds
 ├── oc_install / .bat            venv, requirements, then builds the Rust audio core into the venv
 ├── boot_backend / .bat          loads .env, runs uvicorn on 127.0.0.1:8060
 ├── data/                        runtime data (never committed): media/ holds imported audio and its JSON
@@ -40,6 +42,8 @@ backend/
 
 - [oc_install](#oc-install)
 - [boot_backend](#boot-backend)
+- [requirements.txt and its platform sets](#requirements)
+- [desktop_entry.py](#desktop-entry)
 - [app/main.py](#app-main)
 - [app/core/config.py](#app-core-config)
 - [app/core/paths.py](#app-core-paths)
@@ -167,6 +171,28 @@ Binds `127.0.0.1` unless `HOST` is set, per dev-rules `references/scripts.md`: a
 - logged: v0.1.0 · 2026-09-28
 
 Reads `.env` as `NAME=value` lines, skipping lines that start with `#`, and sets each for the session before the defaults apply. Windows scripts are stored with CRLF line endings, pinned by the root `.gitattributes`.
+
+---
+
+## requirements.txt and its platform sets {#requirements}
+
+### requirements.txt · httpx and onnxruntime, missing since v2.10.8
+- refers-to: requirements.txt, requirements_macos.txt, requirements_desktop.txt :: the package lists
+- kind: rationale
+- logged: v2.12.5 · 2026-10-06
+
+A fresh install's engine did not start from v2.10.8 to v2.12.4: app/routers/cloud.py imports httpx when the engine loads, and no requirements file listed it. The development machine had httpx installed by hand, so no check saw it; the release gate's fresh clone built only the interface. Found when this session moved to a new machine and the repository's own installer was the only way back: `from app.main import app` failed with No module named httpx. Silero VAD's onnxruntime was missing the same way (imported when Mark where people speak runs). An import scan over app/ found these two and nothing else unaccounted for: every other third-party module is an optional component with its own file (transcript, separate, voice, sam_audio). Pinned: httpx 0.28.1 (the MCP server's venv resolves the same) and onnxruntime 1.30.0, each with Python 3.12 wheels for Linux x86_64, macOS arm64 and Windows amd64. requirements_desktop.txt, which builds the desktop app's frozen engine on all three platforms, also lacked pyaaf2, so AAF import and export failed inside the desktop app.
+
+---
+
+## desktop_entry.py {#desktop-entry}
+
+### desktop_entry.py · selfcheck imports the engine
+- refers-to: desktop_entry.py :: selfcheck (engine_imports, after the core's native features)
+- kind: rationale
+- logged: v2.12.5 · 2026-10-06
+
+The build scripts gate on `--selfcheck`, which imported fastapi, uvicorn, numpy and the audio core but never the engine itself, so a frozen engine missing httpx passed it and then could not start inside the app. The selfcheck now imports app.main as the app will and fails with the import's message. Checked both ways: it passes on a complete engine, and with httpx made unimportable (as in the desktop builds from v2.10.8 to v2.12.4) it prints "the engine could not be imported: import of httpx halted" and exits 1.
 
 ---
 
