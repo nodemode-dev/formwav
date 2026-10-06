@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### Speech made on this machine: Kokoro, Pocket TTS and Chatterbox from formcut, and Regenerate's open-weight path
+- refers-to: backend/app/services/local_speech.py; app/services/providers.py (_splice, shared by ElevenLabs' and local regeneration); app/routers/providers.py (/api/providers/local-speech...); frontend/src/ui/models-pane.ts; sidecar verification/verify_local_speech.py, elevenlabs_contract.py (voices/add; literal paths first), verify_elevenlabs.py (Regenerate)
+- kind: explainer
+- logged: v2.11.1 (in progress) · 2026-10-06
+
+From formcut's local speech, the same author's: Kokoro (Apache-2.0, ONNX, 54 voices, no cloning), Pocket TTS (Kyutai, MIT code and CC-BY-4.0 weights, voices and cloning) and Chatterbox (Resemble AI, MIT, cloning, every output watermarked), installed on request into a speech runtime of their own in formwav's data folder, never into the engine, and run there as workers. Their cloning gives Regenerate an open-weight path: the speaker cloned from up to 20 s of the same clip around the selection, the new words made at the clip's rate and spliced in by the same code as ElevenLabs' (the splice now shared, _splice; ElevenLabs' Regenerate re-checked through its contract stand-in, which had matched /v1/voices/add as /v1/voices/{voice_id} until literal paths were tried first). Kokoro was installed here through formwav's own path (the runtime, kokoro-onnx 0.6.1, its two model files, about 570 MB) and run on this CPU: 54 voices; a sentence spoken in 4.3 s for 4.04 s of audio, which formwav's Whisper transcribed back with 92 percent of the words (the one miss, the invented word formwav heard as Form WAV). Local Regenerate's pipeline, with Kokoro standing in for the cloning model, took its reference from the same clip at its 48 kHz, replaced 3.30 to 4.38 s with 1.05 s, and the new media came to the source plus the reported delta exactly. Pocket TTS and Chatterbox bring PyTorch, about 1 and 2 GB, which this machine has no room for (629 MB free after Kokoro): their cloning is unrun here. In the Create tab's Models: speech by Kokoro with its voices, speech in a clip's voice and on-machine Regenerate for Pocket TTS and Chatterbox (each naming its install and size until installed), and Install a speech engine on this machine with its progress; Kokoro spoke from the pane in a chosen voice onto a new track, no layout shift, no page error.
+
 ### Where people speak: Silero VAD from formcut, speech regions and the speech-safe cut
 - refers-to: backend/app/services/vad.py; app/routers/media.py (GET /api/media/{id}/speech, /speech/cut); frontend/src/ui/clip-tab.ts (Mark where people speak); sidecar verification/verify_vad.py
 - kind: explainer

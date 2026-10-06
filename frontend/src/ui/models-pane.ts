@@ -16,7 +16,8 @@ interface Choice {
   fields: string[];
   run: (v: Record<string, string>) => Promise<{ media: MediaRef; at?: number } | { done: string }>;
 }
-type Providers = { providers: { id: string; ready: boolean; needs: string; presets?: { model: string; label: string; fields: string[] }[]; models?: { id: string; label: string; fields?: string[] }[] }[] };
+type LocalEngine = { id: string; name: string; installed: boolean; installing: string; clones: boolean; size: string; license: string };
+type Providers = { localSpeech?: LocalEngine[]; providers: { id: string; ready: boolean; needs: string; presets?: { model: string; label: string; fields: string[] }[]; models?: { id: string; label: string; fields?: string[] }[] }[] };
 
 export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   let lastDub: { job: string; lang: string } | null = null;
@@ -45,6 +46,8 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-models-row" data-field="strength">Strength<input type="number" min="0" max="1" step="0.05" value="0.5" class="fw-models-strength" title="How far the cover departs from the clip: lower keeps more of it"></label>
 <label class="fw-models-row" data-field="from">From (s)<input type="number" min="0" step="0.1" class="fw-models-from" placeholder="the selection's start"></label>
 <label class="fw-models-row" data-field="to">To (s)<input type="number" min="0" step="0.1" class="fw-models-to" placeholder="the selection's end"></label>
+<label class="fw-models-row" data-field="localvoice">Voice<select class="fw-models-localvoice"><option value="af_heart">af_heart</option></select></label>
+<label class="fw-models-row" data-field="localengine">Engine<select class="fw-models-localengine"></select></label>
 <label class="fw-models-row fw-models-check" data-field="loop"><input type="checkbox" class="fw-models-loop"> Loop seamlessly</label>
 <label class="fw-models-row fw-models-check" data-field="instrumental"><input type="checkbox" class="fw-models-instrumental"> Instrumental only</label>
 <label class="fw-models-row fw-models-check" data-field="denoise"><input type="checkbox" class="fw-models-denoise"> Remove background noise first</label>
@@ -87,6 +90,10 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   };
 
   const build = (p: Providers) => {
+    // re-run after an engine installs: start clean, keep what was chosen
+    const keep = kind.value;
+    choices.length = 0;
+    kind.replaceChildren();
     const el = p.providers.find((x) => x.id === "elevenlabs");
     const fal = p.providers.find((x) => x.id === "fal");
     const local = p.providers.find((x) => x.id === "local");
@@ -240,6 +247,67 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
       choices.push({ id: "ace-complete", label: "Complete a clip (ACE-Step)", ready: ace.ready, needs: ace.needs, fields: ["clip", "prompt"],
         run: async (v) => { const c = clipFor(v, "to complete"); return { media: await aceRun({ task: "complete", media_id: c.mediaId, prompt: v.prompt }), at: c.start }; } });
     }
+    // Speech made on this machine (from formcut): Kokoro's voices, Pocket TTS and Chatterbox cloning, and Regenerate's open-weight path
+    const engines = new Map((p.localSpeech ?? []).map((e) => [e.id, e]));
+    const localNeeds = (id: string) => {
+      const e = engines.get(id);
+      return e?.installing ? e.installing : `${e?.name ?? id} installed on this machine (${e?.size ?? ""}): choose Install a speech engine on this machine`;
+    };
+    if (engines.size) {
+      const kokoro = engines.get("kokoro");
+      choices.push({ id: "ls-kokoro", label: "Speech on this machine (Kokoro)", ready: !!kokoro?.installed, needs: localNeeds("kokoro"), fields: ["text", "localvoice"],
+        run: async (v) => ({ media: await post("/api/providers/local-speech/kokoro/speak", { text: v.text, voice: v.localvoice }) }) });
+      if (kokoro?.installed)
+        void fetch("/api/providers/local-speech/kokoro/voices").then((r) => r.json()).then((d: { voices?: string[] }) => {
+          const pick = box.querySelector<HTMLSelectElement>(".fw-models-localvoice") as HTMLSelectElement;
+          if (d.voices?.length) pick.replaceChildren(...d.voices.map((n) => new Option(n, n, n === "af_heart", n === "af_heart")));
+        }, () => undefined);
+      for (const id of ["pocket", "chatterbox"]) {
+        const e = engines.get(id);
+        if (!e) continue;
+        choices.push({ id: `ls-${id}`, label: `Speech in a clip's voice on this machine (${e.name})`, ready: e.installed, needs: localNeeds(id), fields: ["text", "clip"],
+          run: async (v) => {
+            const [trackId, clipId] = v.clip.split("/");
+            const c = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((x) => x.id === clipId);
+            if (!c) throw new Error("Choose the clip whose voice to speak in");
+            return { media: await post(`/api/providers/local-speech/${id}/speak`, { text: v.text, reference_media: c.mediaId }) };
+          } });
+        choices.push({ id: `ls-regen-${id}`, label: `Regenerate the selected words on this machine (${e.name})`, ready: e.installed, needs: localNeeds(id), fields: ["text"],
+          run: async (v) => {
+            const target = regenTarget();
+            if (!target) throw new Error("Select the words to replace first: drag across them on a clip in the lanes");
+            const { t, c, startS, endS, ratio } = target;
+            const out = await post(`/api/providers/local-speech/${id}/regenerate`, { media_id: c.mediaId, start_s: startS, end_s: endS, text: v.text });
+            const delta = Math.round(out.delta_frames / ratio);
+            const later = t.clips.filter((x) => x.id !== c.id && x.start >= c.start + c.length);
+            engine.dispatch({ type: "batch", commands: [
+              { type: "set-clip-media", trackId: t.id, clipId: c.id, media: out.media },
+              { type: "set-clip-bounds", trackId: t.id, clipId: c.id, start: c.start, sourceIn: c.sourceIn, length: c.length + delta },
+              ...later.map((x) => ({ type: "move-clip" as const, trackId: t.id, clipId: x.id, start: x.start + delta })),
+            ] });
+            return { done: `Replaced ${(endS - startS).toFixed(2)} s with ${Number(out.inserted_s).toFixed(2)} s in the speaker's voice, made on this machine by ${e.name}` };
+          } });
+      }
+      const missing = [...engines.values()].filter((e) => !e.installed);
+      const pickEngine = box.querySelector<HTMLSelectElement>(".fw-models-localengine") as HTMLSelectElement;
+      pickEngine.replaceChildren(...missing.map((e) => new Option(`${e.name}: ${e.size}; ${e.license}`, e.id)));
+      choices.push({ id: "ls-install", label: "Install a speech engine on this machine", ready: missing.length > 0, needs: "nothing: every engine is installed", fields: ["localengine"],
+        run: async (v) => {
+          await post(`/api/providers/local-speech/${v.localengine}/install`, null);
+          for (;;) {
+            await sleep(3000);
+            const st = (await (await fetch("/api/providers/local-speech")).json()).engines as LocalEngine[];
+            const e = st.find((x) => x.id === v.localengine);
+            if (!e) throw new Error("the engine went missing");
+            if (e.installing.startsWith("failed")) throw new Error(`${e.name}: ${e.installing}`);
+            if (e.installed) {
+              window.setTimeout(load, 0);
+              return { done: `${e.name} is installed on this machine` };
+            }
+            setText(state, `${e.name}: ${e.installing || "installing"}...`);
+          }
+        } });
+    }
     for (const preset of fal?.presets ?? []) {
       choices.push({ id: `fal:${preset.model}`, label: `${preset.label} (fal)`, ready: !!fal?.ready, needs: fal?.needs ?? "FAL_KEY", fields: preset.fields, run: async (v) => ({ media: await post("/api/providers/fal/generate", { model: preset.model, input: Object.fromEntries(preset.fields.map((f) => [f, f === "duration" ? Number(v.duration) : v[f]])) }) }) });
     }
@@ -255,7 +323,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
       option.textContent = c.ready ? c.label : `${c.label}: needs ${c.needs}`;
       kind.append(option);
     }
-    const first = choices.find((c) => c.ready);
+    const first = choices.find((c) => c.id === keep && c.ready) ?? choices.find((c) => c.ready);
     if (first) kind.value = first.id;
     show();
   };
@@ -309,7 +377,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     const c = choices.find((x) => x.id === kind.value);
     if (!c?.ready) return;
     const v: Record<string, string> = {};
-    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language", "musicmodel", "stems", "speakers", "keyterms", "lines", "preview", "loop", "instrumental", "denoise", "strength", "from", "to"]) v[f] = value(f);
+    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language", "musicmodel", "stems", "speakers", "keyterms", "lines", "preview", "loop", "instrumental", "denoise", "strength", "from", "to", "localvoice", "localengine"]) v[f] = value(f);
     go.disabled = true;
     setText(state, `Making it with ${c.label}...`);
     try {
@@ -332,9 +400,12 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   if (kindRow) kindRow.hidden = true;
   go.hidden = true;
   const load = () =>
-    fetch("/api/providers")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((p: Providers) => {
+    Promise.all([
+      fetch("/api/providers").then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))),
+      fetch("/api/providers/local-speech").then((r) => (r.ok ? r.json() : { engines: [] }), () => ({ engines: [] })),
+    ])
+      .then(([prov, local]: [Providers, { engines: LocalEngine[] }]) => {
+        const p: Providers = { ...prov, localSpeech: local.engines };
         if (kindRow) kindRow.hidden = false;
         go.hidden = false;
         setText(state, "");

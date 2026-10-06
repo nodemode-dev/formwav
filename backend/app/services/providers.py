@@ -184,6 +184,33 @@ def elevenlabs_clone(media_id: str) -> str:
     return voice_id
 
 
+def _splice(media_id: str, a: int, b: int, spoken_id: str) -> dict:
+    """New speech (media spoken_id, at the source's rate) put in place of frames a to b of media_id, with 10 ms equal-power
+    crossfades: a new media, the source kept, and how many frames longer or shorter it is (so the caller can ripple)."""
+    import numpy as np
+
+    from .audacity import _wav_bytes
+    from .tools import _wav_view
+
+    view, rate = _wav_view(media_id)
+    frames, ch = int(view.shape[0]), int(view.shape[1])
+    sview, srate = _wav_view(spoken_id)
+    if srate != rate:
+        raise ProviderError(500, f"the new speech came back at {srate} Hz, not the source's {rate} Hz")
+    x = np.asarray(view[0:frames], dtype=np.float64)  # float in both cases: 16-bit sources read through _Scaled
+    s = np.asarray(sview[0 : int(sview.shape[0])], dtype=np.float64)
+    s = np.repeat(s.mean(axis=1, keepdims=True), ch, axis=1) if s.shape[1] != ch else s
+    n = int(s.shape[0])
+    f = max(1, min(int(0.010 * rate), a, frames - b, n // 2))
+    ramp = np.linspace(0.0, np.pi / 2, f, endpoint=False)[:, None]
+    fade_in, fade_out = np.sin(ramp), np.cos(ramp)
+    out = np.concatenate([x[: a - f], x[a - f : a] * fade_out + s[:f] * fade_in, s[f : n - f], s[n - f :] * fade_out + x[b : b + f] * fade_in, x[b + f :]])
+    info = media.media_info(media_id)
+    stem = str(info.get("name", "clip")).rsplit(".", 1)[0]
+    new = media.import_wav(f"{stem} (regenerated).wav", _wav_bytes([out[:, c].astype(np.float32) for c in range(ch)], rate))
+    return {"media": new, "replaced_s": [a / rate, b / rate], "inserted_s": n / rate, "delta_frames": int(out.shape[0]) - frames, "source_rate": rate}
+
+
 def elevenlabs_regenerate(media_id: str, start_s: float, end_s: float, text: str) -> dict:
     """The words between start_s and end_s of a media (seconds in its own timeline), spoken again as `text` in the
     speaker's cloned voice and spliced in with 10 ms equal-power crossfades: a new media, the source kept. Returns it
@@ -202,21 +229,7 @@ def elevenlabs_regenerate(media_id: str, start_s: float, end_s: float, text: str
         raise ProviderError(422, "select at least 50 ms of the clip to regenerate")
     voice = elevenlabs_clone(media_id)
     spoken = elevenlabs_speech(text, voice, rate=rate)
-    sview, srate = _wav_view(spoken["id"])
-    if srate != rate:
-        raise ProviderError(500, f"the new speech came back at {srate} Hz, not the source's {rate} Hz")
-    x = np.asarray(view[0:frames], dtype=np.float64)  # float in both cases: 16-bit sources read through _Scaled
-    s = np.asarray(sview[0 : int(sview.shape[0])], dtype=np.float64)
-    s = np.repeat(s.mean(axis=1, keepdims=True), ch, axis=1) if s.shape[1] != ch else s
-    n = int(s.shape[0])
-    f = max(1, min(int(0.010 * rate), a, frames - b, n // 2))
-    ramp = np.linspace(0.0, np.pi / 2, f, endpoint=False)[:, None]
-    fade_in, fade_out = np.sin(ramp), np.cos(ramp)
-    out = np.concatenate([x[: a - f], x[a - f : a] * fade_out + s[:f] * fade_in, s[f : n - f], s[n - f :] * fade_out + x[b : b + f] * fade_in, x[b + f :]])
-    info = media.media_info(media_id)
-    stem = str(info.get("name", "clip")).rsplit(".", 1)[0]
-    new = media.import_wav(f"{stem} (regenerated).wav", _wav_bytes([out[:, c].astype(np.float32) for c in range(ch)], rate))
-    return {"media": new, "voice_id": voice, "replaced_s": [a / rate, b / rate], "inserted_s": n / rate, "delta_frames": int(out.shape[0]) - frames, "source_rate": rate}
+    return {**_splice(media_id, a, b, spoken["id"]), "voice_id": voice}
 
 
 def elevenlabs_sound(text: str, duration_s: float | None = None, loop: bool = False, prompt_influence: float | None = None) -> dict:

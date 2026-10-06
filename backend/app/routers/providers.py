@@ -146,3 +146,40 @@ def acestep_generate(body: dict = Body(...)) -> dict:
     num = lambda k: float(body[k]) if body.get(k) not in (None, "") else None
     return _run(acestep.generate, str(body.get("task") or "text2music"), str(body.get("prompt") or ""), str(body.get("lyrics") or ""), num("seconds"), str(body.get("media_id") or ""),
                 num("repaint_start"), num("repaint_end"), num("strength"), int(body["bpm"]) if body.get("bpm") else None, str(body.get("key") or ""), str(body.get("model") or ""), str(body.get("instruction") or ""))
+
+
+
+# Speech made on this machine (from formcut): Kokoro, Pocket TTS, Chatterbox, installed on request into their own runtime
+@router.get("/providers/local-speech")
+def local_speech_status() -> dict:
+    from ..services import local_speech
+
+    return {"engines": local_speech.status()}
+
+
+@router.post("/providers/local-speech/{engine}/install", status_code=202)
+def local_speech_install(engine: str) -> dict:
+    from ..services import local_speech
+
+    return _run(local_speech.install, engine)
+
+
+@router.get("/providers/local-speech/{engine}/voices")
+def local_speech_voices(engine: str) -> dict:
+    from ..services import local_speech
+
+    return {"voices": _run(local_speech.voices, engine)}
+
+
+@router.post("/providers/local-speech/{engine}/speak", status_code=201)
+def local_speech_speak(engine: str, body: dict = Body(...)) -> dict:
+    from ..services import local_speech
+
+    return _run(local_speech.speak, engine, str(body.get("text", "")), str(body.get("voice") or ""), str(body.get("reference_media") or ""), str(body.get("language") or "en"))
+
+
+@router.post("/providers/local-speech/{engine}/regenerate", status_code=201)
+def local_speech_regenerate(engine: str, body: dict = Body(...)) -> dict:
+    from ..services import local_speech
+
+    return _run(local_speech.regenerate, engine, str(body.get("media_id", "")), float(body.get("start_s", 0)), float(body.get("end_s", 0)), str(body.get("text", "")))
