@@ -238,6 +238,11 @@ body.nm-home .nm-canvas-surface { display: none !important; }
   --fw-swatch-blue: #5aa2ff;
   --fw-swatch-pink: #ec6aa8;
   --fw-swatch-violet: #a78bfa;
+  /* The Synth tab's piano keys keep a keyboard's colours in every theme */
+  --fw-key-white: #f1efe9;
+  --fw-key-white-line: #c9c6bd;
+  --fw-key-black: #1b1a1f;
+  --fw-key-label: #6b6a70;
   --fw-record-shade: #3a1519;
   --fw-now-line: #ff475a;
   /* track and clip colours (AU-10); green is the audio colour, so an uncoloured track looks as it always did */

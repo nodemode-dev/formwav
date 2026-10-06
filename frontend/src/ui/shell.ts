@@ -54,7 +54,6 @@ function shellHtml(): string {
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='[data-action="agent"]'><span>Agent</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='[data-action="terminal"]'><span>Terminal</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-panel-toggle[data-pane="media"]'><span>Media pane</span></button>
-            <button class="fw-ibtn" type="button" role="menuitem" data-proxy=".fw-settings-btn"><span>Settings…</span></button>
           </div>
         </div>
         <div class="fw-menu">
@@ -65,6 +64,10 @@ function shellHtml(): string {
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-status [data-action="record"]'><span>Record</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-status [data-action="loop"]'><span>Loop</span></button>
           </div>
+        </div>
+        <div class="fw-menu fw-settings-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Settings</button>
+          <div class="cv-menu fw-menu-pop fw-settings-pop" role="menu" aria-label="Settings" hidden></div>
         </div>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="undo" aria-label="Undo" title="Undo" disabled>${icon("undo", ICON_SIZE.control)}</button>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="redo" aria-label="Redo" title="Redo" disabled>${icon("redo", ICON_SIZE.control)}</button>

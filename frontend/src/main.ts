@@ -41,6 +41,7 @@ import { mountLatencyProbe } from "./ui/latency-probe";
 import { mountStatusBar } from "./ui/status-bar";
 import { mountFileMenu } from "./ui/file-menu";
 import { mountThemeMenu } from "./ui/theme-menu";
+import { mountEditorTabs } from "./ui/editor-tabs";
 import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
@@ -134,6 +135,7 @@ if (host) {
   mountOutputSelect(host, player);
   mountFileMenu(host);
   mountThemeMenu(host);
+  mountEditorTabs(host, engine, player);
   mountDock(host);
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-inspector]")?.click();
   mountProjects(host, engine, player);

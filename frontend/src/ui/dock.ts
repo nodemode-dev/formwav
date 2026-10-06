@@ -64,6 +64,9 @@ export function mountDock(host: HTMLElement): void {
   });
   const wanted: Array<[string, string, string, string]> = [
     ["inspector", "Inspector", ".fw-pane-inspector", ".fw-tool-tray [data-inspector]"],
+    ["effects", "Effects", ".fw-chain", ".fw-tool-tray [data-chain]"],
+    ["synth", "Synth", ".fw-synth", ".fw-tool-tray [data-synth]"],
+    ["pads", "Pads", ".fw-pads", ".fw-tool-tray [data-pads]"],
     ["mixer", "Mixer", ".fw-mixer", '.fw-tool-tray .fw-mode[title^="Show the mixer"]'],
     ["terminal", "Terminal", ".fw-term:not(.fw-agent)", '[data-action="terminal"]'],
     ["notes", "Notes", ".fw-piano", ".fw-tool-tray .fw-mode[data-piano]"],

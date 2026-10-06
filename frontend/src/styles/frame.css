@@ -117,11 +117,13 @@
 @container (max-width: 460px) { .fw-st-line .fw-st-tracks, .fw-st-line .fw-st-length { display: none; } }
 .fw-topbar .fw-session-name { inline-size: 200px; flex: 0 1 200px; min-inline-size: 110px; }
 .fw-topbar-actions > .fw-ibtn:has(svg):not(.fw-btn-export) { inline-size: 28px; padding: 0; justify-content: center; font-size: 0; }
-.fw-settings { display: contents; }
-.fw-settings-pop { margin: 0; inset: calc(var(--fw-titlebar-h) + 6px) 12px auto auto; min-inline-size: 300px; padding: 14px 16px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); color: var(--text-primary); box-shadow: var(--shadow-lg); }
-.fw-settings-pop:popover-open { display: flex; flex-direction: column; gap: 12px; }
-.fw-settings-title { font-size: var(--fs-13); font-weight: 700; }
-.fw-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-12); color: var(--text-secondary); }
+.fw-settings-pop { min-inline-size: 230px; }
+.fw-menu-label { display: block; padding: 8px 10px 4px; font-size: var(--fs-11); color: var(--text-muted); }
+.fw-theme-item { display: flex; align-items: center; gap: 8px; }
+.fw-check { flex: none; inline-size: 14px; block-size: 14px; display: grid; place-items: center; }
+.fw-theme-item[aria-checked="true"] .fw-check::before { content: ""; inline-size: 8px; block-size: 4px; border-inline-start: 2px solid var(--accent-color); border-block-end: 2px solid var(--accent-color); transform: rotate(-45deg) translateY(-1px); }
+.fw-settings-pop .fw-swatches { padding: 4px 8px 8px; }
+.fw-topbar-actions > [data-action="terminal"], .fw-topbar .fw-panel-toggle[data-pane="media"] { display: none; }
 .fw-theme-pick { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-12); color: var(--text-secondary); }
 .fw-theme-pick select { block-size: 28px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-primary); font: inherit; }
 .fw-swatches { display: flex; align-items: center; gap: 2px; }
@@ -142,6 +144,47 @@
 .fw-tool-tray { overflow-x: auto; }
 .fw-pane-media .fw-pane-tabs { flex-wrap: nowrap; overflow-x: auto; padding-block: 0; }
 .fw-pane-media .fw-pane-tab { padding: 0 6px; font-size: var(--fs-12); }
+
+/* The editor's Effects, Synth and Pads tabs (editor-tabs.ts), after the approved target */
+.fw-dock .fw-editor-panel { display: flex; min-block-size: 0; block-size: 100%; }
+.fw-dock .fw-editor-panel[hidden] { display: none; }
+.fw-chain { flex-direction: column; gap: 8px; padding: 10px 14px; }
+.fw-chain-head { display: flex; align-items: baseline; gap: 12px; font-size: var(--fs-12); color: var(--text-muted); }
+.fw-chain-title { color: var(--text-primary); font-weight: 700; font-size: var(--fs-13); }
+.fw-chain-row { flex: 1 1 auto; min-block-size: 0; display: flex; align-items: stretch; overflow: auto hidden; padding-block-end: 4px; }
+.fw-fx-card { flex: none; inline-size: 220px; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); }
+.fw-fx-top { display: flex; align-items: flex-start; gap: 6px; }
+.fw-fx-names { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; }
+.fw-fx-name { font-weight: 700; font-size: var(--fs-13); }
+.fw-fx-sub { font-size: var(--fs-11); color: var(--text-secondary); }
+.fw-fx-bypass, .fw-fx-remove { block-size: 22px; padding: 0 7px; border: 1px solid var(--line-2); border-radius: 6px; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-11); cursor: pointer; }
+.fw-fx-bypass[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
+.fw-fx-knobs { display: flex; justify-content: space-around; gap: 6px; }
+.fw-knob { display: flex; flex-direction: column; align-items: center; gap: 1px; border-radius: 8px; color: var(--accent-color); cursor: ns-resize; touch-action: none; }
+.fw-knob svg { inline-size: 48px; block-size: 48px; }
+.fw-knob-track { fill: none; stroke: var(--line-2); stroke-width: 4; stroke-linecap: round; }
+.fw-knob-arc { fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; }
+.fw-knob circle { fill: var(--surface-1); }
+.fw-knob-value { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-primary); }
+.fw-knob-label { font-size: var(--fs-11); color: var(--text-secondary); }
+.fw-fx-link { flex: none; align-self: center; inline-size: 22px; block-size: 2px; background: var(--line-2); }
+.fw-fx-add { flex: none; inline-size: 170px; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 12px; border: 1px dashed var(--line-2); border-radius: 12px; }
+.fw-fx-add select { block-size: 28px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-primary); font: inherit; }
+.fw-synth, .fw-pads { gap: 16px; padding: 12px 14px; }
+.fw-synth-side { flex: none; inline-size: 200px; display: flex; flex-direction: column; gap: 6px; }
+.fw-synth-title { font-weight: 700; font-size: var(--fs-13); }
+.fw-synth-hint { font-size: var(--fs-12); color: var(--text-secondary); }
+.fw-keys { position: relative; flex: 1 1 auto; min-inline-size: 0; }
+.fw-key { position: absolute; top: 0; bottom: 0; inline-size: calc(100% / 14 - 3px); display: flex; align-items: flex-end; justify-content: center; padding: 0 0 6px; border: 1px solid var(--fw-key-white-line); border-radius: 0 0 7px 7px; background: var(--fw-key-white); color: var(--fw-key-label); font: inherit; font-size: var(--fs-10, 10px); cursor: pointer; touch-action: none; }
+.fw-key.fw-key-black { z-index: 1; bottom: 40%; inline-size: calc(100% / 14 * 0.62); padding: 0; border-color: var(--fw-key-black); background: var(--fw-key-black); }
+.fw-key[aria-pressed="true"], .fw-pad[aria-pressed="true"] { border-color: var(--accent-color); background: var(--accent-color); color: var(--text-on-accent); }
+.fw-pad-grid { flex: none; inline-size: 300px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.fw-pad { display: flex; align-items: flex-end; padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface-2); color: var(--text-primary); font: inherit; font-size: var(--fs-11); font-weight: 600; cursor: pointer; touch-action: none; }
+.fw-touch-side { flex: 1 1 auto; min-inline-size: 0; display: flex; flex-direction: column; gap: 6px; }
+.fw-touch-head { display: flex; align-items: baseline; gap: 12px; }
+.fw-touch { position: relative; flex: 1 1 auto; min-block-size: 0; padding: 0; overflow: hidden; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-0); cursor: crosshair; touch-action: none; }
+.fw-touch-dot { position: absolute; left: 42%; top: 42%; inline-size: 18px; block-size: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--accent-color); box-shadow: 0 0 0 6px var(--accent-soft); pointer-events: none; }
+.fw-touch[aria-pressed="true"] .fw-touch-dot { inline-size: 26px; block-size: 26px; margin: -13px 0 0 -13px; }
 
 /* The Inspector as the editor's first tab: its sections flow in columns across the editor's width, scrolling
  * sideways, instead of one tall column. */

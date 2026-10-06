@@ -15,20 +15,24 @@ function hexOf(rgb: string): string {
 }
 
 export function mountThemeMenu(host: HTMLElement): void {
-  const slot = host.querySelector<HTMLElement>(".fw-topbar-actions");
-  if (!slot) return;
+  const pop = host.querySelector<HTMLElement>(".fw-settings-pop");
+  if (!pop) return;
   const choice = readChoice();
-  const wrap = document.createElement("div");
-  wrap.className = "fw-settings";
-  const options = Object.entries(THEMES)
-    .map(([id, t]) => `<option value="${id}"${id === choice.theme ? " selected" : ""}>${t.label}</option>`)
+  const wrap = pop;
+  const themes = Object.entries(THEMES)
+    .map(([id, t]) => `<button class="fw-ibtn fw-theme-item" type="button" role="menuitem" data-theme="${id}" aria-checked="${id === choice.theme}"><span class="fw-check" aria-hidden="true"></span><span>${t.label}</span></button>`)
     .join("");
   const swatches = SWATCHES.map(
     (name) =>
       `<button type="button" class="fw-swatch" data-swatch="${name}" aria-label="${name[0].toUpperCase()}${name.slice(1)} accent" aria-pressed="false" style="color: var(--fw-swatch-${name})"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="7" fill="currentColor"></circle></svg></button>`,
   ).join("");
-  wrap.innerHTML = `<button type="button" class="fw-ibtn fw-settings-btn" popovertarget="fw-settings-pop" title="Theme, accent and other settings">Settings</button><div id="fw-settings-pop" class="fw-settings-pop" popover><span class="fw-settings-title">Settings</span><label class="fw-theme-pick" title="The interface's colours, from the form family's profiles">Theme <select aria-label="Theme">${options}</select></label><div class="fw-settings-row"><span>Accent</span><div class="fw-swatches" role="group" aria-label="Accent colour">${swatches}</div></div></div>`;
-  slot.prepend(wrap);
+  pop.innerHTML = `<span class="fw-menu-label">Theme</span>${themes}<span class="fw-menu-label">Accent</span><div class="fw-swatches" role="group" aria-label="Accent colour">${swatches}</div>`;
+  pop.addEventListener("click", (e) => {
+    const item = (e.target as HTMLElement).closest<HTMLElement>(".fw-theme-item");
+    if (!item?.dataset.theme) return;
+    setTheme(item.dataset.theme);
+    for (const t of pop.querySelectorAll<HTMLElement>(".fw-theme-item")) t.setAttribute("aria-checked", String(t === item));
+  });
 
   const mark = (accent: string) => {
     for (const b of wrap.querySelectorAll<HTMLButtonElement>(".fw-swatch")) {
