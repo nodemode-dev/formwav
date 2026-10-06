@@ -398,3 +398,186 @@ mod tests {
         assert_eq!(wide, [16384, -16384, 16384, -16384, -8192, 24576, -8192, 24576]);
     }
 }
+
+/// The comparison's Multitrack recording row: capture through the engine, every channel of an interface. A browser's
+/// capture stops at two channels (Chromium and Firefox alike), so recording more inputs than that from one interface
+/// goes through here. One input stream per device, on its own thread as the output's is; while recording, the callback
+/// appends the device's interleaved frames as floats, and it keeps each channel's latest peak for meters either way.
+/// Unlike the output's, the callback takes the lock rather than trying it: a missed render is silence, a missed capture
+/// would be a hole in the take. The engine holds the lock only to copy out.
+struct InputShared {
+    recording: bool,
+    frames: Vec<f32>,
+    peaks: Vec<f32>,
+}
+
+pub struct NativeInput {
+    shared: Arc<Mutex<InputShared>>,
+    stop_tx: mpsc::Sender<()>,
+    thread: Option<std::thread::JoinHandle<()>>,
+    pub name: String,
+    pub channels: usize,
+    pub rate: u32,
+}
+
+/// The input devices of every host offered, by name (an ASIO device's with "ASIO: " before it), with their most
+/// channels.
+pub fn input_devices() -> Vec<(String, u16)> {
+    hosts()
+        .into_iter()
+        .flat_map(|(prefix, host)| {
+            host.input_devices()
+                .map(|ds| {
+                    ds.filter_map(|d| {
+                        let name = d.description().ok()?.to_string();
+                        let most = d.supported_input_configs().ok().and_then(|cs| cs.map(|c| c.channels()).max()).or_else(|| d.default_input_config().ok().map(|c| c.channels()))?;
+                        Some((format!("{prefix}{name}"), most))
+                    })
+                    .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+fn build_input<T>(dev: &cpal::Device, config: cpal::StreamConfig, channels: usize, state: Arc<Mutex<InputShared>>) -> Result<cpal::Stream, cpal::Error>
+where
+    T: cpal::SizedSample,
+    f32: cpal::FromSample<T>,
+{
+    dev.build_input_stream(
+        config,
+        move |data: &[T], _: &cpal::InputCallbackInfo| {
+            let Ok(mut s) = state.lock() else { return };
+            if s.peaks.len() != channels {
+                s.peaks = vec![0.0; channels];
+            }
+            let mut block = vec![0f32; channels];
+            if s.recording {
+                s.frames.reserve(data.len());
+            }
+            for frame in data.chunks(channels) {
+                for (c, v) in frame.iter().enumerate() {
+                    let x = <f32 as cpal::FromSample<T>>::from_sample_(*v);
+                    block[c] = block[c].max(x.abs());
+                    if s.recording {
+                        s.frames.push(x);
+                    }
+                }
+            }
+            s.peaks.copy_from_slice(&block);
+        },
+        |err| eprintln!("formwav native input: {err}"),
+        None,
+    )
+}
+
+impl NativeInput {
+    /// Opens `device` (by name; the default input when None) at `rate` with `channels` when asked (as a DAW's I/O set-up
+    /// chooses), else the most it offers at that rate, and starts its stream; nothing is kept until start().
+    pub fn open(device: Option<String>, rate: u32, channels: Option<u16>) -> Result<NativeInput, String> {
+        let shared = Arc::new(Mutex::new(InputShared { recording: false, frames: Vec::new(), peaks: Vec::new() }));
+        let (ready_tx, ready_rx) = mpsc::channel::<Result<(String, usize), String>>();
+        let (stop_tx, stop_rx) = mpsc::channel::<()>();
+        let state = shared.clone();
+        let thread = std::thread::Builder::new()
+            .name("formwav-native-input".into())
+            .spawn(move || {
+                let opened = (|| -> Result<(cpal::Stream, String, usize), String> {
+                    let (prefix, dev) = match &device {
+                        Some(want) => hosts()
+                            .into_iter()
+                            .find_map(|(prefix, host)| {
+                                let bare = want.strip_prefix(prefix)?;
+                                host.input_devices().ok()?.find(|d| d.description().map(|n| n.to_string() == bare).unwrap_or(false)).map(|d| (prefix, d))
+                            })
+                            .ok_or(format!("no input device named {want}"))?,
+                        None => ("", cpal::default_host().default_input_device().ok_or("no default input device")?),
+                    };
+                    let name = format!("{prefix}{}", dev.description().map(|n| n.to_string()).unwrap_or_default());
+                    // The configuration with the most channels at this rate, float preferred
+                    let range = dev
+                        .supported_input_configs()
+                        .map_err(|e| e.to_string())?
+                        .filter(|c| c.min_sample_rate() <= rate && rate <= c.max_sample_rate())
+                        .filter(|c| channels.is_none_or(|n| c.channels() == n))
+                        .max_by_key(|c| (c.channels(), c.sample_format() == cpal::SampleFormat::F32))
+                        .ok_or(match channels { Some(n) => format!("{name} offers no {n}-channel input at {rate} Hz"), None => format!("{name} offers no input at {rate} Hz") })?;
+                    let chosen = range.with_sample_rate(rate);
+                    let channels = chosen.channels().max(1) as usize;
+                    // A moderate fixed buffer (1024 frames, within what the device allows): a capture engine's choice, and some
+                    // devices' defaults reach for the top of a very wide range
+                    let buffer_size = match chosen.buffer_size() {
+                        cpal::SupportedBufferSize::Range { min, max } => cpal::BufferSize::Fixed(1024u32.clamp(*min, *max)),
+                        cpal::SupportedBufferSize::Unknown => cpal::BufferSize::Default,
+                    };
+                    let config = cpal::StreamConfig { channels: chosen.channels(), sample_rate: rate, buffer_size };
+                    let stream = match chosen.sample_format() {
+                        cpal::SampleFormat::F32 => build_input::<f32>(&dev, config, channels, state.clone()),
+                        cpal::SampleFormat::I32 => build_input::<i32>(&dev, config, channels, state.clone()),
+                        cpal::SampleFormat::I16 => build_input::<i16>(&dev, config, channels, state.clone()),
+                        other => return Err(format!("{name} gives {other} samples, which formwav does not read")),
+                    }
+                    .map_err(|e| e.to_string())?;
+                    stream.play().map_err(|e| e.to_string())?;
+                    Ok((stream, name, channels))
+                })();
+                match opened {
+                    Ok((stream, name, channels)) => {
+                        let _ = ready_tx.send(Ok((name, channels)));
+                        let _ = stop_rx.recv();
+                        drop(stream);
+                    }
+                    Err(e) => {
+                        let _ = ready_tx.send(Err(e));
+                    }
+                }
+            })
+            .map_err(|e| e.to_string())?;
+        let (name, channels) = ready_rx.recv().map_err(|e| e.to_string())??;
+        Ok(NativeInput { shared, stop_tx, thread: Some(thread), name, channels, rate })
+    }
+
+    /// Begins a take: what the device delivers from now on is kept.
+    pub fn start(&self) {
+        if let Ok(mut s) = self.shared.lock() {
+            s.frames.clear();
+            s.recording = true;
+        }
+    }
+
+    /// Ends the take and hands back its frames, interleaved over the device's channels.
+    pub fn stop(&self) -> Vec<f32> {
+        match self.shared.lock() {
+            Ok(mut s) => {
+                s.recording = false;
+                std::mem::take(&mut s.frames)
+            }
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// What the take holds so far, handed over while it goes on: the engine drains a take to disk as it records, so a
+    /// long take with many channels never sits whole in memory.
+    pub fn drain(&self) -> Vec<f32> {
+        self.shared.lock().map(|mut s| std::mem::take(&mut s.frames)).unwrap_or_default()
+    }
+
+    /// Each channel's latest peak, for meters.
+    pub fn peaks(&self) -> Vec<f32> {
+        self.shared.lock().map(|s| s.peaks.clone()).unwrap_or_default()
+    }
+
+    pub fn close(&mut self) {
+        let _ = self.stop_tx.send(());
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
+}
+
+impl Drop for NativeInput {
+    fn drop(&mut self) {
+        self.close();
+    }
+}

@@ -45,6 +45,13 @@ native/
 
 ## formwav-dsp/Cargo.toml {#cargo-toml}
 
+### Native capture: every channel of an interface, through the engine
+- refers-to: native/formwav-dsp/src/native.rs (NativeInput, input_devices, build_input); src/python.rs (NativeInput, native_input_devices); backend/app/routers/native_audio.py (/api/audio/inputs, /record/start, /record/levels, /record/stop); sidecar verification/native_capture
+- kind: explainer
+- logged: v2.10.8 (in progress) · 2026-10-06
+
+The comparison's Multitrack recording row, past two inputs. A browser takes at most two channels of one interface (measured, and sourced, at the previous entry in the interface's log), so capture of more goes through the engine: NativeInput opens an interface through cpal on its own thread, as the native output does, with the most channels it offers at the rate or the count asked (as an I/O set-up names an interface's width), a 1024-frame buffer within the device's range (a device's default can reach for the top of a very wide range), and float or integer samples converted to float. Its callback takes the lock rather than trying it, unlike the output's: a missed render is silence, a missed capture would be a hole in the take. The engine drains the take every quarter second into a file per track holding that track's channels, so a long take with many channels never sits whole in memory, and on stop each becomes a float WAV in the media store with the take's start on the engine's clock. Checked against a virtual eight-channel ALSA interface fed through a pipe at real-time pace with a tone per channel and a click on every channel each half second: the interface listed, opened at eight channels, levels of 0.2 on every channel mid-take (the tones' level), eight takes of one channel each at the same length, each its own channel's tone, and the clicks on identical frames in all eight. Not yet measured: that virtual interface is not clocked (ALSA's null plugin under it runs about 2.1 times real time and pads silence), so level and frequency fidelity in real time wait for a clocked interface; the harness is kept in the sidecar. The recorder choosing native capture for such an interface, and placing its takes, comes next.
+
 ### Cargo.toml · crate type and targets
 - refers-to: Cargo.toml :: `[lib]`
 - kind: todo

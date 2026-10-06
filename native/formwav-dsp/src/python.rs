@@ -202,6 +202,88 @@ fn render_sampled<'py>(py: Python<'py>, notes: Vec<(u64, u64, u8, u8)>, rate: u3
     Ok(PyBytes::new(py, &bytes))
 }
 
+/// Native capture for the engine (crate::native::NativeInput): every channel of an interface, which a browser cannot
+/// give past two. stop() hands the take back as little-endian float bytes, interleaved over the device's channels.
+#[cfg(feature = "native")]
+#[pyclass(name = "NativeInput")]
+struct PyNativeInput {
+    inner: Option<crate::native::NativeInput>,
+}
+
+#[cfg(feature = "native")]
+impl PyNativeInput {
+    fn input(&self) -> PyResult<&crate::native::NativeInput> {
+        self.inner.as_ref().ok_or_else(|| PyValueError::new_err("the input is closed"))
+    }
+}
+
+#[cfg(feature = "native")]
+#[pymethods]
+impl PyNativeInput {
+    #[new]
+    #[pyo3(signature = (rate, device=None, channels=None))]
+    fn new(rate: u32, device: Option<String>, channels: Option<u16>) -> PyResult<Self> {
+        let input = crate::native::NativeInput::open(device, rate, channels).map_err(PyValueError::new_err)?;
+        Ok(Self { inner: Some(input) })
+    }
+
+    #[getter]
+    fn device(&self) -> PyResult<String> {
+        Ok(self.input()?.name.clone())
+    }
+
+    #[getter]
+    fn rate(&self) -> PyResult<u32> {
+        Ok(self.input()?.rate)
+    }
+
+    #[getter]
+    fn channels(&self) -> PyResult<usize> {
+        Ok(self.input()?.channels)
+    }
+
+    fn start(&self) -> PyResult<()> {
+        self.input()?.start();
+        Ok(())
+    }
+
+    fn stop<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let frames = self.input()?.stop();
+        let mut bytes = Vec::with_capacity(frames.len() * 4);
+        for x in frames {
+            bytes.extend_from_slice(&x.to_le_bytes());
+        }
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    /// The take so far (little-endian floats, interleaved), handed over while recording goes on.
+    fn drain<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+        let frames = self.input()?.drain();
+        let mut bytes = Vec::with_capacity(frames.len() * 4);
+        for x in frames {
+            bytes.extend_from_slice(&x.to_le_bytes());
+        }
+        Ok(PyBytes::new(py, &bytes))
+    }
+
+    fn peaks(&self) -> PyResult<Vec<f32>> {
+        Ok(self.input()?.peaks())
+    }
+
+    fn close(&mut self) {
+        if let Some(mut input) = self.inner.take() {
+            input.close();
+        }
+    }
+}
+
+/// The input devices (name, most channels) native capture can open.
+#[cfg(feature = "native")]
+#[pyfunction]
+fn native_input_devices() -> Vec<(String, u16)> {
+    crate::native::input_devices()
+}
+
 /// Native audio output for the engine (crate::native): the Player on a device's stream, driven by the worklet's
 /// messages; sources load straight from WAV bytes (the engine's media files).
 #[cfg(feature = "native")]
@@ -315,6 +397,10 @@ impl PyMidiInput {
 fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "native")]
     m.add_class::<PyNativeOutput>()?;
+    #[cfg(feature = "native")]
+    m.add_class::<PyNativeInput>()?;
+    #[cfg(feature = "native")]
+    m.add_function(wrap_pyfunction!(native_input_devices, m)?)?;
     #[cfg(feature = "native")]
     m.add_class::<PyMidiInput>()?;
     m.add_function(wrap_pyfunction!(probe, m)?)?;

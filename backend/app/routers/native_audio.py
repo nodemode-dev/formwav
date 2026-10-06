@@ -103,3 +103,131 @@ async def native(ws: WebSocket) -> None:
         if out is not None:
             out.stop()
             out.close()
+
+
+# The comparison's Multitrack recording row: capture through the engine, every channel of an interface (a browser's
+# capture stops at two). One recording at a time; a thread drains the take every quarter second into a file per track
+# (the channels that track records), so a long take with many channels never sits whole in memory.
+import struct  # noqa: E402
+import tempfile  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from fastapi import HTTPException  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
+
+_rec: dict = {"input": None}
+_rec_lock = threading.Lock()
+
+
+class RecordTrack(BaseModel):
+    trackId: str
+    channels: list[int]
+    name: str = ""
+
+
+class RecordStart(BaseModel):
+    device: str | None = None
+    rate: int = 48000
+    deviceChannels: int | None = None  # the interface's width, as an I/O set-up names it; the most it offers when absent
+    tracks: list[RecordTrack]
+
+
+def _capture() -> object:
+    core = _core()
+    if core is None or not hasattr(core, "NativeInput"):
+        raise HTTPException(501, "this engine was built without native capture")
+    return core
+
+
+def _drain(rec: dict, raw: bytes) -> None:
+    """Interleaved frames from the device, split into each track's channels and appended to its file."""
+    import numpy as np
+
+    if not raw:
+        return
+    x = np.frombuffer(raw, dtype="<f4").reshape(-1, rec["channels"])
+    for t in rec["tracks"]:
+        rec["files"][t.trackId].write(np.ascontiguousarray(x[:, t.channels]).tobytes())
+
+
+def _wav_f32(path: Path, channels: int, rate: int) -> bytes:
+    data = path.read_bytes()
+    header = b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 3, channels, rate, rate * 4 * channels, 4 * channels, 32)
+    return header + b"data" + struct.pack("<I", len(data)) + data
+
+
+@router.get("/inputs")
+def inputs() -> dict:
+    """The interfaces native capture can open, each with its most channels."""
+    core = _core()
+    if core is None or not hasattr(core, "native_input_devices"):
+        return {"native": False, "inputs": []}
+    return {"native": True, "inputs": [{"name": n, "channels": ch} for n, ch in core.native_input_devices()]}
+
+
+@router.post("/record/start")
+def record_start(body: RecordStart) -> dict:
+    """Opens the interface with the most channels it offers and starts a take; each track names the channels it takes."""
+    core = _capture()
+    if not body.tracks or any(not t.channels or min(t.channels) < 0 for t in body.tracks):
+        raise HTTPException(422, "each track names the channels it records")
+    with _rec_lock:
+        if _rec["input"] is not None:
+            raise HTTPException(409, "a native take is already recording")
+        try:
+            inp = core.NativeInput(body.rate, body.device, body.deviceChannels)
+        except ValueError as err:
+            raise HTTPException(404, str(err)) from err
+        need = max(c for t in body.tracks for c in t.channels) + 1
+        if inp.channels < need:
+            inp.close()
+            raise HTTPException(422, f"{inp.device} has {inp.channels} channels; channel {need} was asked for")
+        scratch = Path(tempfile.mkdtemp(prefix="formwav-capture-"))
+        rec = {"input": inp, "channels": inp.channels, "rate": inp.rate, "device": inp.device, "tracks": body.tracks, "scratch": scratch,
+               "files": {t.trackId: open(scratch / f"{t.trackId}.f32", "wb") for t in body.tracks}, "stop": threading.Event()}
+
+        def drainer() -> None:
+            while not rec["stop"].wait(0.25):
+                _drain(rec, inp.drain())
+
+        inp.start()
+        rec["started"] = time.time()
+        rec["thread"] = threading.Thread(target=drainer, name="formwav-capture-drain", daemon=True)
+        rec["thread"].start()
+        _rec.update(rec)
+        return {"started": rec["started"], "device": inp.device, "channels": inp.channels, "rate": inp.rate}
+
+
+@router.get("/record/levels")
+def record_levels() -> dict:
+    with _rec_lock:
+        inp = _rec["input"]
+        return {"recording": inp is not None, "peaks": inp.peaks() if inp is not None else []}
+
+
+@router.post("/record/stop")
+def record_stop() -> dict:
+    """Ends the take: each track's channels become a float WAV in the media store, with the take's start (engine clock)."""
+    with _rec_lock:
+        rec = dict(_rec)
+        if rec["input"] is None:
+            raise HTTPException(409, "no native take is recording")
+        _rec.clear()
+        _rec["input"] = None
+    rec["stop"].set()
+    rec["thread"].join()
+    inp = rec["input"]
+    _drain(rec, inp.stop())
+    inp.close()
+    takes = []
+    for t in rec["tracks"]:
+        f = rec["files"][t.trackId]
+        f.close()
+        data = _wav_f32(Path(f.name), len(t.channels), rec["rate"])
+        label = t.name or f"input {'+'.join(str(c + 1) for c in t.channels)}"
+        takes.append({"trackId": t.trackId, "channels": t.channels, "media": media.import_wav(f"{label} (native take).wav", data)})
+        Path(f.name).unlink(missing_ok=True)
+    rec["scratch"].rmdir()
+    return {"started": rec["started"], "device": rec["device"], "rate": rec["rate"], "takes": takes}
