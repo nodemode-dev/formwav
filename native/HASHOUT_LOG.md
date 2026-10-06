@@ -15,15 +15,17 @@ native/
     ├── Cargo.toml               crate manifest, version site; rlib and cdylib; optional pyo3 behind the python feature
     ├── Cargo.lock               lockfile, version site
     ├── pyproject.toml           maturin build of the Python module formwav_dsp, python feature on
-    └── src/
-        ├── lib.rs               public surface and CRATE_VERSION
-        ├── graph.rs             node and port model, connection rules, processing order
-        ├── wav.rs               RIFF WAVE probe and decode to planar f32
-        ├── peaks.rs             min and max peak pyramid for waveform drawing
-        ├── python.rs            pyo3 module: probe() and peaks() (python feature only)
-        ├── render.rs            Player: sources, clips, position, render to a stereo pair
-        ├── wasm.rs              C-ABI exports for the wasm32 build (fw_alloc, fw_load_wav, fw_render, ...)
-        └── loudness.rs          BS.1770-4 integrated loudness: K-weighting for any rate, 400 ms blocks, two gates
+    ├── src/
+    │   ├── lib.rs               public surface and CRATE_VERSION
+    │   ├── graph.rs             node and port model, connection rules, processing order
+    │   ├── wav.rs               RIFF WAVE probe and decode to planar f32
+    │   ├── peaks.rs             min and max peak pyramid for waveform drawing
+    │   ├── python.rs            pyo3 module: probe() and peaks() (python feature only)
+    │   ├── render.rs            Player: sources, clips, position, render to a stereo pair
+    │   ├── wasm.rs              C-ABI exports for the wasm32 build (fw_alloc, fw_load_wav, fw_render, ...)
+    │   └── loudness.rs          BS.1770-4 integrated loudness: K-weighting for any rate, 400 ms blocks, two gates
+    └── tests/
+        └── stages.rs            the 19 live effect kinds held to the interface's catalogue (cargo test)
 ```
 
 ---
@@ -40,6 +42,7 @@ native/
 - [formwav-dsp/src/render.rs](#src-render)
 - [formwav-dsp/src/wasm.rs](#src-wasm)
 - [formwav-dsp/src/loudness.rs](#src-loudness)
+- [formwav-dsp/tests/stages.rs](#tests-stages)
 
 ---
 
@@ -404,3 +407,16 @@ The v0.94.0 finding at 2048 tracks (the realtime thread taking the whole core, t
 - logged: v1.11.0 (in progress) · 2026-10-01
 
 A long file had to arrive whole before it could play. A source can now be allocated silent at its full length and filled with interleaved frames written at any offset (clipped to the length; an unknown source or an offset past the end writes nothing), so the player can start on the piece under the playhead and fill the rest behind it. Verified: the new unit test (written frames read back, silence around them, writes clipped at the end, unknown sources ignored) and the other seven pass; through the wasm core a 70 s stereo file streamed in 2 s pieces and bounced matched the engine's export to 0.0 at 3371 points across the file. Stated: the source is still held whole in memory once filled; this changes when the audio arrives, not how much is held.
+
+---
+
+## formwav-dsp/tests/stages.rs {#tests-stages}
+
+### tests/stages.rs · the live effect kinds held to the interface's catalogue
+- refers-to: tests/stages.rs :: CATALOGUE, and every test in the file
+- kind: rationale
+- logged: v2.12.5 · 2026-10-06
+
+PLAN_v11's 4.1, written on the owner's explicit ask (2026-10-06: "Write the tests now", answering whether the tests dev-rules bans unasked should be written). Each of the 19 live kinds is held to what the interface promises in frontend/src/ui/editor-tabs.ts (label, one-line promise, parameter ranges and defaults), through the crate's public Stage API only, so the tests read the promise and not the implementation. Over every kind: designs at 44.1, 48 and 96 kHz; stays finite and under 1000 at every corner of its ranges against a hostile signal (full-scale noise, DC, ±4 impulses, a +12 dB tone); silence stays silent; reset leaves no tail; the latency it reports is where its output correlates best with its input; and the settings the catalogue makes neutral (mix 0, depth 0, ratio 1, 0 dB, strength 0) give the input back with the residual under -60 dB. The catalogue's two numbers hold: De-reverb 21 ms and De-click 3.5 ms behind at 48 kHz. Per kind, the untested ones: the low-pass and both shelves, echo repeats at the delay each the feedback times the last, the limiter never past its ceiling by 0.1 dB (a +12 dB tone and noise, two ceilings) and leaving audio under it untouched, the gate reaching its range in a long gap while keeping what is above the threshold and closing faster at a shorter release, tremolo dipping 8 times in 2 s at 4 Hz and steady at depth 0, chorus and flanger moving a steady tone by more than 6 dB, the phaser's notch passing over at least two of four tones, and dialogue isolate equal to RNNoise (nnnoiseless) called directly to within 1e-5 once aligned by a frame, taking room-like noise down more than 10 dB and leaving it at strength 0.
+
+Two first runs failed, and neither failure was a fault in the DSP: dialogue isolate took full-band white noise down only 1.1 dB, which a probe showed is RNNoise's own behaviour on that signal (the stage matched nnnoiseless called directly to 0.1 dB; low-passed noise came down 35 to 41 dB), so the test uses room-like noise and checks the stage against RNNoise itself; and the gate's gap measured 23 dB down 0.2 to 0.5 s after the sound stopped, because its release is the time constant of a gain smoothed in linear terms, so a -60 dB range is reached about seven releases later (about 0.7 s at 100 ms; 17 dB down at 0.2 s). The catalogue does not say which a release means, so the test holds what it does say; whether a release should instead move the gain in decibels and reach the range in one release time is the owner's call, reported. rustfmt is not enforced: the crate has never been formatted with it (245 places would change, this file's 25 among them), and running it over the crate is the kind of scripted rewrite dev-rules' SEDO law forbids. Clippy's 18 warnings in the library predate this file, which has none.
