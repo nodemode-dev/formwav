@@ -123,6 +123,26 @@
 .fw-swatches { display: flex; align-items: center; gap: 2px; }
 .fw-swatch { inline-size: 24px; block-size: 24px; display: grid; place-items: center; padding: 0; border: 2px solid transparent; border-radius: 50%; background: transparent; cursor: pointer; }
 .fw-swatch[aria-pressed="true"] { border-color: var(--text-primary); }
+
+/* Track headers, after the approved target: the track's number beside its name and what it runs, then mute, solo,
+ * arm and automation as lettered buttons and the meter in one row. Overrides the older header rules in shell.css and
+ * surfaces.css, so the pressed states are restated after it. */
+.fw-lane .fw-lane-head { display: grid; grid-template-areas: none; grid-template-columns: 28px repeat(4, 26px) minmax(0, 1fr); grid-template-rows: auto auto auto; align-content: center; column-gap: 4px; row-gap: 3px; padding: 6px 10px; }
+.fw-lane .fw-lane-head .fw-lane-num { grid-area: 1 / 1 / 3 / 2; align-self: center; font-size: 19px; font-weight: 300; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.fw-lane .fw-lane-head .fw-lane-name { grid-area: 1 / 2 / 2 / -1; font-weight: 600; }
+.fw-lane .fw-lane-head .fw-lane-meta { grid-area: 2 / 2 / 3 / -1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-lane .fw-lane-head .fw-lane-ms { display: contents; }
+.fw-lane .fw-lane-head .fw-lane-mute { grid-area: 3 / 2; }
+.fw-lane .fw-lane-head .fw-lane-solo { grid-area: 3 / 3; }
+.fw-lane .fw-lane-head .fw-arm { grid-area: 3 / 4; }
+.fw-lane .fw-lane-head .fw-auto-toggle { grid-area: 3 / 5; }
+.fw-lane .fw-lane-head .fw-lane-meter { grid-area: 3 / 6; align-self: center; margin-inline-start: 4px; }
+.fw-lane .fw-lane-head .fw-takes-toggle { grid-area: 1 / 6; justify-self: end; }
+.fw-lane .fw-lane-head :is(.fw-lane-mute, .fw-lane-solo, .fw-arm, .fw-auto-toggle) { position: static; inline-size: 26px; block-size: 22px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line-2); border-radius: 5px; background: var(--surface-1); color: var(--text-secondary); font: inherit; font-size: var(--fs-11); font-weight: 700; }
+.fw-lane .fw-lane-head .fw-lane-mute[aria-pressed="true"] { background: var(--danger); border-color: var(--danger); color: var(--text-on-accent); }
+.fw-lane .fw-lane-head .fw-lane-solo[aria-pressed="true"] { background: var(--accent-color); border-color: var(--accent-color); color: var(--text-on-accent); }
+.fw-lane .fw-lane-head .fw-arm[aria-pressed="true"] { background: var(--fw-record); border-color: var(--fw-record); color: var(--text-on-accent); }
+.fw-lane .fw-lane-head .fw-auto-toggle[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-ink); }
 .fw-transport-controls { gap: 4px; }
 .fw-tbtn { inline-size: 30px; block-size: 30px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-secondary); }
 .fw-tbtn:hover:not(:disabled) { background: var(--surface-raised); color: var(--text-primary); }
