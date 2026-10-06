@@ -176,7 +176,7 @@
 .fw-synth-hint { font-size: var(--fs-12); color: var(--text-secondary); }
 .fw-keys { position: relative; flex: 1 1 auto; min-inline-size: 0; }
 .fw-key { position: absolute; top: 0; bottom: 0; inline-size: calc(100% / 14 - 3px); display: flex; align-items: flex-end; justify-content: center; padding: 0 0 6px; border: 1px solid var(--fw-key-white-line); border-radius: 0 0 7px 7px; background: var(--fw-key-white); color: var(--fw-key-label); font: inherit; font-size: var(--fs-10, 10px); cursor: pointer; touch-action: none; }
-.fw-key.fw-key-black { z-index: 1; bottom: 40%; inline-size: calc(100% / 14 * 0.62); padding: 0; border-color: var(--fw-key-black); background: var(--fw-key-black); }
+.fw-key.fw-key-black { z-index: var(--z-raised); bottom: 40%; inline-size: calc(100% / 14 * 0.62); padding: 0; border-color: var(--fw-key-black); background: var(--fw-key-black); }
 .fw-key[aria-pressed="true"], .fw-pad[aria-pressed="true"] { border-color: var(--accent-color); background: var(--accent-color); color: var(--text-on-accent); }
 .fw-pad-grid { flex: none; inline-size: 300px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .fw-pad { display: flex; align-items: flex-end; padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 9px; background: var(--surface-2); color: var(--text-primary); font: inherit; font-size: var(--fs-11); font-weight: 600; cursor: pointer; touch-action: none; }
