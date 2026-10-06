@@ -11,6 +11,7 @@ FORMWAV_HOST_BIN names the host binary; otherwise the repository's build is used
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
@@ -196,3 +197,83 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
             raise media.MediaError(f"{plugin['name']} failed: {reason[0][:300]}")
         stem = str(info.get("name", "clip")).rsplit(".", 1)[0]
         return media.import_wav(f"{stem} ({plugin['name']}).wav", out.read_bytes())
+
+
+# PT-24: ARA plug-ins, hosted through their CLAP binding by formwav-host (fwhost ara-check, ara-store, ara-render)
+_ara: dict[str, dict] = {}
+
+
+def ara_plugins(refresh: bool = False) -> list[dict]:
+    """The installed CLAP plug-ins that offer ARA: each one the scan found asked once (fwhost ara-check, kept until a
+    refresh), named plugin:clap:<path> as the other plug-ins are, with what it can analyze."""
+    found = []
+    for p in scan(refresh):
+        if p.get("format") != "clap" or "error" in p:
+            continue
+        path = p["path"]
+        if refresh or path not in _ara:
+            try:
+                done = subprocess.run([host_binary(), "ara-check", path], capture_output=True, timeout=60)
+                _ara[path] = json.loads(done.stdout or b"{}") if done.returncode == 0 else {}
+            except (media.MediaError, subprocess.TimeoutExpired, ValueError, OSError):
+                _ara[path] = {}
+        info = _ara[path]
+        if info.get("ara") and info.get("factories"):
+            f = info["factories"][0]
+            found.append({"name": f"plugin:clap:{path}", "label": f.get("name") or p.get("name"), "version": f.get("version"), "manufacturer": f.get("manufacturer"), "analyzable": f.get("analyzable", []), "archiveId": f.get("document_archive_id")})
+    return found
+
+
+def _ara_run(command: list[str], label: str) -> subprocess.CompletedProcess:
+    try:
+        done = subprocess.run(command, capture_output=True, timeout=900)
+    except subprocess.TimeoutExpired as err:
+        raise media.MediaError(f"{label} did not finish within 15 minutes") from err
+    if done.returncode != 0:
+        reason = (done.stderr or b"").decode(errors="replace").strip().splitlines()[-1:] or [f"exit status {done.returncode}"]
+        if done.returncode < 0:
+            reason = [f"the plug-in crashed (signal {-done.returncode}); formwav is unaffected"]
+        raise media.MediaError(f"{label} failed: {reason[0][:300]}")
+    return done
+
+
+def _ara_installed(name: str) -> tuple[str, str]:
+    """An ARA plug-in the scan found (plugin:clap:<path>): only those are ever loaded."""
+    match = next((a for a in ara_plugins() if a["name"] == name), None)
+    if match is None:
+        raise media.MediaError(f"no installed ARA plug-in named {name} (rescan with GET /api/ara/plugins?refresh=1)")
+    return name.split(":", 2)[2], match["label"]
+
+
+def ara_analyze(media_id: str, name: str) -> dict:
+    """The media analyzed by the ARA plug-in, which then stores its state: the notes it found, and its archive (base64,
+    its format's id first) for the session to keep on the clip, so the plug-in's state comes back with the session."""
+    path, label = _ara_installed(name)
+    media.media_info(media_id)
+    source = media.media_dir() / f"{media_id}.wav"
+    with tempfile.TemporaryDirectory(prefix="formwav-ara-") as tmp:
+        archive = Path(tmp) / "state.archive"
+        done = _ara_run([host_binary(), "ara-store", path, str(source), str(archive)], label)
+        result = json.loads(done.stdout or b"{}")
+        return {"notes": len(result.get("notes", [])), "archiveId": result.get("archive_id", ""), "archive": base64.b64encode(archive.read_bytes()).decode()}
+
+
+def ara_render(media_id: str, name: str, archive: str | None = None) -> dict:
+    """The media rendered by the ARA plug-in as its playback renderer into new media, its state first restored from the
+    archive the session keeps (so its edits are what is heard)."""
+    path, label = _ara_installed(name)
+    info = media.media_info(media_id)
+    source = media.media_dir() / f"{media_id}.wav"
+    with tempfile.TemporaryDirectory(prefix="formwav-ara-") as tmp:
+        out = Path(tmp) / "out.wav"
+        command = [host_binary(), "ara-render", path, str(source), str(out)]
+        if archive:
+            state = Path(tmp) / "state.archive"
+            try:
+                state.write_bytes(base64.b64decode(archive, validate=True))
+            except ValueError as err:
+                raise media.MediaError("the clip's ARA archive is not valid base64") from err
+            command.append(str(state))
+        _ara_run(command, label)
+        stem = str(info.get("name", "clip")).rsplit(".", 1)[0]
+        return media.import_wav(f"{stem} ({label} ARA).wav", out.read_bytes())

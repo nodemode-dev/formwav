@@ -502,6 +502,38 @@ def plugin_params(name: str) -> dict:
         raise HTTPException(status_code=404, detail=str(err)) from err
 
 
+@router.get("/ara/plugins")
+def ara_plugins(refresh: bool = False) -> dict:
+    """PT-24: the installed CLAP plug-ins that offer ARA (services/plugins.py), each with what it can analyze."""
+    from ..services import plugins
+
+    return {"plugins": plugins.ara_plugins(refresh)}
+
+
+@router.post("/media/{media_id}/ara/analyze")
+def ara_analyze(media_id: str, name: str) -> dict:
+    """PT-24: the media analyzed by an ARA plug-in: the notes it found, and its stored state (an archive, base64) for
+    the session to keep on the clip."""
+    from ..services import plugins
+
+    try:
+        return plugins.ara_analyze(media_id, name)
+    except media.MediaError as err:
+        raise HTTPException(status_code=404 if "no installed" in str(err) else 400, detail=str(err)) from err
+
+
+@router.post("/media/{media_id}/ara/render", status_code=201)
+def ara_render(media_id: str, name: str, body: dict = Body(default={})) -> dict:
+    """PT-24: the media rendered by an ARA plug-in as its playback renderer into new media, its state first restored from
+    the archive in the body ({"archive": base64}) when the clip has one."""
+    from ..services import plugins
+
+    try:
+        return plugins.ara_render(media_id, name, (body or {}).get("archive"))
+    except media.MediaError as err:
+        raise HTTPException(status_code=404 if "no installed" in str(err) else 400, detail=str(err)) from err
+
+
 @router.get("/sam-audio/status")
 def sam_audio_status() -> dict:
     """Which of SAM-Audio's preconditions are met: installed, Hugging Face login or a cached checkpoint, device."""

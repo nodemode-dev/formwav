@@ -215,9 +215,14 @@
 .fw-cf-color { inline-size: 22px; block-size: 22px; padding: 0; border: 2px solid transparent; border-radius: 50%; background: currentColor; cursor: pointer; }
 .fw-cf-color[data-color=""] { border: 2px dashed var(--line-2); background: transparent; }
 .fw-cf-color[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--text-primary); }
+.fw-cf-ara-row { display: flex; align-items: center; gap: 6px; min-inline-size: 0; }
+.fw-cf-ara-row select { flex: 1 1 auto; }
+.fw-cf-ara-row .fw-ibtn { flex: none; block-size: 30px; }
+.fw-cf .fw-cf-ara-state { display: block; block-size: 18px; padding: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-11); line-height: 18px; }
 
 /* The browser's effects (browser-effects.ts), under the session's media */
-.fw-fxlib { display: flex; flex-direction: column; gap: 10px; margin-block-start: 8px; padding: 12px 8px; border-block-start: 1px solid var(--line-1); }
+.fw-fxlib { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-block-size: 0; overflow-y: auto; padding: 12px 8px; border-block-start: 1px solid var(--line-1); }
+.fw-fxlib[hidden] { display: none; }
 .fw-fxlib-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 4px; font-size: var(--fs-12); font-weight: 700; }
 .fw-fxlib-hint { font-size: var(--fs-11); font-weight: 400; color: var(--text-muted); }
 .fw-fxlib-group { display: flex; flex-direction: column; }
@@ -258,12 +263,13 @@
 .fw-tool-tray [data-group] .fw-mode > svg { display: none; }
 
 /* The browser's rows and tabs, after the approved target */
+.fw-pane-media .fw-media-list { flex: none; block-size: 196px; overflow-y: auto; }
 .fw-media-list .fw-media-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 6px; row-gap: 1px; padding: 7px 8px; border-radius: 8px; }
 .fw-media-list .fw-media-item:hover { background: var(--surface-2); }
 .fw-media-list .fw-media-name { grid-area: 1 / 1; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
 .fw-media-list .fw-media-meta { grid-area: 2 / 1; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-11); color: var(--text-secondary); }
 .fw-media-list .fw-media-item > button { grid-row: 1 / span 2; }
-.fw-pane-media .fw-pane-tabs { gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-0); }
+.fw-pane-media .fw-pane-tabs { flex: none; align-items: center; box-sizing: border-box; block-size: 30px; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-0); }
 .fw-pane-media .fw-pane-tab.is-active { background: var(--surface-raised); color: var(--text-primary); }
 
 /* The Inspector as the editor's first tab: its sections flow in columns across the editor's width, scrolling

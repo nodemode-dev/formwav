@@ -46,6 +46,16 @@ export interface NoteEvent {
   velocity: number;
 }
 
+/** PT-24: an ARA plug-in's state for a clip: the plug-in (plugin:clap:<path>, as the engine names it), its label, its
+ *  archive's format id and the archive itself (base64, as the engine returns it), and how many notes it found. */
+export interface ClipAra {
+  plugin: string;
+  label: string;
+  archiveId: string;
+  archive: string;
+  notes: number;
+}
+
 export interface Clip {
   id: string;
   mediaId: string;
@@ -63,6 +73,9 @@ export interface Clip {
   color?: string;
   /** The media this clip held before any effect replaced it (RX-61's Restore original); absent until one does. */
   original?: string;
+  /** PT-24: the ARA plug-in this clip was analyzed with and its stored state, kept with the session so the plug-in's
+   *  analysis and edits come back with it; absent until the clip is analyzed with one. */
+  ara?: ClipAra;
   start: number;
   length: number;
   sourceIn: number;
@@ -466,6 +479,7 @@ export type Command =
   /** A palette key, or "" for the default (green for a track; the track's colour for a clip). */
   | { type: "set-track-color"; trackId: string; color: string }
   | { type: "set-clip-color"; trackId: string; clipId: string; color: string }
+  | { type: "set-clip-ara"; trackId: string; clipId: string; ara: ClipAra | null }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
   | { type: "set-track-mute"; trackId: string; mute: boolean }
@@ -1093,6 +1107,15 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         }),
       }));
     }
+    case "set-clip-ara":
+      return mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.map((c) => {
+          if (c.id !== cmd.clipId) return c;
+          const { ara: _old, ...rest } = c;
+          return cmd.ara ? { ...rest, ara: cmd.ara } : rest;
+        }),
+      }));
     case "set-track-gain":
       return mapTrack(doc, cmd.trackId, (t) => (t.gainDb === cmd.gainDb ? t : { ...t, gainDb: cmd.gainDb }));
     case "add-bus": {

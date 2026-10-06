@@ -2,11 +2,14 @@
  * The editor's Clip tab, after the approved target (research/ui_reference): the selected clip's settings as one grid
  * of fields, each editing through the engine's own command, as the Inspector's fields do: the track's name
  * (rename-track), the clip's start (move-clip), gain (set-clip-gain), fades and their shape (set-clip-fades), sound
- * type (set-clip-type) and colour (set-clip-color); its source and length are shown. A field being typed in is never
- * overwritten by an update. A dock panel like the others: its toggle flips its hidden flag.
+ * type (set-clip-type) and colour (set-clip-color); its source and length are shown. PT-24: an ARA plug-in analyses the
+ * clip, its state kept on the clip (set-clip-ara) so it is saved with the session, and renders it with that state
+ * restored (set-clip-media). A field being typed in is never overwritten by an update. A dock panel like the others:
+ * its toggle flips its hidden flag.
  */
 import type { Engine } from "../engine";
 import type { Clip, SessionDoc, Track } from "../engine/document";
+import type { MediaRef } from "../engine";
 import { setText } from "../vendor/nodemode/dom-stable";
 
 const COLORS = ["cyan", "violet", "amber", "pink", "slate", "green", "blue", "red"];
@@ -33,6 +36,7 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     field("Fade out (s)", `<input type="number" data-f="fadeOut" min="0" step="0.01">`),
     field("Fade shape", `<select data-f="shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
     `<div class="fw-cf fw-cf-wide"><span class="fw-cf-label">Colour</span><div class="fw-cf-colors" role="group" aria-label="Clip colour"><button type="button" class="fw-cf-color" data-color="" aria-label="The track's colour" title="The track's colour"></button>${COLORS.map((c) => `<button type="button" class="fw-cf-color" data-color="${c}" aria-label="${c}" title="${c}" style="color: var(--fw-color-${c})"></button>`).join("")}</div></div>`,
+    `<div class="fw-cf fw-cf-wide fw-cf-ara"><span class="fw-cf-label">ARA plug-in</span><div class="fw-cf-ara-row"><select data-ara-plugin aria-label="ARA plug-in"><option value="">Looking for ARA plug-ins</option></select><button type="button" class="fw-ibtn" data-ara="analyze" disabled>Analyse</button><button type="button" class="fw-ibtn" data-ara="render" disabled>Render</button></div><output class="fw-cf-ara-state" data-ara-state></output></div>`,
   ].join("")}</div>`;
   anchor.before(panel);
   const toggle = document.createElement("button");
@@ -61,6 +65,7 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
   const put = (el: HTMLInputElement | HTMLSelectElement, value: string) => {
     if (document.activeElement !== el && el.value !== value) el.value = value;
   };
+  let araBusy = false;
   const render = () => {
     const doc = engine.get("document");
     const hit = find(doc);
@@ -78,6 +83,12 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     put(f<HTMLInputElement>("fadeOut"), sec(clip.fadeOut ?? 0, doc).toFixed(2));
     put(f<HTMLSelectElement>("shape"), clip.fadeShape ?? "linear");
     for (const b of panel.querySelectorAll<HTMLElement>(".fw-cf-color")) b.setAttribute("aria-pressed", String((b.dataset.color ?? "") === (clip.color ?? "")));
+    const ara = clip.ara;
+    if (!araBusy) {
+      setText(panel.querySelector("[data-ara-state]"), ara ? `${ara.label}: ${ara.notes} ${ara.notes === 1 ? "note" : "notes"} found; its state is saved with the session` : "Analyse the clip with an ARA plug-in to keep its state with the session.");
+    }
+    const select = panel.querySelector<HTMLSelectElement>("[data-ara-plugin]");
+    if (select && ara && document.activeElement !== select && [...select.options].some((o) => o.value === ara.plugin) && select.value !== ara.plugin) select.value = ara.plugin;
   };
 
   panel.addEventListener("change", (e) => {
@@ -120,6 +131,60 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     const hit = b ? find(engine.get("document")) : null;
     if (!b || !hit) return;
     engine.dispatch({ type: "set-clip-color", trackId: hit.track.id, clipId: hit.clip.id, color: b.dataset.color ?? "" });
+  });
+
+  // PT-24: the installed ARA plug-ins (the engine's scan, each asked whether it offers ARA); a clip analysed with one,
+  // its state kept on the clip so it is saved with the session, and rendered through it with that state restored.
+  // Both work on the clip's original audio: the state describes the audio it analysed, not a render of it.
+  const araSelect = panel.querySelector<HTMLSelectElement>("[data-ara-plugin]") as HTMLSelectElement;
+  const araButtons = [...panel.querySelectorAll<HTMLButtonElement>("[data-ara]")];
+  const engineJson = async (url: string, init?: RequestInit) => {
+    const res = await fetch(url, init);
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+    return out;
+  };
+  void (async () => {
+    try {
+      const listed = (await engineJson("/api/ara/plugins")) as { plugins: { name: string; label: string; version?: string }[] };
+      araSelect.replaceChildren(...(listed.plugins.length ? listed.plugins.map((p) => new Option(`${p.label}${p.version ? ` ${p.version}` : ""}`, p.name)) : [new Option("No ARA plug-ins installed", "")]));
+      for (const b of araButtons) b.disabled = listed.plugins.length === 0;
+      render();
+    } catch {
+      araSelect.replaceChildren(new Option("ARA plug-ins unavailable while the engine is offline", ""));
+    }
+  })();
+  panel.addEventListener("click", async (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-ara]");
+    const hit = b ? find(engine.get("document")) : null;
+    if (!b || !hit || !araSelect.value || araBusy) return;
+    const { track, clip } = hit;
+    const name = araSelect.value;
+    const label = (araSelect.selectedOptions[0]?.textContent ?? name).replace(/ [0-9.]+$/, "");
+    const source = clip.original ?? clip.mediaId;
+    const state = panel.querySelector("[data-ara-state]");
+    araBusy = true;
+    for (const x of araButtons) x.disabled = true;
+    try {
+      if (b.dataset.ara === "analyze") {
+        setText(state, `Analysing with ${label}...`);
+        const out = (await engineJson(`/api/media/${source}/ara/analyze?name=${encodeURIComponent(name)}`, { method: "POST" })) as { notes: number; archiveId: string; archive: string };
+        araBusy = false;
+        engine.dispatch({ type: "set-clip-ara", trackId: track.id, clipId: clip.id, ara: { plugin: name, label, archiveId: out.archiveId, archive: out.archive, notes: out.notes } });
+      } else {
+        setText(state, `Rendering through ${label}...`);
+        const archive = clip.ara && clip.ara.plugin === name ? clip.ara.archive : undefined;
+        const media = (await engineJson(`/api/media/${source}/ara/render?name=${encodeURIComponent(name)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(archive ? { archive } : {}) })) as MediaRef;
+        araBusy = false;
+        engine.dispatch({ type: "set-clip-media", trackId: track.id, clipId: clip.id, media });
+      }
+      render();
+    } catch (err) {
+      araBusy = false;
+      setText(state, err instanceof Error ? err.message : String(err));
+    } finally {
+      for (const x of araButtons) x.disabled = araSelect.value === "";
+    }
   });
   host.addEventListener("fw-selection", (e) => {
     selected = (e as CustomEvent<string[]>).detail ?? [];

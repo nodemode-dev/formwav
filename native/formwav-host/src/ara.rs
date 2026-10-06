@@ -461,17 +461,25 @@ impl Doc {
 /// playback renderer role. A CLAP instance of it is bound to the document as playback renderer and given the region;
 /// it is then processed with silence as its input and a playing transport at each block's position (as the SDK's own
 /// CLAPRenderBuffer does), so everything it outputs comes from the document through ARA, not from its audio input.
-pub fn render(path: &Path, input: crate::wav::Audio) -> Result<crate::wav::Audio, String> {
+pub fn render(path: &Path, input: crate::wav::Audio, archive: Option<&Path>) -> Result<crate::wav::Audio, String> {
     unsafe {
         let opened = open(path)?;
         let f = &*opened.factory;
+        let reader = match archive {
+            Some(a) => Some(read_archive(f, a)?),
+            None => None,
+        };
         initialize(f)?;
         let host = Host::new();
         let rate = input.rate;
         let frames = input.channels.first().map(|c| c.len()).unwrap_or(0);
         let channels = input.channels.len().max(1);
         let source = Source { channels: input.channels };
-        let doc = Doc::build(f, &host, &source, rate, frames, None)?;
+        let doc = Doc::build(f, &host, &source, rate, frames, reader.as_ref())?;
+        if doc.restored == Some(false) {
+            doc.teardown()?;
+            return Err("the plug-in would not restore the archive".into());
+        }
 
         let factory = ((*opened.entry).get_factory.ok_or("no get_factory")?)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
         if factory.is_null() {
@@ -675,6 +683,23 @@ fn archive_file(id: &str, bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+/// An archive file read back for the plug-in: its format id checked against the plug-in's own and compatible archive
+/// ids, so a plug-in is never handed another's state.
+unsafe fn read_archive(f: &ARAFactory, archive: &Path) -> Result<ArchiveReader, String> {
+    let file = std::fs::read(archive).map_err(|e| format!("cannot read {}: {e}", archive.display()))?;
+    let split = file.iter().position(|&b| b == 0).ok_or("not an archive (no format id)")?;
+    let id = String::from_utf8_lossy(&file[..split]).into_owned();
+    let compatible: Vec<String> = if !f.compatibleDocumentArchiveIDs.is_null() {
+        (0..f.compatibleDocumentArchiveIDsCount as usize).map(|i| text(*f.compatibleDocumentArchiveIDs.add(i))).collect()
+    } else {
+        Vec::new()
+    };
+    if id != text(f.documentArchiveID) && !compatible.contains(&id) {
+        return Err(format!("the archive's format ({id}) is not one this plug-in reads"));
+    }
+    Ok(ArchiveReader { bytes: file[split + 1..].to_vec(), id: CString::new(id).map_err(|e| e.to_string())? })
+}
+
 /// `fwhost ara-store <plugin.clap> <in.wav> <archive>`: an ARA document round the file analyzed, then the plug-in's
 /// state for every object written to the archive (storeObjectsToArchive, ARA 2's partial persistency, as the SDK's
 /// test host stores), its format's id first; JSON reports the notes it held and the archive's size.
@@ -710,22 +735,12 @@ pub fn store(path: &Path, input: crate::wav::Audio, archive: &Path) -> Result<St
 /// cycle; the notes are then read without any analysis requested, so what comes back came from the archive.
 pub fn restore(path: &Path, input: crate::wav::Audio, archive: &Path) -> Result<String, String> {
     unsafe {
-        let file = std::fs::read(archive).map_err(|e| format!("cannot read {}: {e}", archive.display()))?;
-        let split = file.iter().position(|&b| b == 0).ok_or("not an archive (no format id)")?;
-        let id = String::from_utf8_lossy(&file[..split]).into_owned();
         let opened = open(path)?;
         let f = &*opened.factory;
-        let compatible: Vec<String> = if !f.compatibleDocumentArchiveIDs.is_null() {
-            (0..f.compatibleDocumentArchiveIDsCount as usize).map(|i| text(*f.compatibleDocumentArchiveIDs.add(i))).collect()
-        } else {
-            Vec::new()
-        };
-        if id != text(f.documentArchiveID) && !compatible.contains(&id) {
-            return Err(format!("the archive's format ({id}) is not one this plug-in reads"));
-        }
+        let reader = read_archive(f, archive)?;
+        let id = reader.id.to_string_lossy().into_owned();
         initialize(f)?;
         let host = Host::new();
-        let reader = ArchiveReader { bytes: file[split + 1..].to_vec(), id: CString::new(id.clone()).map_err(|e| e.to_string())? };
         let (rate, frames) = (input.rate, input.channels.first().map(|c| c.len()).unwrap_or(0));
         let source = Source { channels: input.channels };
         let doc = Doc::build(f, &host, &source, rate, frames, Some(&reader))?;

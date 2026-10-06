@@ -27,7 +27,10 @@ export function mountBrowserEffects(host: HTMLElement, engine: Engine): void {
         .map((k) => `<button type="button" class="fw-fxlib-item" data-kind="${k}" title="Add ${KINDS[k].label} to the selected clip's track"><span>${KINDS[k].label}</span><span class="fw-fxlib-sub">${KINDS[k].sub}</span></button>`)
         .join("")}</div>`,
   ).join("")}`;
-  media.append(section);
+  // After the media list rather than inside it, so a new file (an import, a render) never pushes it; marked as part of
+  // the media panel, so the pane's other tabs hide it with the list
+  section.dataset.panel = "media";
+  media.after(section);
 
   let selected: string[] = [];
   host.addEventListener("fw-selection", (e) => {
