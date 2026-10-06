@@ -58,6 +58,14 @@ export interface ClipAra {
   notes: number;
 }
 
+/** The comparison's Multitrack recording row: where a track records from, saved with the session. The device's label
+ *  travels with its id, so a session opened on another machine finds the same interface by name. */
+export interface TrackInput {
+  device?: string;
+  label?: string;
+  channels?: number[];
+}
+
 export interface Clip {
   id: string;
   mediaId: string;
@@ -279,6 +287,8 @@ export interface Track {
   color?: string;
   /** Realtime effects in order (Audacity's realtime stack); bypassed ones are skipped. */
   fx?: TrackFx[];
+  /** Where this track records from; absent means the default input. */
+  input?: TrackInput;
   /** PT-16: MIDI effects before the instrument, in order; a note clip keeps the notes as played and is rendered from
    *  the notes after them, and live MIDI on the track passes through them too. */
   midiFx?: MidiFx[];
@@ -482,6 +492,7 @@ export type Command =
   | { type: "set-track-color"; trackId: string; color: string }
   | { type: "set-clip-color"; trackId: string; clipId: string; color: string }
   | { type: "set-clip-ara"; trackId: string; clipId: string; ara: ClipAra | null }
+  | { type: "set-track-input"; trackId: string; input: TrackInput | null }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
   | { type: "set-track-mute"; trackId: string; mute: boolean }
@@ -1109,6 +1120,12 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         }),
       }));
     }
+    case "set-track-input":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const { input: _old, ...rest } = t;
+        const next = cmd.input && (cmd.input.device || cmd.input.channels?.length) ? cmd.input : null;
+        return next ? { ...rest, input: next } : rest;
+      });
     case "set-clip-ara":
       return mapTrack(doc, cmd.trackId, (t) => ({
         ...t,

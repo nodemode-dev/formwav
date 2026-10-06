@@ -1,3 +1,4 @@
+import type { Engine } from "../engine";
 export type InputDevice = { id: string; label: string };
 
 const chosen = new Map<string, string>();
@@ -9,7 +10,42 @@ export function trackInput(trackId: string): string {
   return chosen.get(trackId) ?? "";
 }
 
+/** Where the choices live: the session (Track.input, set-track-input), so they save, undo and travel; these maps are
+ *  the live view, rebuilt from the document and the devices present, a missing id found again by its label. */
+let bound: Engine | null = null;
+
+function rebuild(): void {
+  if (!bound) return;
+  chosen.clear();
+  channelChoice.clear();
+  for (const t of bound.get("document").tracks) {
+    const want = t.input;
+    if (!want) continue;
+    const here = devices.find((d) => d.id === want.device) ?? (want.label ? devices.find((d) => d.label === want.label) : undefined);
+    if (here) chosen.set(t.id, here.id);
+    if (want.channels?.length) channelChoice.set(t.id, [...want.channels]);
+  }
+  for (const fn of listeners) fn();
+}
+
+export function bindInputs(engine: Engine): void {
+  bound = engine;
+  engine.subscribe("document", rebuild);
+  rebuild();
+}
+
+function store(trackId: string, change: { device?: string; channels?: number[] | null }): void {
+  if (!bound) return;
+  const track = bound.get("document").tracks.find((t) => t.id === trackId);
+  if (!track) return;
+  const device = change.device !== undefined ? change.device : track.input?.device ?? "";
+  const channels = change.channels !== undefined ? change.channels ?? undefined : track.input?.channels;
+  const label = device ? devices.find((d) => d.id === device)?.label ?? track.input?.label : undefined;
+  bound.dispatch({ type: "set-track-input", trackId, input: device || channels?.length ? { ...(device ? { device, label } : {}), ...(channels?.length ? { channels } : {}) } : null });
+}
+
 export function setTrackInput(trackId: string, deviceId: string): void {
+  if (bound) return store(trackId, { device: deviceId });
   if (deviceId) chosen.set(trackId, deviceId);
   else chosen.delete(trackId);
 }
@@ -23,6 +59,7 @@ export function trackChannels(trackId: string): number[] | null {
 }
 
 export function setTrackChannels(trackId: string, channels: number[] | null): void {
+  if (bound) return store(trackId, { channels });
   if (channels && channels.length) channelChoice.set(trackId, channels);
   else channelChoice.delete(trackId);
 }
@@ -77,8 +114,11 @@ export async function refreshInputs(askPermission = false): Promise<InputDevice[
   if (sig !== signature) {
     devices = next;
     signature = sig;
-    for (const id of [...chosen.keys()]) if (!next.some((d) => d.id === chosen.get(id))) chosen.delete(id);
-    for (const fn of listeners) fn();
+    if (bound) rebuild();
+    else {
+      for (const id of [...chosen.keys()]) if (!next.some((d) => d.id === chosen.get(id))) chosen.delete(id);
+      for (const fn of listeners) fn();
+    }
   }
   return devices;
 }

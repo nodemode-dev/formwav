@@ -52,6 +52,7 @@ import { mountSpectrum } from "./ui/spectrum";
 import { mountEnvelopeEdit } from "./ui/envelope-edit";
 import { mountProjects } from "./ui/projects";
 import { mountCloud } from "./ui/cloud";
+import { bindInputs } from "./ui/inputs";
 import { mountRoom } from "./ui/room";
 import { Player, type OutputChoice } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
@@ -144,6 +145,7 @@ if (host) {
   mountBrowserEffects(host, engine);
   mountDock(host);
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();
+  bindInputs(engine); // track inputs live in the session (Track.input)
   mountProjects(host, engine, player);
   mountCloud(host, engine);
   mountRoom(host, engine);

@@ -109,6 +109,14 @@ frontend/
 
 ## index.html {#index-html}
 
+### Track inputs saved with the session, and why a browser cannot record more than two channels of one interface
+- refers-to: frontend/src/engine/document.ts (TrackInput, Track.input, set-track-input); src/ui/inputs.ts (bindInputs, the maps rebuilt from the document); src/main.ts
+- kind: explainer
+- logged: v2.10.8 (in progress) · 2026-10-06
+
+The comparison's Multitrack recording row noted the channel choice was held in the page, not the session. A track's input (its device, the device's label, the channels it records) is now Track.input, set by set-track-input: saved with the session, one undo step, and found again on another machine by its label when the device's id is not present there. inputs.ts keeps its getters, so the recorder and the Inspector read as before; its maps are now rebuilt from the document and the devices present. Checked in Chromium with fake inputs: an input chosen in the Inspector reached the document with its label, the session saved and reopened in a fresh page through the projects module's own path came back with it (the Inspector showing it), and an unknown device id with a known label was matched by the label; no page error.
+Measured on the way, and sourced: a synthetic eight-channel stream through Chromium's media-stream path delivered its first two channels and silence on the other six. That is the browser, not formwav: Chrome's audio team said on the W3C audio list that getUserMedia does not support more than two channels, a 2024 note on the W3C WebRTC list points to the limit of two in Chromium's source, and Firefox's tracker has the same limit open as bug 1393401. A browser recorder therefore cannot take more than two channels of one interface; recording eight inputs needs capture through the engine (the Rust core and cpal), the next step.
+
 ### Cloud projects, the interface: File > Cloud, adapted from formcut 2.6.3
 - refers-to: frontend/src/ui/cloud.ts; src/ui/projects.ts (savedSessionName, fw-open-project); src/ui/shell.ts (File > Cloud); src/main.ts; src/styles/workspace.css (.fw-cloud-*)
 - kind: explainer
