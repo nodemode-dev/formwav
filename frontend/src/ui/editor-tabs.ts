@@ -29,6 +29,8 @@ export const KINDS: Record<string, Kind> = {
   highshelf: { label: "High shelf", sub: "Highs up or down", params: [FREQ, ["gainDb", "Gain", -24, 24, "dB"]], init: { freq: 6000, gainDb: 0, q: 0.707 } },
   compressor: { label: "Compressor", sub: "Evens the level", params: [["thresholdDb", "Threshold", -60, 0, "dB"], ["ratio", "Ratio", 1, 20, ":1"], ["makeupDb", "Makeup", 0, 24, "dB"]], init: { thresholdDb: -20, ratio: 4, attackMs: 10, releaseMs: 150, makeupDb: 0 } },
   denoise: { label: "Denoise", sub: "Lowers steady noise", params: [["reductionDb", "Reduction", 0, 40, "dB"], ["sensitivityDb", "Sensitivity", -6, 12, "dB"]], init: { reductionDb: 12, sensitivityDb: 0 } },
+  dehum: { label: "De-hum", sub: "Takes out mains hum and its harmonics", params: [["baseHz", "Hum", 20, 400, "Hz"], ["harmonics", "Harmonics", 1, 16, ""], ["q", "Narrowness", 1, 200, ""]], init: { baseHz: 60, harmonics: 8, q: 30 } },
+  declick: { label: "De-click", sub: "Repairs clicks as it plays, 3.5 ms behind", params: [["sensitivity", "Threshold", 3, 30, "x"], ["maxMs", "Longest click", 0.1, 2, "ms"]], init: { sensitivity: 8, maxMs: 1 } },
   voice: { label: "Dialogue isolate", sub: "Keeps only the voice", params: [["strength", "Strength", 0, 1, ""]], init: { strength: 1 } },
   reverb: { label: "Reverb", sub: "A room around it", params: [["room", "Room", 0, 1, ""], ["damping", "Damping", 0, 1, ""], ["width", "Width", 0, 1, ""]], init: { room: 0.5, damping: 0.5, width: 1 } },
   echo: { label: "Echo", sub: "Repeats that fade", params: [["delayMs", "Delay", 1, 2000, "ms"], ["feedback", "Feedback", 0, 0.95, ""], ["mix", "Mix", 0, 1, ""]], init: { delayMs: 300, feedback: 0.35, mix: 0.4 } },

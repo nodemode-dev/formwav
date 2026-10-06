@@ -847,6 +847,178 @@ impl Flanger {
 
 /// One stage of a bus or master chain: a filter, a compressor, the de-noiser or a reverb, run a stereo frame at a
 /// time. The reverb's delay lines live behind a box, so a filter stage stays small.
+/// L6 (the v11 comparison's restoration-in-the-live-rack row): hum taken out while playing. Notches (RBJ cookbook) at the hum's
+/// fundamental and its harmonics, f64 state (single precision loses a 50 Hz notch at 48 kHz). No latency.
+pub const DEHUM: u8 = 17;
+/// L6: clicks repaired while playing. A click is a second-difference residual far above its running level (sensitivity
+/// times it); the span is replaced by cubic Hermite interpolation from the clean samples either side. The stage looks
+/// 3.5 ms ahead to see past a click, so it reports that as latency (fixed, so the mixer's compensation never moves).
+pub const DECLICK: u8 = 18;
+
+#[derive(Debug, Clone, PartialEq)]
+struct Notch {
+    b: [f64; 3],
+    a: [f64; 2],
+    z: [[f64; 2]; 2],
+}
+
+impl Notch {
+    fn new(freq: f32, q: f32, rate: f32) -> Notch {
+        let w0 = 2.0 * std::f64::consts::PI * freq as f64 / rate as f64;
+        let alpha = w0.sin() / (2.0 * q as f64);
+        let a0 = 1.0 + alpha;
+        let c = -2.0 * w0.cos();
+        Notch { b: [1.0 / a0, c / a0, 1.0 / a0], a: [c / a0, (1.0 - alpha) / a0], z: [[0.0; 2]; 2] }
+    }
+    #[inline]
+    fn process(&mut self, ch: usize, x: f32) -> f32 {
+        let x = x as f64;
+        let z = &mut self.z[ch];
+        let y = self.b[0] * x + z[0];
+        z[0] = self.b[1] * x - self.a[0] * y + z[1];
+        z[1] = self.b[2] * x - self.a[1] * y;
+        y as f32
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeHum {
+    notches: Vec<Notch>,
+}
+
+impl DeHum {
+    /// a = the hum's frequency (20 to 400 Hz: 50 or 60, or tuned), b = harmonics (1 to 16), c = Q (1 to 200; 30 when 0).
+    pub fn design(base: f32, harmonics: f32, q: f32, rate: f32) -> Option<DeHum> {
+        if !(20.0..=400.0).contains(&base) || rate <= 0.0 {
+            return None;
+        }
+        let n = (harmonics.round() as usize).clamp(1, 16);
+        let q = if q > 0.0 { q.clamp(1.0, 200.0) } else { 30.0 };
+        let notches = (1..=n).map(|k| base * k as f32).take_while(|&f| f < rate * 0.45).map(|f| Notch::new(f, q, rate)).collect();
+        Some(DeHum { notches })
+    }
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let (mut a, mut b) = (l, r);
+        for n in &mut self.notches {
+            a = n.process(0, a);
+            b = n.process(1, b);
+        }
+        (a, b)
+    }
+    pub fn reset(&mut self) {
+        for n in &mut self.notches {
+            n.z = [[0.0; 2]; 2];
+        }
+    }
+}
+
+const DECLICK_RING: usize = 1024;
+
+#[derive(Debug, Clone, PartialEq)]
+struct ClickChannel {
+    buf: [f32; DECLICK_RING],
+    env2: f32,
+    span: Option<(u64, u64)>,
+    hold: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeClick {
+    ch: [Box<ClickChannel>; 2],
+    n: u64,
+    latency: usize,
+    max_len: u64,
+    sensitivity: f32,
+    alpha: f32,
+    warmup: u64,
+}
+
+impl DeClick {
+    /// a = sensitivity (3 to 30: a click stands this many times above the residual's level; 8 when 0), b = the longest click
+    /// repaired in ms (0.1 to 2; 1 when 0).
+    pub fn design(sensitivity: f32, max_ms: f32, rate: f32) -> Option<DeClick> {
+        if rate <= 0.0 {
+            return None;
+        }
+        let sensitivity = if sensitivity > 0.0 { sensitivity.clamp(3.0, 30.0) } else { 8.0 };
+        let max_ms = if max_ms > 0.0 { max_ms.clamp(0.1, 2.0) } else { 1.0 };
+        let latency = (rate * 0.0035).round() as usize + 4;
+        if latency + 8 >= DECLICK_RING {
+            return None;
+        }
+        let fresh = || Box::new(ClickChannel { buf: [0.0; DECLICK_RING], env2: 1e-8, span: None, hold: 0 });
+        Some(DeClick { ch: [fresh(), fresh()], n: 0, latency, max_len: ((rate * max_ms / 1000.0).round() as u64).max(1), sensitivity, alpha: 1.0 - (-1.0 / (0.010 * rate)).exp(), warmup: (rate * 0.020) as u64 })
+    }
+
+    pub fn latency(&self) -> usize {
+        self.latency
+    }
+
+    fn repair(c: &mut ClickChannel, s: u64, e: u64) {
+        let at = |i: u64| (i as usize) % DECLICK_RING;
+        let (p0, p1) = (c.buf[at(s - 1)], c.buf[at(e + 1)]);
+        let (m0, m1) = (c.buf[at(s - 1)] - c.buf[at(s - 2)], c.buf[at(e + 2)] - c.buf[at(e + 1)]);
+        let width = (e - s + 2) as f32;
+        for i in s..=e {
+            let t = (i - s + 1) as f32 / width;
+            let (t2, t3) = (t * t, t * t * t);
+            c.buf[at(i)] = (2.0 * t3 - 3.0 * t2 + 1.0) * p0 + (t3 - 2.0 * t2 + t) * m0 * width + (-2.0 * t3 + 3.0 * t2) * p1 + (t3 - t2) * m1 * width;
+        }
+    }
+
+    #[inline]
+    fn channel(&mut self, k: usize, x: f32) -> f32 {
+        let n = self.n;
+        let (sens, alpha, max_len, latency, warmup) = (self.sensitivity, self.alpha, self.max_len, self.latency as u64, self.warmup);
+        let c = &mut self.ch[k];
+        let at = |i: u64| (i as usize) % DECLICK_RING;
+        c.buf[at(n)] = x;
+        if n >= 4 {
+            let e = x - 2.0 * c.buf[at(n - 1)] + c.buf[at(n - 2)];
+            let level = c.env2.sqrt();
+            // a click: the residual far above its level and above -80 dBFS, once the level has settled (20 ms)
+            let hit = n > warmup && e.abs() > sens * level && e.abs() > 1e-4;
+            match c.span {
+                Some((s, _)) if hit && n - s > max_len => {
+                    // longer than a click: an onset or a transient, left as it is, and the next few ms with it
+                    c.span = None;
+                    c.hold = n + max_len;
+                }
+                Some((s, _)) if hit => c.span = Some((s, n)),
+                Some((s, last)) if n >= last + 3 => {
+                    // quiet for two samples past the click: repair what was marked
+                    Self::repair(c, s, last);
+                    c.span = None;
+                }
+                None if hit && n >= c.hold => c.span = Some((n - 1, n)),
+                _ => {}
+            }
+            // the level follows the residual, a click held out of it so it cannot raise its own threshold
+            let e2 = (e * e).min((sens * level).powi(2).max(1e-8));
+            c.env2 += alpha * (e2 - c.env2);
+        }
+        if n >= latency { c.buf[at(n - latency)] } else { 0.0 }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let out = (self.channel(0, l), self.channel(1, r));
+        self.n += 1;
+        out
+    }
+
+    pub fn reset(&mut self) {
+        for c in &mut self.ch {
+            c.buf = [0.0; DECLICK_RING];
+            c.env2 = 1e-8;
+            c.span = None;
+            c.hold = 0;
+        }
+        self.n = 0;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stage {
     Filter(Biquad),
@@ -861,6 +1033,8 @@ pub enum Stage {
     Phaser(Box<Phaser>),
     Flanger(Box<Flanger>),
     Voice(Box<Voice>),
+    DeHum(Box<DeHum>),
+    DeClick(Box<DeClick>),
 }
 
 impl Stage {
@@ -869,6 +1043,7 @@ impl Stage {
     pub fn latency(&self) -> usize {
         match self {
             Stage::Voice(_) => 2 * VOICE_FRAME,
+            Stage::DeClick(x) => x.latency(),
             _ => 0,
         }
     }
@@ -899,6 +1074,10 @@ impl Stage {
             Flanger::design(a, b, c, rate).map(|x| Stage::Flanger(Box::new(x)))
         } else if kind == VOICE {
             Voice::design(a).map(|x| Stage::Voice(Box::new(x)))
+        } else if kind == DEHUM {
+            DeHum::design(a, b, c, rate).map(|x| Stage::DeHum(Box::new(x)))
+        } else if kind == DECLICK {
+            DeClick::design(a, b, rate).map(|x| Stage::DeClick(Box::new(x)))
         } else {
             Biquad::design(kind, a, b, c, rate).map(Stage::Filter)
         }
@@ -919,6 +1098,8 @@ impl Stage {
             Stage::Phaser(x) => x.process(l, r),
             Stage::Flanger(x) => x.process(l, r),
             Stage::Voice(x) => x.process(l, r),
+            Stage::DeHum(x) => x.process(l, r),
+            Stage::DeClick(x) => x.process(l, r),
         }
     }
 
@@ -936,6 +1117,8 @@ impl Stage {
             Stage::Phaser(x) => x.reset(),
             Stage::Flanger(x) => x.reset(),
             Stage::Voice(x) => x.reset(),
+            Stage::DeHum(x) => x.reset(),
+            Stage::DeClick(x) => x.reset(),
         }
     }
 }
@@ -943,6 +1126,54 @@ impl Stage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tone(freqs: &[f32], amp: f32, n: usize, rate: f32) -> Vec<f32> {
+        (0..n).map(|i| freqs.iter().map(|f| amp * (2.0 * std::f32::consts::PI * f * i as f32 / rate).sin()).sum()).collect()
+    }
+
+    fn rms(x: &[f32]) -> f32 {
+        (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt()
+    }
+
+    #[test]
+    fn dehum_takes_out_hum_and_its_harmonics_and_leaves_the_rest() {
+        let rate = 48000.0;
+        for (k, f) in [60.0f32, 120.0, 180.0, 240.0, 300.0].iter().enumerate() {
+            let mut d = DeHum::design(60.0, 8.0, 30.0, rate).unwrap();
+            // a Q-30 notch at 60 Hz settles in about 0.16 s: measured over the last half second of two
+            let x = tone(&[*f], 0.5, 96000, rate);
+            let y: Vec<f32> = x.iter().map(|&v| d.process(v, v).0).collect();
+            let db = 20.0 * (rms(&y[72000..]) / rms(&x[72000..])).log10();
+            assert!(db < -40.0, "harmonic {} ({} Hz) only {:.1} dB down", k + 1, f, db);
+        }
+        let mut d = DeHum::design(60.0, 8.0, 30.0, rate).unwrap();
+        let x = tone(&[1000.0], 0.5, 48000, rate);
+        let y: Vec<f32> = x.iter().map(|&v| d.process(v, v).0).collect();
+        let db = 20.0 * (rms(&y[24000..]) / rms(&x[24000..])).log10();
+        assert!(db.abs() < 0.5, "1 kHz moved {:.2} dB", db);
+    }
+
+    #[test]
+    fn declick_leaves_clean_audio_untouched_and_repairs_clicks() {
+        let rate = 48000.0;
+        let clean = tone(&[440.0, 1300.0], 0.3, 48000, rate);
+        let mut d = DeClick::design(8.0, 1.0, rate).unwrap();
+        let lat = d.latency();
+        let y: Vec<f32> = clean.iter().map(|&v| d.process(v, v).0).collect();
+        assert!(y[lat..].iter().zip(&clean).all(|(a, b)| a == b), "clean audio changed");
+        let mut clicked = clean.clone();
+        let sites: Vec<usize> = (1..=10).map(|k| k * 4000 + 37).collect();
+        for &s in &sites {
+            clicked[s] += 0.8;
+            clicked[s + 1] -= 0.5;
+        }
+        let mut d = DeClick::design(8.0, 1.0, rate).unwrap();
+        let y: Vec<f32> = clicked.iter().map(|&v| d.process(v, v).0).collect();
+        for &s in &sites {
+            let worst = (s.saturating_sub(4)..s + 6).map(|i| (y[i + lat] - clean[i]).abs()).fold(0.0f32, f32::max);
+            assert!(worst < 0.05, "click at {} left {:.3}", s, worst);
+        }
+    }
 
     /// Gain in dB of a sine through `f`, by RMS over the settled second half against the sine's RMS (1/sqrt 2).
     /// Sample peaks understate high frequencies (6 samples a cycle at 8 kHz read -0.56 dB through a flat filter).

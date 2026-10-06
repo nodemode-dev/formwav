@@ -45,6 +45,13 @@ native/
 
 ## formwav-dsp/Cargo.toml {#cargo-toml}
 
+### Restoration in the live rack: de-hum and de-click while playing
+- refers-to: native/formwav-dsp/src/fx.rs (DeHum, kind 17; DeClick, kind 18; tests); backend/app/services/render.py; frontend/src/engine/document.ts, src/audio/player.ts, src/ui/lanes.ts, src/ui/inspector-pane.ts, src/ui/editor-tabs.ts, src/ui/browser-effects.ts; sidecar verification/verify_live_restoration.py
+- kind: explainer
+- logged: v2.11.3 (in progress) · 2026-10-06
+
+The comparison's L6: repair only offline. Two stages join the core, so they run live in the browser's rack and in export alike. De-hum: notches (RBJ, f64 state) at the hum's frequency and its harmonics, no latency. De-click: a click is a second-difference residual far above its running level (threshold times it, above -80 dBFS, after a 20 ms warm-up); a run longer than a click is an onset and is left alone; a click is replaced by cubic Hermite interpolation from the samples either side, which the stage sees by running 3.5 ms behind, reported as latency and compensated as Voice's is. The first tests caught two faults: de-hum's measurement inside the notch's 0.16 s settling (the test now measures after it), and de-click repairing onsets from silence and over-long runs (now a warm-up, and long runs abandoned). Rust tests: harmonics of 60 Hz over 40 dB down, 1 kHz within 0.5 dB; clean audio through de-click bit-exact, ten clicks repaired within 0.05. Through the export renderer on the JFK speech: the hum alone, each of eight harmonics down 122 to 197 dB; the speech alone, -0.23 dB in level and 0.033 dB on average in its spectrum away from the notches; 40 clicks, the worst error at a click 0.60 before and 0.006 after; clean speech through de-click, 46 samples of 527,828 changed (transients taken for clicks). Wired through the document, the player's two maps, automation (none for these), the export table, the inspector's lists and cards and the effects browser's Repair group; TypeScript caught three places treating any unnamed kind as a filter. De-reverb live is not built: it needs a spectral stage with its own latency, the next of L6.
+
 ### Native capture: every channel of an interface, through the engine
 - refers-to: native/formwav-dsp/src/native.rs (NativeInput, input_devices, build_input); src/python.rs (NativeInput, native_input_devices); backend/app/routers/native_audio.py (/api/audio/inputs, /record/start, /record/levels, /record/stop); sidecar verification/native_capture
 - kind: explainer

@@ -39,6 +39,8 @@ export function flatFx(fx: readonly TrackFx[] | undefined): number[] {
     if (f.kind === "gate") return [13, f.thresholdDb, f.releaseMs, f.rangeDb];
     if (f.kind === "phaser") return [14, f.rateHz, f.depth, f.feedback];
     if (f.kind === "flanger") return [15, f.rateHz, f.depthMs, f.feedback];
+    if (f.kind === "dehum") return [17, f.baseHz, f.harmonics, f.q];
+    if (f.kind === "declick") return [18, f.sensitivity, f.maxMs, 0];
     return [codes[f.kind], f.freq, f.gainDb, f.q];
   });
 }
@@ -50,7 +52,7 @@ export function flatFxAuto(fx: readonly TrackFx[] | undefined): { stage: number;
   let stage = 0;
   for (const f of fx ?? []) {
     if (f.bypass || f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice") continue;
-    if (f.kind === "denoise" || f.kind === "echo" || f.kind === "chorus" || f.kind === "limiter" || f.kind === "tremolo" || f.kind === "gate" || f.kind === "phaser" || f.kind === "flanger") {
+    if (f.kind === "denoise" || f.kind === "echo" || f.kind === "chorus" || f.kind === "limiter" || f.kind === "tremolo" || f.kind === "gate" || f.kind === "phaser" || f.kind === "flanger" || f.kind === "dehum" || f.kind === "declick") {
       stage++; // a place in the chain, nothing to automate
       continue;
     }
@@ -81,6 +83,8 @@ export function flatStages(fx: readonly TrackFx[] | undefined): number[] {
     if (f.kind === "phaser") return [14, f.rateHz, f.depth, f.feedback, 0, 0];
     if (f.kind === "flanger") return [15, f.rateHz, f.depthMs, f.feedback, 0, 0];
     if (f.kind === "voice") return [16, f.strength, 0, 0, 0, 0];
+    if (f.kind === "dehum") return [17, f.baseHz, f.harmonics, f.q, 0, 0];
+    if (f.kind === "declick") return [18, f.sensitivity, f.maxMs, 0, 0, 0];
     return [codes[f.kind], f.freq, f.gainDb, f.q, 0, 0];
   });
 }

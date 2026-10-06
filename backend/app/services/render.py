@@ -10,7 +10,7 @@ class RenderError(ValueError):
 
 
 #: Track effect kinds, as the core's stage codes (formwav-dsp fx.rs).
-FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11, "tremolo": 12, "gate": 13, "phaser": 14, "flanger": 15, "voice": 16}
+FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11, "tremolo": 12, "gate": 13, "phaser": 14, "flanger": 15, "voice": 16, "dehum": 17, "declick": 18}
 
 
 def _stage(f: dict) -> tuple | None:
@@ -19,6 +19,10 @@ def _stage(f: dict) -> tuple | None:
     kind = FX_KINDS.get(f.get("kind")) if isinstance(f, dict) else None
     if not kind or f.get("bypass"):
         return None
+    if kind == 17:  # L6: de-hum, a = the hum in Hz, b = harmonics, c = Q
+        return (17, float(f.get("baseHz", 60)), float(f.get("harmonics", 8)), float(f.get("q", 30)), 0.0, 0.0)
+    if kind == 18:  # L6: de-click, a = threshold (times the residual's level), b = the longest click in ms
+        return (18, float(f.get("sensitivity", 8)), float(f.get("maxMs", 1)), 0.0, 0.0, 0.0)
     if kind == 9:
         return (9, float(f.get("delayMs", 300)), float(f.get("feedback", 0.35)), float(f.get("mix", 0.4)), 0.0, 0.0)
     if kind == 10:
