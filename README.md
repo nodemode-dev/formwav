@@ -109,6 +109,8 @@ A provider without its key or server is listed with what it needs. Other open-we
 
 ## Connect an agent (MCP)
 
+The `formwav-harness` skill (`.claude/skills/formwav-harness`) teaches an agent to use these tools well: what to check first, which tool fits a job, the order of steps, and what to tell you when a key or an install is missing. Claude Code finds it in this repository; on claude.ai, upload the packaged `formwav-harness.skill`. `CLAUDE.md` and `AGENTS.md` guide agents working on formwav's code.
+
 formwav ships an MCP server in `backend/formwav_mcp` (installed by `formwav_oc_install` into its own venv). With formwav running, an agent can list, measure, repair, transcribe and export your media, make speech, music, sound effects and dubs, find speech, regenerate words, split speech, music and ambience, record, reach the cloud, and render saved sessions as a mix, 5.1 or ADM objects, through twenty-eight `formwav_*` tools; every edit makes new media and keeps the source. Claude Desktop (`claude_desktop_config.json`) or any client that launches stdio servers:
 
 ```json

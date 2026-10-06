@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### The formwav-harness skill, CLAUDE.md and AGENTS.md
+- refers-to: .claude/skills/formwav-harness (SKILL.md, five sub-skills, references and checklists, EVALS.json); CLAUDE.md; AGENTS.md; README.md (Connect an agent); sidecar harness/ (the tools-reference generator, the trigger phrases, dist/formwav-harness.skill)
+- kind: explainer
+- logged: v2.12.2 (in progress) · 2026-10-06
+
+PLAN_v11's 3.0, the owner's harness, emulating formcut's for formwav and made with the god-tier-skill-creator skill through its director (intake, architecture, description, body, payload, audit, evaluation and packaging; media skipped, none carried) with its connector specialist (mcp-skill-builder). The skill is the knowledge layer over the MCP server's 28 tools: the master body's spine is three workflows with exact tool names (repair a recording, work by the words, deliver a session), ground rules (status first, the models status before generating, sources never change, measure before and after, paths from the person), recovery for the four failures (the engine not running, a key or install missing, a tool name that does not resolve, a workflow stopped partway) and the direct-call test that tells a skill failure from a server failure. Sub-skills: harness-director, tools (its reference generated from the server's own listing, the generator refusing when its groups and the server disagree), workflows (nine, step by step), setup (Claude Code, Codex, Cursor and Claude Desktop, over stdio or HTTP, with the troubleshooting checklist), development (the tool-change checklist). Ledger: description 973 of 1024 characters, its 16 should-trigger phrases all covered, 8 near misses sharing words only where an exclusion is named or a setup phrase is generic (none names formwav, which every trigger does); body 62 of 500 lines; 11 of 200 files; 0 of 67 media; 0.04 MB of 30; validator FAIL 0, WARN 0; five evaluations with observable behaviours; packaged as formwav-harness.skill (0.02 MB, archive root formwav-harness/). The evaluations are written, not yet run by a model here. CLAUDE.md and AGENTS.md give agents working on formwav's code its conventions, the silent invariants this sprint learned (commands dispatched, an effect kind's many places, sourceIn in media samples, freq not hz, the loopback rule) and the two agent surfaces.
+
 ### The MCP server reaches what formwav has gained: 28 tools, each checked by a real MCP client
 - refers-to: backend/formwav_mcp/server.py; sidecar verification/verify_mcp.py
 - kind: explainer
