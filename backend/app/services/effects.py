@@ -205,7 +205,7 @@ def _filter_curve_chain(v: dict) -> str:
 #: Adjustable effects: each parameter is (label, min, max, default, unit); the builder makes the chain from clamped values.
 #: Enhance speech's strength follows formcut's own voice-clean strength control (noise floor and ratio scale with it).
 PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]] = {
-    "dialogue-isolate": ({"strength": ("Strength", 0, 100, 100, "%")}, lambda v: f"arnndn=m={_rnnoise_model()}:mix={v['strength'] / 100:.2f}"),
+    "dialogue-isolate": ({"strength": ("Strength", 0, 100, 100, "%")}, lambda v: f"apad=pad_len=480,arnndn=m={_rnnoise_model()}:mix={v['strength'] / 100:.2f},atrim=start_sample=480"),
     "voice-clean": ({"strength": ("Strength", 0, 100, 50, "%")}, lambda v: f"highpass=f=90,afftdn=nf={-15 - 20 * v['strength'] / 100:.1f},acompressor=threshold=0.12:ratio={1.5 + 3 * v['strength'] / 100:.2f},alimiter"),
     "amplify-up": ({"db": ("Gain", -24, 24, 6, "dB")}, lambda v: f"volume={v['db']:.2f}dB"),
     "peak-normalize": ({"target": ("Peak", -24, 0, -1, "dBFS"), "dc": ("Remove DC (1 = on)", 0, 1, 0, "", 1), "independent": ("Each channel (1 = on)", 0, 1, 0, "", 1)}, None),
@@ -1714,7 +1714,35 @@ def _peak_normalize(x, rate: int, v: dict):
     return (y * gains).astype(np.float32)
 
 
-NUMPY_EFFECTS = {"dereverb": _dereverb, "dereverb-restore": _dereverb_wpe, "derustle": _derustle, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
+def _dialogue_isolate(x, rate: int, v: dict):
+    """RX-16: the dedicated dialogue model, DeepFilterNet3 (deepfilter.py), Strength as its attenuation limit; when the
+    model cannot be had (offline before its one download), RNNoise through ffmpeg's arnndn as before, Strength its mix."""
+    from . import deepfilter
+
+    strength = float(v.get("strength", 100))
+    try:
+        return deepfilter.isolate(x, rate, strength)
+    except Exception:
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        import numpy as np
+
+        from . import media
+        from .audacity import _wav_bytes
+
+        x = np.asarray(x, dtype=np.float32)
+        quiet = [media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-y"]
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "in.wav"
+            src.write_bytes(_wav_bytes([x[:, c] for c in range(x.shape[1])], rate))
+            # arnndn delays its output by one 480-sample frame: padded and trimmed so the clip stays where it was
+            dec = subprocess.run([*quiet, "-i", str(src), "-af", f"apad=pad_len=480,arnndn=m={_rnnoise_model()}:mix={strength / 100:.2f},atrim=start_sample=480", "-f", "f32le", "-"], capture_output=True, check=True, timeout=600)
+        return np.frombuffer(dec.stdout, dtype="<f4").reshape(-1, x.shape[1])[: len(x)].copy()
+
+
+NUMPY_EFFECTS = {"dialogue-isolate": _dialogue_isolate, "dereverb": _dereverb, "dereverb-restore": _dereverb_wpe, "derustle": _derustle, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
                  "azimuth-measured": _azimuth_measured, "dc-measured": _dc_measured, "breath-control": _breath_control,
                  "de-hum-adaptive": _de_hum_adaptive, "de-ess-spectral": _de_ess_spectral, "spectral-recovery": _spectral_recovery,
                  "spectral-repair": _spectral_repair, "dialogue-leveler": _dialogue_leveler, "dynamics-curve": _dynamics_curve}
