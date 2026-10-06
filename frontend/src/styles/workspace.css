@@ -380,7 +380,8 @@
 /* Settings > Agents (ui/agents.ts): a client per row, its text to copy, scrolling inside the dialog */
 .fw-agents-dialog { inline-size: min(640px, calc(100vw - 32px)); }
 .fw-agents-note { margin: 0 0 8px; font-size: 12px; color: var(--text-muted); }
-.fw-agents-list { max-block-size: min(56vh, 520px); overflow-y: auto; display: grid; gap: 10px; }
+/* the list's height reserved from the start, so six clients arriving after the request do not move what is below */
+.fw-agents-list { block-size: min(56vh, 520px); overflow-y: auto; display: grid; align-content: start; gap: 10px; }
 .fw-agent-client { border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 8px; }
 .fw-agent-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .fw-agent-where { font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }

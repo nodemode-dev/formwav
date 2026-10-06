@@ -2,7 +2,7 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v2.12.2
+Current build version: v2.12.3
 Last updated: 2026-09-30 · Isolate sound's span prediction and candidate re-ranking controls (the last entry below); the header had read v0.40.0 while entries ran to v0.84.0
 
 ---
@@ -108,6 +108,13 @@ frontend/
 ---
 
 ## index.html {#index-html}
+
+### Settings > Agents moved what was below it as its clients arrived
+- refers-to: frontend/src/styles/workspace.css (.fw-agents-list)
+- kind: fix
+- logged: v2.12.3 (in progress) · 2026-10-06
+
+Found by the v2.12.3 gate's interface run: opening Settings > Agents made a layout shift of 0.0108. The dialog opened with a one-line note and grew when the six clients arrived from the engine, moving its status line and Close button down after the input that opened it. The list's height is now reserved from the start (min(56vh, 520px), scrolling inside); opening Settings, the dialog, the list arriving and closing, twice under 4x throttling with each step labelled, make no layout-shift entry.
 
 ### A session view that plays: slots kept with the session, launch quantize choices, launching starts playback
 - refers-to: frontend/src/ui/launcher.ts; src/engine/document.ts (LauncherState, launcher, set-launcher-slot, set-launcher); src/ui/media-pane.ts and src/main.ts (the player passed to the launcher); src/styles/workspace.css (a playing slot)
