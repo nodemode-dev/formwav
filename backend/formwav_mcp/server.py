@@ -42,7 +42,8 @@ mcp = MCPServer(
         "formwav_list_media, formwav_import_audio or any tool that makes media) and saved sessions by name (from "
         "formwav_list_sessions). Editing never changes a source: every effect and repair returns a new media_id. "
         "Measure before and after with formwav_analyze_media, and export with formwav_export_media or "
-        "formwav_render_session. The prompt formwav_repair_workflow describes the usual order."
+        "formwav_render_session (a stereo mix, 5.1, or ADM objects). Generation, speech, dubbing and separation tools make new media too; "
+        "formwav_local_models_status says which engines are ready. The prompt formwav_repair_workflow describes the usual order."
     ),
 )
 
@@ -186,10 +187,17 @@ async def formwav_get_session(name: str) -> dict[str, Any]:
 
 
 @mcp.tool(annotations=WRITES_FILE, structured_output=True)
-async def formwav_render_session(name: str, path: str, format: str = "wav") -> dict[str, Any]:
+async def formwav_render_session(name: str, path: str, format: str = "wav", what: str = "mix") -> dict[str, Any]:
     """Renders a saved session's mix (every track, its effects and automation, as the app plays it) to a file on this
-    machine: `format` wav, flac or mp3; `path` the file to write in an existing folder (replaced if present)."""
+    machine: `format` wav, flac or mp3; `path` the file to write in an existing folder (replaced if present). `what`: mix
+    (stereo, the default), surround51 (six channels, L R C LFE Ls Rs) or adm (an ADM BWF: tracks placed on the surround pad
+    as objects, moving along their paths, and tracks marked Bed as a 5.1 bed; always WAV)."""
     fmt = format.lower().strip()
+    kind = what.lower().strip()
+    if kind not in ("mix", "surround51", "adm"):
+        raise ToolError("what must be mix, surround51 or adm.")
+    if kind != "mix":
+        fmt = "wav"
     if fmt not in ("wav", "flac", "mp3"):
         raise ToolError("format must be wav, flac or mp3.")
     target = Path(path).expanduser()
@@ -197,8 +205,8 @@ async def formwav_render_session(name: str, path: str, format: str = "wav") -> d
         raise ToolError(f"The folder {target.parent} does not exist. Choose a path in an existing folder.")
     doc = (await _call("GET", f"/api/projects/{quote(name)}")).json()
     doc = doc.get("document", doc)
-    target.write_bytes((await _call("POST", f"/api/render?format={fmt}&what=mix", content=json.dumps(doc).encode(), headers={"Content-Type": "application/json"}, timeout=1800)).content)
-    return {"path": str(target), "bytes": target.stat().st_size, "format": fmt}
+    target.write_bytes((await _call("POST", f"/api/render?format={fmt}&what={kind}", content=json.dumps(doc).encode(), headers={"Content-Type": "application/json"}, timeout=1800)).content)
+    return {"path": str(target), "bytes": target.stat().st_size, "format": fmt, "what": kind}
 
 
 @mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
@@ -208,6 +216,176 @@ async def formwav_transcribe_media(media_id: str) -> dict[str, Any]:
     data = (await _call("POST", f"/api/media/{quote(media_id)}/transcript", timeout=1800)).json()
     words = data.get("words", [])
     return {"media_id": media_id, "language": data.get("language"), "text": " ".join(str(w.get("text", "")).strip() for w in words), "words": [{"text": w.get("text"), "start": w.get("start"), "end": w.get("end")} for w in words]}
+
+
+def _post(path: str, body: dict[str, Any], timeout: float = 1800.0):
+    return _call("POST", path, content=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, timeout=timeout)
+
+
+# 3.1: what formwav has gained since the first twelve tools, each a thin call to a route the engine already serves
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_local_models_status() -> dict[str, Any]:
+    """What can make sound on this machine and in the cloud: the local speech engines (Kokoro, Pocket TTS, Chatterbox)
+    and whether each is installed, the dubbing languages installed, whether ACE-Step's server answers, and which cloud
+    providers have their keys. Call it before generating, to pick an engine that will work."""
+    speech = (await _call("GET", "/api/providers/local-speech")).json().get("engines", [])
+    dub = (await _call("GET", "/api/providers/local-dub")).json()
+    providers = (await _call("GET", "/api/providers")).json().get("providers", [])
+    return {"local_speech": [{"engine": e["id"], "installed": e["installed"], "size": e["size"]} for e in speech],
+            "dubbing": {"translator": dub.get("translator"), "languages": [l["code"] for l in dub.get("languages", []) if l.get("installed")]},
+            "providers": [{"id": p["id"], "ready": p["ready"], "needs": p.get("needs")} for p in providers]}
+
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_list_voices(engine: str = "kokoro") -> dict[str, Any]:
+    """The voices an engine speaks in: kokoro (on this machine, once installed) or elevenlabs (the account's voices,
+    needs ELEVENLABS_API_KEY). Use a returned voice with formwav_generate_speech."""
+    if engine == "kokoro":
+        return {"engine": engine, "voices": (await _call("GET", "/api/providers/local-speech/kokoro/voices")).json().get("voices", [])}
+    if engine == "elevenlabs":
+        return {"engine": engine, "voices": [{"voice_id": v.get("voice_id"), "name": v.get("name")} for v in (await _call("GET", "/api/providers/elevenlabs/voices")).json().get("voices", [])]}
+    raise ToolError("engine must be kokoro or elevenlabs.")
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_generate_speech(text: str, engine: str = "kokoro", voice: str = "") -> dict[str, Any]:
+    """Speech from text, as new media: engine kokoro (on this machine; voice a Kokoro voice such as af_heart) or
+    elevenlabs (voice an ElevenLabs voice_id, needs ELEVENLABS_API_KEY)."""
+    if engine == "kokoro":
+        return _media((await _post("/api/providers/local-speech/kokoro/speak", {"text": text, "voice": voice})).json())
+    if engine == "elevenlabs":
+        return _media((await _post("/api/providers/elevenlabs/speech", {"text": text, "voice_id": voice})).json())
+    raise ToolError("engine must be kokoro or elevenlabs.")
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_generate_music(prompt: str, lyrics: str = "", seconds: float = 30, engine: str = "elevenlabs") -> dict[str, Any]:
+    """Music or a song from a prompt, with lyrics sung when given, as new media: engine elevenlabs (needs
+    ELEVENLABS_API_KEY; 3 s to 10 min) or acestep (ACE-Step 1.5's server on this machine, uv run acestep-api; 10 s to
+    10 min)."""
+    if engine == "elevenlabs":
+        return _media((await _post("/api/providers/elevenlabs/music", {"prompt": prompt, "lyrics": lyrics, "seconds": seconds})).json())
+    if engine == "acestep":
+        return _media((await _post("/api/providers/acestep/generate", {"task": "text2music", "prompt": prompt, "lyrics": lyrics, "seconds": seconds})).json())
+    raise ToolError("engine must be elevenlabs or acestep.")
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_generate_sound_effect(description: str, seconds: float = 5, loop: bool = False) -> dict[str, Any]:
+    """A sound effect from a description, 0.5 to 30 s, looping seamlessly when asked, as new media (ElevenLabs, needs
+    ELEVENLABS_API_KEY; there is no open-weight path on this machine)."""
+    return _media((await _post("/api/providers/elevenlabs/sound", {"text": description, "duration_s": seconds, "loop": loop})).json())
+
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_speech_regions(media_id: str) -> dict[str, Any]:
+    """Where someone speaks in a media, in seconds (Silero VAD on this machine; under music too). Use it to find pauses
+    for cuts: a cut inside a region lands in speech."""
+    regions = (await _call("GET", f"/api/media/{quote(media_id)}/speech")).json().get("regions", [])
+    return {"media_id": media_id, "regions": regions, "speech_seconds": round(sum(r["end"] - r["start"] for r in regions), 3)}
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_transcribe_with_speakers(media_id: str, speakers: int = 0) -> dict[str, Any]:
+    """Transcribes with ElevenLabs Scribe v2 (needs ELEVENLABS_API_KEY): words with times, which speaker said each, and
+    sounds such as laughter as events; kept as the media's transcript too. `speakers` 0 lets it count them."""
+    data = (await _post("/api/providers/elevenlabs/transcribe", {"media_id": media_id, "speakers": speakers or None})).json()
+    return {"media_id": media_id, "language": data.get("language"), "words": data.get("words", [])}
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_regenerate_words(media_id: str, start_seconds: float, end_seconds: float, text: str, engine: str = "elevenlabs") -> dict[str, Any]:
+    """Replaces the speech between two times with new words in the speaker's own voice, cloned from the recording, as
+    new media (the source is kept): engine elevenlabs (needs ELEVENLABS_API_KEY), pocket or chatterbox (installed on
+    this machine). Find the times with formwav_transcribe_media."""
+    path = "/api/providers/elevenlabs/regenerate" if engine == "elevenlabs" else f"/api/providers/local-speech/{quote(engine)}/regenerate"
+    if engine not in ("elevenlabs", "pocket", "chatterbox"):
+        raise ToolError("engine must be elevenlabs, pocket or chatterbox.")
+    out = (await _post(path, {"media_id": media_id, "start_s": start_seconds, "end_s": end_seconds, "text": text})).json()
+    return {**_media(out["media"]), "replaced_seconds": out.get("replaced_s"), "inserted_seconds": out.get("inserted_s")}
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_dub_media(media_id: str, language: str = "es", engine: str = "local") -> dict[str, Any]:
+    """Dubs a media's speech into another language, as new media the same length: engine local (Whisper, Argos
+    Translate and Kokoro on this machine; es, fr, it or pt once installed) or elevenlabs (needs ELEVENLABS_API_KEY;
+    waits for the job, up to 20 minutes)."""
+    if engine == "local":
+        out = (await _post(f"/api/providers/local-dub/{quote(language)}", {"media_id": media_id})).json()
+        return {**_media(out["media"]), "language": language, "sentences": [{"start": p["start"], "text": p["text"], "translated": p.get("translated")} for p in out.get("sentences", [])]}
+    if engine == "elevenlabs":
+        import asyncio
+
+        job = (await _post("/api/providers/elevenlabs/dub", {"media_id": media_id, "target_lang": language})).json()
+        for _ in range(240):
+            st = (await _call("GET", f"/api/providers/elevenlabs/dub/{quote(job['job'])}?lang={quote(language)}")).json()
+            if st.get("status") == "dubbed":
+                return {**_media(st["media"]), "language": language}
+            if st.get("status") in ("failed", "error"):
+                raise ToolError(f"ElevenLabs could not dub it: {st.get('error') or st.get('status')}")
+            await asyncio.sleep(5)
+        raise ToolError("ElevenLabs had not finished after 20 minutes; the job continues on its side.")
+    raise ToolError("engine must be local or elevenlabs.")
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_separate_speech_music_ambience(media_id: str) -> dict[str, Any]:
+    """Splits a media into speech, music and ambience, three new media that add up to it exactly (DeepFilterNet3 and
+    harmonic-percussive masks, on this machine)."""
+    out = (await _post(f"/api/media/{quote(media_id)}/three-way", {})).json()
+    return {k: _media(out[k]) for k in ("speech", "music", "ambience")}
+
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_list_inputs() -> dict[str, Any]:
+    """The audio interfaces formwav's engine can record from natively, each with its channel count (every channel of an
+    interface, where a browser takes two). Empty when the engine has no native audio here."""
+    return (await _call("GET", "/api/audio/inputs")).json()
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_record(seconds: float, channels: list[int] | None = None, device: str = "") -> dict[str, Any]:
+    """Records a take of `seconds` (at most 600) from a native input (formwav_list_inputs names them; `device` empty for
+    the default), the channels listed (0-based; default the first), as new media."""
+    import asyncio
+
+    if not 0 < seconds <= 600:
+        raise ToolError("seconds must be above 0 and at most 600.")
+    await _post("/api/audio/record/start", {"device": device or None, "tracks": [{"trackId": "mcp", "channels": channels or [0], "name": "MCP take"}]})
+    await asyncio.sleep(seconds)
+    out = (await _post("/api/audio/record/stop", {})).json()
+    return {"takes": [{**_media(t["media"]), "channels": t.get("channels")} for t in out.get("takes", [])]}
+
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_cloud_status() -> dict[str, Any]:
+    """Which cloud stores (Google Drive, Dropbox) are set up and connected for saving and opening sessions and media.
+    Connecting is done once in formwav's File > Cloud."""
+    return (await _call("GET", "/api/cloud")).json()
+
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_cloud_list_files(provider: str, folder: str = "") -> dict[str, Any]:
+    """The files in a connected cloud store's formwav folder (provider google or dropbox): ids and names, to import with
+    formwav_cloud_import."""
+    return (await _call("GET", f"/api/cloud/{quote(provider)}/files?folder={quote(folder)}")).json()
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_cloud_import(provider: str, file_id: str, name: str) -> dict[str, Any]:
+    """Brings a file from a connected cloud store into formwav: a session (.fmw) becomes a saved session, audio becomes
+    new media."""
+    out = (await _post(f"/api/cloud/{quote(provider)}/import", {"id": file_id, "name": name})).json()
+    return {"session": out["project"]} if "project" in out else _media(out["media"])
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=True), structured_output=True)
+async def formwav_cloud_save(provider: str, session: str = "", media_id: str = "") -> dict[str, Any]:
+    """Saves a saved session (by name) or a media (by id) to a connected cloud store (google or dropbox)."""
+    if bool(session) == bool(media_id):
+        raise ToolError("give either session or media_id.")
+    return (await _post(f"/api/cloud/{quote(provider)}/upload", {"project": session or None, "mediaId": media_id or None})).json()
 
 
 @mcp.prompt()

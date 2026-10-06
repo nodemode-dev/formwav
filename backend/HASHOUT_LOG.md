@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### The MCP server reaches what formwav has gained: 28 tools, each checked by a real MCP client
+- refers-to: backend/formwav_mcp/server.py; sidecar verification/verify_mcp.py
+- kind: explainer
+- logged: v2.12.1 (in progress) · 2026-10-06
+
+PLAN_v11's 3.1. The server had twelve tools (media, effects, repairs, sessions, render, Whisper). Sixteen join them, each a thin call to a route the engine already serves and its earlier checks cover: the local models' status (which engines and dubbing languages are installed, which providers have keys); voices; speech (Kokoro here or ElevenLabs); music and songs (ElevenLabs or ACE-Step's server); sound effects; speech regions (Silero VAD); transcription with speakers (Scribe v2); Regenerate in the speaker's cloned voice (ElevenLabs, Pocket TTS or Chatterbox); dubbing (here, or ElevenLabs with its job polled); speech, music and ambience as three media; native inputs and a timed native take; and the cloud's status, files, import and save. The render tool gains what: a stereo mix, 5.1, or ADM objects with their paths and the bed. Checked as an agent meets it: the MCP SDK's own client (2.2.0) starts the server over stdio, lists 28 tools and calls each against the running engine; 34 of 34 checks pass. Where it can work here it returns its result (54 Kokoro voices, speech and its regions, the JFK transcript, the Spanish dub saying ustedes, three stems of 11 s, a saved session rendered as a mix, 5.1 and ADM, that ADM 99 percent left at the start and 100 percent right at the end with its bed 100 percent centre in EAR); where a key, an install or a device is missing here it fails with what a person needs to do (ELEVENLABS_API_KEY, acestep-api, not installed, Connect Dropbox first, the audio device). Not yet tools: mixing edits on a saved session, and cutting words out of media; the in-app agent has its own word tools.
+
 ### Objects that move and a bed, checked in the EBU's own renderer
 - refers-to: backend/app/services/adm.py (paths as block sequences, a 5.1 bed on the common definitions, an explicit CHNA); frontend/src/engine/document.ts (surround.path, surround.bed); src/ui/inspector-pane.ts (Add point at playhead, Clear path, Bed); sidecar verification/verify_adm_ear.py, ear_share.py, earvenv (EAR 2.1.0)
 - kind: explainer
