@@ -175,18 +175,42 @@ unsafe extern "C" fn destroy_audio_reader(_: ARAAudioAccessControllerHostRef, re
     drop(Box::from_raw(reader as *mut Reader));
 }
 
-unsafe extern "C" fn get_archive_size(_: ARAArchivingControllerHostRef, _: ARAArchiveReaderHostRef) -> ARASize {
-    0
+/// An archive the plug-in writes its state into (storeObjectsToArchive), byte ranges at the positions it gives.
+struct ArchiveWriter {
+    bytes: Vec<u8>,
 }
-unsafe extern "C" fn read_bytes_from_archive(_: ARAArchivingControllerHostRef, _: ARAArchiveReaderHostRef, _: ARASize, _: ARASize, _: *mut ARAByte) -> ARABool {
-    0
+
+/// An archive the plug-in restores its state from, with the id of the archive format it was written in.
+struct ArchiveReader {
+    bytes: Vec<u8>,
+    id: CString,
 }
-unsafe extern "C" fn write_bytes_to_archive(_: ARAArchivingControllerHostRef, _: ARAArchiveWriterHostRef, _: ARASize, _: ARASize, _: *const ARAByte) -> ARABool {
-    0
+
+unsafe extern "C" fn get_archive_size(_: ARAArchivingControllerHostRef, reader: ARAArchiveReaderHostRef) -> ARASize {
+    (*(reader as *const ArchiveReader)).bytes.len() as ARASize
+}
+unsafe extern "C" fn read_bytes_from_archive(_: ARAArchivingControllerHostRef, reader: ARAArchiveReaderHostRef, position: ARASize, length: ARASize, buffer: *mut ARAByte) -> ARABool {
+    let bytes = &(*(reader as *const ArchiveReader)).bytes;
+    let (at, n) = (position as usize, length as usize);
+    if at.checked_add(n).is_none_or(|end| end > bytes.len()) {
+        return 0;
+    }
+    std::ptr::copy_nonoverlapping(bytes.as_ptr().add(at), buffer, n);
+    1
+}
+unsafe extern "C" fn write_bytes_to_archive(_: ARAArchivingControllerHostRef, writer: ARAArchiveWriterHostRef, position: ARASize, length: ARASize, buffer: *const ARAByte) -> ARABool {
+    let bytes = &mut (*(writer as *mut ArchiveWriter)).bytes;
+    let (at, n) = (position as usize, length as usize);
+    let Some(end) = at.checked_add(n) else { return 0 };
+    if bytes.len() < end {
+        bytes.resize(end, 0);
+    }
+    std::ptr::copy_nonoverlapping(buffer, bytes.as_mut_ptr().add(at), n);
+    1
 }
 unsafe extern "C" fn archiving_progress(_: ARAArchivingControllerHostRef, _: f32) {}
-unsafe extern "C" fn get_document_archive_id(_: ARAArchivingControllerHostRef, _: ARAArchiveReaderHostRef) -> ARAPersistentID {
-    std::ptr::null()
+unsafe extern "C" fn get_document_archive_id(_: ARAArchivingControllerHostRef, reader: ARAArchiveReaderHostRef) -> ARAPersistentID {
+    (*(reader as *const ArchiveReader)).id.as_ptr()
 }
 
 // The host offers no musical or audio content of its own (no tempo, signatures or notes): every query says so.
@@ -358,6 +382,8 @@ struct Doc {
     source: ARAAudioSourceRef,
     modification: ARAAudioModificationRef,
     region: ARAPlaybackRegionRef,
+    /// Whether the plug-in accepted the archive restored into the document (None when none was given).
+    restored: Option<bool>,
 }
 
 macro_rules! call {
@@ -365,14 +391,16 @@ macro_rules! call {
 }
 
 impl Doc {
-    unsafe fn build(f: &ARAFactory, host: &Host, source: &Source, rate: u32, frames: usize) -> Result<Doc, String> {
+    /// With an archive, the objects are recreated under the same persistent ids and the plug-in restores its state
+    /// for them inside the same editing cycle (ARA 2's partial persistency, as the SDK's test host restores).
+    unsafe fn build(f: &ARAFactory, host: &Host, source: &Source, rate: u32, frames: usize, restore: Option<&ArchiveReader>) -> Result<Doc, String> {
         let token = 1usize as *mut core::ffi::c_void;
         let doc_props = ARADocumentProperties { structSize: std::mem::size_of::<ARADocumentProperties>() as ARASize, name: c"formwav".as_ptr() };
         let instance = (f.createDocumentControllerWithDocument.ok_or("no createDocumentControllerWithDocument")?)(&host.instance, &doc_props);
         if instance.is_null() {
             return Err("the plug-in made no document controller".into());
         }
-        let mut doc = Doc { ctrl: { (*instance).documentControllerRef }, dc: { (*instance).documentControllerInterface }, context: std::ptr::null_mut(), sequence: std::ptr::null_mut(), source: std::ptr::null_mut(), modification: std::ptr::null_mut(), region: std::ptr::null_mut() };
+        let mut doc = Doc { ctrl: { (*instance).documentControllerRef }, dc: { (*instance).documentControllerInterface }, context: std::ptr::null_mut(), sequence: std::ptr::null_mut(), source: std::ptr::null_mut(), modification: std::ptr::null_mut(), region: std::ptr::null_mut(), restored: None };
         call!(doc, beginEditing);
         let context_props = ARAMusicalContextProperties { structSize: std::mem::size_of::<ARAMusicalContextProperties>() as ARASize, name: std::ptr::null(), orderIndex: 0, color: std::ptr::null() };
         doc.context = call!(doc, createMusicalContext, token as _, &context_props);
@@ -406,6 +434,9 @@ impl Doc {
             color: std::ptr::null(),
         };
         doc.region = call!(doc, createPlaybackRegion, doc.modification, token as _, &region_props);
+        if let Some(reader) = restore {
+            doc.restored = Some(call!(doc, restoreObjectsFromArchive, reader as *const ArchiveReader as ARAArchiveReaderHostRef, std::ptr::null()) != 0);
+        }
         call!(doc, endEditing);
         call!(doc, enableAudioSourceSamplesAccess, doc.source, 1);
         Ok(doc)
@@ -440,7 +471,7 @@ pub fn render(path: &Path, input: crate::wav::Audio) -> Result<crate::wav::Audio
         let frames = input.channels.first().map(|c| c.len()).unwrap_or(0);
         let channels = input.channels.len().max(1);
         let source = Source { channels: input.channels };
-        let doc = Doc::build(f, &host, &source, rate, frames)?;
+        let doc = Doc::build(f, &host, &source, rate, frames, None)?;
 
         let factory = ((*opened.entry).get_factory.ok_or("no get_factory")?)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
         if factory.is_null() {
@@ -557,51 +588,11 @@ pub fn analyze(path: &Path, input: crate::wav::Audio) -> Result<String, String> 
         let rate = input.rate;
         let source = Source { channels: input.channels };
         let channel_count = source.channels.len();
-        let doc = Doc::build(f, &host, &source, rate, frames)?;
-        let audio_source = doc.source;
-
-        PROGRESS_EVENTS.store(0, std::sync::atomic::Ordering::Relaxed);
-        CONTENT_EVENTS.store(0, std::sync::atomic::Ordering::Relaxed);
-        let notes_type = kARAContentTypeNotes as ARAContentType;
-        call!(doc, requestAudioSourceContentAnalysis, audio_source, 1, &notes_type);
-        let started = std::time::Instant::now();
-        let mut finished = false;
-        while started.elapsed().as_secs_f64() < 120.0 {
-            call!(doc, notifyModelUpdates);
-            if call!(doc, isAudioSourceContentAnalysisIncomplete, audio_source, notes_type) == 0 {
-                finished = true;
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(20));
-        }
-        call!(doc, notifyModelUpdates);
-        let analysis_seconds = started.elapsed().as_secs_f64();
-
-        let mut notes = Vec::new();
-        let available = call!(doc, isAudioSourceContentAvailable, audio_source, notes_type) != 0;
-        if available {
-            let reader = call!(doc, createAudioSourceContentReader, audio_source, notes_type, std::ptr::null());
-            if !reader.is_null() {
-                let count = call!(doc, getContentReaderEventCount, reader);
-                for i in 0..count {
-                    let p = call!(doc, getContentReaderDataForEvent, reader, i) as *const ARAContentNote;
-                    if p.is_null() {
-                        continue;
-                    }
-                    let n = std::ptr::read_unaligned(p);
-                    notes.push(format!(
-                        "{{\"frequency\": {}, \"pitch\": {}, \"volume\": {:.6}, \"start_s\": {:.6}, \"duration_s\": {:.6}, \"signal_s\": {:.6}}}",
-                        { n.frequency },
-                        { n.pitchNumber },
-                        { n.volume },
-                        { n.startPosition },
-                        { n.noteDuration },
-                        { n.signalDuration }
-                    ));
-                }
-                call!(doc, destroyContentReader, reader);
-            }
-        }
+        let doc = Doc::build(f, &host, &source, rate, frames, None)?;
+        let (finished, analysis_seconds) = analyze_notes(&doc)?;
+        let notes = read_notes(&doc)?;
+        let available = notes.is_some();
+        let notes = notes.unwrap_or_default();
         doc.teardown()?;
         if let Some(uninit) = f.uninitializeARA {
             uninit();
@@ -620,6 +611,139 @@ pub fn analyze(path: &Path, input: crate::wav::Audio) -> Result<String, String> 
             CONTENT_EVENTS.load(std::sync::atomic::Ordering::Relaxed),
             available,
             notes.join(", ")
+        ))
+    }
+}
+
+/// Note analysis of the document's audio source requested and waited for, model updates delivered while it runs:
+/// whether it finished, and how long it took.
+unsafe fn analyze_notes(doc: &Doc) -> Result<(bool, f64), String> {
+    PROGRESS_EVENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+    CONTENT_EVENTS.store(0, std::sync::atomic::Ordering::Relaxed);
+    let notes_type = kARAContentTypeNotes as ARAContentType;
+    call!(doc, requestAudioSourceContentAnalysis, doc.source, 1, &notes_type);
+    let started = std::time::Instant::now();
+    let mut finished = false;
+    while started.elapsed().as_secs_f64() < 120.0 {
+        call!(doc, notifyModelUpdates);
+        if call!(doc, isAudioSourceContentAnalysisIncomplete, doc.source, notes_type) == 0 {
+            finished = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    call!(doc, notifyModelUpdates);
+    Ok((finished, started.elapsed().as_secs_f64()))
+}
+
+/// The notes the plug-in holds for the document's audio source, each as JSON; None when it has none available.
+unsafe fn read_notes(doc: &Doc) -> Result<Option<Vec<String>>, String> {
+    let notes_type = kARAContentTypeNotes as ARAContentType;
+    if call!(doc, isAudioSourceContentAvailable, doc.source, notes_type) == 0 {
+        return Ok(None);
+    }
+    let mut notes = Vec::new();
+    let reader = call!(doc, createAudioSourceContentReader, doc.source, notes_type, std::ptr::null());
+    if !reader.is_null() {
+        let count = call!(doc, getContentReaderEventCount, reader);
+        for i in 0..count {
+            let p = call!(doc, getContentReaderDataForEvent, reader, i) as *const ARAContentNote;
+            if p.is_null() {
+                continue;
+            }
+            let n = std::ptr::read_unaligned(p);
+            notes.push(format!(
+                "{{\"frequency\": {}, \"pitch\": {}, \"volume\": {:.6}, \"start_s\": {:.6}, \"duration_s\": {:.6}, \"signal_s\": {:.6}}}",
+                { n.frequency },
+                { n.pitchNumber },
+                { n.volume },
+                { n.startPosition },
+                { n.noteDuration },
+                { n.signalDuration }
+            ));
+        }
+        call!(doc, destroyContentReader, reader);
+    }
+    Ok(Some(notes))
+}
+
+/// An archive file: the archive format's id (the plug-in's document archive id), a NUL, then the plug-in's bytes.
+fn archive_file(id: &str, bytes: &[u8]) -> Vec<u8> {
+    let mut out = id.as_bytes().to_vec();
+    out.push(0);
+    out.extend_from_slice(bytes);
+    out
+}
+
+/// `fwhost ara-store <plugin.clap> <in.wav> <archive>`: an ARA document round the file analyzed, then the plug-in's
+/// state for every object written to the archive (storeObjectsToArchive, ARA 2's partial persistency, as the SDK's
+/// test host stores), its format's id first; JSON reports the notes it held and the archive's size.
+pub fn store(path: &Path, input: crate::wav::Audio, archive: &Path) -> Result<String, String> {
+    unsafe {
+        let opened = open(path)?;
+        let f = &*opened.factory;
+        initialize(f)?;
+        let host = Host::new();
+        let (rate, frames) = (input.rate, input.channels.first().map(|c| c.len()).unwrap_or(0));
+        let source = Source { channels: input.channels };
+        let doc = Doc::build(f, &host, &source, rate, frames, None)?;
+        let (finished, _) = analyze_notes(&doc)?;
+        let notes = read_notes(&doc)?.unwrap_or_default();
+        let mut writer = ArchiveWriter { bytes: Vec::new() };
+        let stored = call!(doc, storeObjectsToArchive, &mut writer as *mut ArchiveWriter as ARAArchiveWriterHostRef, std::ptr::null()) != 0;
+        doc.teardown()?;
+        if let Some(uninit) = f.uninitializeARA {
+            uninit();
+        }
+        if !stored {
+            return Err("the plug-in would not store its state".into());
+        }
+        let id = text(f.documentArchiveID);
+        std::fs::write(archive, archive_file(&id, &writer.bytes)).map_err(|e| format!("cannot write {}: {e}", archive.display()))?;
+        drop(opened);
+        Ok(format!("{{\"analysis_finished\": {}, \"archive_id\": \"{}\", \"archive_bytes\": {}, \"notes\": [{}]}}", finished, esc(&id), writer.bytes.len(), notes.join(", ")))
+    }
+}
+
+/// `fwhost ara-restore <plugin.clap> <in.wav> <archive>`: a fresh ARA document round the file, its objects recreated
+/// under the persistent ids they were stored with and the plug-in's state restored into them in the same editing
+/// cycle; the notes are then read without any analysis requested, so what comes back came from the archive.
+pub fn restore(path: &Path, input: crate::wav::Audio, archive: &Path) -> Result<String, String> {
+    unsafe {
+        let file = std::fs::read(archive).map_err(|e| format!("cannot read {}: {e}", archive.display()))?;
+        let split = file.iter().position(|&b| b == 0).ok_or("not an archive (no format id)")?;
+        let id = String::from_utf8_lossy(&file[..split]).into_owned();
+        let opened = open(path)?;
+        let f = &*opened.factory;
+        let compatible: Vec<String> = if !f.compatibleDocumentArchiveIDs.is_null() {
+            (0..f.compatibleDocumentArchiveIDsCount as usize).map(|i| text(*f.compatibleDocumentArchiveIDs.add(i))).collect()
+        } else {
+            Vec::new()
+        };
+        if id != text(f.documentArchiveID) && !compatible.contains(&id) {
+            return Err(format!("the archive's format ({id}) is not one this plug-in reads"));
+        }
+        initialize(f)?;
+        let host = Host::new();
+        let reader = ArchiveReader { bytes: file[split + 1..].to_vec(), id: CString::new(id.clone()).map_err(|e| e.to_string())? };
+        let (rate, frames) = (input.rate, input.channels.first().map(|c| c.len()).unwrap_or(0));
+        let source = Source { channels: input.channels };
+        let doc = Doc::build(f, &host, &source, rate, frames, Some(&reader))?;
+        call!(doc, notifyModelUpdates);
+        let notes = read_notes(&doc)?;
+        let restored = doc.restored.unwrap_or(false);
+        doc.teardown()?;
+        if let Some(uninit) = f.uninitializeARA {
+            uninit();
+        }
+        drop(opened);
+        Ok(format!(
+            "{{\"archive_id\": \"{}\", \"archive_bytes\": {}, \"restored\": {}, \"notes_available\": {}, \"notes\": [{}]}}",
+            esc(&id),
+            reader.bytes.len(),
+            restored,
+            notes.is_some(),
+            notes.unwrap_or_default().join(", ")
         ))
     }
 }

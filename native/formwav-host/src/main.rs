@@ -677,6 +677,8 @@ fn main() {
         }
         (Some("ara-check"), Some(path)) => ara::check(std::path::Path::new(path)).map(|json| println!("{json}")),
         (Some("ara-analyze"), Some(path)) if args.len() >= 4 => wav::read(&args[3]).and_then(|input| ara::analyze(std::path::Path::new(path), input)).map(|json| println!("{json}")),
+        (Some("ara-store"), Some(path)) if args.len() >= 5 => wav::read(&args[3]).and_then(|input| ara::store(std::path::Path::new(path), input, std::path::Path::new(&args[4]))).map(|json| println!("{json}")),
+        (Some("ara-restore"), Some(path)) if args.len() >= 5 => wav::read(&args[3]).and_then(|input| ara::restore(std::path::Path::new(path), input, std::path::Path::new(&args[4]))).map(|json| println!("{json}")),
         (Some("ara-render"), Some(path)) if args.len() >= 5 => wav::read(&args[3]).and_then(|input| ara::render(std::path::Path::new(path), input)).and_then(|output| {
             wav::write(&args[4], &output)?;
             println!("{{\"frames\": {}, \"rate\": {}, \"channels\": {}}}", output.channels.first().map_or(0, |c| c.len()), output.rate, output.channels.len());
