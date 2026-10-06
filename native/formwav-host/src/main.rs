@@ -5,6 +5,8 @@
 //!
 //! The buffer is 100 ms of a 1 kHz sine at -12 dBFS on both channels at 48 kHz; the report is one JSON line.
 
+mod ara;
+mod ara_sys;
 mod au;
 mod instrument;
 mod ladspa;
@@ -673,6 +675,7 @@ fn main() {
             println!("{}", au::check());
             Ok(())
         }
+        (Some("ara-check"), Some(path)) => ara::check(std::path::Path::new(path)).map(|json| println!("{json}")),
         (Some("scan"), _) => {
             let dirs: Vec<std::path::PathBuf> = if args.len() > 2 { args[2..].iter().map(std::path::PathBuf::from).collect() } else { offline::default_dirs() };
             println!("[{}]", offline::scan(&dirs).join(",\n "));
