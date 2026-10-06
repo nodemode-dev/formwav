@@ -36,6 +36,7 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     field("Fade out (s)", `<input type="number" data-f="fadeOut" min="0" step="0.01">`),
     field("Fade shape", `<select data-f="shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
     `<div class="fw-cf fw-cf-wide"><span class="fw-cf-label">Colour</span><div class="fw-cf-colors" role="group" aria-label="Clip colour"><button type="button" class="fw-cf-color" data-color="" aria-label="The track's colour" title="The track's colour"></button>${COLORS.map((c) => `<button type="button" class="fw-cf-color" data-color="${c}" aria-label="${c}" title="${c}" style="color: var(--fw-color-${c})"></button>`).join("")}</div></div>`,
+    `<div class="fw-cf fw-cf-wide fw-cf-speech"><span class="fw-cf-label">Speech</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-speech>Mark where people speak</button></div><output class="fw-cf-ara-state" data-speech-state>Finds speech in this clip, under music too, and marks it as regions.</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-sync"><span class="fw-cf-label">Line up by sound</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-sync>Line up other tracks' takes to this one</button></div><output class="fw-cf-ara-state" data-sync-state>Takes on other tracks that overlap this clip move to match its sound, to a fraction of a sample.</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-ara"><span class="fw-cf-label">ARA plug-in</span><div class="fw-cf-ara-row"><select data-ara-plugin aria-label="ARA plug-in"><option value="">Looking for ARA plug-ins</option></select><button type="button" class="fw-ibtn" data-ara="analyze" disabled>Analyse</button><button type="button" class="fw-ibtn" data-ara="render" disabled>Render</button></div><output class="fw-cf-ara-state" data-ara-state></output></div>`,
   ].join("")}</div>`;
@@ -132,6 +133,36 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     const hit = b ? find(engine.get("document")) : null;
     if (!b || !hit) return;
     engine.dispatch({ type: "set-clip-color", trackId: hit.track.id, clipId: hit.clip.id, color: b.dataset.color ?? "" });
+  });
+
+  // Where people speak (services/vad.py, Silero VAD ported from formcut): the clip's speech marked as regions, in one undo step
+  panel.addEventListener("click", async (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-speech]");
+    const hit = b ? find(engine.get("document")) : null;
+    if (!b || !hit) return;
+    const state = panel.querySelector("[data-speech-state]");
+    const rate = engine.get("document").sampleRate;
+    const clip = hit.clip;
+    b.disabled = true;
+    setText(state, "Listening for speech...");
+    try {
+      const res = await fetch(`/api/media/${clip.mediaId}/speech`);
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+      const inS = clip.sourceIn / rate;
+      const outS = (clip.sourceIn + clip.length) / rate;
+      const marks = (out.regions as { start: number; end: number }[])
+        .map((r) => ({ start: Math.max(r.start, inS), end: Math.min(r.end, outS) }))
+        .filter((r) => r.end > r.start)
+        .map((r) => ({ type: "add-region" as const, start: Math.round(clip.start + (r.start - inS) * rate), end: Math.round(clip.start + (r.end - inS) * rate), label: "Speech" }));
+      if (marks.length) engine.dispatch({ type: "batch", commands: marks });
+      const seconds = marks.reduce((n, m) => n + (m.end - m.start), 0) / rate;
+      setText(state, marks.length ? `Marked ${marks.length} stretch${marks.length === 1 ? "" : "es"} of speech, ${seconds.toFixed(1)} s in all.` : "No speech found in this clip.");
+    } catch (err) {
+      setText(state, err instanceof Error ? err.message : String(err));
+    } finally {
+      b.disabled = false;
+    }
   });
 
   // The comparison's Multitrack recording row: takes from different devices (or a remote room) lined up by their sound

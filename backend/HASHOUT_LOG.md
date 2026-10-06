@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### Where people speak: Silero VAD from formcut, speech regions and the speech-safe cut
+- refers-to: backend/app/services/vad.py; app/routers/media.py (GET /api/media/{id}/speech, /speech/cut); frontend/src/ui/clip-tab.ts (Mark where people speak); sidecar verification/verify_vad.py
+- kind: explainer
+- logged: v2.11.1 (in progress) · 2026-10-06
+
+Asked by the owner (proper speech detection), from formcut's speech module, the same author's: Silero VAD (MIT, ONNX, 2.3 MB, fetched once from Silero's repository and checked against the hash it had when this was written) gives a speech probability every 32 ms, under music too, which word times and loudness pauses cannot. From it come speech regions (above 0.5, at least 250 ms, gaps under 300 ms joined) and formcut's speech-safe cut rule (unsafe with speech on both sides within 100 ms). Measured: the JFK speech gave four stretches, 7.58 s of speech in 11 s; under a music bed 6 dB below it, chords and plucks, four stretches agreeing on 96.2 percent of the clean speech's time; the bed alone, none; a cut inside speech unsafe and one in a pause safe. In the Clip tab, Mark where people speak adds the clip's speech as regions in one undo step: in Chromium, four Speech regions matching the engine's, one undo removing them, no layout shift, no page error.
+
 ### ACE-Step 1.5 on this machine: songs, covers, repaints, layers, extraction and completion
 - refers-to: backend/app/services/acestep.py; app/services/providers.py (the provider entry); app/routers/providers.py (/api/providers/acestep, /generate); frontend/src/ui/models-pane.ts; sidecar verification/acestep_contract.py, verify_acestep.py
 - kind: explainer

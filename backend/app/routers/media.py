@@ -42,6 +42,28 @@ def library_catalogue() -> list[dict]:
     return library.catalogue()
 
 
+@router.get("/media/{media_id}/speech")
+def speech_regions(media_id: str) -> dict:
+    """Where someone is speaking (services/vad.py: Silero VAD, ported from formcut), in the media's seconds."""
+    from ..services import vad
+
+    try:
+        return {"regions": vad.regions(media_id), "step": vad.STEP}
+    except media.MediaError as err:
+        raise HTTPException(404, str(err)) from err
+
+
+@router.get("/media/{media_id}/speech/cut")
+def speech_safe_cut(media_id: str, at: float) -> dict:
+    """formcut's speech-safe cut rule at `at` seconds: unsafe with speech on both sides within 100 ms."""
+    from ..services import vad
+
+    try:
+        return vad.cut_is_safe(media_id, at)
+    except media.MediaError as err:
+        raise HTTPException(404, str(err)) from err
+
+
 @router.post("/media/sync")
 def sync_by_sound(body: dict = Body(...)) -> dict:
     """Takes lined up by their sound (services/sync.py): {"reference": {"media", "in"}, "others": [{"media", "in"}]}, each
