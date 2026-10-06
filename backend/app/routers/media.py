@@ -42,6 +42,18 @@ def library_catalogue() -> list[dict]:
     return library.catalogue()
 
 
+@router.post("/media/{media_id}/three-way", status_code=201)
+def three_way(media_id: str, body: dict = Body(default={})) -> dict:
+    """Speech, music and ambience (services/three_way.py): a range split into three parts that sum back to it exactly."""
+    from ..services import three_way as tw
+
+    end = body.get("end")
+    try:
+        return tw.split(media_id, float(body.get("start") or 0), float(end) if end is not None else None)
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/media/{media_id}/speech")
 def speech_regions(media_id: str) -> dict:
     """Where someone is speaking (services/vad.py: Silero VAD, ported from formcut), in the media's seconds."""

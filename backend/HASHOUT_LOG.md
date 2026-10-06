@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### Speech, music and ambience as three faders
+- refers-to: backend/app/services/three_way.py; app/routers/media.py (POST /api/media/{id}/three-way); frontend/src/ui/clip-tab.ts (Speech, music and ambience to three tracks); sidecar verification/verify_three_way.py
+- kind: explainer
+- logged: v2.11.4 (in progress) · 2026-10-06
+
+The comparison's Adobe row (PLAN_v11 2.M4): a clip split into speech, music and ambience, each on its own track at the clip, so the session's faders are the three faders; the original track is muted in the same undo step when the clip is alone on it. Speech is DeepFilterNet3's dialogue (RX-16's model); the rest is split as separate.deconstruct splits a range (harmonic and percussive separation, RX's Deconstruct as reference), ported to numpy so it runs without PyTorch, with soft masks: a bin is music in proportion to how far its tonal or transient median stands over the other, all of it at twice; the ambience is defined as the remainder less the music, so the three add up to the clip sample for sample. Measured on a stereo mix with known parts (speech in the centre; chords, bass, kick and hat 8 dB under; decorrelated pink noise swelling 14 dB under): the stems' sum within 3.2e-8 of the mix (float storage); SI-SDR against each true part, speech 12.1 dB (the mix itself 7.0), music 0.7 (-8.2), ambience -3.9 (-14.5), gains of 5.1, 8.8 and 10.6 dB. Deconstruct's binary masks gave music -1.9 and ambience -5.5 on the same mix; soft masks were adopted for that and for their absence of musical noise. Music and ambience still carry each other's leakage (DeepFilterNet leaves some speech in the remainder, and a steady chord and steady noise differ only in degree); Demucs where it is installed separates music further. In Chromium: three tracks the clip's length at its place, the original muted, one undo restoring it, no layout shift, no page error.
+
 ### The agent edits by transcript: words read, cut and rewritten as the Transcript tab does
 - refers-to: frontend/src/ui/agent-pane.ts (get_transcript, delete_words, remove_fillers, rewrite_words); src/ui/transcript-pane.ts (sessionWords, rangesOf exported); sidecar verification/verify_agent_transcript.md
 - kind: explainer
