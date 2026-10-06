@@ -53,10 +53,19 @@ export function mountDock(host: HTMLElement): void {
   const body = dock.querySelector<HTMLElement>(".fw-dock-body") as HTMLElement;
   const grip = dock.querySelector<HTMLElement>(".fw-dock-grip") as HTMLElement;
 
+  // The Inspector is the editor's first tab (the approved target): its toggle flips its hidden flag, as each other
+  // panel's module does, so the dock's one-at-a-time rule and tabs treat it like them
+  const inspector = host.querySelector<HTMLElement>(".fw-pane-inspector");
+  const inspectorToggle = host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-inspector]");
+  inspectorToggle?.addEventListener("click", () => {
+    if (!inspector) return;
+    inspector.hidden = !inspector.hidden;
+    inspectorToggle.setAttribute("aria-pressed", String(!inspector.hidden));
+  });
   const wanted: Array<[string, string, string, string]> = [
+    ["inspector", "Inspector", ".fw-pane-inspector", ".fw-tool-tray [data-inspector]"],
     ["mixer", "Mixer", ".fw-mixer", '.fw-tool-tray .fw-mode[title^="Show the mixer"]'],
     ["terminal", "Terminal", ".fw-term:not(.fw-agent)", '[data-action="terminal"]'],
-    ["agent", "Agent", ".fw-agent", '[data-action="agent"]'],
     ["notes", "Notes", ".fw-piano", ".fw-tool-tray .fw-mode[data-piano]"],
     ["spectrum", "Spectrum", ".fw-spectrum", ".fw-tool-tray .fw-mode[data-spectrum]"],
   ];

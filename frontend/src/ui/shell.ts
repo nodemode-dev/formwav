@@ -34,6 +34,36 @@ function shellHtml(): string {
             <button class="fw-ibtn" type="button" role="menuitem" data-action="save" title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span><kbd>⌘S</kbd></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="open" aria-haspopup="dialog" title="Open (Cmd or Ctrl O)">${icon("folderOpen", ICON_SIZE.control)}<span>Open…</span><kbd>⌘O</kbd></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="import" title="Import any audio or video file">${icon("upload", ICON_SIZE.control)}<span>Import…</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-topbar [data-action="export"]'><span>Export…</span><kbd>⇧⌘E</kbd></button>
+          </div>
+        </div>
+        <div class="fw-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Edit</button>
+          <div class="cv-menu fw-menu-pop" role="menu" aria-label="Edit" hidden>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tools [data-action="undo"]'><span>Undo</span><kbd>⌘Z</kbd></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tools [data-action="redo"]'><span>Redo</span><kbd>⇧⌘Z</kbd></button>
+          </div>
+        </div>
+        <div class="fw-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">View</button>
+          <div class="cv-menu fw-menu-pop" role="menu" aria-label="View" hidden>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray [data-inspector]'><span>Inspector</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray .fw-mode[title^="Show the mixer"]'><span>Mixer</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray .fw-mode[data-piano]'><span>Notes</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray .fw-mode[data-spectrum]'><span>Spectrum</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='[data-action="agent"]'><span>Agent</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='[data-action="terminal"]'><span>Terminal</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-panel-toggle[data-pane="media"]'><span>Media pane</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy=".fw-settings-btn"><span>Settings…</span></button>
+          </div>
+        </div>
+        <div class="fw-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Transport</button>
+          <div class="cv-menu fw-menu-pop" role="menu" aria-label="Transport" hidden>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-status [data-action="play"]'><span>Play or pause</span><kbd>Space</kbd></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-status [data-action="stop"]'><span>Stop</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-status [data-action="record"]'><span>Record</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-status [data-action="loop"]'><span>Loop</span></button>
           </div>
         </div>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="undo" aria-label="Undo" title="Undo" disabled>${icon("undo", ICON_SIZE.control)}</button>
@@ -60,7 +90,7 @@ function shellHtml(): string {
     </aside>
     <div class="fw-pane-divider" data-side="media" role="separator" aria-orientation="vertical" aria-label="Resize the Media pane" tabindex="0"></div>
     <section class="fw-pane fw-pane-timeline" aria-label="Timeline">
-      <div class="fw-tool-tray" role="toolbar" aria-label="Timeline options"><div class="fw-opt-group" data-group="edit" data-label="Edit" role="group" aria-label="Edit"></div><div class="fw-opt-group fw-opt-view" data-group="view" data-label="View" role="group" aria-label="View"></div></div>
+      <div class="fw-tool-tray" role="toolbar" aria-label="Timeline options"><div class="fw-opt-group" data-group="edit" data-label="Edit" role="group" aria-label="Edit"></div><div class="fw-opt-group fw-opt-view" data-group="view" data-label="View" role="group" aria-label="View"><button type="button" class="fw-mode" data-inspector aria-pressed="false" title="Show the Inspector: the selected clip's and the session's settings">Inspector</button></div></div>
       <main class="fw-stage" data-view="empty">
         <section class="fw-empty">
           <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>
@@ -70,14 +100,14 @@ function shellHtml(): string {
         <div class="fw-lanes"></div>
         <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi,.mxf,.aup,.aup3,.zip,.mid,.midi,.aaf,.edl" multiple hidden>
       </main>
+      <section class="fw-pane fw-pane-inspector" aria-label="Inspector" hidden>
+        <div class="fw-pane-header"><span class="fw-pane-title">Inspector</span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
+        <div class="fw-pane-body fw-inspector-body"></div>
+      </section>
       <footer class="fw-dock-anchor" aria-hidden="true"></footer>
     </section>
-    <div class="fw-pane-divider" data-side="inspector" role="separator" aria-orientation="vertical" aria-label="Resize the Inspector pane" tabindex="0"></div>
-    <aside class="fw-pane fw-pane-inspector" aria-label="Inspector">
-      <div class="fw-pane-header"><span class="fw-pane-title">Inspector</span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
-      <div class="fw-pane-body fw-inspector-body"></div>
-      <div class="fw-insp-strip"><button type="button" class="fw-panel-toggle fw-strip-expand" data-pane="inspector" aria-label="Show the Inspector" title="Show the Inspector">${fvIcon("collapseLeft", 16)}</button><span class="fw-strip-label" aria-hidden="true">Inspector</span></div>
-    </aside>
+    <div class="fw-pane-divider" data-side="inspector" role="separator" aria-orientation="vertical" aria-label="Resize the agent column" tabindex="0"></div>
+    <aside class="fw-pane fw-pane-agent" aria-label="Agent"><div class="fw-agent-anchor"></div></aside>
   </div>
   <footer class="fw-status" aria-label="Transport and status">
     <div class="fw-transport" role="group" aria-label="Transport and meters">

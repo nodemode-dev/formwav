@@ -19,7 +19,7 @@ export function mountThemeMenu(host: HTMLElement): void {
   if (!slot) return;
   const choice = readChoice();
   const wrap = document.createElement("div");
-  wrap.className = "fw-theme-menu";
+  wrap.className = "fw-settings";
   const options = Object.entries(THEMES)
     .map(([id, t]) => `<option value="${id}"${id === choice.theme ? " selected" : ""}>${t.label}</option>`)
     .join("");
@@ -27,7 +27,7 @@ export function mountThemeMenu(host: HTMLElement): void {
     (name) =>
       `<button type="button" class="fw-swatch" data-swatch="${name}" aria-label="${name[0].toUpperCase()}${name.slice(1)} accent" aria-pressed="false" style="color: var(--fw-swatch-${name})"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="7" fill="currentColor"></circle></svg></button>`,
   ).join("");
-  wrap.innerHTML = `<label class="fw-theme-pick" title="The interface's colours, from the form family's profiles">Theme <select aria-label="Theme">${options}</select></label><div class="fw-swatches" role="group" aria-label="Accent colour">${swatches}</div>`;
+  wrap.innerHTML = `<button type="button" class="fw-ibtn fw-settings-btn" popovertarget="fw-settings-pop" title="Theme, accent and other settings">Settings</button><div id="fw-settings-pop" class="fw-settings-pop" popover><span class="fw-settings-title">Settings</span><label class="fw-theme-pick" title="The interface's colours, from the form family's profiles">Theme <select aria-label="Theme">${options}</select></label><div class="fw-settings-row"><span>Accent</span><div class="fw-swatches" role="group" aria-label="Accent colour">${swatches}</div></div></div>`;
   slot.prepend(wrap);
 
   const mark = (accent: string) => {

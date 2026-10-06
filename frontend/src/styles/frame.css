@@ -117,12 +117,39 @@
 @container (max-width: 460px) { .fw-st-line .fw-st-tracks, .fw-st-line .fw-st-length { display: none; } }
 .fw-topbar .fw-session-name { inline-size: 200px; flex: 0 1 200px; min-inline-size: 110px; }
 .fw-topbar-actions > .fw-ibtn:has(svg):not(.fw-btn-export) { inline-size: 28px; padding: 0; justify-content: center; font-size: 0; }
-.fw-theme-menu { display: flex; align-items: center; gap: 10px; margin-inline-end: 6px; }
-.fw-theme-pick { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12); color: var(--text-secondary); }
+.fw-settings { display: contents; }
+.fw-settings-pop { margin: 0; inset: calc(var(--fw-titlebar-h) + 6px) 12px auto auto; min-inline-size: 300px; padding: 14px 16px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); color: var(--text-primary); box-shadow: var(--shadow-lg); }
+.fw-settings-pop:popover-open { display: flex; flex-direction: column; gap: 12px; }
+.fw-settings-title { font-size: var(--fs-13); font-weight: 700; }
+.fw-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-12); color: var(--text-secondary); }
+.fw-theme-pick { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-12); color: var(--text-secondary); }
 .fw-theme-pick select { block-size: 28px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-primary); font: inherit; }
 .fw-swatches { display: flex; align-items: center; gap: 2px; }
 .fw-swatch { inline-size: 24px; block-size: 24px; display: grid; place-items: center; padding: 0; border: 2px solid transparent; border-radius: 50%; background: transparent; cursor: pointer; }
 .fw-swatch[aria-pressed="true"] { border-color: var(--text-primary); }
+
+/* The agent column, after the approved target: the agent's panel fills the right column (no longer a bottom panel),
+ * and the column closes when the agent does; the Agent button is its toggle. */
+.fw-pane-agent { display: flex; flex-direction: column; min-block-size: 0; min-inline-size: 0; background: var(--surface-1); border-inline-start: 1px solid var(--line-0); }
+.fw-pane-agent > .fw-agent { flex: 1 1 auto; min-block-size: 0; block-size: auto; max-block-size: none; border: 0; }
+.fw-pane-agent > .fw-agent[hidden] { display: none; }
+.fw-workspace:has(.fw-pane-agent > .fw-agent[hidden]) { --fw-inspector-w: 0px; --fw-inspector-gap: 0px; }
+.fw-topbar .fw-panel-toggle[data-pane="inspector"] { display: none; }
+.fw-pane-agent .fw-term-head { flex-wrap: wrap; row-gap: 6px; }
+.fw-pane-agent .fw-agent-ask { flex-wrap: wrap; }
+.fw-pane-agent .fw-agent-ask textarea { flex: 1 1 100%; min-inline-size: 0; }
+.fw-tool-tray :is([data-inspector], .fw-mode[data-piano], .fw-mode[data-spectrum], .fw-mode[title^="Show the mixer"]) { display: none; }
+.fw-tool-tray { overflow-x: auto; }
+.fw-pane-media .fw-pane-tabs { flex-wrap: nowrap; overflow-x: auto; padding-block: 0; }
+.fw-pane-media .fw-pane-tab { padding: 0 6px; font-size: var(--fs-12); }
+
+/* The Inspector as the editor's first tab: its sections flow in columns across the editor's width, scrolling
+ * sideways, instead of one tall column. */
+.fw-dock .fw-pane-inspector { display: flex; flex-direction: column; min-block-size: 0; block-size: 100%; }
+.fw-dock .fw-pane-inspector[hidden] { display: none; }
+.fw-dock .fw-pane-inspector > .fw-pane-header { display: none; }
+.fw-dock .fw-inspector-body { flex: 1 1 auto; min-block-size: 0; overflow: auto hidden; padding: 10px 14px; column-width: 300px; column-gap: 28px; column-rule: 1px solid var(--line-1); column-fill: auto; }
+.fw-dock .fw-inspector-body > * { break-inside: avoid; }
 
 /* Track headers, after the approved target: the track's number beside its name and what it runs, then mute, solo,
  * arm and automation as lettered buttons and the meter in one row. Overrides the older header rules in shell.css and

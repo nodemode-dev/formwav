@@ -5,7 +5,11 @@
  * it after the item's own handler has run (so a dialog positioned from the item still sees it in place).
  */
 export function mountFileMenu(host: HTMLElement): void {
-  const root = host.querySelector<HTMLElement>(".fw-menu");
+  for (const root of host.querySelectorAll<HTMLElement>(".fw-menu")) mountMenu(root);
+}
+
+/** One menu of the menu bar: File, Edit, View, Transport. */
+function mountMenu(root: HTMLElement): void {
   const button = root?.querySelector<HTMLButtonElement>(".fw-menu-btn");
   const pop = root?.querySelector<HTMLElement>(".fw-menu-pop");
   if (!root || !button || !pop) return;
@@ -24,7 +28,10 @@ export function mountFileMenu(host: HTMLElement): void {
     }
   });
   pop.addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest('[role="menuitem"]')) window.setTimeout(() => setOpen(false), 0);
+    const item = (e.target as HTMLElement).closest<HTMLElement>('[role="menuitem"]');
+    if (!item) return;
+    if (item.dataset.proxy) document.querySelector<HTMLElement>(item.dataset.proxy)?.click();
+    window.setTimeout(() => setOpen(false), 0);
   });
   pop.addEventListener("keydown", (e) => {
     const list = items();

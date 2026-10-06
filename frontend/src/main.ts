@@ -135,6 +135,7 @@ if (host) {
   mountFileMenu(host);
   mountThemeMenu(host);
   mountDock(host);
+  host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-inspector]")?.click();
   mountProjects(host, engine, player);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
