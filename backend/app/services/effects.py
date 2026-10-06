@@ -1742,7 +1742,46 @@ def _dialogue_isolate(x, rate: int, v: dict):
         return np.frombuffer(dec.stdout, dtype="<f4").reshape(-1, x.shape[1])[: len(x)].copy()
 
 
-NUMPY_EFFECTS = {"dialogue-isolate": _dialogue_isolate, "dereverb": _dereverb, "dereverb-restore": _dereverb_wpe, "derustle": _derustle, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
+def _enhance_speech(x, rate: int, v: dict):
+    """AP-01: learned speech enhancement: RX-12's WPE dereverberation (full from Strength 50 %), DeepFilterNet3 with
+    Strength as its attenuation limit (0 to 60 dB, none at 100 %), then a 90 Hz high-pass and the level brought to
+    -16 LUFS under a -1 dBFS sample-peak limiter (true peaks may sit about half a dB higher); the DSP chain as before
+    when the model cannot be had."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    import numpy as np
+
+    from . import deepfilter, media
+    from .audacity import _wav_bytes
+
+    strength = float(v.get("strength", 50))
+    x = np.asarray(x, dtype=np.float32)
+    quiet = [media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-y"]
+    try:
+        dry = _dereverb_wpe(x, rate, {**_values("dereverb-restore", None), "amount": min(100.0, strength * 2)})
+        y = deepfilter.isolate(dry, rate, 100 if strength >= 100 else 100 * (1 - 10 ** (-0.6 * strength / 20)))
+        chain = "highpass=f=90"
+    except Exception:
+        y = x
+        chain = f"highpass=f=90,afftdn=nf={-15 - 20 * strength / 100:.1f},acompressor=threshold=0.12:ratio={1.5 + 3 * strength / 100:.2f},alimiter"
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "in.wav"
+        src.write_bytes(_wav_bytes([np.asarray(y, dtype=np.float32)[:, c] for c in range(y.shape[1])], rate))
+        # ebur128 prints its summary at ffmpeg's normal log level, so the meter runs without -loglevel error
+        meter = subprocess.run([media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-i", str(src), "-af", f"{chain},ebur128", "-f", "null", "-"], capture_output=True, text=True, timeout=600)
+        found = [ln for ln in meter.stderr.splitlines() if ln.strip().startswith("I:")]
+        lufs = float(found[-1].split()[1]) if found else -70.0
+        gain = 0.0 if lufs <= -70 else -16.0 - lufs
+        dec = subprocess.run([*quiet, "-i", str(src), "-af", f"{chain},volume={gain:.2f}dB,alimiter=limit=0.891:level=false", "-f", "f32le", "-"], capture_output=True, check=True, timeout=600)
+    out = np.frombuffer(dec.stdout, dtype="<f4").reshape(-1, x.shape[1])
+    if len(out) < len(x):
+        out = np.pad(out, ((0, len(x) - len(out)), (0, 0)))
+    return out[: len(x)].copy()
+
+
+NUMPY_EFFECTS = {"voice-clean": _enhance_speech, "dialogue-isolate": _dialogue_isolate, "dereverb": _dereverb, "dereverb-restore": _dereverb_wpe, "derustle": _derustle, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
                  "azimuth-measured": _azimuth_measured, "dc-measured": _dc_measured, "breath-control": _breath_control,
                  "de-hum-adaptive": _de_hum_adaptive, "de-ess-spectral": _de_ess_spectral, "spectral-recovery": _spectral_recovery,
                  "spectral-repair": _spectral_repair, "dialogue-leveler": _dialogue_leveler, "dynamics-curve": _dynamics_curve}
