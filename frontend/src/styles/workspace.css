@@ -368,3 +368,6 @@
 .fw-room-guest { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 5px 2px; }
 .fw-room-note { box-sizing: border-box; block-size: 2.9em; margin: 0; overflow: hidden; }
 .fw-room-btn.is-live { color: var(--accent-color); }
+/* Shared editing (ui/share.ts): the status bar's chip keeps its place when off, so the bar never moves */
+.fw-share-chip { flex: none; box-sizing: border-box; inline-size: 136px; overflow: hidden; text-overflow: ellipsis; padding: 2px 8px; border-radius: 999px; font-size: 11px; color: var(--accent-color); background: var(--accent-tint); white-space: nowrap; text-align: center; }
+.fw-share-chip[data-off] { visibility: hidden; }

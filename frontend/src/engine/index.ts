@@ -72,7 +72,34 @@ export class Engine {
     this.update("link", link);
   }
 
+  /** Shared editing (ui/share.ts): while a session is shared, dispatch, undo and redo go to the share instead. */
+  private shareHooks: { dispatch: (c: Command) => boolean; undo: () => boolean; redo: () => boolean } | null = null;
+
+  setShareHooks(hooks: { dispatch: (c: Command) => boolean; undo: () => boolean; redo: () => boolean } | null): void {
+    this.shareHooks = hooks;
+  }
+
+  /** While shared, the Edit menu follows the share's own undo (each editor's own edits), not the local history. */
+  reportHistory(state: HistoryState): void {
+    this.update("history", state);
+  }
+
+  /** A shared command at its number: applied with ids seeded by its op id (every editor makes the same ones), kept out of
+   *  the local undo history (shared undo is each editor's own, by ui/share.ts). Returns the documents before and after. */
+  applyShared(command: Command, opId: string): { before: SessionDoc; after: SessionDoc } {
+    const before = this.state.document;
+    let n = 0;
+    const after = followClips(before, applyCommand(before, command, () => `${opId}-${n++}`));
+    if (after !== before) this.commit(after);
+    return { before, after };
+  }
+
   dispatch(command: Command): boolean {
+    if (this.shareHooks) return this.shareHooks.dispatch(command);
+    return this.dispatchLocal(command);
+  }
+
+  dispatchLocal(command: Command): boolean {
     const current = this.state.document;
     const next = followClips(current, applyCommand(current, command, () => crypto.randomUUID()));
     if (next === current) return false;
@@ -82,6 +109,7 @@ export class Engine {
   }
 
   undo(): boolean {
+    if (this.shareHooks) return this.shareHooks.undo();
     const previous = this.past.undo(this.state.document);
     if (previous === null) return false;
     this.commit(previous);
@@ -89,6 +117,7 @@ export class Engine {
   }
 
   redo(): boolean {
+    if (this.shareHooks) return this.shareHooks.redo();
     const next = this.past.redo(this.state.document);
     if (next === null) return false;
     this.commit(next);

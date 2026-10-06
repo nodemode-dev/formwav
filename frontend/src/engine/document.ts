@@ -66,6 +66,44 @@ export interface TrackInput {
   channels?: number[];
 }
 
+/** Shared editing's undo (ui/share.ts): what one edit changed, kept so that edit alone can be put back while others go
+ *  on editing. Lists of things with ids (tracks, markers) are kept by id with their order; the media table entry by entry
+ *  (putting it back whole would drop media someone else just added); anything else whole. */
+export type RestoreChange =
+  | { kind: "value"; value: unknown }
+  | { kind: "entities"; items: Record<string, unknown>; order: string[] }
+  | { kind: "record"; items: Record<string, unknown> };
+export type RestorePatch = Record<string, RestoreChange>;
+
+const isEntity = (v: unknown): v is { id: string } => typeof v === "object" && v !== null && typeof (v as { id?: unknown }).id === "string";
+
+/** The patch that takes `after` back to `before` for what changed between them (unchanged parts are the same objects). */
+export function computeRestore(before: SessionDoc, after: SessionDoc): RestorePatch {
+  const a = before as unknown as Record<string, unknown>;
+  const b = after as unknown as Record<string, unknown>;
+  const patch: RestorePatch = {};
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const was = a[key];
+    const now = b[key];
+    if (was === now) continue;
+    if (Array.isArray(was) && Array.isArray(now) && [...was, ...now].every(isEntity)) {
+      const items: Record<string, unknown> = {};
+      const wasById = new Map(was.map((e) => [e.id, e]));
+      const nowById = new Map(now.map((e) => [e.id, e]));
+      for (const [id, e] of wasById) if (nowById.get(id) !== e) items[id] = e;
+      for (const id of nowById.keys()) if (!wasById.has(id)) items[id] = null;
+      patch[key] = { kind: "entities", items, order: was.map((e) => e.id) };
+    } else if (key === "media" && typeof was === "object" && was && typeof now === "object" && now) {
+      const items: Record<string, unknown> = {};
+      const w = was as Record<string, unknown>;
+      const n = now as Record<string, unknown>;
+      for (const k of new Set([...Object.keys(w), ...Object.keys(n)])) if (w[k] !== n[k]) items[k] = k in w ? w[k] : null;
+      patch[key] = { kind: "record", items };
+    } else patch[key] = { kind: "value", value: was };
+  }
+  return patch;
+}
+
 export interface Clip {
   id: string;
   mediaId: string;
@@ -493,6 +531,7 @@ export type Command =
   | { type: "set-clip-color"; trackId: string; clipId: string; color: string }
   | { type: "set-clip-ara"; trackId: string; clipId: string; ara: ClipAra | null }
   | { type: "set-track-input"; trackId: string; input: TrackInput | null }
+  | { type: "restore"; patch: RestorePatch }
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
   | { type: "set-track-mute"; trackId: string; mute: boolean }
@@ -1119,6 +1158,33 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           return color ? { ...rest, color } : rest;
         }),
       }));
+    }
+    case "restore": {
+      const out: Record<string, unknown> = { ...(doc as unknown as Record<string, unknown>) };
+      for (const [key, change] of Object.entries(cmd.patch)) {
+        if (change.kind === "value") {
+          if (change.value === undefined) delete out[key];
+          else out[key] = change.value;
+        } else if (change.kind === "record") {
+          const rec = { ...((out[key] as Record<string, unknown> | undefined) ?? {}) };
+          for (const [k, v] of Object.entries(change.items)) {
+            if (v === null) delete rec[k];
+            else rec[k] = v;
+          }
+          out[key] = rec;
+        } else {
+          const current = ((out[key] as { id: string }[] | undefined) ?? []).filter(isEntity);
+          const byId = new Map<string, unknown>(current.map((e) => [e.id, e]));
+          for (const [id, item] of Object.entries(change.items)) {
+            if (item === null) byId.delete(id);
+            else byId.set(id, item);
+          }
+          // the patch's order for what it knew, then anything added since in its present place
+          const order = [...change.order.filter((id) => byId.has(id)), ...current.map((e) => e.id).filter((id) => !change.order.includes(id) && byId.has(id))];
+          out[key] = order.map((id) => byId.get(id));
+        }
+      }
+      return out as unknown as SessionDoc;
     }
     case "set-track-input":
       return mapTrack(doc, cmd.trackId, (t) => {
