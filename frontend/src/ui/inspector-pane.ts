@@ -124,7 +124,7 @@ const BODY = `
   <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fill-gaps title="Fill every gap between this track's clips with room tone (RX's Ambience Match under every edit): learned from half a second at each side, moving from the one background to the other across the gap">Fill gaps with room tone</button></div>
   <div data-stems></div>
-  <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="voice">Dialogue isolate</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-clipfx">
   <div class="fw-insp-head" title="Realtime EQ and dynamics on the selected clip alone, ahead of its track's effects; the compressor follows the clip gain, not the fader">Clip effects</div>
@@ -134,7 +134,7 @@ const BODY = `
 <div class="fw-insp-section fw-insp-bus" hidden>
   <div class="fw-insp-head fw-bus-head">Bus effects</div>
   <div class="fw-rtfx-list" data-scope="bus"></div>
-  <div class="fw-analyze-buttons" data-scope="bus"><select data-rtfx="kind" aria-label="Realtime effect to add to the bus"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-analyze-buttons" data-scope="bus"><select data-rtfx="kind" aria-label="Realtime effect to add to the bus"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="voice">Dialogue isolate</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
@@ -2611,7 +2611,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const busId = find(doc)?.track.busId;
     return busId !== undefined ? (doc.buses ?? []).find((b) => b.id === busId) ?? null : null;
   };
-  const RTFX_LABEL: Record<TrackFx["kind"], string> = { highpass: "High-pass", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor", denoise: "Denoise", reverb: "Reverb", echo: "Echo", chorus: "Chorus", limiter: "Limiter", tremolo: "Tremolo", gate: "Gate", phaser: "Phaser", flanger: "Flanger" };
+  const RTFX_LABEL: Record<TrackFx["kind"], string> = { highpass: "High-pass", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor", denoise: "Denoise", reverb: "Reverb", echo: "Echo", chorus: "Chorus", limiter: "Limiter", tremolo: "Tremolo", gate: "Gate", phaser: "Phaser", flanger: "Flanger", voice: "Dialogue isolate" };
   const RTFX_DEFAULT: Record<TrackFx["kind"], TrackFx> = {
     denoise: { kind: "denoise", reductionDb: 12, sensitivityDb: 3 },
     reverb: { kind: "reverb", room: 0.6, damping: 0.5, mix: 0.25, width: 1 },
@@ -2622,6 +2622,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     gate: { kind: "gate", thresholdDb: -40, releaseMs: 100, rangeDb: -60 },
     phaser: { kind: "phaser", rateHz: 0.5, depth: 1, feedback: 0.5 },
     flanger: { kind: "flanger", rateHz: 0.25, depthMs: 3, feedback: 0.5 },
+    voice: { kind: "voice", strength: 1 },
     highpass: { kind: "highpass", freq: 100, gainDb: 0, q: 0.707 },
     lowpass: { kind: "lowpass", freq: 8000, gainDb: 0, q: 0.707 },
     peak: { kind: "peak", freq: 1000, gainDb: 0, q: 1 },
@@ -2667,6 +2668,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
                 ? num("Rate Hz", "rateHz", 0.05, 10, 0.05) + num("Depth", "depth", 0, 1, 0.05) + num("Feedback", "feedback", 0, 0.9, 0.05)
               : f.kind === "flanger"
                 ? num("Rate Hz", "rateHz", 0.05, 5, 0.05) + num("Depth ms", "depthMs", 0, 5, 0.1) + num("Feedback", "feedback", -0.9, 0.9, 0.05)
+              : f.kind === "voice"
+                ? num("Strength", "strength", 0, 1, 0.05)
               : f.kind === "reverb"
                 ? num("Room", "room", 0, 1, 0.05) + num("Damp", "damping", 0, 1, 0.05) + num("Mix", "mix", 0, 1, 0.05) + num("Width", "width", 0, 1, 0.05)
               : num("Hz", "freq", 20, 20000, 1) + (shaped ? num("dB", "gainDb", -24, 24, 0.5) : "") + num("Q", "q", 0.1, 18, 0.1);

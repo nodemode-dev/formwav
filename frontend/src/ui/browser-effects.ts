@@ -1,5 +1,5 @@
 /**
- * The browser's effects, after the approved target (research/ui_reference): under the session's media, the fifteen
+ * The browser's effects, after the approved target (research/ui_reference): under the session's media, the sixteen
  * realtime effects in four groups. Choosing one appends it to the selected clip's track's realtime chain
  * (set-track-fx, with the Effects tab's own defaults; the first track when no clip is selected) and opens the editor's
  * Effects tab on it.
@@ -12,7 +12,7 @@ const GROUPS: Array<[string, string[]]> = [
   ["EQ and filters", ["highpass", "lowpass", "peak", "lowshelf", "highshelf"]],
   ["Dynamics", ["compressor", "limiter", "gate"]],
   ["Space and movement", ["reverb", "echo", "chorus", "flanger", "phaser", "tremolo"]],
-  ["Repair", ["denoise"]],
+  ["Repair", ["denoise", "voice"]],
 ];
 
 export function mountBrowserEffects(host: HTMLElement, engine: Engine): void {

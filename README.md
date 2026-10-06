@@ -28,7 +28,7 @@ formwav is an open-source audio editor that runs on your own machine: record, ed
 ## The interface
 
 - **Menu bar.** File (Save, Open, Import, Export), Edit (Undo, Redo), View (every editor tab, the agent, the terminal, the media pane), Transport (play or pause, stop, record, loop) and Settings (the 15 themes and six accents).
-- **Browser, at the left.** The session's media, and under it the fifteen realtime effects in four groups; a click adds one to the selected clip's track. Its other tabs hold Voice, Transcript, Labels and Create.
+- **Browser, at the left.** The session's media, and under it the sixteen realtime effects in four groups (Dialogue isolate among the repairs); a click adds one to the selected clip's track. Its other tabs hold Voice, Transcript, Labels and Create.
 - **Arrangement, in the middle.** Numbered track headers with M, S, R (arm) and A (automation), a colour per track, each clip's name on it, and the tools in words: Grid, Shuffle, Spot, Punch, Bars, Draw, Picture, Spectrogram.
 - **Editor, under the arrangement.** Clip (the selected clip's settings as fields), Inspector (every setting), Effects (the track's realtime chain as cards with knobs), Synth and Pads (keys, sixteen pads and a touchpad playing the live instrument), Mixer (coloured strips, each fader beside its meter, routing under Route), Terminal, Notes and Spectrum.
 - **Agent, at the right.** Tell it what the session needs; it measures, edits through the same commands as the interface (including a track's realtime chain), logs each action, and every change is one undo away.

@@ -188,7 +188,14 @@ export interface FlangerFx {
   bypass?: boolean;
 }
 
-export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx | TremoloFx | GateFx | PhaserFx | FlangerFx;
+/** RX-16: the dialogue isolate live (RNNoise in the core), strength 0 to 1; its track plays through a bus of its own. */
+export interface VoiceFx {
+  kind: "voice";
+  strength: number;
+  bypass?: boolean;
+}
+
+export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx | TremoloFx | GateFx | PhaserFx | FlangerFx | VoiceFx;
 
 /** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
@@ -197,7 +204,7 @@ export type Instrument = { kind: "sampler"; media: string; root: number } | { ki
 
 export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocity"; scale: number; offset: number } | { kind: "quantize"; beats: number; strength: number };
 
-const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger"]);
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice"]);
 
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
@@ -229,6 +236,9 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
       }
       if (f.kind === "flanger") {
         return { kind: "flanger", rateHz: clamp(f.rateHz, 0.05, 5, 0.25), depthMs: clamp(f.depthMs, 0, 5, 3), feedback: clamp(f.feedback, -0.9, 0.9, 0.5), ...bypass };
+      }
+      if (f.kind === "voice") {
+        return { kind: "voice", strength: clamp(f.strength, 0, 1, 1), ...bypass };
       }
       if (f.kind === "reverb") {
         // PT-22: room size, damping, mix and width, each 0 to 1
@@ -775,7 +785,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-fx-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
         const target = t.fx?.[cmd.fxIndex];
-        if (!t.fx || !target || target.kind === "compressor" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter" || target.kind === "tremolo" || target.kind === "gate" || target.kind === "phaser" || target.kind === "flanger") return t;
+        if (!t.fx || !target || target.kind === "compressor" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter" || target.kind === "tremolo" || target.kind === "gate" || target.kind === "phaser" || target.kind === "flanger" || target.kind === "voice") return t;
         const { [cmd.param]: _old, ...others } = target.automation ?? {};
         const automation = cmd.points.length ? { ...others, [cmd.param]: cmd.points } : others;
         const next = cleanFx(t.fx.map((f, i) => (i === cmd.fxIndex ? { ...target, automation } : f)));
