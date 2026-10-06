@@ -47,7 +47,11 @@ function shellHtml(): string {
         <div class="fw-menu">
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">View</button>
           <div class="cv-menu fw-menu-pop" role="menu" aria-label="View" hidden>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray [data-cliptab]'><span>Clip</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray [data-inspector]'><span>Inspector</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray [data-chain]'><span>Effects</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray [data-synth]'><span>Synth</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray [data-pads]'><span>Pads</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray .fw-mode[title^="Show the mixer"]'><span>Mixer</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray .fw-mode[data-piano]'><span>Notes</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-tool-tray .fw-mode[data-spectrum]'><span>Spectrum</span></button>

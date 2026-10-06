@@ -167,8 +167,9 @@ async def formwav_list_sessions() -> dict[str, Any]:
 
 @mcp.tool(annotations=READ, structured_output=True)
 async def formwav_get_session(name: str) -> dict[str, Any]:
-    """One saved session: its sample rate, length, and each track with its clips (media_id, media name, where the clip
-    starts on the timeline and how long it is, in seconds)."""
+    """One saved session: its sample rate, length, and each track with its realtime effect chain (the Effects tab's:
+    each effect's kind, parameters and whether it is bypassed) and its clips (media_id, media name, where the clip starts
+    on the timeline and how long it is, in seconds)."""
     doc = (await _call("GET", f"/api/projects/{quote(name)}")).json()
     doc = doc.get("document", doc)
     rate = int(doc.get("sampleRate") or 48000)
@@ -180,7 +181,7 @@ async def formwav_get_session(name: str) -> dict[str, Any]:
         for c in t.get("clips", []):
             end = max(end, int(c.get("start", 0)) + int(c.get("length", 0)))
             clips.append({"media_id": c.get("mediaId"), "media": (media.get(c.get("mediaId")) or {}).get("name"), "start_s": round(int(c.get("start", 0)) / rate, 3), "seconds": round(int(c.get("length", 0)) / rate, 3)})
-        tracks.append({"name": t.get("name"), "muted": bool(t.get("mute")), "clips": clips})
+        tracks.append({"name": t.get("name"), "muted": bool(t.get("mute")), "effects": list(t.get("fx") or []), "clips": clips})
     return {"name": name, "sample_rate": rate, "seconds": round(end / rate, 3), "tracks": tracks}
 
 

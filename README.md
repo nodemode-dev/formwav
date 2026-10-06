@@ -19,11 +19,20 @@ formwav is an open-source audio editor that runs on your own machine: record, ed
 
 - **Engine link, verified.** The interface asks the engine for its health through the dev proxy & shows the answer in place; an engine that is down reads as offline, not as a spinner.
 - **Zero-flash shell.** Mounted once & patched in place. Under 4x CPU throttling & a Fast 3G profile: layout shift 0, only the status chip's text & state change after mount, & the first frames are already the theme's background in dark & light profiles.
-- **NodeMode design system.** Tokens, the 14 theme profiles & the pre-paint theme boot, vendored verbatim, so formwav matches formvis & NodeMode surface for surface.
+- **NodeMode design system.** Tokens, the 15 theme profiles (chosen in Settings, with six accents) & the pre-paint theme boot, vendored verbatim, so formwav matches formvis & NodeMode surface for surface.
 - **One mixer, two places.** The Rust core mixes clips, fades, buses, VCAs, automation & the realtime effects the same way in the browser's audio thread & in the engine's export, so what plays is what renders. The crate also carries an N-channel port graph (audio & event ports, kind mismatches, cycles & duplicate edges refused) that the mixer does not use yet; MIDI, surround & ambisonics would start there.
 - **Import, edit, undo.** Import or drop MP3, M4A, FLAC, OGG, Opus, AIFF, WAV or a video's audio, resampled to the session's rate; every change is an undo step, 200 deep, on Cmd or Ctrl Z.
 - **Optional AI components, each under its own licence.** Transcription (faster-whisper), stem separation (Demucs), voice generation (the owner's formwave code with Qwen3-TTS), noise suppression (an RNNoise model fetched on first use) & Isolate sound (Meta's SAM-Audio, under Meta's SAM License, with weights gated behind a manual access request on Hugging Face). None is part of formwav or shipped with it; each has its own requirements file in `backend/`, the app runs without them & says what is missing.
 - **Loopback only.** The interface & the engine bind 127.0.0.1; nothing listens on the network unless `HOST` says so.
+
+## The interface
+
+- **Menu bar.** File (Save, Open, Import, Export), Edit (Undo, Redo), View (every editor tab, the agent, the terminal, the media pane), Transport (play or pause, stop, record, loop) and Settings (the 15 themes and six accents).
+- **Browser, at the left.** The session's media, and under it the fifteen realtime effects in four groups; a click adds one to the selected clip's track. Its other tabs hold Voice, Transcript, Labels and Create.
+- **Arrangement, in the middle.** Numbered track headers with M, S, R (arm) and A (automation), a colour per track, each clip's name on it, and the tools in words: Grid, Shuffle, Spot, Punch, Bars, Draw, Picture, Spectrogram.
+- **Editor, under the arrangement.** Clip (the selected clip's settings as fields), Inspector (every setting), Effects (the track's realtime chain as cards with knobs), Synth and Pads (keys, sixteen pads and a touchpad playing the live instrument), Mixer (coloured strips, each fader beside its meter, routing under Route), Terminal, Notes and Spectrum.
+- **Agent, at the right.** Tell it what the session needs; it measures, edits through the same commands as the interface (including a track's realtime chain), logs each action, and every change is one undo away.
+- **Bottom bar.** The transport and clock, speed and recording settings, the output, phase, loudness and input meters, and the status.
 
 ## Quick Start
 

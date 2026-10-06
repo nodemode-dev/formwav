@@ -1,5 +1,12 @@
 import type { Engine, MediaRef, Track } from "../engine";
+import type { TrackFx } from "../engine/document";
 import { setText } from "../vendor/nodemode/dom-stable";
+import { KINDS } from "./editor-tabs";
+
+/** The realtime effects a track's chain can hold, with each parameter's range, for the agent's tool description. */
+const KIND_SUMMARY = Object.entries(KINDS)
+  .map(([id, k]) => `${id} (${k.params.map((p) => `${p[0]} ${p[2]} to ${p[3]}${p[4] ? ` ${p[4]}` : ""}`).join(", ")})`)
+  .join("; ");
 
 /**
  * The in-app agent (owner decision, Sprint D: agent actions and controls; DS-02). An instruction goes to the model
@@ -28,7 +35,9 @@ const SYSTEM =
   "You are formwav's editing assistant, working inside the user's open audio session through tools. Call get_session " +
   "first to learn the tracks and clips and their ids; times are in seconds and levels in dB. Measure with analyze_clip " +
   "before changing levels or applying repairs, and look up an effect's id and parameters with list_effects before " +
-  "apply_effect_to_clip. Make the smallest set of changes that does what was asked; every change is undoable. When you " +
+  "apply_effect_to_clip, which renders an effect into a clip. A track's realtime chain, heard live and shown in the " +
+  "Effects tab, is set with set_track_effects. Make the smallest set of changes that does what was asked; every change " +
+  "is undoable. When you " +
   "are done, say in one or two sentences what you changed.";
 
 export function mountAgent(host: HTMLElement, engine: Engine): void {
@@ -46,7 +55,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   dock.className = "fw-term fw-agent";
   dock.hidden = !host.querySelector(".fw-agent-anchor");
   dock.setAttribute("aria-label", "Agent");
-  dock.innerHTML = `<div class="fw-term-head"><span class="fw-term-title">Agent</span><span class="fw-term-state" aria-live="polite"></span><button type="button" class="fw-ibtn" data-agent="undo" disabled>Undo run</button><button type="button" class="fw-ibtn" data-agent="hide">Hide</button></div><div class="fw-agent-body"><ol class="fw-agent-log" aria-live="polite"></ol><div class="fw-agent-suggest" role="group" aria-label="Suggestions"><button type="button" class="fw-agent-chip" data-suggest="Clean up the dialogue on the selected track">Clean up the dialogue</button><button type="button" class="fw-agent-chip" data-suggest="Cut the ums and long pauses">Cut the ums</button><button type="button" class="fw-agent-chip" data-suggest="Make the session ready for a podcast at -16 LUFS">Podcast-ready loudness</button></div><div class="fw-agent-ask"><textarea rows="2" placeholder="Tell the assistant what to do with this session" aria-label="Instruction for the assistant"></textarea><button type="button" class="fw-ibtn fw-agent-run" data-agent="run">Run</button><button type="button" class="fw-ibtn" data-agent="stop" disabled>Stop</button></div></div>`;
+  dock.innerHTML = `<div class="fw-term-head"><span class="fw-term-title">Agent</span><span class="fw-term-state" aria-live="polite"></span><button type="button" class="fw-ibtn" data-agent="undo" disabled>Undo run</button><button type="button" class="fw-ibtn" data-agent="hide">Hide</button></div><div class="fw-agent-body"><ol class="fw-agent-log" aria-live="polite"></ol><div class="fw-agent-suggest" role="group" aria-label="Suggestions"><button type="button" class="fw-agent-chip" data-suggest="Clean up the dialogue on the selected track">Clean up the dialogue</button><button type="button" class="fw-agent-chip" data-suggest="Measure each track and set their gains so the voices sit evenly">Even out the voices</button><button type="button" class="fw-agent-chip" data-suggest="Make the session ready for a podcast at -16 LUFS">Podcast-ready loudness</button></div><div class="fw-agent-ask"><textarea rows="2" placeholder="Tell the assistant what to do with this session" aria-label="Instruction for the assistant"></textarea><button type="button" class="fw-ibtn fw-agent-run" data-agent="run">Run</button><button type="button" class="fw-ibtn" data-agent="stop" disabled>Stop</button></div></div>`;
   const transport = host.querySelector<HTMLElement>(".fw-agent-anchor") ?? host.querySelector<HTMLElement>(".fw-dock-anchor");
   if (transport) transport.before(dock);
   else host.append(dock);
@@ -100,7 +109,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
         return {
           sample_rate: doc.sampleRate,
           playhead_s: sec(engine.get("transport").positionSamples),
-          tracks: doc.tracks.map((t) => ({ id: t.id, name: t.name, gain_db: t.gainDb, pan: t.pan ?? 0, mute: t.mute, solo: t.solo, clips: t.clips.map((c) => ({ id: c.id, media_id: c.mediaId, media: doc.media[c.mediaId]?.name, start_s: sec(c.start), length_s: sec(c.length), gain_db: c.gainDb, fade_in_s: sec(c.fadeIn ?? 0), fade_out_s: sec(c.fadeOut ?? 0) })) })),
+          tracks: doc.tracks.map((t) => ({ id: t.id, name: t.name, gain_db: t.gainDb, pan: t.pan ?? 0, mute: t.mute, solo: t.solo, effects: t.fx ?? [], clips: t.clips.map((c) => ({ id: c.id, media_id: c.mediaId, media: doc.media[c.mediaId]?.name, start_s: sec(c.start), length_s: sec(c.length), gain_db: c.gainDb, fade_in_s: sec(c.fadeIn ?? 0), fade_out_s: sec(c.fadeOut ?? 0) })) })),
           markers: doc.markers.map((m) => ({ id: m.id, at_s: sec(m.at), label: m.label })),
         };
       },
@@ -131,6 +140,26 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
         const media = (await engineJson(`/api/media/${c.mediaId}/effect?name=${encodeURIComponent(String(i.effect))}${params}`, { method: "POST" })) as MediaRef;
         engine.dispatch({ type: "set-clip-media", trackId: t.id, clipId: c.id, media });
         return { applied: i.effect, clip: c.id, new_media: media.name };
+      },
+    },
+    {
+      name: "set_track_effects",
+      description: `Replaces a track's realtime effect chain, heard live and shown in the Effects tab (an empty list clears it). Each effect is an object with kind and any parameters (the rest take their defaults), and bypass: true to keep it but switch it off. Kinds and parameter ranges: ${KIND_SUMMARY}.`,
+      input_schema: obj({ track_id: id("track"), effects: { type: "array", items: { type: "object" }, description: 'The chain in order, e.g. [{ "kind": "highpass", "freq": 90 }, { "kind": "compressor", "thresholdDb": -20, "ratio": 3 }]' } }, ["track_id", "effects"]),
+      run: (i) => {
+        const t = track(i.track_id);
+        const list = Array.isArray(i.effects) ? (i.effects as Record<string, unknown>[]) : [];
+        const fx = list.map((e, n) => {
+          const kind = String(e?.kind ?? "");
+          const k = KINDS[kind];
+          if (!k) throw new Error(`effect ${n + 1}: unknown kind "${kind}"; the kinds are ${Object.keys(KINDS).join(", ")}`);
+          const out: Record<string, unknown> = { kind, ...k.init };
+          for (const p of k.params) if (e[p[0]] !== undefined) out[p[0]] = num(e[p[0]], p[0], p[2], p[3]);
+          if (e.bypass === true) out.bypass = true;
+          return out as unknown as TrackFx;
+        });
+        engine.dispatch({ type: "set-track-fx", trackId: t.id, fx });
+        return { track: t.name, effects: fx.map((f) => f.kind) };
       },
     },
     {
