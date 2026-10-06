@@ -2,7 +2,7 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v2.12.1
+Current build version: v2.12.2
 Last updated: 2026-09-30 · Isolate sound's span prediction and candidate re-ranking controls (the last entry below); the header had read v0.40.0 while entries ran to v0.84.0
 
 ---
