@@ -229,9 +229,6 @@
 /* The mixer inside the editor: strips taller than the editor scroll (their routing menus stay reachable), and mute and
  * solo read M and S like the track headers (the icons hidden, the buttons, labels and pressed states unchanged) */
 .fw-dock .fw-mixer { overflow: auto; }
-.fw-mixer :is(.fw-strip-mute, .fw-strip-solo) > * { display: none; }
-.fw-mixer .fw-strip-mute::after { content: "M"; font-size: var(--fs-11); font-weight: 700; }
-.fw-mixer .fw-strip-solo::after { content: "S"; font-size: var(--fs-11); font-weight: 700; }
 
 /* The arrangement after the approved target: each track a colour by its place, through the lanes' existing colour
  * variable (a colour set on the track or the clip still wins, being set on the element), the clip's name on a chip
@@ -453,21 +450,41 @@
 
 /* A compact strip in the dock: the fader beside a column of the pan knob, its readout and the buttons, so a strip
    fits the dock's default height (it stood 329 px in 201 px, the pan below the fold until the Mixer scrolled). */
+.fw-dock .fw-mixer { display: flex; align-items: flex-start; gap: 8px; }
+.fw-dock .fw-mixer-bar { order: 2; display: flex; flex-direction: column; gap: 6px; flex: none; }
+.fw-dock .fw-mixer-strips { align-items: flex-start; gap: 8px; }
 .fw-dock .fw-strip {
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: "name name" "meter meter" "fader knob" "fader db" "fader buttons" "out out" "vca vca";
+  display: grid;
+  overflow: clip;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  grid-template-areas: "name knob" "kind knob" "fader meter" "db db" "buttons route";
   align-items: center;
   row-gap: 4px;
-  column-gap: 6px;
+  column-gap: 8px;
+  inline-size: 124px;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--line-1);
+  border-block-start: 3px solid var(--fw-strip-color, var(--line-2));
+  border-radius: 10px;
+  background: var(--surface-2);
 }
-.fw-dock .fw-strip-name { grid-area: name; }
-.fw-dock .fw-strip-meter { grid-area: meter; }
-.fw-dock .fw-strip-fader { grid-area: fader; inline-size: 76px; }
-.fw-dock .fw-strip .fw-knob { grid-area: knob; }
-.fw-dock .fw-strip-db { grid-area: db; }
-.fw-dock .fw-strip-buttons { grid-area: buttons; }
-.fw-dock .fw-strip-out { grid-area: out; }
-.fw-dock .fw-strip-vca { grid-area: vca; }
+.fw-dock .fw-strip-name { grid-area: name; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-12); font-weight: 700; }
+.fw-dock .fw-strip-kind { grid-area: kind; font-size: var(--fs-11); color: var(--text-muted); }
+.fw-dock .fw-strip .fw-knob { grid-area: knob; justify-self: end; }
+.fw-dock .fw-strip-fader { grid-area: fader; inline-size: 84px; justify-self: center; }
+.fw-dock .fw-strip-meter { grid-area: meter; justify-self: center; align-self: center; display: flex; flex-direction: column; gap: 3px; inline-size: 84px; max-inline-size: none; transform: rotate(-90deg); }
+.fw-dock .fw-strip-meter > .fw-out-track:not([hidden]) { inline-size: 84px; block-size: 5px; }
+.fw-dock .fw-strip-db { grid-area: db; text-align: center; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-primary); }
+.fw-dock .fw-strip-buttons { grid-area: buttons; display: flex; gap: 4px; }
+.fw-dock .fw-strip-buttons button { inline-size: 26px; block-size: 22px; font-size: var(--fs-11); font-weight: 700; }
+.fw-dock .fw-strip-route { grid-area: route; min-inline-size: 0; font-size: var(--fs-11); color: var(--text-secondary); }
+.fw-dock .fw-strip-route[hidden] { display: none; }
+.fw-dock .fw-strip-route > summary { cursor: pointer; list-style: none; padding: 2px 4px; border-radius: 5px; }
+.fw-dock .fw-strip-route > summary::-webkit-details-marker { display: none; }
+.fw-dock .fw-strip-route > summary:hover { background: var(--surface-raised); color: var(--text-primary); }
+.fw-dock .fw-strip-route[open] { grid-area: auto / 1 / auto / -1; }
+.fw-dock .fw-route-box { display: flex; flex-direction: column; gap: 6px; margin-block-start: 6px; }
+.fw-dock .fw-route-box > :not([hidden]) { inline-size: 100%; min-inline-size: 0; }
 
 /* The effect-parameter automation row's head (PT-19): a menu of the track's filter parameters, in the row's height */
 .fw-auto-fx-head { display: flex; align-items: center; min-inline-size: 0; }

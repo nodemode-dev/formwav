@@ -12,18 +12,20 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
   node.className = "fw-strip";
   node.dataset.kind = kind;
   node.innerHTML =
-    `<div class="fw-strip-name"></div>` +
+    `<div class="fw-strip-name"></div><span class="fw-strip-kind">${kind === "track" ? "Track" : kind === "bus" ? "Bus" : kind === "vca" ? "VCA" : "Output"}</span>` +
     `<div class="fw-strip-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div>${kind === "master" ? ["L", "R", "C", "LFE", "Ls", "Rs"].map((ch) => `<div class="fw-out-track fw-out-51" data-ch="${ch}" title="5.1 ${ch}" hidden><div class="fw-out-bar"></div></div>`).join("") : ""}</div>` +
     `<input class="fw-strip-fader" type="range" min="-60" max="12" step="0.1" data-default="0" aria-label="Volume">` +
     `<output class="fw-strip-db"></output>` +
     `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" data-default="0" aria-label="Pan"${kind === "master" || kind === "vca" ? " hidden" : ""}>` +
-    `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute"><span class="fw-glyph-off">${fcIcon("speaker")}</span><span class="fw-glyph-on">${fcIcon("mute")}</span></button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo"${kind !== "track" ? " hidden" : ""}>${fcIcon("headphones")}</button></div>` +
+    `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute">M</button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo"${kind !== "track" ? " hidden" : ""}>S</button></div>` +
+    `<details class="fw-strip-route"${kind === "master" ? " hidden" : ""}><summary>${kind === "track" ? "Route" : "More"}</summary><div class="fw-route-box">` +
     `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>` +
     `<select class="fw-strip-vca" aria-label="VCA"${kind !== "track" ? " hidden" : ""}></select>` +
     `<select class="fw-strip-send" aria-label="Send to bus" title="Send this track, after its inserts and fader, to a bus as well"${kind !== "track" ? " hidden" : ""}></select>` +
     `<input class="fw-strip-send-level" type="range" min="-60" max="12" step="0.5" value="-12" data-default="-12" aria-label="Send level" title="Send level, dB"${kind !== "track" ? " hidden" : ""}>` +
     `<select class="fw-strip-auto" aria-label="Automation mode" title="Read plays the volume automation; Write, Touch, Latch and Trim record the fader into it while playing"${kind !== "track" ? " hidden" : ""}><option value="read">Read</option><option value="write">Write</option><option value="touch">Touch</option><option value="latch">Latch</option><option value="trim">Trim</option></select>` +
-    `<button type="button" class="fw-ibtn fw-strip-remove"${kind === "bus" || kind === "vca" ? "" : " hidden"} title="Remove; its tracks go back to the master or leave the VCA">Remove</button>`;
+    `<button type="button" class="fw-ibtn fw-strip-remove"${kind === "bus" || kind === "vca" ? "" : " hidden"} title="Remove; its tracks go back to the master or leave the VCA">Remove</button>` +
+    `</div></details>`;
   return node;
 }
 
@@ -35,6 +37,9 @@ function setAttr(el: Element | null, name: string, value: string): void {
 
 function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
   setText(node.querySelector(".fw-strip-name"), strip.item.name);
+  const palette = ["cyan", "violet", "amber", "pink", "slate", "green", "blue", "red"];
+  const color = strip.kind === "track" ? `var(--fw-color-${strip.item.color ?? palette[Math.max(0, doc.tracks.indexOf(strip.item)) % 8]})` : strip.kind === "master" ? "var(--accent-color)" : "var(--text-muted)";
+  if (node.style.getPropertyValue("--fw-strip-color") !== color) node.style.setProperty("--fw-strip-color", color);
   if (strip.kind === "master") {
     const masterFader = node.querySelector<HTMLInputElement>(".fw-strip-fader");
     if (masterFader && node.dataset.dragging !== "fader") {
