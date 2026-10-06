@@ -5,7 +5,7 @@ import { download } from "./labels-pane";
 import { subtitleCues, toSubRip, toWebVtt } from "./subtitles";
 
 /** A word in its media file's own seconds, as the engine's transcript returns it. */
-interface MediaWord {
+export interface MediaWord {
   text: string;
   start: number;
   end: number;
@@ -14,7 +14,7 @@ interface MediaWord {
   speaker?: string;
 }
 /** A word placed on the session timeline, in session samples. */
-interface SessionWord {
+export interface SessionWord {
   key: string;
   text: string;
   filler: boolean;
@@ -33,7 +33,7 @@ const GAP_KEEP = 0.3;
  * Maps every transcribed clip's words onto the session: a word belongs to a clip when its midpoint lies inside the
  * clip's trimmed source range, and moves with the clip. Re-derived from the document, so it follows every edit and undo.
  */
-function sessionWords(doc: SessionDoc, transcripts: Map<string, MediaWord[]>): SessionWord[] {
+export function sessionWords(doc: SessionDoc, transcripts: Map<string, MediaWord[]>): SessionWord[] {
   const out: SessionWord[] = [];
   for (const track of doc.tracks)
     for (const clip of track.clips) {
@@ -64,7 +64,7 @@ function sessionWords(doc: SessionDoc, transcripts: Map<string, MediaWord[]>): S
 }
 
 /** Consecutive words become one range (the gaps between them go too). */
-function rangesOf(words: SessionWord[], pick: (w: SessionWord) => boolean): { start: number; end: number }[] {
+export function rangesOf(words: SessionWord[], pick: (w: SessionWord) => boolean): { start: number; end: number }[] {
   const ranges: { start: number; end: number }[] = [];
   let open: { start: number; end: number } | null = null;
   for (const w of words) {

@@ -1,3 +1,4 @@
+import { rangesOf, sessionWords, type MediaWord, type SessionWord } from "./transcript-pane";
 import type { Engine, MediaRef, Track } from "../engine";
 import type { TrackFx } from "../engine/document";
 import { setText } from "../vendor/nodemode/dom-stable";
@@ -98,6 +99,26 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   };
   const obj = (properties: Json, required: string[] = []) => ({ type: "object", properties, required });
   const id = (what: string) => ({ type: "string", description: `The ${what}'s id from get_session` });
+
+  // The transcripts the agent's word tools read, kept per media as the Transcript tab keeps them
+  const transcripts = new Map<string, MediaWord[]>();
+  const allWords = async () => {
+    const doc = engine.get("document");
+    for (const id of new Set(doc.tracks.flatMap((t) => t.clips.map((c) => c.mediaId)))) {
+      if (transcripts.has(id)) continue;
+      const res = await fetch(`/api/media/${id}/transcript`, { method: "POST" });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `transcribing answered ${res.status}`);
+      transcripts.set(id, out.words as MediaWord[]);
+    }
+    return sessionWords(engine.get("document"), transcripts);
+  };
+  const cutWords = (words: SessionWord[], pick: (w: SessionWord) => boolean) => {
+    const ranges = rangesOf(words, pick);
+    const doc = engine.get("document");
+    engine.dispatch({ type: "clear-ranges", trackIds: doc.tracks.map((t) => t.id), ranges, ripple: true });
+    return { deleted_words: words.filter(pick).length, ranges: ranges.length, removed_s: sec(ranges.reduce((n, r) => n + (r.end - r.start), 0)) };
+  };
 
   const tools: AgentTool[] = [
     {
@@ -286,6 +307,70 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
         if (end <= start) throw new Error("end_s must be after start_s.");
         engine.dispatch({ type: "set-loop", start, end, enabled: true });
         return { loop_s: [Number(i.start_s), Number(i.end_s)] };
+      },
+    },
+    // Editing by transcript (the comparison's Descript row): the words as the Transcript tab has them, cut and rewritten the same way
+    {
+      name: "get_transcript",
+      description: "Every transcribed word in the session in order: index, text, speaker, start_s, end_s, filler (um, uh and the like). Clips not yet transcribed are transcribed first on this machine, which takes a while for long audio. Use the indexes with delete_words and rewrite_words, from the latest call: indexes change after an edit.",
+      input_schema: obj({ max_words: { type: "integer", description: "At most this many words (default 2000)" } }),
+      run: async (i) => {
+        const words = await allWords();
+        const cap = Math.max(1, Math.min(10000, Number(i.max_words ?? 2000)));
+        return { count: words.length, words: words.slice(0, cap).map((w, k) => ({ index: k, text: w.text, speaker: w.speaker, start_s: sec(w.start), end_s: sec(w.end), filler: w.filler })) };
+      },
+    },
+    {
+      name: "delete_words",
+      description: "Cut words out by their get_transcript indexes (from and to, inclusive; several ranges at once), closing the gap as the Transcript tab's Delete does, across every track.",
+      input_schema: obj({ ranges: { type: "array", description: "Word ranges to cut", items: obj({ from: { type: "integer" }, to: { type: "integer" } }, ["from", "to"]) } }, ["ranges"]),
+      run: async (i) => {
+        const words = await allWords();
+        const keys = new Set<string>();
+        for (const r of (i.ranges ?? []) as { from: number; to: number }[]) for (let k = Math.max(0, r.from); k <= Math.min(words.length - 1, r.to); k++) keys.add(words[k].key);
+        if (!keys.size) throw new Error("no words in those ranges: call get_transcript for the current indexes");
+        return cutWords(words, (w) => keys.has(w.key));
+      },
+    },
+    {
+      name: "remove_fillers",
+      description: "Cut every filler word (um, uh and the like, as the transcript marks them) out of the session, closing the gaps.",
+      input_schema: obj({}),
+      run: async () => {
+        const words = await allWords();
+        if (!words.some((w) => w.filler)) return { deleted_words: 0, note: "no filler words in the transcript" };
+        return cutWords(words, (w) => w.filler);
+      },
+    },
+    {
+      name: "rewrite_words",
+      description: "Replace words (from and to, inclusive, within one clip) with new text spoken in the speaker's cloned voice, as Regenerate does: engine elevenlabs (needs ELEVENLABS_API_KEY), pocket or chatterbox (installed on this machine). Later clips on that track move by the change in length.",
+      input_schema: obj({ from: { type: "integer" }, to: { type: "integer" }, text: { type: "string", description: "What to say instead" }, engine: { type: "string", enum: ["elevenlabs", "pocket", "chatterbox"], description: "Default elevenlabs" } }, ["from", "to", "text"]),
+      run: async (i) => {
+        const words = await allWords();
+        const a = words[Number(i.from)];
+        const b = words[Number(i.to)];
+        if (!a || !b || Number(i.to) < Number(i.from)) throw new Error("no such words: call get_transcript for the current indexes");
+        const clipId = a.key.split(":")[0];
+        if (b.key.split(":")[0] !== clipId) throw new Error("rewrite words within one clip at a time");
+        const doc = engine.get("document");
+        const t = doc.tracks.find((x) => x.clips.some((c) => c.id === clipId));
+        const c = t?.clips.find((x) => x.id === clipId);
+        if (!t || !c) throw new Error("that clip is gone");
+        const which = String(i.engine ?? "elevenlabs");
+        const url = which === "elevenlabs" ? "/api/providers/elevenlabs/regenerate" : `/api/providers/local-speech/${which}/regenerate`;
+        const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ media_id: c.mediaId, start_s: a.mediaStart, end_s: b.mediaEnd, text: String(i.text ?? "") }) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        const ratio = (doc.media[c.mediaId]?.sampleRate ?? doc.sampleRate) / doc.sampleRate;
+        const delta = Math.round(out.delta_frames / ratio);
+        const later = t.clips.filter((x) => x.id !== c.id && x.start >= c.start + c.length);
+        engine.dispatch({ type: "batch", commands: [
+          { type: "set-clip-media", trackId: t.id, clipId: c.id, media: out.media },
+          { type: "set-clip-bounds", trackId: t.id, clipId: c.id, start: c.start, sourceIn: c.sourceIn, length: c.length + delta },
+          ...later.map((x) => ({ type: "move-clip" as const, trackId: t.id, clipId: x.id, start: x.start + delta })),
+        ] });
+        return { replaced_s: sec(b.end - a.start), inserted_s: out.inserted_s, engine: which, later_clips_moved: later.length };
       },
     },
   ];

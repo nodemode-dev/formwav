@@ -56,6 +56,20 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### The agent edits by transcript: words read, cut and rewritten as the Transcript tab does
+- refers-to: frontend/src/ui/agent-pane.ts (get_transcript, delete_words, remove_fillers, rewrite_words); src/ui/transcript-pane.ts (sessionWords, rangesOf exported); sidecar verification/verify_agent_transcript.md
+- kind: explainer
+- logged: v2.11.2 (in progress) · 2026-10-06
+
+The comparison's Descript row: the agent could not edit by the words. It now has four tools built on the Transcript tab's own functions, so its edits behave as the person's: get_transcript (every word in session order with index, speaker, times and a filler flag; clips not yet transcribed are transcribed on this machine), delete_words (ranges of indexes cut with clear-ranges across every track, the gap closed, as Delete does), remove_fillers, and rewrite_words (words in one clip spoken again in the speaker's cloned voice through Regenerate, ElevenLabs or a cloning engine installed here, later clips on the track moved by the change). Checked with a scripted model through a scratch engine and the ElevenLabs stand-in: "my fellow" cut (0.8 s), the opening rewritten, two later clips moved, the timeline ending at 10.450 s as computed, two undos restoring the clip, no page error.
+
+### Regenerate doubled a clip rewritten from its first word
+- refers-to: backend/app/services/providers.py (_splice); sidecar verification/verify_elevenlabs.py (exact lengths at the start and the end)
+- kind: fix
+- logged: v2.11.2 (in progress) · 2026-10-06
+
+Found by the agent's rewrite_words check: rewriting "And so" at the very start of the JFK clip made a clip 12 s long instead of 1 s. The splice shared one crossfade length by both ends, at least one frame: with the words starting at frame 0 it was forced to one, and x[: a - f] read as x[:-1], the whole recording, so the new media held the source and then the splice (1,068,477 frames where 540,480 were due). A rewrite of the opening is common, and the same trap sat at the very end. Each end now has its own crossfade, none where there is nothing to fade from. Measured: at the start, in the middle and to the end of the JFK media the new lengths are the source less the replaced span plus the new speech less 480 frames per faded end (none at an edge), exactly. verify_elevenlabs.py now checks exact lengths at the very start and the very end; against the code before the fix both fail (198k and 110k frames where 109,809 are due).
+
 ### Speech made on this machine: Kokoro, Pocket TTS and Chatterbox from formcut, and Regenerate's open-weight path
 - refers-to: backend/app/services/local_speech.py; app/services/providers.py (_splice, shared by ElevenLabs' and local regeneration); app/routers/providers.py (/api/providers/local-speech...); frontend/src/ui/models-pane.ts; sidecar verification/verify_local_speech.py, elevenlabs_contract.py (voices/add; literal paths first), verify_elevenlabs.py (Regenerate)
 - kind: explainer
