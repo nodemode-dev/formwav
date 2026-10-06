@@ -339,3 +339,19 @@
 
 /* PT-10: the note editor's canvas, notes dragged up or down */
 .fw-notes-canvas { display: block; inline-size: 100%; block-size: 160px; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; cursor: ns-resize; touch-action: none; color: inherit; }
+/* Cloud (ui/cloud.ts): the export dialog's look, wider for a file list; fixed heights so listing never moves it */
+.fw-cloud-dialog { inline-size: min(520px, calc(100vw - 32px)); block-size: min(600px, calc(100vh - 32px)); box-sizing: border-box; overflow: hidden; }
+.fw-cloud-dialog form { box-sizing: border-box; block-size: 100%; grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
+.fw-cloud-body { display: grid; align-content: start; gap: 10px; min-block-size: 0; overflow-y: auto; }
+.fw-cloud-services { display: flex; gap: 6px; }
+.fw-cloud-services [aria-checked="true"] { background: var(--accent-tint-strong); color: var(--text-primary); }
+.fw-cloud-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--text-secondary); }
+.fw-cloud-bar { display: flex; align-items: center; gap: 8px; }
+.fw-cloud-where { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: var(--text-secondary); }
+.fw-cloud-list { box-sizing: border-box; block-size: 220px; margin: 0; padding: 0; overflow-y: auto; list-style: none; border: 1px solid var(--border-soft); border-radius: 8px; }
+.fw-cloud-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 5px 8px; }
+.fw-cloud-item:hover { background: var(--accent-tint); }
+.fw-cloud-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; }
+.fw-cloud-size { font-size: 11px; color: var(--text-secondary); }
+.fw-cloud-more[data-off] { visibility: hidden; }
+.fw-cloud-note { box-sizing: border-box; block-size: 2.9em; margin: 0; overflow: hidden; }

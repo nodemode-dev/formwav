@@ -109,6 +109,13 @@ frontend/
 
 ## index.html {#index-html}
 
+### Cloud projects, the interface: File > Cloud, adapted from formcut 2.6.3
+- refers-to: frontend/src/ui/cloud.ts; src/ui/projects.ts (savedSessionName, fw-open-project); src/ui/shell.ts (File > Cloud); src/main.ts; src/styles/workspace.css (.fw-cloud-*)
+- kind: explainer
+- logged: v2.10.8 (in progress) · 2026-10-06
+
+formcut's three cloud pieces (a browser, an upload dialog, settings rows) became one dialog in formwav's export-dialog style, opened from File > Cloud: a Google Drive or Dropbox switch; set up with the app's client ID (and Google's desktop secret, and the opt-in full-Drive scope); Connect, with Google finishing in the browser and Dropbox's code pasted back; then the service's files with folders and paging, where a session (.fmw) opens through the projects module's own path (its unsaved-changes guard included, by an fw-open-project event) and any other file comes in as media on a new track at the playhead, and Save this session here sends the saved session up whole, refusing while there are unsaved changes so what goes up is what was saved. Checked in Chromium under 4x throttling against formcut's fake services through a scratch engine, every click on a visible control: set up, Google connected through its redirect, browsed, a file imported onto a new track, an unsaved save refused, Dropbox connected by its pasted code. The check found a Refresh a Google user needed that sat inside the hidden file section (a user would have been stuck; the connect step now has its own), and layout shifts as the dialog's sections changed (up to 0.05 in all): the dialog now holds a fixed height with its title and service switch on top, one scrolling body, and its note and Close pinned below, and More keeps its place, invisible when there is no next page. Re-run: no layout-shift entry over the whole flow, no page error; the design audit at 0 FAIL, 0 WARN.
+
 ### index.html · critical style and theme boot
 - refers-to: index.html :: head `style` and inline `script`
 - kind: rationale

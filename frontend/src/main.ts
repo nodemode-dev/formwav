@@ -51,6 +51,7 @@ import { mountPianoRoll } from "./ui/piano-roll";
 import { mountSpectrum } from "./ui/spectrum";
 import { mountEnvelopeEdit } from "./ui/envelope-edit";
 import { mountProjects } from "./ui/projects";
+import { mountCloud } from "./ui/cloud";
 import { Player, type OutputChoice } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
 import { applyTheme } from "./vendor/formvis/themes";
@@ -143,6 +144,7 @@ if (host) {
   mountDock(host);
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();
   mountProjects(host, engine, player);
+  mountCloud(host, engine);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
 activateAll(engine);

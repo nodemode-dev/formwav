@@ -33,6 +33,7 @@ function shellHtml(): string {
           <div class="cv-menu fw-menu-pop" role="menu" aria-label="File" hidden>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="save" title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span><kbd>⌘S</kbd></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="open" aria-haspopup="dialog" title="Open (Cmd or Ctrl O)">${icon("folderOpen", ICON_SIZE.control)}<span>Open…</span><kbd>⌘O</kbd></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="cloud" aria-haspopup="dialog" title="Open from or save to Google Drive or Dropbox"><span>Cloud…</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="import" title="Import any audio or video file">${icon("upload", ICON_SIZE.control)}<span>Import…</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-topbar [data-action="export"]'><span>Export…</span><kbd>⇧⌘E</kbd></button>
           </div>

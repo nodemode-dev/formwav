@@ -14,6 +14,10 @@ function when(savedAt: string | null): string {
   return Number.isNaN(date.getTime()) ? savedAt : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+/** The saved session's name while nothing has changed since it was saved (so the cloud saves it as it is), else null. */
+let savedSession: () => string | null = () => null;
+export const savedSessionName = (): string | null => savedSession();
+
 export function mountProjects(host: HTMLElement, engine: Engine, player: Player): void {
   const nameField = host.querySelector<HTMLInputElement>("input.fw-session-name");
   const saveButton = host.querySelector<HTMLButtonElement>('[data-action="save"]');
@@ -156,6 +160,9 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       return `Opened ${opened.name}`;
     });
   };
+  // The cloud (ui/cloud.ts) opens a session it brought in through the same path, unsaved-changes guard included
+  host.addEventListener("fw-open-project", (e) => open((e as CustomEvent<string>).detail));
+  savedSession = () => (known && !unsaved() ? known.name : null);
 
   // Audacity's home screen of recent projects: the empty timeline lists the latest saved sessions.
   const emptyStage = host.querySelector<HTMLElement>(".fw-empty");
