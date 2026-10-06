@@ -34,8 +34,8 @@ def elevenlabs_speech(body: dict = Body(...)) -> dict:
 
 @router.post("/providers/elevenlabs/sound", status_code=201)
 def elevenlabs_sound(body: dict = Body(...)) -> dict:
-    duration = body.get("duration_s")
-    return _run(prov.elevenlabs_sound, str(body.get("text", "")), float(duration) if duration else None)
+    duration, influence = body.get("duration_s"), body.get("prompt_influence")
+    return _run(prov.elevenlabs_sound, str(body.get("text", "")), float(duration) if duration else None, bool(body.get("loop")), float(influence) if influence is not None else None)
 
 
 @router.post("/providers/elevenlabs/regenerate", status_code=201)
@@ -66,3 +66,65 @@ def fal_generate(body: dict = Body(...)) -> dict:
 @router.post("/providers/local/generate", status_code=201)
 def local_generate(body: dict = Body(...)) -> dict:
     return _run(prov.local_generate, str(body.get("model", "")), str(body.get("prompt", "")), str(body.get("lyrics", "")), float(body.get("duration_s") or 30))
+
+
+
+# The rest of ElevenLabs (the v11 plan's 1.5), each checked against ElevenLabs' OpenAPI document
+@router.get("/providers/elevenlabs/models")
+def elevenlabs_models() -> dict:
+    return {"models": _run(prov.elevenlabs_models)}
+
+
+@router.post("/providers/elevenlabs/voice-changer", status_code=201)
+def elevenlabs_change_voice(body: dict = Body(...)) -> dict:
+    seed = body.get("seed")
+    return _run(prov.elevenlabs_change_voice, str(body.get("media_id", "")), str(body.get("voice_id", "")), str(body.get("model_id") or ""), bool(body.get("remove_background_noise")), int(seed) if seed is not None else None)
+
+
+@router.post("/providers/elevenlabs/music", status_code=201)
+def elevenlabs_music(body: dict = Body(...)) -> dict:
+    seconds, seed = body.get("seconds"), body.get("seed")
+    return _run(prov.elevenlabs_music, str(body.get("prompt", "")), str(body.get("lyrics") or ""), float(seconds) if seconds else None, str(body.get("model_id") or "music_v1"), bool(body.get("instrumental")), int(seed) if seed is not None else None)
+
+
+@router.post("/providers/elevenlabs/stems", status_code=201)
+def elevenlabs_stems(body: dict = Body(...)) -> dict:
+    return {"stems": _run(prov.elevenlabs_stems, str(body.get("media_id", "")), body.get("six", True) is not False)}
+
+
+@router.post("/providers/elevenlabs/isolate", status_code=201)
+def elevenlabs_isolate(body: dict = Body(...)) -> dict:
+    return _run(prov.elevenlabs_isolate, str(body.get("media_id", "")))
+
+
+@router.post("/providers/elevenlabs/transcribe")
+def elevenlabs_transcribe(body: dict = Body(...)) -> dict:
+    speakers = body.get("speakers")
+    keyterms = [str(k) for k in body.get("keyterms", [])] if isinstance(body.get("keyterms"), list) else None
+    return _run(prov.elevenlabs_transcribe, str(body.get("media_id", "")), str(body.get("model_id") or "scribe_v2"), body.get("diarize", True) is not False, int(speakers) if speakers else None, body.get("events", True) is not False, keyterms, bool(body.get("entities")), str(body.get("language") or ""))
+
+
+@router.post("/providers/elevenlabs/design", status_code=201)
+def elevenlabs_design(body: dict = Body(...)) -> dict:
+    return _run(prov.elevenlabs_design, str(body.get("description", "")), str(body.get("text") or ""), str(body.get("model_id") or ""))
+
+
+@router.post("/providers/elevenlabs/voices", status_code=201)
+def elevenlabs_save_voice(body: dict = Body(...)) -> dict:
+    return _run(prov.elevenlabs_save_voice, str(body.get("name", "")), str(body.get("description", "")), str(body.get("generated_voice_id", "")))
+
+
+@router.post("/providers/elevenlabs/dialogue", status_code=201)
+def elevenlabs_dialogue(body: dict = Body(...)) -> dict:
+    lines = body.get("lines") if isinstance(body.get("lines"), list) else []
+    return _run(prov.elevenlabs_dialogue, lines, str(body.get("model_id") or "eleven_v3"))
+
+
+@router.post("/providers/elevenlabs/align")
+def elevenlabs_align(body: dict = Body(...)) -> dict:
+    return _run(prov.elevenlabs_align, str(body.get("media_id", "")), str(body.get("text", "")))
+
+
+@router.get("/providers/elevenlabs/dub/{job}/transcript")
+def elevenlabs_dub_transcript(job: str, lang: str, format: str = "srt") -> dict:
+    return {"subtitles": _run(prov.elevenlabs_dub_transcript, job, lang, format)}

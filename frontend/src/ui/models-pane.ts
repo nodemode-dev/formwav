@@ -19,6 +19,8 @@ interface Choice {
 type Providers = { providers: { id: string; ready: boolean; needs: string; presets?: { model: string; label: string; fields: string[] }[]; models?: { id: string; label: string; fields?: string[] }[] }[] };
 
 export function mountModelsPane(host: HTMLElement, engine: Engine): void {
+  let lastDub: { job: string; lang: string } | null = null;
+  let lastDesign: { description: string; ids: string[] } | null = null;
   const lib = host.querySelector<HTMLElement>(".fw-library");
   if (!lib) return;
   const box = document.createElement("section");
@@ -34,6 +36,15 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-models-row" data-field="input">Input JSON<textarea rows="2" class="fw-models-input">{}</textarea></label>
 <label class="fw-models-row" data-field="clip">Clip<select class="fw-models-clip"></select></label>
 <label class="fw-models-row" data-field="language">Language<input class="fw-models-language" value="es" placeholder="es, fr, de, ja"></label>
+<label class="fw-models-row" data-field="musicmodel">Music model<select class="fw-models-musicmodel"><option value="music_v1">Music v1</option><option value="music_v2">Music v2</option><option value="music_v2_5">Music v2.5</option></select></label>
+<label class="fw-models-row" data-field="stems">Stems<select class="fw-models-stems"><option value="six">Six: vocals, drums, bass, piano, guitar, other</option><option value="two">Two: vocals and the rest</option></select></label>
+<label class="fw-models-row" data-field="speakers">Speakers<input type="number" min="1" max="32" class="fw-models-speakers" placeholder="found by itself"></label>
+<label class="fw-models-row" data-field="keyterms">Key terms<input class="fw-models-keyterms" placeholder="names and words to get right, comma-separated"></label>
+<label class="fw-models-row" data-field="lines">Lines<textarea rows="3" class="fw-models-lines" placeholder="Rachel: Where were you?&#10;Adam: [laughs] Right here."></textarea></label>
+<label class="fw-models-row" data-field="preview">Preview<select class="fw-models-preview"><option value="">Design a voice first</option></select></label>
+<label class="fw-models-row fw-models-check" data-field="loop"><input type="checkbox" class="fw-models-loop"> Loop seamlessly</label>
+<label class="fw-models-row fw-models-check" data-field="instrumental"><input type="checkbox" class="fw-models-instrumental"> Instrumental only</label>
+<label class="fw-models-row fw-models-check" data-field="denoise"><input type="checkbox" class="fw-models-denoise"> Remove background noise first</label>
 <button type="button" class="fw-btn fw-models-go">Make it on a new track</button><p class="fw-models-state" aria-live="polite"></p>`;
   lib.after(box);
   const $ = <T extends HTMLElement>(sel: string) => box.querySelector<T>(sel) as T;
@@ -42,7 +53,11 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   const clip = $<HTMLSelectElement>(".fw-models-clip");
   const go = $<HTMLButtonElement>(".fw-models-go");
   const state = $<HTMLElement>(".fw-models-state");
-  const value = (field: string) => (box.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`.fw-models-${field}`)?.value ?? "").trim();
+  const value = (field: string) => {
+    const el = box.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(`.fw-models-${field}`);
+    if (el instanceof HTMLInputElement && el.type === "checkbox") return el.checked ? "1" : "";
+    return (el?.value ?? "").trim();
+  };
 
   const post = async (url: string, body: unknown) => {
     const res = await fetch(url, { method: url.includes("/dub/") ? "GET" : "POST", headers: { "Content-Type": "application/json" }, body: url.includes("/dub/") ? undefined : JSON.stringify(body) });
@@ -94,7 +109,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
           return { done: `Replaced ${(endS - startS).toFixed(2)} s with ${Number(out.inserted_s).toFixed(2)} s in the speaker's voice${later.length ? `; ${later.length} later clip${later.length === 1 ? "" : "s"} moved ${(delta / engine.get("document").sampleRate).toFixed(2)} s` : ""}` };
         },
       });
-      choices.push({ id: "el-sound", label: "Sound effect (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["text", "duration"], run: async (v) => ({ media: await post("/api/providers/elevenlabs/sound", { text: v.text, duration_s: Number(v.duration) }) }) });
+      choices.push({ id: "el-sound", label: "Sound effect (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["text", "duration", "loop"], run: async (v) => ({ media: await post("/api/providers/elevenlabs/sound", { text: v.text, duration_s: Number(v.duration), loop: !!v.loop }) }) });
       choices.push({
         id: "el-dub", label: "Dub a clip (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["clip", "language"],
         run: async (v) => {
@@ -107,10 +122,89 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
             await sleep(3000);
             setText(state, `Dubbing into ${v.language}... ${Math.round((performance.now() - t0) / 1000)} s`);
             const st = await post(`/api/providers/elevenlabs/dub/${encodeURIComponent(job.job)}?lang=${encodeURIComponent(v.language)}&source=${encodeURIComponent(job.source ?? "")}`, null);
-            if (st.status === "dubbed") return { media: st.media, at: c.start };
+            if (st.status === "dubbed") {
+              lastDub = { job: job.job, lang: v.language || "es" };
+              return { media: st.media, at: c.start };
+            }
           }
         },
       });
+      // The rest of ElevenLabs (the v11 plan's 1.5): each request checked against ElevenLabs' OpenAPI document
+      const clipOf = (v: Record<string, string>, what: string) => {
+        const [trackId, clipId] = v.clip.split("/");
+        const c = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((x) => x.id === clipId);
+        if (!c) throw new Error(`Choose a clip ${what}`);
+        return c;
+      };
+      const placeAll = (refs: MediaRef[], at: number) => engine.dispatch({ type: "batch", commands: refs.map((media) => ({ type: "import-media" as const, media, at })) });
+      choices.push({ id: "el-music", label: "Music or a song (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["prompt", "lyrics", "duration", "musicmodel", "instrumental"],
+        run: async (v) => ({ media: await post("/api/providers/elevenlabs/music", { prompt: v.prompt, lyrics: v.lyrics, seconds: Number(v.duration) || undefined, model_id: v.musicmodel, instrumental: !!v.instrumental }) }) });
+      choices.push({ id: "el-voicechanger", label: "Change a clip's voice (ElevenLabs voice changer)", ready: el.ready, needs: el.needs, fields: ["clip", "voice", "denoise"],
+        run: async (v) => { const c = clipOf(v, "to re-voice"); return { media: await post("/api/providers/elevenlabs/voice-changer", { media_id: c.mediaId, voice_id: v.voice, remove_background_noise: !!v.denoise }), at: c.start }; } });
+      choices.push({ id: "el-isolate", label: "Isolate the voice in a clip (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["clip"],
+        run: async (v) => { const c = clipOf(v, "to clean"); return { media: await post("/api/providers/elevenlabs/isolate", { media_id: c.mediaId }), at: c.start }; } });
+      choices.push({ id: "el-stems", label: "Separate a clip into stems (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["clip", "stems"],
+        run: async (v) => {
+          const c = clipOf(v, "to separate");
+          const out = await post("/api/providers/elevenlabs/stems", { media_id: c.mediaId, six: v.stems !== "two" });
+          placeAll(out.stems, c.start);
+          return { done: `Placed ${out.stems.length} stems on their own tracks under the clip, in one undo step` };
+        } });
+      choices.push({ id: "el-scribe", label: "Transcribe a clip with Scribe v2: speakers and sounds (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["clip", "speakers", "keyterms", "language"],
+        run: async (v) => {
+          const c = clipOf(v, "to transcribe");
+          const keyterms = v.keyterms.split(",").map((k) => k.trim()).filter(Boolean);
+          const out = await post("/api/providers/elevenlabs/transcribe", { media_id: c.mediaId, speakers: Number(v.speakers) || undefined, keyterms, entities: true, language: v.language.length === 2 ? v.language : "" });
+          const words = out.words as { speaker?: number; event?: boolean }[];
+          const speakers = new Set(words.map((w) => w.speaker).filter((x) => x !== undefined)).size;
+          return { done: `Scribe v2: ${words.filter((w) => !w.event).length} words, ${speakers} speaker${speakers === 1 ? "" : "s"}, ${words.filter((w) => w.event).length} sound events; kept as the clip's transcript (scribe_v2)` };
+        } });
+      choices.push({ id: "el-design", label: "Design a voice from a description (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["prompt", "text"],
+        run: async (v) => {
+          const out = await post("/api/providers/elevenlabs/design", { description: v.prompt, text: v.text });
+          lastDesign = { description: v.prompt, ids: out.previews.map((p: { generated_voice_id: string }) => p.generated_voice_id) };
+          const pick = box.querySelector<HTMLSelectElement>(".fw-models-preview") as HTMLSelectElement;
+          pick.replaceChildren(...lastDesign.ids.map((id, i) => new Option(`Preview ${i + 1}`, id)));
+          placeAll(out.previews.map((p: { media: MediaRef }) => p.media), engine.get("transport").positionSamples);
+          return { done: `Placed ${out.previews.length} previews on new tracks; keep the one you like with Keep a designed voice` };
+        } });
+      choices.push({ id: "el-keep", label: "Keep a designed voice (ElevenLabs)", ready: el.ready, needs: el.needs, fields: ["preview", "text"],
+        run: async (v) => {
+          if (!lastDesign || !v.preview) throw new Error("Design a voice first, then choose its preview");
+          const out = await post("/api/providers/elevenlabs/voices", { name: v.text || "Designed voice", description: lastDesign.description, generated_voice_id: v.preview });
+          voice.append(new Option(out.name, out.voice_id));
+          return { done: `Kept ${out.name} among your voices` };
+        } });
+      choices.push({ id: "el-dialogue", label: "A dialogue between voices (ElevenLabs v3)", ready: el.ready, needs: el.needs, fields: ["lines"],
+        run: async (v) => {
+          const byName = new Map([...voice.options].map((o) => [o.textContent?.trim().toLowerCase() ?? "", o.value]));
+          const lines = v.lines.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+            const at = l.indexOf(":");
+            const who = at > 0 ? l.slice(0, at).trim().toLowerCase() : "";
+            if (!byName.has(who)) throw new Error(`No voice named ${l.slice(0, Math.max(at, 0)).trim() || "(none)"}: start each line with a voice's name and a colon`);
+            return { voice_id: byName.get(who), text: l.slice(at + 1).trim() };
+          });
+          return { media: await post("/api/providers/elevenlabs/dialogue", { lines }) };
+        } });
+      choices.push({ id: "el-align", label: "Align a script to a clip (ElevenLabs forced alignment)", ready: el.ready, needs: el.needs, fields: ["clip", "text"],
+        run: async (v) => {
+          const c = clipOf(v, "to align");
+          const out = await post("/api/providers/elevenlabs/align", { media_id: c.mediaId, text: v.text });
+          return { done: `Timed ${out.words.length} words of the script against the clip; kept as its transcript (alignment)` };
+        } });
+      choices.push({ id: "el-dubsubs", label: "Translated subtitles of the last dub (ElevenLabs)", ready: el.ready, needs: el.needs, fields: [],
+        run: async () => {
+          if (!lastDub) throw new Error("Dub a clip first");
+          const res = await fetch(`/api/providers/elevenlabs/dub/${encodeURIComponent(lastDub.job)}/transcript?lang=${encodeURIComponent(lastDub.lang)}`);
+          const out = await res.json();
+          if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(new Blob([out.subtitles], { type: "application/x-subrip" }));
+          a.download = `dub-${lastDub.lang}.srt`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          return { done: `Saved the ${lastDub.lang} subtitles as dub-${lastDub.lang}.srt` };
+        } });
     }
     for (const preset of fal?.presets ?? []) {
       choices.push({ id: `fal:${preset.model}`, label: `${preset.label} (fal)`, ready: !!fal?.ready, needs: fal?.needs ?? "FAL_KEY", fields: preset.fields, run: async (v) => ({ media: await post("/api/providers/fal/generate", { model: preset.model, input: Object.fromEntries(preset.fields.map((f) => [f, f === "duration" ? Number(v.duration) : v[f]])) }) }) });
@@ -181,7 +275,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     const c = choices.find((x) => x.id === kind.value);
     if (!c?.ready) return;
     const v: Record<string, string> = {};
-    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language"]) v[f] = value(f);
+    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language", "musicmodel", "stems", "speakers", "keyterms", "lines", "preview", "loop", "instrumental", "denoise"]) v[f] = value(f);
     go.disabled = true;
     setText(state, `Making it with ${c.label}...`);
     try {

@@ -211,13 +211,18 @@ def elevenlabs_regenerate(media_id: str, start_s: float, end_s: float, text: str
     return {"media": new, "voice_id": voice, "replaced_s": [a / rate, b / rate], "inserted_s": n / rate, "delta_frames": int(out.shape[0]) - frames, "source_rate": rate}
 
 
-def elevenlabs_sound(text: str, duration_s: float | None = None) -> dict:
+def elevenlabs_sound(text: str, duration_s: float | None = None, loop: bool = False, prompt_influence: float | None = None) -> dict:
+    """Sound effects (eleven_text_to_sound_v2): 0.5 to 30 s, looping on request, held to the prompt more or less."""
     if not text.strip():
         raise ProviderError(422, "a sound effect needs a description")
     key = _key("ELEVENLABS_API_KEY", "ElevenLabs")
-    payload: dict = {"text": text}
+    payload: dict = {"text": text, "model_id": "eleven_text_to_sound_v2"}
     if duration_s:
         payload["duration_seconds"] = max(0.5, min(30.0, float(duration_s)))
+    if loop:
+        payload["loop"] = True
+    if prompt_influence is not None:
+        payload["prompt_influence"] = max(0.0, min(1.0, float(prompt_influence)))
     status, raw, _ = _http("POST", f"{_el_base()}/v1/sound-generation", {"xi-api-key": key, "content-type": "application/json", "accept": "audio/mpeg"}, json.dumps(payload).encode())
     return media.import_audio(f"Sound - {text[:40].strip()}.mp3", _ok("ElevenLabs", status, raw))
 
@@ -330,3 +335,191 @@ def local_generate(model_id: str, prompt: str = "", lyrics: str = "", duration_s
             tail = (done.stderr or done.stdout or b"").decode(errors="replace").strip().splitlines()[-3:]
             raise ProviderError(502, f"{entry.get('label', model_id)} exited {done.returncode} without writing audio: {' | '.join(tail)[:300]}")
         return media.import_audio(f"{entry.get('label', model_id)} - {(prompt or model_id)[:40].strip()}.{out.suffix.lstrip('.')}", out.read_bytes())
+
+
+# ── ElevenLabs, the rest of the API (the v11 plan's 1.5; every request checked against ElevenLabs' OpenAPI document by
+# sidecar verification/elevenlabs_contract.py: fields, enums and ranges as the document gives them) ──────────────────
+
+def _el_file(media_id: str) -> tuple[str, bytes, str]:
+    info = media.media_info(media_id)
+    return (str(info.get("name") or f"{media_id}.wav").rsplit(".", 1)[0] + ".wav", (media.media_dir() / f"{media_id}.wav").read_bytes(), "audio/wav")
+
+
+def _el_json(method: str, path: str, payload: dict | None = None, accept: str = "application/json") -> bytes:
+    key = _key("ELEVENLABS_API_KEY", "ElevenLabs")
+    headers = {"xi-api-key": key, "accept": accept}
+    body = None
+    if payload is not None:
+        headers["content-type"] = "application/json"
+        body = json.dumps(payload).encode()
+    status, raw, _ = _http(method, f"{_el_base()}{path}", headers, body, timeout=900)
+    return _ok("ElevenLabs", status, raw)
+
+
+def _el_form(path: str, fields: dict[str, str], files: dict[str, tuple[str, bytes, str]], accept: str = "application/json") -> bytes:
+    key = _key("ELEVENLABS_API_KEY", "ElevenLabs")
+    body, ctype = _multipart(fields, files)
+    status, raw, _ = _http("POST", f"{_el_base()}{path}", {"xi-api-key": key, "content-type": ctype, "accept": accept}, body, timeout=900)
+    return _ok("ElevenLabs", status, raw)
+
+
+def elevenlabs_models() -> list[dict]:
+    """The account's models, with what each can do: speech, and voice conversion (the voice changer's models)."""
+    rows = json.loads(_el_json("GET", "/v1/models"))
+    return [{"model_id": r.get("model_id"), "name": r.get("name"), "speech": bool(r.get("can_do_text_to_speech")), "voice_changer": bool(r.get("can_do_voice_conversion"))} for r in rows]
+
+
+def elevenlabs_change_voice(media_id: str, voice_id: str, model_id: str = "", remove_background_noise: bool = False, seed: int | None = None) -> dict:
+    """The voice changer (speech to speech): the clip re-voiced, its delivery, pacing and timing kept."""
+    if not voice_id:
+        raise ProviderError(422, "choose the voice to change to")
+    fields: dict[str, str] = {}
+    if model_id:
+        fields["model_id"] = model_id
+    if remove_background_noise:
+        fields["remove_background_noise"] = "true"
+    if seed is not None:
+        fields["seed"] = str(int(seed))
+    raw = _el_form(f"/v1/speech-to-speech/{voice_id}?output_format=mp3_44100_192", fields, {"audio": _el_file(media_id)}, "audio/mpeg")
+    return media.import_audio(f"{_el_file(media_id)[0].rsplit('.', 1)[0]} (new voice).mp3", raw)
+
+
+MUSIC_MODELS = ("music_v1", "music_v2", "music_v2_5")
+
+
+def elevenlabs_music(prompt: str, lyrics: str = "", seconds: float | None = None, model_id: str = "music_v1", instrumental: bool = False, seed: int | None = None) -> dict:
+    """A song or a piece from a prompt, with lyrics when given (sung), 3 s to 10 min."""
+    if not prompt.strip():
+        raise ProviderError(422, "describe the music")
+    if model_id not in MUSIC_MODELS:
+        raise ProviderError(422, f"model must be one of {', '.join(MUSIC_MODELS)}")
+    payload: dict = {"prompt": prompt, "model_id": model_id}
+    if seconds:
+        payload["music_length_ms"] = int(max(3000, min(600_000, float(seconds) * 1000)))
+    if lyrics.strip():
+        payload["lyrics_text"] = lyrics
+    if instrumental:
+        payload["force_instrumental"] = True
+    if seed is not None:
+        payload["seed"] = int(seed)
+    raw = _el_json("POST", "/v1/music?output_format=mp3_44100_192", payload, "audio/mpeg")
+    return media.import_audio(f"Music - {prompt[:40].strip()}.mp3", raw)
+
+
+def elevenlabs_stems(media_id: str, six: bool = True) -> list[dict]:
+    """The clip separated into stems (six, or vocals and the rest), each as media."""
+    import io
+    import zipfile
+
+    raw = _el_form("/v1/music/stem-separation?output_format=mp3_44100_192", {"stem_variation_id": "six_stems_v1" if six else "two_stems_v1"}, {"file": _el_file(media_id)}, "application/zip")
+    stem = _el_file(media_id)[0].rsplit(".", 1)[0]
+    out = []
+    with zipfile.ZipFile(io.BytesIO(raw)) as z:
+        for name in sorted(n for n in z.namelist() if not n.endswith("/")):
+            part = name.rsplit("/", 1)[-1]
+            out.append(media.import_audio(f"{stem} - {part}", z.read(name)))
+    return out
+
+
+def elevenlabs_isolate(media_id: str) -> dict:
+    """Voice isolation: the speech kept, the rest of the sound taken out."""
+    raw = _el_form("/v1/audio-isolation", {}, {"audio": _el_file(media_id)}, "audio/mpeg")
+    return media.import_audio(f"{_el_file(media_id)[0].rsplit('.', 1)[0]} (voice isolated).mp3", raw)
+
+
+def elevenlabs_transcribe(media_id: str, model_id: str = "scribe_v2", diarize: bool = True, speakers: int | None = None, events: bool = True, keyterms: list[str] | None = None, entities: bool = False, language: str = "") -> dict:
+    """Scribe: words with times, speakers told apart, sounds like laughter tagged, entities found; written where formwav
+    keeps transcripts (model scribe_v2), so the Transcript tab, transcript editing and subtitles use it as their own."""
+    from . import transcript as tr
+
+    fields: dict[str, str] = {"model_id": model_id, "diarize": "true" if diarize else "false", "tag_audio_events": "true" if events else "false", "timestamps_granularity": "word"}
+    if speakers:
+        fields["num_speakers"] = str(int(speakers))
+    if language:
+        fields["language_code"] = language
+    if entities:
+        fields["entity_detection"] = "all"
+    files = {"file": _el_file(media_id)}
+    body, ctype = _multipart(fields, files)
+    if keyterms:  # a list goes as the field repeated, as multipart carries arrays
+        extra = b"".join(f'--{ctype.split("boundary=")[1]}\r\nContent-Disposition: form-data; name="keyterms"\r\n\r\n{k}\r\n'.encode() for k in keyterms[:100] if k.strip())
+        body = extra + body
+    key = _key("ELEVENLABS_API_KEY", "ElevenLabs")
+    status, raw, _ = _http("POST", f"{_el_base()}/v1/speech-to-text", {"xi-api-key": key, "content-type": ctype, "accept": "application/json"}, body, timeout=1800)
+    data = json.loads(_ok("ElevenLabs", status, raw))
+    words = []
+    for w in data.get("words", []):
+        if w.get("type") not in ("word", "audio_event") or not str(w.get("text", "")).strip():
+            continue
+        item = {"text": str(w["text"]).strip(), "start": round(float(w.get("start") or 0), 3), "end": round(float(w.get("end") or 0), 3)}
+        spk = str(w.get("speaker_id") or "")
+        if spk.startswith("speaker_") and spk[8:].isdigit():
+            item["speaker"] = int(spk[8:])
+        if w.get("type") == "audio_event":
+            item["event"] = True
+        words.append(item)
+    language_code = str(data.get("language_code") or "en")
+    result = {"mediaId": media_id, "model": model_id, "language": language_code, "words": tr.mark_fillers(words, language_code), "source": "ElevenLabs Scribe"}
+    if data.get("entities"):
+        result["entities"] = data["entities"]
+    cache = media.media_dir().parent / "transcripts" / f"{media_id}.{model_id}.json"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(result))
+    return result
+
+
+def elevenlabs_design(description: str, text: str = "", model_id: str = "") -> dict:
+    """Voice design: voices made from a description, as previews to hear; one is kept with elevenlabs_save_voice."""
+    if not description.strip():
+        raise ProviderError(422, "describe the voice")
+    payload: dict = {"voice_description": description}
+    if text.strip():
+        payload["text"] = text
+    else:
+        payload["auto_generate_text"] = True
+    if model_id:
+        payload["model_id"] = model_id
+    data = json.loads(_el_json("POST", "/v1/text-to-voice/design", payload))
+    import base64
+
+    previews = []
+    for i, pv in enumerate(data.get("previews", [])):
+        ref = media.import_audio(f"Voice preview {i + 1} - {description[:30].strip()}.mp3", base64.b64decode(pv.get("audio_base_64", "")))
+        previews.append({"generated_voice_id": pv.get("generated_voice_id"), "media": ref})
+    return {"previews": previews, "text": data.get("text", "")}
+
+
+def elevenlabs_save_voice(name: str, description: str, generated_voice_id: str) -> dict:
+    if not (name.strip() and generated_voice_id):
+        raise ProviderError(422, "name the voice and choose a preview")
+    data = json.loads(_el_json("POST", "/v1/text-to-voice", {"voice_name": name, "voice_description": description, "generated_voice_id": generated_voice_id}))
+    return {"voice_id": data.get("voice_id"), "name": data.get("name", name)}
+
+
+def elevenlabs_dialogue(lines: list[dict], model_id: str = "eleven_v3") -> dict:
+    """Several voices in one conversation: each line its text and voice."""
+    inputs = [{"text": str(l.get("text", "")), "voice_id": str(l.get("voice_id", ""))} for l in lines if str(l.get("text", "")).strip() and l.get("voice_id")]
+    if not inputs:
+        raise ProviderError(422, "give each line its text and voice")
+    raw = _el_json("POST", "/v1/text-to-dialogue?output_format=mp3_44100_192", {"inputs": inputs, "model_id": model_id}, "audio/mpeg")
+    return media.import_audio(f"Dialogue - {inputs[0]['text'][:30].strip()}.mp3", raw)
+
+
+def elevenlabs_align(media_id: str, text: str) -> dict:
+    """Forced alignment: a known script's words timed against the recording, kept as its transcript (model alignment)."""
+    from . import transcript as tr
+
+    if not text.strip():
+        raise ProviderError(422, "give the script to align")
+    data = json.loads(_el_form("/v1/forced-alignment", {"text": text}, {"file": _el_file(media_id)}))
+    words = [{"text": str(w["text"]).strip(), "start": round(float(w["start"]), 3), "end": round(float(w["end"]), 3)} for w in data.get("words", []) if str(w.get("text", "")).strip()]
+    result = {"mediaId": media_id, "model": "alignment", "language": "en", "words": tr.mark_fillers(words, "en"), "source": "ElevenLabs forced alignment"}
+    cache = media.media_dir().parent / "transcripts" / f"{media_id}.alignment.json"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(result))
+    return result
+
+
+def elevenlabs_dub_transcript(job: str, lang: str, fmt: str = "srt") -> str:
+    """A dub's translated transcript, as subtitles (srt or webvtt)."""
+    return _el_json("GET", f"/v1/dubbing/{job}/transcript/{lang}?format_type={'webvtt' if fmt == 'webvtt' else 'srt'}", None, "text/plain").decode(errors="replace")
