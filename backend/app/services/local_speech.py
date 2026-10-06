@@ -22,9 +22,9 @@ from . import media
 from .providers import ProviderError, _splice
 
 ENGINES = {
-    "kokoro": {"name": "Kokoro", "module": "kokoro_onnx", "package": "kokoro-onnx==0.6.1", "license": "Apache-2.0", "clones": False, "size": "about 400 MB with its model"},
-    "pocket": {"name": "Pocket TTS", "module": "pocket_tts", "package": "pocket-tts", "license": "MIT code, CC-BY-4.0 weights (Kyutai)", "clones": True, "size": "PyTorch, about 1 GB"},
-    "chatterbox": {"name": "Chatterbox", "module": "chatterbox", "package": "chatterbox-tts", "license": "MIT (Resemble AI); every output carries an inaudible watermark", "clones": True, "size": "PyTorch, about 2 GB"},
+    "kokoro": {"name": "Kokoro", "module": "kokoro_onnx", "package": "kokoro-onnx==0.6.1", "license": "Apache-2.0", "clones": False, "size": "about 600 MB with its model (570 MB measured here)"},
+    "pocket": {"name": "Pocket TTS", "module": "pocket_tts", "package": "pocket-tts", "license": "MIT code, CC-BY-4.0 weights (Kyutai)", "clones": True, "size": "PyTorch and its weights, not measured here (expect a GB or more)"},
+    "chatterbox": {"name": "Chatterbox", "module": "chatterbox", "package": "chatterbox-tts", "license": "MIT (Resemble AI); every output carries an inaudible watermark", "clones": True, "size": "PyTorch and its weights, not measured here (expect several GB)"},
 }
 KOKORO_FILES = {
     "kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx",

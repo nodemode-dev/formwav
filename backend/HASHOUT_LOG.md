@@ -56,6 +56,13 @@ backend/
 
 ## boot_backend {#boot-backend}
 
+### The claims audit: the README's counts checked against the code, and kept checked
+- refers-to: README.md; backend/app/services/local_speech.py (engine sizes); sidecar verification/audit_claims.py (in the release gate from v2.11.8)
+- kind: fix
+- logged: v2.11.8 (in progress) · 2026-10-06
+
+PLAN_v11 Phase 2's claims audit. A script reads each countable claim from the README and computes its truth from the code or the live engine: the live effect kinds (the document's kind set), formwav's own catalogue (the engine's effects less the plug-ins found on the machine, 256 here, which is why the 114 holds while the engine lists 370), the MCP server's tools, the theme profiles, the undo depth, the export formats, the memory arithmetic, the version, and whether the loopback sentence admits the network listener; it also lists the interface's and the engine's size strings for review. Its first run found the README four times saying sixteen live effect kinds (there are nineteen since de-hum, de-click and de-reverb), eight export formats (seven, MP3 at two bitrates in the dialog), "nothing listens on the network unless HOST says so" while Settings > Devices opens a listener (off by default, paired devices only), Kokoro's install as about 400 MB (570 MB measured), and Pocket TTS's and Chatterbox's sizes stated as figures nobody measured. The audit's own first faults were fixed before it was trusted (a pattern matching "the realtime effects", the Status history counted as current, a theme count of zero from a misread module). The README's descriptions were brought to what exists (the menus' Cloud, Share and Devices; the Clip tab's new actions; the agent's transcript tools; the models; the routers), and its Not built list gained every limit found since: models checked against stand-ins and not run with real keys or servers, Pocket TTS and Chatterbox unrun, Enhance speech behind Adobe, no local sound effects, shared editing and remote recording on the local network only.
+
 ### Dubbing made on this machine: Whisper's words, Argos Translate's models, Kokoro's voices
 - refers-to: backend/app/services/local_dub.py; app/routers/providers.py (/api/providers/local-dub...); frontend/src/ui/models-pane.ts; sidecar verification/verify_local_dub.py
 - kind: explainer
