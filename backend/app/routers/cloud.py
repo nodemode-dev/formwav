@@ -42,6 +42,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from ..core.paths import data_dir
+from ..core.store import read_json, write_json
 from ..services import media, projects
 
 router = APIRouter(prefix="/cloud", tags=["cloud"])
@@ -117,24 +118,11 @@ def _store() -> Path:
 
 
 def _read() -> dict:
-    try:
-        return json.loads(_store().read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return {}
-    except ValueError:  # a damaged file is set aside rather than lost, and a fresh one begins
-        _store().replace(_store().with_suffix(f".damaged-{int(time.time())}"))
-        return {}
+    return read_json(_store(), {})
 
 
 def _write(data: dict) -> None:
-    # Written whole and then moved into place, readable by this user only: it holds the tokens
-    path = _store()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".cloud-", dir=path.parent)
-    with os.fdopen(fd, "w", encoding="utf-8") as out:
-        json.dump(data, out)
-    os.chmod(tmp, 0o600)
-    os.replace(tmp, path)
+    write_json(_store(), data, private=True)  # it holds the tokens
 
 
 def _provider(name: str) -> str:

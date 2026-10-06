@@ -45,12 +45,24 @@ class LocalOnly:
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers") or []}
         client = (scope.get("client") or ("", 0))[0] or ""
         reason = None
-        if client and not _loopback(client):
+        through_network = bool(scope.get("formwav.remote"))
+        if through_network:
+            # The network listener (routers/remote.py, off by default), marked by its own server: only paired devices,
+            # and the pairing page itself, get through. The loopback listener's checks below are unchanged.
+            from ..routers import remote
+
+            if not remote.admitted(scope, headers):
+                reason = "pair this device first"
+        elif client and not _loopback(client):
             reason = "the engine answers this machine only"
         elif not _HOST.match(headers.get("host", "")):
             reason = "unexpected Host header"
-        elif scope["type"] == "http" and scope["method"] in _MUTATING and scope["path"].startswith("/api/") and headers.get(LOCAL_HEADER) != "1":
+        if reason is None and scope["type"] == "http" and scope["method"] in _MUTATING and scope["path"].startswith("/api/") and headers.get(LOCAL_HEADER) != "1":
             reason = f"a change needs the {LOCAL_HEADER} header"
+        if reason and through_network and scope["type"] == "http" and scope["method"] == "GET" and not scope["path"].startswith("/api/"):
+            await send({"type": "http.response.start", "status": 303, "headers": [(b"location", b"/pair"), (b"content-length", b"0")]})
+            await send({"type": "http.response.body", "body": b""})
+            return
         if reason:
             if scope["type"] == "websocket":
                 await receive()  # the connect event, then a close before accept refuses the handshake (403)
