@@ -853,7 +853,7 @@ dependencies = [
 
 [[package]]
 name = "formwav-desktop"
-version = "2.10.3"
+version = "2.10.4"
 dependencies = [
  "regex",
  "tauri",

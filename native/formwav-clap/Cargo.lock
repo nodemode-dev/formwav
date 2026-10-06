@@ -61,7 +61,7 @@ dependencies = [
 
 [[package]]
 name = "formwav-dsp"
-version = "2.10.3"
+version = "2.10.4"
 dependencies = [
  "nnnoiseless",
 ]
