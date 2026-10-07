@@ -450,7 +450,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 /* Editor: Effects */
 .fw-dock .fw-chain { padding: 12px 16px; overflow: auto; }
 .fw-dock .fw-chain-head { display: none; }
-.fw-dock .fw-chain-row { flex: 1 1 auto; display: flex; align-items: stretch; gap: 0; min-block-size: 0; padding-block-end: 4px; overflow: auto hidden; }
+.fw-dock .fw-chain-row { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px 0; min-block-size: 0; padding-block-end: 4px; overflow: hidden auto; }
 .fw-dock .fw-fx-card { flex: none; inline-size: 216px; display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-tertiary); }
 .fw-dock .fw-fx-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; }
 .fw-dock .fw-fx-names { min-inline-size: 0; display: flex; flex-direction: column; }
@@ -461,6 +461,9 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-dock .fw-fx-bypass[aria-pressed="false"] { color: var(--text-muted); }
 .fw-dock .fw-fx-card:has(.fw-fx-bypass[aria-pressed="false"]) .fw-fx-knobs { opacity: 0.45; }
 .fw-dock .fw-fx-knobs { display: flex; justify-content: space-around; gap: 6px; }
+.fw-dock .fw-fx-card-wide { inline-size: 420px; max-block-size: 100%; }
+.fw-dock .fw-fx-card-wide .fw-fx-knobs { flex: 1 1 auto; min-block-size: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-content: start; gap: 6px 4px; overflow: hidden auto; }
+.fw-dock .fw-fx-card-wide .fw-knob svg { inline-size: 36px; block-size: 36px; }
 .fw-dock .fw-fx-card .fw-knob { flex: 1 1 0; min-inline-size: 0; inline-size: auto; block-size: auto; display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0; border-radius: 8px; color: var(--accent-color); }
 .fw-dock .fw-fx-card .fw-knob :is(.fw-knob-value, .fw-knob-label) { max-inline-size: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .fw-dock .fw-fx-card .fw-knob svg { inline-size: 48px; block-size: 48px; }

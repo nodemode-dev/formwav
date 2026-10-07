@@ -4,8 +4,11 @@ import { renderNotes } from "../audio/notes";
 import { importFile } from "../io/media-client";
 import { clockMode, formatClock, parseTimecode } from "./shell";
 import { PALETTE } from "../engine/document";
+import { PROCESSOR_BY_ID, PROCESSORS, processorValues } from "../engine/processors";
 
 const COLOURS = PALETTE.map((k) => `<option value="${k}">${k[0].toUpperCase()}${k.slice(1)}</option>`).join("");
+const PROCESSOR_OPTIONS = `<optgroup label="Studio processors">${PROCESSORS.map((p) => `<option value="processor:${p.id}">${p.name}</option>`).join("")}</optgroup>`;
+const rtKey = (f: TrackFx) => (f.kind === "processor" ? `rt:processor:${f.id}` : `rt:${f.kind}`);
 import { loadPresets, savePresets, type Preset } from "../io/presets-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { inputDevices, inputSignature, onInputsChanged, refreshInputs, setTrackChannels, setTrackInput, setTrackMonitor, trackChannels, trackInput, trackMonitor } from "./inputs";
@@ -18,7 +21,7 @@ const BODY = `
 <div class="fw-insp-section fw-insp-master">
   <div class="fw-insp-head">Master effects</div>
   <div class="fw-rtfx-list" data-scope="master"></div>
-  <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option>${PROCESSOR_OPTIONS}</select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
   <div class="fw-insp-head">Time track</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Playback speed at the session's start, in percent"><span>Start</span><input type="number" data-tt="from" min="25" max="400" step="1" value="100" aria-label="Time track speed at the start in percent"> %</label><label class="fw-sam-opt" title="Playback speed at the end of the session's audio, in percent"><span>End</span><input type="number" data-tt="to" min="25" max="400" step="1" value="100" aria-label="Time track speed at the end in percent"> %</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-tt="apply" title="Playback speed moves from Start to End across the session's audio, pitch following speed (Audacity's time track), in playback and exports">Set time track</button>
@@ -125,7 +128,7 @@ const BODY = `
   <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fill-gaps title="Fill every gap between this track's clips with room tone (RX's Ambience Match under every edit): learned from half a second at each side, moving from the one background to the other across the gap">Fill gaps with room tone</button></div>
   <div data-stems></div>
-  <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="voice">Dialogue isolate</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="voice">Dialogue isolate</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option>${PROCESSOR_OPTIONS}</select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-clipfx">
   <div class="fw-insp-head" title="Realtime EQ and dynamics on the selected clip alone, ahead of its track's effects; the compressor follows the clip gain, not the fader">Clip effects</div>
@@ -135,7 +138,7 @@ const BODY = `
 <div class="fw-insp-section fw-insp-bus" hidden>
   <div class="fw-insp-head fw-bus-head">Bus effects</div>
   <div class="fw-rtfx-list" data-scope="bus"></div>
-  <div class="fw-analyze-buttons" data-scope="bus"><select data-rtfx="kind" aria-label="Realtime effect to add to the bus"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="voice">Dialogue isolate</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
+  <div class="fw-analyze-buttons" data-scope="bus"><select data-rtfx="kind" aria-label="Realtime effect to add to the bus"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="voice">Dialogue isolate</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option>${PROCESSOR_OPTIONS}</select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
@@ -2431,9 +2434,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const scope = select ? scopeOf(select) : null;
     const index = Number(select?.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
     const f = scope && Number.isInteger(index) ? getFx(scope)[index] : undefined;
-    const p = f && select ? presets.find((x) => x.effect === `rt:${f.kind}` && x.name === select.value) : undefined;
+    const p = f && select ? presets.find((x) => x.effect === rtKey(f) && x.name === select.value) : undefined;
     if (!scope || !p) return;
-    commitRtfx(scope, (fx) => fx.map((x, k) => (k === index ? ({ ...x, ...p.params } as TrackFx) : x)));
+    commitRtfx(scope, (fx) => fx.map((x, k) => (k !== index ? x : x.kind === "processor" ? { ...x, values: { ...x.values, ...p.params } } : ({ ...x, ...p.params } as TrackFx))));
     select?.blur();
     setText(notice, `Loaded preset ${p.name}`);
   });
@@ -2456,8 +2459,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       if (!f) return;
       const name = window.prompt("Preset name", "")?.trim();
       if (!name) return;
-      const effect = `rt:${f.kind}`;
-      const params = Object.fromEntries(Object.entries(f).filter(([k, v]) => k !== "kind" && k !== "bypass" && typeof v === "number")) as Record<string, number>;
+      const effect = rtKey(f);
+      const params = f.kind === "processor" ? { ...f.values } : (Object.fromEntries(Object.entries(f).filter(([k, v]) => k !== "kind" && k !== "bypass" && typeof v === "number")) as Record<string, number>);
       void storePresets([...presets.filter((p) => !(p.effect === effect && p.name === name)), { name, effect, params }], `Saved preset ${name}`);
     }
   });
@@ -2638,8 +2641,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const busId = find(doc)?.track.busId;
     return busId !== undefined ? (doc.buses ?? []).find((b) => b.id === busId) ?? null : null;
   };
-  const RTFX_LABEL: Record<TrackFx["kind"], string> = { highpass: "High-pass", dehum: "De-hum", declick: "De-click", dereverb: "De-reverb", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor", denoise: "Denoise", reverb: "Reverb", echo: "Echo", chorus: "Chorus", limiter: "Limiter", tremolo: "Tremolo", gate: "Gate", phaser: "Phaser", flanger: "Flanger", voice: "Dialogue isolate" };
+  const RTFX_LABEL: Record<TrackFx["kind"], string> = { processor: "Processor", highpass: "High-pass", dehum: "De-hum", declick: "De-click", dereverb: "De-reverb", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor", denoise: "Denoise", reverb: "Reverb", echo: "Echo", chorus: "Chorus", limiter: "Limiter", tremolo: "Tremolo", gate: "Gate", phaser: "Phaser", flanger: "Flanger", voice: "Dialogue isolate" };
   const RTFX_DEFAULT: Record<TrackFx["kind"], TrackFx> = {
+    processor: { kind: "processor", id: "gain", values: { gain: 0 } },
     denoise: { kind: "denoise", reductionDb: 12, sensitivityDb: 3 },
     reverb: { kind: "reverb", room: 0.6, damping: 0.5, mix: 0.25, width: 1 },
     echo: { kind: "echo", delayMs: 300, feedback: 0.35, mix: 0.4 },
@@ -2679,8 +2683,17 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         row.dataset.index = String(i);
         const shaped = f.kind === "peak" || f.kind === "lowshelf" || f.kind === "highshelf";
         const num = (label: string, p: string, min: number, max: number, step: number) => `<label>${label} <input type="number" min="${min}" max="${max}" step="${step}" data-p="${p}"></label>`;
+        const UNIT: Record<string, [string, number]> = { Db: ["dB", 0.1], Hz: ["Hz", 1], Ms: ["ms", 0.1], Percent: ["%", 1], Ratio: [":1", 0.1], Semitones: ["st", 1], Cents: ["ct", 1], Seconds: ["s", 0.05] };
         const fields =
-          f.kind === "compressor"
+          f.kind === "processor"
+            ? (PROCESSOR_BY_ID.get(f.id)?.params ?? [])
+                .map((p) =>
+                  p.unit === "Toggle" || p.unit === "Choice"
+                    ? `<label>${p.name} <select data-p="v:${p.id}">${(p.unit === "Toggle" ? ["Off", "On"] : p.choices).map((c, n) => `<option value="${n}">${c}</option>`).join("")}</select></label>`
+                    : num(`${p.name}${UNIT[p.unit] ? ` ${UNIT[p.unit][0]}` : ""}`, `v:${p.id}`, p.min, p.max, UNIT[p.unit]?.[1] ?? 0.01),
+                )
+                .join("")
+            : f.kind === "compressor"
             ? num("Thr dB", "thresholdDb", -60, 0, 0.5) + num("Ratio", "ratio", 1, 20, 0.5) + num("Atk ms", "attackMs", 0.1, 200, 1) + num("Rel ms", "releaseMs", 1, 2000, 10) + num("Gain dB", "makeupDb", 0, 24, 0.5)
             : f.kind === "denoise"
               ? num("Reduce dB", "reductionDb", 0, 40, 1) + num("Sens dB", "sensitivityDb", -6, 12, 0.5)
@@ -2710,12 +2723,13 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
                 ? num("Room", "room", 0, 1, 0.05) + num("Damp", "damping", 0, 1, 0.05) + num("Mix", "mix", 0, 1, 0.05) + num("Width", "width", 0, 1, 0.05)
               : num("Hz", "freq", 20, 20000, 1) + (shaped ? num("dB", "gainDb", -24, 24, 0.5) : "") + num("Q", "q", 0.1, 18, 0.1);
         row.innerHTML = `<span class="fw-rtfx-name"></span>${fields}<label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="up">Up</button><button type="button" class="fw-ibtn" data-rtfx="down">Down</button><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button><select data-preset="rt" aria-label="Preset for this effect"></select><button type="button" class="fw-ibtn" data-preset="rt-save">Save</button>`;
-        fillPresets(row.querySelector<HTMLSelectElement>('[data-preset="rt"]'), `rt:${f.kind}`);
+        fillPresets(row.querySelector<HTMLSelectElement>('[data-preset="rt"]'), rtKey(f));
         const name = row.querySelector<HTMLElement>(".fw-rtfx-name");
-        if (name) name.textContent = RTFX_LABEL[f.kind];
-        for (const input of row.querySelectorAll<HTMLInputElement>("input[data-p]")) {
+        if (name) name.textContent = f.kind === "processor" ? PROCESSOR_BY_ID.get(f.id)?.name ?? f.id : RTFX_LABEL[f.kind];
+        for (const input of row.querySelectorAll<HTMLInputElement>("input[data-p], select[data-p]")) {
           const p = input.dataset.p;
           if (p === "on") input.checked = !f.bypass;
+          else if (p?.startsWith("v:") && f.kind === "processor") input.value = String(f.values[p.slice(2)] ?? "");
           else if (p) input.value = String((f as unknown as Record<string, number>)[p] ?? "");
         }
         const up = row.querySelector<HTMLButtonElement>('[data-rtfx="up"]');
@@ -2770,7 +2784,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const index = Number(input.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
     const p = input.dataset.p;
     if (!scope || !Number.isInteger(index) || !p) return;
-    commitRtfx(scope, (fx) => fx.map((f, k) => (k !== index ? f : p === "on" ? { ...f, bypass: !input.checked } : { ...f, [p]: Number(input.value) })));
+    commitRtfx(scope, (fx) => fx.map((f, k) => (k !== index ? f : p === "on" ? { ...f, bypass: !input.checked } : p.startsWith("v:") && f.kind === "processor" ? { ...f, values: { ...f.values, [p.slice(2)]: Number(input.value) } } : { ...f, [p]: Number(input.value) })));
   });
   body.addEventListener("click", (e) => {
     const button = (e.target as HTMLElement).closest<HTMLElement>("[data-rtfx]");
@@ -2779,7 +2793,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (!button || !scope || !action || action === "kind") return;
     if (action === "add") {
       const kind = button.closest<HTMLElement>("[data-scope]")?.querySelector<HTMLSelectElement>('[data-rtfx="kind"]')?.value as TrackFx["kind"] | undefined;
-      if (kind && RTFX_DEFAULT[kind]) commitRtfx(scope, (fx) => [...fx, { ...RTFX_DEFAULT[kind] }]);
+      const info = kind?.startsWith("processor:") ? PROCESSOR_BY_ID.get(kind.slice(10)) : undefined;
+      if (info) commitRtfx(scope, (fx) => [...fx, { kind: "processor", id: info.id, values: processorValues(info, undefined) }]);
+      else if (kind && kind !== "processor" && RTFX_DEFAULT[kind]) commitRtfx(scope, (fx) => [...fx, { ...RTFX_DEFAULT[kind] }]);
       renderRtfx(true);
       return;
     }

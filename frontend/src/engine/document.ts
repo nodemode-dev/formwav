@@ -1,3 +1,5 @@
+import { PROCESSOR_BY_ID, processorValues } from "./processors";
+
 export interface MediaRef {
   id: string;
   name: string;
@@ -279,8 +281,16 @@ export interface VoiceFx {
   strength: number;
   bypass?: boolean;
 }
+/** A processor from the core's library (engine/processors.ts, kind 20), its parameters by name; on a track's sum, a
+ *  bus or the master, never per clip. */
+export interface ProcessorFx {
+  kind: "processor";
+  id: string;
+  values: Record<string, number>;
+  bypass?: boolean;
+}
 
-export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx | TremoloFx | GateFx | PhaserFx | FlangerFx | VoiceFx | DeHumFx | DeClickFx | DeReverbFx;
+export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx | TremoloFx | GateFx | PhaserFx | FlangerFx | VoiceFx | DeHumFx | DeClickFx | DeReverbFx | ProcessorFx;
 
 /** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
@@ -321,15 +331,19 @@ export function cleanSynth(p: Partial<SynthPatch>): SynthPatch {
 
 export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocity"; scale: number; offset: number } | { kind: "quantize"; beats: number; strength: number };
 
-const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice", "dehum", "declick", "dereverb"]);
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice", "dehum", "declick", "dereverb", "processor"]);
 
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
   const clamp = (v: number, lo: number, hi: number, fallback: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
   return fx
-    .filter((f) => FX_KINDS.has(f.kind))
+    .filter((f) => FX_KINDS.has(f.kind) && (f.kind !== "processor" || PROCESSOR_BY_ID.has(f.id)))
     .map((f): TrackFx => {
       const bypass = f.bypass ? { bypass: true } : {};
+      if (f.kind === "processor") {
+        const info = PROCESSOR_BY_ID.get(f.id);
+        return { kind: "processor", id: f.id, values: info ? processorValues(info, f.values) : {}, ...bypass };
+      }
       if (f.kind === "denoise") {
         return { kind: "denoise", reductionDb: clamp(f.reductionDb, 0, 40, 12), sensitivityDb: clamp(f.sensitivityDb, -6, 12, 3), ...bypass };
       }
@@ -956,7 +970,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-fx-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
         const target = t.fx?.[cmd.fxIndex];
-        if (!t.fx || !target || target.kind === "compressor" || target.kind === "dehum" || target.kind === "declick" || target.kind === "dereverb" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter" || target.kind === "tremolo" || target.kind === "gate" || target.kind === "phaser" || target.kind === "flanger" || target.kind === "voice") return t;
+        if (!t.fx || !target || target.kind === "processor" || target.kind === "compressor" || target.kind === "dehum" || target.kind === "declick" || target.kind === "dereverb" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter" || target.kind === "tremolo" || target.kind === "gate" || target.kind === "phaser" || target.kind === "flanger" || target.kind === "voice") return t;
         const { [cmd.param]: _old, ...others } = target.automation ?? {};
         const automation = cmd.points.length ? { ...others, [cmd.param]: cmd.points } : others;
         const next = cleanFx(t.fx.map((f, i) => (i === cmd.fxIndex ? { ...target, automation } : f)));
@@ -1687,7 +1701,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       return mapTrack(doc, cmd.trackId, (t) => {
         const target = t.clips.find((c) => c.id === cmd.clipId);
         if (!target) return t;
-        const fx = cleanFx(cmd.fx);
+        const fx = cleanFx(cmd.fx).filter((f) => f.kind !== "processor");
         if (JSON.stringify(fx) === JSON.stringify(target.fx ?? [])) return t;
         return {
           ...t,

@@ -29,6 +29,8 @@ interface CoreExports {
   fw_add_master_fx(player: number, kind: number, freq: number, gainDb: number, q: number): number;
   fw_add_master_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
   fw_add_bus_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
+  fw_add_master_processor(player: number, ptr: number, len: number): number;
+  fw_add_bus_processor(player: number, ptr: number, len: number): number;
   fw_take_peaks(player: number, out: number): void;
   fw_set_places(player: number, ptr: number, count: number): void;
   fw_set_fold_51(player: number, on: number): void;
@@ -88,7 +90,7 @@ export type WorkletMessage =
   | { type: "alloc"; id: number; rate: number; channels: number; frames: number; window?: number }
   | { type: "stats" }
   | { type: "write"; id: number; offset: number; data: Float32Array }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean; surroundFormat?: number }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; processors?: string[]; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean; surroundFormat?: number }
   | { type: "play" }
   | { type: "speed"; value: number }
   | { type: "rate-ratio"; value: number }
@@ -256,6 +258,15 @@ class PlayerProcessor extends AudioWorkletProcessor {
           core.fw_free(ptr, bytes);
           return id;
         };
+        const processor = (master: boolean, k: number): void => {
+          const spec = msg.processors?.[k] ?? "";
+          const len = Math.max(1, spec.length);
+          const ptr = core.fw_alloc(len);
+          new Uint8Array(core.memory.buffer, ptr, spec.length).set(Array.from(spec, (ch) => ch.charCodeAt(0) & 0x7f));
+          if (master) core.fw_add_master_processor(this.player, ptr, spec.length);
+          else core.fw_add_bus_processor(this.player, ptr, spec.length);
+          core.fw_free(ptr, len);
+        };
         for (const c of msg.clips) {
           const gainEnv = envelope(c.gainPoints, true);
           const panEnv = envelope(c.panPoints, false);
@@ -276,11 +287,17 @@ class PlayerProcessor extends AudioWorkletProcessor {
         for (const b of msg.buses) {
           core.fw_add_bus(this.player, b.id, b.gain, b.pan);
           const st = b.stages ?? [];
-          for (let k = 0; k + 5 < st.length; k += 6) core.fw_add_bus_stage(this.player, st[k], st[k + 1], st[k + 2], st[k + 3], st[k + 4], st[k + 5]);
+          for (let k = 0; k + 5 < st.length; k += 6) {
+            if (st[k] === 20) processor(false, st[k + 1]);
+            else core.fw_add_bus_stage(this.player, st[k], st[k + 1], st[k + 2], st[k + 3], st[k + 4], st[k + 5]);
+          }
         }
         core.fw_clear_master_fx(this.player);
         const mfx = msg.masterFx ?? [];
-        for (let k = 0; k + 5 < mfx.length; k += 6) core.fw_add_master_stage(this.player, mfx[k], mfx[k + 1], mfx[k + 2], mfx[k + 3], mfx[k + 4], mfx[k + 5]);
+        for (let k = 0; k + 5 < mfx.length; k += 6) {
+          if (mfx[k] === 20) processor(true, mfx[k + 1]);
+          else core.fw_add_master_stage(this.player, mfx[k], mfx[k + 1], mfx[k + 2], mfx[k + 3], mfx[k + 4], mfx[k + 5]);
+        }
         core.fw_set_master_db(this.player, msg.masterDb);
         // PT-38, AA-11: the placements and the fold mode, after the master chain (the core copies it for the C and LFE
         // pair and the surrounds); a session not hearing its fold-down clears both

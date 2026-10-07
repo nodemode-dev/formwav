@@ -6,7 +6,11 @@
  */
 import type { Engine } from "../engine";
 import type { TrackFx } from "../engine/document";
-import { KINDS } from "./editor-tabs";
+import { PROCESSOR_BY_ID, PROCESSORS, processorValues } from "../engine/processors";
+import { KINDS, PROCESSOR_GROUPS } from "./editor-tabs";
+
+/** The processor library by group, in the core's order. */
+const PROCESSOR_ROWS: Array<[string, string[]]> = [...new Set(PROCESSORS.map((p) => PROCESSOR_GROUPS[p.category] ?? "Utility"))].map((g) => [g, PROCESSORS.filter((p) => (PROCESSOR_GROUPS[p.category] ?? "Utility") === g).map((p) => p.id)]);
 
 export const FX_GROUPS: Array<[string, string[]]> = [
   ["EQ and filters", ["highpass", "lowpass", "peak", "lowshelf", "highshelf"]],
@@ -26,6 +30,15 @@ export function mountBrowserEffects(host: HTMLElement, engine: Engine): void {
       `<div class="fw-fxlib-group" role="group" aria-label="${label}"><span class="fw-fxlib-label">${label}</span>${kinds
         .map((k) => `<button type="button" class="fw-fxlib-item" data-kind="${k}" title="Add ${KINDS[k].label} to the selected clip's track, live"><span>${KINDS[k].label}</span><span class="fw-fxlib-sub">${KINDS[k].sub}</span></button>`)
         .join("")}</div>`,
+  ).join("")}<div class="fw-fxlib-head"><span>Studio processors</span><span class="fw-fxlib-hint">On the track's sum, a bus or the master</span></div>${PROCESSOR_ROWS.map(
+    ([label, ids]) =>
+      `<div class="fw-fxlib-group" role="group" aria-label="Studio ${label}"><span class="fw-fxlib-label">${label}</span>${ids
+        .map((id) => {
+          const p = PROCESSOR_BY_ID.get(id);
+          const n = p?.params.length ?? 0;
+          return `<button type="button" class="fw-fxlib-item" data-proc="${id}" title="Add ${p?.name ?? id} to the selected clip's track, live"><span>${p?.name ?? id}</span><span class="fw-fxlib-sub">${n === 0 ? "No controls" : n === 1 ? "One control" : `${n} controls`}</span></button>`;
+        })
+        .join("")}</div>`,
   ).join("")}<p class="fw-fxlib-more">These play live on the track. The other effects render into a clip, from the Inspector.<br><button type="button" class="fw-ibtn" data-open-inspector>Open the Inspector</button></p>`;
   panel.append(section);
   section.querySelector("[data-open-inspector]")?.addEventListener("click", () => {
@@ -37,14 +50,16 @@ export function mountBrowserEffects(host: HTMLElement, engine: Engine): void {
     selected = (e as CustomEvent<string[]>).detail ?? [];
   });
   section.addEventListener("click", (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-kind]");
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-kind], [data-proc]");
     const kind = b?.dataset.kind ?? "";
     const k = KINDS[kind];
-    if (!k) return;
+    const info = PROCESSOR_BY_ID.get(b?.dataset.proc ?? "");
+    if (!k && !info) return;
     const doc = engine.get("document");
     const track = doc.tracks.find((t) => t.clips.some((c) => c.id === selected[0])) ?? doc.tracks[0];
     if (!track) return;
-    engine.dispatch({ type: "set-track-fx", trackId: track.id, fx: [...(track.fx ?? []), { kind, ...k.init } as unknown as TrackFx] });
+    const added: TrackFx = info ? { kind: "processor", id: info.id, values: processorValues(info, undefined) } : ({ kind, ...k.init } as unknown as TrackFx);
+    engine.dispatch({ type: "set-track-fx", trackId: track.id, fx: [...(track.fx ?? []), added] });
     if (host.querySelector<HTMLElement>(".fw-chain")?.hidden) host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-chain]")?.click();
   });
 }

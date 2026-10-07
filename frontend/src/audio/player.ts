@@ -1,5 +1,6 @@
 import type { Engine, SessionDoc } from "../engine";
 import { cleanSynth, DEFAULT_SYNTH, FADE_SHAPES, type SynthPatch, type TrackFx } from "../engine/document";
+import { processorSpec } from "../engine/processors";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
 import { NativeNode, nativeChoice } from "./native-node";
@@ -19,6 +20,8 @@ export interface ClipPlan {
   buses: WorkletBus[];
   /** Master fader in dB (0 turns the master stage off). */
   masterDb: number;
+  /** The processor stages' specs, which a stage [20, k, ...] names by k. */
+  processors: string[];
 }
 
 export function dbToGain(db: number): number {
@@ -29,7 +32,7 @@ export function dbToGain(db: number): number {
 export function flatFx(fx: readonly TrackFx[] | undefined): number[] {
   const codes = { highpass: 1, lowpass: 2, peak: 3, lowshelf: 4, highshelf: 5 } as const;
   return (fx ?? []).flatMap((f) => {
-    if (f.bypass || f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice") return [];
+    if (f.bypass || f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice" || f.kind === "processor") return [];
     // RX-24, RX-40, RX-49: the denoiser rides the clip chain as kind 7, its reduction and sensitivity in the filter slots
     if (f.kind === "denoise") return [7, f.reductionDb, f.sensitivityDb, 0];
     if (f.kind === "echo") return [9, f.delayMs, f.feedback, f.mix];
@@ -52,7 +55,7 @@ export function flatFxAuto(fx: readonly TrackFx[] | undefined): { stage: number;
   const out: { stage: number; param: number; points: number[] }[] = [];
   let stage = 0;
   for (const f of fx ?? []) {
-    if (f.bypass || f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice") continue;
+    if (f.bypass || f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice" || f.kind === "processor") continue;
     if (f.kind === "denoise" || f.kind === "echo" || f.kind === "chorus" || f.kind === "limiter" || f.kind === "tremolo" || f.kind === "gate" || f.kind === "phaser" || f.kind === "flanger" || f.kind === "dehum" || f.kind === "declick" || f.kind === "dereverb") {
       stage++; // a place in the chain, nothing to automate
       continue;
@@ -69,10 +72,15 @@ export function flatFxAuto(fx: readonly TrackFx[] | undefined): { stage: number;
 /** Enabled stages of any kind as flat [kind, a, b, c, d, e, ...] for bus and master chains (backend render.py _stage,
  * core fx.rs Stage::design): filters carry frequency, gain and Q; the compressor (6) threshold, ratio, attack, release
  * and makeup. */
-export function flatStages(fx: readonly TrackFx[] | undefined): number[] {
+export function flatStages(fx: readonly TrackFx[] | undefined, processors?: string[]): number[] {
   const codes = { highpass: 1, lowpass: 2, peak: 3, lowshelf: 4, highshelf: 5 } as const;
   return (fx ?? []).flatMap((f) => {
     if (f.bypass) return [];
+    if (f.kind === "processor") {
+      if (!processors) return [];
+      processors.push(processorSpec(f.id, f.values));
+      return [20, processors.length - 1, 0, 0, 0, 0];
+    }
     if (f.kind === "compressor") return [6, f.thresholdDb, f.ratio, f.attackMs, f.releaseMs, f.makeupDb];
     if (f.kind === "denoise") return [7, f.reductionDb, f.sensitivityDb, 0, 0, 0];
     if (f.kind === "reverb") return [8, f.room, f.damping, f.mix, f.width, 0];
@@ -199,6 +207,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
   const busIndex = new Map<string, number>();
   const mutedBuses = new Set<string>();
   const buses: WorkletBus[] = [];
+  const processors: string[] = [];
   for (const bus of doc.buses ?? []) {
     if (bus.mute) {
       mutedBuses.add(bus.id);
@@ -206,7 +215,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     }
     const id = buses.length + 1;
     busIndex.set(bus.id, id);
-    const busStages = flatStages(bus.fx);
+    const busStages = flatStages(bus.fx, processors);
     buses.push({ id, gain: dbToGain(bus.gainDb), pan: bus.pan ?? 0, ...(busStages.length ? { stages: busStages } : {}) });
   }
   const clips: WorkletClip[] = [];
@@ -221,13 +230,13 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     let bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
     let fxFlat = flatFx(track.fx);
     let fxAuto = flatFxAuto(track.fx);
-    if (bus === 0 && (track.fx ?? []).some((f) => (f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice" || f.kind === "declick" || f.kind === "dereverb") && !f.bypass)) {
+    if (bus === 0 && (track.fx ?? []).some((f) => (f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice" || f.kind === "declick" || f.kind === "dereverb" || f.kind === "processor") && !f.bypass)) {
       // A compressor must see the track's sum, a reverb's tail must ring on past each clip's end (PT-22), and a stage
       // that delays its signal is read ahead only on a bus (RX-16): its own bus (unity, centre) carries the whole
       // chain, as in exports.
       // (Bus chains are not automated yet, so the automation stays with the clip chain it was written for.)
       bus = buses.length + 1;
-      buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx) });
+      buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx, processors) });
       fxFlat = [];
       fxAuto = [];
     }
@@ -279,7 +288,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       end = Math.max(end, clip.start + clip.length);
     }
   }
-  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0, places, fold: !!doc.surroundFold && places.length > 0, surroundFormat: doc.spatialFormat === "foa" ? 1 : 0 };
+  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0, places, fold: !!doc.surroundFold && places.length > 0, surroundFormat: doc.spatialFormat === "foa" ? 1 : 0, processors };
 }
 
 function send(node: AudioWorkletNode, message: WorkletMessage, transfer: Transferable[] = []): void {
@@ -532,7 +541,7 @@ export class Player {
   private module: Promise<ArrayBuffer> | null = null;
   private sources = new Map<string, number>();
   private counter = 0;
-  private lastPlan: ClipPlan = { clips: [], end: 0, skipped: 0, buses: [], masterDb: 0 };
+  private lastPlan: ClipPlan = { clips: [], end: 0, skipped: 0, buses: [], masterDb: 0, processors: [] };
   private pending = new Map<string, Promise<void>>();
 
   constructor(private readonly engine: Engine) {
@@ -628,7 +637,8 @@ export class Player {
   private sendPlan(node: AudioWorkletNode, doc: SessionDoc): void {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true, places: this.lastPlan.places, fold: this.lastPlan.fold, surroundFormat: this.lastPlan.surroundFormat });
+    const processors = [...this.lastPlan.processors];
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx, processors), processors, timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true, places: this.lastPlan.places, fold: this.lastPlan.fold, surroundFormat: this.lastPlan.surroundFormat });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
@@ -895,7 +905,8 @@ export class Player {
     const node = await makeNode(ctx, await this.core());
     await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter, streamInfo(doc, id, 0), true)));
     const plan = planClips(doc, sources);
-    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterFx: flatStages(doc.masterFx), timeTrack, timeTrackLog: doc.timeTrackLog === true, places: plan.places, fold: plan.fold, surroundFormat: plan.surroundFormat });
+    const processors = [...plan.processors];
+    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterFx: flatStages(doc.masterFx, processors), processors, timeTrack, timeTrackLog: doc.timeTrackLog === true, places: plan.places, fold: plan.fold, surroundFormat: plan.surroundFormat });
     send(node, { type: "play" });
     await request(node, { type: "seek", position: 0 }, (r) => r.type === "position");
     const rendered = await ctx.startRendering();

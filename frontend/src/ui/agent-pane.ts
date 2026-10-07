@@ -4,11 +4,13 @@ import type { TrackFx } from "../engine/document";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 import { KINDS } from "./editor-tabs";
 import { PANEL_ICONS } from "./shell";
+import { PROCESSOR_BY_ID, PROCESSORS, processorValues } from "../engine/processors";
 
 /** The realtime effects a track's chain can hold, with each parameter's range, for the agent's tool description. */
 const KIND_SUMMARY = Object.entries(KINDS)
   .map(([id, k]) => `${id} (${k.params.map((p) => `${p[0]} ${p[2]} to ${p[3]}${p[4] ? ` ${p[4]}` : ""}`).join(", ")})`)
   .join("; ");
+const PROCESSOR_SUMMARY = PROCESSORS.map((p) => `${p.id} (${p.params.map((q) => (q.choices.length ? `${q.id} 0 to ${q.max}: ${q.choices.join("/")}` : `${q.id} ${q.min} to ${q.max}`)).join(", ") || "no parameters"})`).join("; ");
 
 /**
  * The in-app agent (owner decision, Sprint D: agent actions and controls; DS-02). An instruction goes to the model
@@ -185,13 +187,19 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
     },
     {
       name: "set_track_effects",
-      description: `Replaces a track's realtime effect chain, heard live and shown in the Effects tab (an empty list clears it). Each effect is an object with kind and any parameters (the rest take their defaults), and bypass: true to keep it but switch it off. Kinds and parameter ranges: ${KIND_SUMMARY}.`,
+      description: `Replaces a track's realtime effect chain, heard live and shown in the Effects tab (an empty list clears it). Each effect is an object with kind and any parameters (the rest take their defaults), and bypass: true to keep it but switch it off. Kinds and parameter ranges: ${KIND_SUMMARY}. Or a studio processor, { "kind": "processor", "id": one of the ids below, "values": { parameter id: value } } (values outside a range are held to it; switches 0 or 1; choices by index): ${PROCESSOR_SUMMARY}.`,
       input_schema: obj({ track_id: id("track"), effects: { type: "array", items: { type: "object" }, description: 'The chain in order, e.g. [{ "kind": "highpass", "freq": 90 }, { "kind": "compressor", "thresholdDb": -20, "ratio": 3 }]' } }, ["track_id", "effects"]),
       run: (i) => {
         const t = track(i.track_id);
         const list = Array.isArray(i.effects) ? (i.effects as Record<string, unknown>[]) : [];
         const fx = list.map((e, n) => {
           const kind = String(e?.kind ?? "");
+          if (kind === "processor") {
+            const info = PROCESSOR_BY_ID.get(String(e.id ?? ""));
+            if (!info) throw new Error(`effect ${n + 1}: unknown processor "${String(e.id ?? "")}"; the processors are ${PROCESSORS.map((p) => p.id).join(", ")}`);
+            const values = e.values && typeof e.values === "object" ? (e.values as Record<string, unknown>) : {};
+            return { kind: "processor", id: info.id, values: processorValues(info, values), ...(e.bypass === true ? { bypass: true } : {}) } as TrackFx;
+          }
           const k = KINDS[kind];
           if (!k) throw new Error(`effect ${n + 1}: unknown kind "${kind}"; the kinds are ${Object.keys(KINDS).join(", ")}`);
           const out: Record<string, unknown> = { kind, ...k.init };
@@ -200,7 +208,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
           return out as unknown as TrackFx;
         });
         engine.dispatch({ type: "set-track-fx", trackId: t.id, fx });
-        return { track: t.name, effects: fx.map((f) => f.kind) };
+        return { track: t.name, effects: fx.map((f) => (f.kind === "processor" ? f.id : f.kind)) };
       },
     },
     {

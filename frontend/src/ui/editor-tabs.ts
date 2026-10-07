@@ -9,11 +9,12 @@
  */
 import type { Engine } from "../engine";
 import { cleanSynth, DEFAULT_SYNTH, type SynthPatch, type TrackFx } from "../engine/document";
+import { PROCESSOR_BY_ID, processorValues } from "../engine/processors";
 import type { Player } from "../audio/player";
 import { renderNoteMedia } from "../audio/notes";
 import { setText } from "../vendor/nodemode/dom-stable";
 
-type Param = [key: string, label: string, min: number, max: number, unit: string, log?: boolean];
+type Param = [key: string, label: string, min: number, max: number, unit: string, log?: boolean, steps?: string[]];
 interface Kind {
   label: string;
   sub: string;
@@ -44,6 +45,27 @@ export const KINDS: Record<string, Kind> = {
   flanger: { label: "Flanger", sub: "A jet-like sweep", params: [["rateHz", "Rate", 0.05, 5, "Hz"], ["depthMs", "Depth", 0, 5, "ms"], ["feedback", "Feedback", -0.9, 0.9, ""]], init: { rateHz: 0.25, depthMs: 3, feedback: 0.5 } },
 };
 
+/** The studio processors' groups as the browser names them. */
+export const PROCESSOR_GROUPS: Record<string, string> = { Eq: "EQ", Dynamics: "Dynamics", Reverb: "Reverb", Delay: "Delay", Modulation: "Modulation", Harmonic: "Harmonic", Pitch: "Pitch", Utility: "Utility" };
+const UNITS: Record<string, string> = { Db: "dB", Hz: "Hz", Ms: "ms", Percent: "%", Ratio: ":1", Semitones: "st", Cents: "ct", Seconds: "s" };
+const processorKinds = new Map<string, Kind>();
+
+/** A processor's card: its parameters from the core's table, switches and choices stepped through their names. */
+export function processorKind(id: string): Kind | undefined {
+  const info = PROCESSOR_BY_ID.get(id);
+  if (!info) return undefined;
+  let k = processorKinds.get(id);
+  if (!k) {
+    const params: Param[] = info.params.map((p) => [p.id, p.name, p.min, p.max, UNITS[p.unit] ?? "", p.taper === "Log", p.unit === "Toggle" ? ["Off", "On"] : p.unit === "Choice" ? p.choices : undefined]);
+    k = { label: info.name, sub: PROCESSOR_GROUPS[info.category] ?? "Utility", params, init: processorValues(info, undefined) };
+    processorKinds.set(id, k);
+  }
+  return k;
+}
+
+const kindOf = (f: TrackFx): Kind | undefined => (f.kind === "processor" ? processorKind(f.id) : KINDS[f.kind]);
+const valuesOf = (f: TrackFx): Record<string, number> => (f.kind === "processor" ? f.values : (f as unknown as Record<string, number>));
+
 const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const noteName = (p: number) => `${NAMES[p % 12]}${Math.floor(p / 12) - 1}`;
 const PENTA = [0, 3, 5, 7, 10];
@@ -58,8 +80,12 @@ const fmt = (v: number, unit: string) => {
   if (unit === "dB") return `${v > 0 ? "+" : ""}${v.toFixed(1)} dB`;
   if (unit === ":1") return `${v.toFixed(1)}:1`;
   if (unit === "ms") return `${v < 10 ? v.toFixed(1) : Math.round(v)} ms`;
+  if (unit === "%") return `${Math.round(v)}%`;
+  if (unit === "s") return `${v.toFixed(2)} s`;
+  if (unit === "st" || unit === "ct") return `${v > 0 ? "+" : ""}${Math.round(v)} ${unit}`;
   return v.toFixed(2);
 };
+const shown = (v: number, p: Param) => (p[6] ? p[6][Math.round(v)] ?? "" : fmt(v, p[4]));
 const arc = (t: number) => {
   const pt = (deg: number) => {
     const a = (deg * Math.PI) / 180;
@@ -159,16 +185,16 @@ export function mountEditorTabs(host: HTMLElement, engine: Engine, player: Playe
     return doc.tracks[i >= 0 ? i : 0] ?? null;
   };
   const card = (f: TrackFx, i: number) => {
-    const k = KINDS[f.kind];
+    const k = kindOf(f);
     if (!k) return "";
-    const v = f as unknown as Record<string, number>;
+    const v = valuesOf(f);
     const knobs = k.params
       .map((p) => {
         const value = Number(v[p[0]] ?? k.init[p[0]] ?? p[2]);
-        return `<div class="fw-knob" data-i="${i}" data-key="${p[0]}" tabindex="0" role="slider" aria-label="${k.label} ${p[1]}" aria-valuemin="${p[2]}" aria-valuemax="${p[3]}" aria-valuenow="${value}"><svg viewBox="0 0 48 48" aria-hidden="true"><path class="fw-knob-track" d="${TRACK_ARC}"></path><path class="fw-knob-arc" d="${arc(toT(value, p))}"></path><circle cx="24" cy="24" r="11"></circle></svg><span class="fw-knob-value">${fmt(value, p[4])}</span><span class="fw-knob-label">${p[1]}</span></div>`;
+        return `<div class="fw-knob" data-i="${i}" data-key="${p[0]}" tabindex="0" role="slider" aria-label="${k.label} ${p[1]}" aria-valuemin="${p[2]}" aria-valuemax="${p[3]}" aria-valuenow="${value}"><svg viewBox="0 0 48 48" aria-hidden="true"><path class="fw-knob-track" d="${TRACK_ARC}"></path><path class="fw-knob-arc" d="${arc(toT(value, p))}"></path><circle cx="24" cy="24" r="11"></circle></svg><span class="fw-knob-value">${shown(value, p)}</span><span class="fw-knob-label">${p[1]}</span></div>`;
       })
       .join("");
-    return `<div class="fw-fx-card" data-i="${i}"><div class="fw-fx-top"><span class="fw-fx-names"><span class="fw-fx-name">${k.label}</span><span class="fw-fx-sub">${k.sub}</span></span><button type="button" class="fw-fx-bypass" data-i="${i}" aria-pressed="${!f.bypass}" aria-label="${k.label} on" title="On or bypassed">${POWER}</button><button type="button" class="fw-fx-remove" data-i="${i}" aria-label="Remove ${k.label}" title="Remove">${CROSS}</button></div><div class="fw-fx-knobs">${knobs}</div></div><span class="fw-fx-link" aria-hidden="true">${ARROW}</span>`;
+    return `<div class="fw-fx-card${k.params.length > 3 ? " fw-fx-card-wide" : ""}" data-i="${i}"><div class="fw-fx-top"><span class="fw-fx-names"><span class="fw-fx-name">${k.label}</span><span class="fw-fx-sub">${k.sub}</span></span><button type="button" class="fw-fx-bypass" data-i="${i}" aria-pressed="${!f.bypass}" aria-label="${k.label} on" title="On or bypassed">${POWER}</button><button type="button" class="fw-fx-remove" data-i="${i}" aria-label="Remove ${k.label}" title="Remove">${CROSS}</button></div><div class="fw-fx-knobs">${knobs}</div></div><span class="fw-fx-link" aria-hidden="true">${ARROW}</span>`;
   };
   const addCard = `<button type="button" class="fw-fx-add fw-fx-add-btn" title="Pick an effect in the browser's Effects tab; it joins this track's chain">${PLUS}<span>Add an effect</span></button>`;
   let shape = "";
@@ -176,23 +202,23 @@ export function mountEditorTabs(host: HTMLElement, engine: Engine, player: Playe
     const track = target();
     const fx = track?.fx ?? [];
     setText(title, track ? `${track.name}: ${fx.length === 0 ? "no effects yet" : fx.length === 1 ? "one effect, live" : `${fx.length} effects, live`}` : "Import a recording to give it effects");
-    const next = `${track?.id ?? ""}|${fx.map((f) => f.kind).join(",")}`;
+    const next = `${track?.id ?? ""}|${fx.map((f) => (f.kind === "processor" ? f.id : f.kind)).join(",")}`;
     if (next !== shape) {
       shape = next;
       row.innerHTML = track ? fx.map(card).join("") + addCard : "";
       return;
     }
     fx.forEach((f, i) => {
-      const k = KINDS[f.kind];
+      const k = kindOf(f);
       if (!k) return;
-      const v = f as unknown as Record<string, number>;
+      const v = valuesOf(f);
       row.querySelector(`.fw-fx-bypass[data-i="${i}"]`)?.setAttribute("aria-pressed", String(!f.bypass));
       for (const p of k.params) {
         const knob = row.querySelector<HTMLElement>(`.fw-knob[data-i="${i}"][data-key="${p[0]}"]`);
         if (!knob || knob.dataset.dragging) continue;
         const value = Number(v[p[0]] ?? k.init[p[0]] ?? p[2]);
         knob.querySelector(".fw-knob-arc")?.setAttribute("d", arc(toT(value, p)));
-        setText(knob.querySelector(".fw-knob-value"), fmt(value, p[4]));
+        setText(knob.querySelector(".fw-knob-value"), shown(value, p));
         knob.setAttribute("aria-valuenow", String(value));
       }
     });
@@ -203,12 +229,12 @@ export function mountEditorTabs(host: HTMLElement, engine: Engine, player: Playe
   };
   const paramOf = (knob: HTMLElement): Param | undefined => {
     const f = target()?.fx?.[Number(knob.dataset.i)];
-    return f ? KINDS[f.kind]?.params.find((p) => p[0] === knob.dataset.key) : undefined;
+    return f ? kindOf(f)?.params.find((p) => p[0] === knob.dataset.key) : undefined;
   };
   const commit = (knob: HTMLElement, value: number) => {
     const i = Number(knob.dataset.i);
     const key = knob.dataset.key ?? "";
-    setFx((list) => list.map((f, j) => (j === i ? ({ ...f, [key]: value } as TrackFx) : f)));
+    setFx((list) => list.map((f, j) => (j !== i ? f : f.kind === "processor" ? { ...f, values: { ...f.values, [key]: value } } : ({ ...f, [key]: value } as TrackFx))));
   };
   row.addEventListener("click", (e) => {
     const el = e.target as HTMLElement;
@@ -236,7 +262,7 @@ export function mountEditorTabs(host: HTMLElement, engine: Engine, player: Playe
     const move = (ev: PointerEvent) => {
       value = fromT(startT + (startY - ev.clientY) / 160, p);
       knob.querySelector(".fw-knob-arc")?.setAttribute("d", arc(toT(value, p)));
-      setText(knob.querySelector(".fw-knob-value"), fmt(value, p[4]));
+      setText(knob.querySelector(".fw-knob-value"), shown(value, p));
     };
     const up = () => {
       knob.removeEventListener("pointermove", move);
@@ -256,7 +282,8 @@ export function mountEditorTabs(host: HTMLElement, engine: Engine, player: Playe
     const step = e.key === "ArrowUp" || e.key === "ArrowRight" ? 0.02 : e.key === "ArrowDown" || e.key === "ArrowLeft" ? -0.02 : 0;
     if (!step) return;
     e.preventDefault();
-    commit(knob, Number(fromT(toT(Number(knob.getAttribute("aria-valuenow")), p) + step, p).toPrecision(4)));
+    const now = Number(knob.getAttribute("aria-valuenow"));
+    commit(knob, p[6] ? Math.min(p[3], Math.max(p[2], Math.round(now) + Math.sign(step))) : Number(fromT(toT(now, p) + step, p).toPrecision(4)));
   });
   engine.subscribe("document", render);
   host.addEventListener("fw-selection", render);
