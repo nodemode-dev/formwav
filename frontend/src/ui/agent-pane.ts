@@ -454,7 +454,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
     },
     {
       name: "separate_clip",
-      description: "Splits a clip into speech, music and ambience on three new tracks under it that add up to it exactly (on this machine); the original track is muted when the clip is alone on it. Returns the three tracks.",
+      description: "Splits a clip into speech, music and effects on three new tracks under it that add up to it exactly (on this machine; music by a trained model where it is installed, by rule otherwise, and the effects part is returned as ambience); the original track is muted when the clip is alone on it. Returns the three tracks and the method.",
       input_schema: obj({ track_id: id("track"), clip_id: id("clip") }, ["track_id", "clip_id"]),
       run: async (i) => {
         const { t, c } = clipOf(i.track_id, i.clip_id);
@@ -462,7 +462,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
         const out = await postJson(`/api/media/${c.mediaId}/three-way`, { start: inS, end: outS });
         const parts = (["speech", "music", "ambience"] as const).map((k) => ({ part: k, ...place(out[k], c.start) }));
         if (t.clips.length === 1) engine.dispatch({ type: "set-track-mute", trackId: t.id, mute: true });
-        return { parts, original_muted: t.clips.length === 1 };
+        return { parts, method: out.method, original_muted: t.clips.length === 1 };
       },
     },
     {

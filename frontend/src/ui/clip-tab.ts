@@ -37,7 +37,7 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     `<div class="fw-cf-actions" role="group" aria-label="Clip actions"><button type="button" class="fw-ibtn" data-clip-act="split" title="Split this clip where the playhead is">Split at the playhead</button><button type="button" class="fw-ibtn" data-clip-act="normalize" title="Normalize the selected clips to a loudness target">Normalize</button><button type="button" class="fw-ibtn" data-clip-act="check" title="Measure the recording and list what it needs, in the Inspector">Check the recording</button><button type="button" class="fw-ibtn" data-clip-act="repair" title="Find the clip's problems and propose a repair chain, in the Inspector">Repair assistant</button></div>`,
     field("Source", `<output data-f="source"></output>`, true),
     `<div class="fw-cf fw-cf-wide"><span class="fw-cf-label">Colour</span><div class="fw-cf-colors" role="group" aria-label="Clip colour"><button type="button" class="fw-cf-color" data-color="" aria-label="The track's colour" title="The track's colour"></button>${COLORS.map((c) => `<button type="button" class="fw-cf-color" data-color="${c}" aria-label="${c}" title="${c}" style="color: var(--fw-color-${c})"></button>`).join("")}</div></div>`,
-    `<div class="fw-cf fw-cf-wide fw-cf-three"><span class="fw-cf-label">Separate</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-three>Speech, music and ambience to three tracks</button></div><output class="fw-cf-ara-state" data-three-state>Three tracks that add up to this clip exactly</output></div>`,
+    `<div class="fw-cf fw-cf-wide fw-cf-three"><span class="fw-cf-label">Separate</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-three>Speech, music and effects to three tracks</button></div><output class="fw-cf-ara-state" data-three-state>Three tracks that add up to this clip exactly</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-speech"><span class="fw-cf-label">Speech</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-speech>Mark where people speak</button></div><output class="fw-cf-ara-state" data-speech-state>Marks speech as regions, even under music</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-sync"><span class="fw-cf-label">Line up by sound</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-sync>Line up other tracks' takes to this one</button></div><output class="fw-cf-ara-state" data-sync-state>Overlapping takes move to match this clip's sound</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-ara"><span class="fw-cf-label">ARA plug-in</span><div class="fw-cf-ara-row"><select data-ara-plugin aria-label="ARA plug-in"><option value="">Looking for ARA plug-ins</option></select><button type="button" class="fw-ibtn" data-ara="analyze" disabled>Analyse</button><button type="button" class="fw-ibtn" data-ara="render" disabled>Render</button></div><output class="fw-cf-ara-state" data-ara-state></output></div>`,
@@ -161,7 +161,7 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     card?.querySelectorAll<HTMLElement>(".fw-mic-findings")[act === "check" ? 0 : 1]?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
   });
 
-  // Speech, music and ambience (services/three_way.py): three tracks under the clip that sum to it exactly, one undo step
+  // Speech, music and effects (services/three_way.py, a trained model where installed): three tracks under the clip that sum to it exactly, one undo step
   panel.addEventListener("click", async (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-three]");
     const hit = b ? find(engine.get("document")) : null;
@@ -172,7 +172,7 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     const mediaRate = doc.media[clip.mediaId]?.sampleRate ?? doc.sampleRate;
     const start = clip.sourceIn / mediaRate;
     b.disabled = true;
-    setText(state, "Separating speech, music and ambience...");
+    setText(state, "Separating speech, music and effects...");
     try {
       const res = await fetch(`/api/media/${clip.mediaId}/three-way`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ start, end: start + clip.length / doc.sampleRate }) });
       const out = await res.json().catch(() => ({}));
@@ -182,7 +182,8 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
         ...(["speech", "music", "ambience"] as const).map((k) => ({ type: "import-media" as const, media: out[k], at: clip.start })),
         ...(alone ? [{ type: "set-track-mute" as const, trackId: track.id, mute: true }] : []),
       ] });
-      setText(state, alone ? "Speech, music and ambience are on three new tracks, the original muted: their faders set the balance." : "Speech, music and ambience are on three new tracks; lower or mute the original clip, which shares its track with others.");
+      const how = out.method === "trained" ? "by the trained model" : "music by rule; trained model in Sounds > Models";
+      setText(state, alone ? `On three new tracks, the original muted (${how})` : `On three new tracks; lower or mute the original (${how})`);
     } catch (err) {
       setText(state, err instanceof Error ? err.message : String(err));
     } finally {

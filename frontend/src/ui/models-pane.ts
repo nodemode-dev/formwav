@@ -257,7 +257,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     const engines = new Map((p.localSpeech ?? []).map((e) => [e.id, e]));
     const localNeeds = (id: string) => {
       const e = engines.get(id);
-      return e?.installing ? e.installing : `${e?.name ?? id} installed on this machine (${e?.size ?? ""}): choose Install a speech engine on this machine`;
+      return e?.installing ? e.installing : `${e?.name ?? id} installed on this machine (${e?.size ?? ""}): choose Install a model on this machine`;
     };
     if (engines.size) {
       const kokoro = engines.get("kokoro");
@@ -297,7 +297,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
       const missing = [...engines.values()].filter((e) => !e.installed);
       const pickEngine = box.querySelector<HTMLSelectElement>(".fw-models-localengine") as HTMLSelectElement;
       pickEngine.replaceChildren(...missing.map((e) => new Option(`${e.name}: ${e.size}; ${e.license}`, e.id)));
-      choices.push({ id: "ls-install", label: "Install a speech engine on this machine", ready: missing.length > 0, needs: "nothing: every engine is installed", fields: ["localengine"],
+      choices.push({ id: "ls-install", label: "Install a model on this machine", ready: missing.length > 0, needs: "nothing: every model is installed", fields: ["localengine"],
         run: async (v) => {
           await post(`/api/providers/local-speech/${v.localengine}/install`, null);
           for (;;) {
@@ -321,7 +321,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
       const missing = dubbing.languages.filter((l) => !l.installed);
       const pick = box.querySelector<HTMLSelectElement>(".fw-models-dublang") as HTMLSelectElement;
       const fill = (langs: LocalDub["languages"]) => pick.replaceChildren(...langs.map((l) => new Option(l.name, l.code)));
-      const needs = !dubbing.kokoro ? "Kokoro installed on this machine: choose Install a speech engine on this machine" : "a dubbing language installed: choose Install a dubbing language on this machine";
+      const needs = !dubbing.kokoro ? "Kokoro installed on this machine: choose Install a model on this machine" : "a dubbing language installed: choose Install a dubbing language on this machine";
       choices.push({ id: "ld-dub", label: "Dub a clip on this machine (Whisper, Argos Translate, Kokoro)", ready: dubbing.kokoro && dubbing.translator && ready.length > 0, needs, fields: ["clip", "dublang"],
         run: async (v) => {
           const [trackId, clipId] = v.clip.split("/");

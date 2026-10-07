@@ -77,7 +77,7 @@ Removes what leaked into a recording from another recording (headphone spill, a 
 
 Kind: makes new media or writes a file. Parameters: `media_id` (string).
 
-Splits a media into speech, music and ambience, three new media that add up to it exactly (DeepFilterNet3 and harmonic-percussive masks, on this machine).
+Splits a media into speech, music and effects, three new media that add up to it exactly, on this machine: DeepFilterNet3's speech, then music by the trained TIGER-DnR separator where it is installed (`method` "trained"; the effects part comes back under `ambience`) or by harmonic-percussive masks (`method` "rule"). The trained model is installed from the interface (Sounds > Models, Install a model on this machine) and takes about eleven times the clip's length on a two-core machine.
 
 ## Words and speech
 

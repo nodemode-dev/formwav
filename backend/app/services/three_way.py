@@ -8,16 +8,21 @@ where PyTorch is not installed, with soft masks: its tonal and transient parts a
 remainder less the music. So speech, music and ambience add up to the clip sample for sample, and faders left at 0 dB
 change nothing. One mask serves every channel, which keeps the stereo picture. Demucs, where it is installed, separates
 music further (separate.separate); this split needs no PyTorch.
+
+Where the trained separator is installed (PLAN_v12 R1, services/tiger_dnr.py) the music mask is a trained model's
+instead (trained_mask), and the third part is the effects: what TIGER-DnR, trained on the Divide and Remaster set, does
+not call dialogue or music. Its file is named effects; the API keeps the key ambience, which its callers already read.
 """
 
 import subprocess
 
 import numpy as np
 
-from . import deepfilter, media
+from . import deepfilter, media, tiger_dnr
 from .audacity import _wav_bytes
 
 N_FFT, HOP, KERNEL, MARGIN = 2048, 512, 17, 2.0
+TRAINED_HOP = 4.0
 _BLOCK = 256  # frames per median block: memory stays bounded on long recordings
 
 
@@ -72,6 +77,16 @@ def music_mask(specs: list[np.ndarray]) -> np.ndarray:
     return np.clip((ratio - 1.0) / (MARGIN - 1.0), 0.0, 1.0).astype(np.float32)
 
 
+def trained_mask(x: np.ndarray, rest: np.ndarray, rate: int) -> np.ndarray:
+    """How much of each bin is music by the trained separator (services/tiger_dnr.py, PLAN_v12 R1): TIGER-DnR's music of
+    the clip's mid channel as a share of the remainder's mid in each bin, clipped to [0, 1]; one mask for every channel,
+    as music_mask's, so the stereo picture is kept and the parts still sum exactly. The model hears the whole mix, as it
+    was trained to: from the remainder alone its music was 3 dB worse on a mix of recordings
+    (sidecar verification/verify_dnr_split.json)."""
+    music = tiger_dnr.separate(x.mean(axis=1, keepdims=True).astype(np.float32), rate, ("music",), TRAINED_HOP)["music"][:, 0]
+    return np.clip(np.abs(_stft(music)) / np.maximum(np.abs(_stft(rest.mean(axis=1).astype(np.float32))), 1e-9), 0.0, 1.0).astype(np.float32)
+
+
 def split(media_id: str, start: float = 0.0, end: float | None = None) -> dict:
     info = media.media_info(media_id)
     rate, chans = int(info["sampleRate"]), int(info["channels"])
@@ -89,12 +104,14 @@ def split(media_id: str, start: float = 0.0, end: float | None = None) -> dict:
     speech = deepfilter.isolate(x, rate, 100)[:n].astype(np.float32)
     rest = x - speech
     specs = [_stft(rest[:, c]) for c in range(chans)]
-    mask = music_mask(specs)
+    trained = tiger_dnr.installed()
+    mask = trained_mask(x, rest, rate) if trained else music_mask(specs)
     music = np.stack([_istft(specs[c] * mask, n) for c in range(chans)], axis=1)
     ambience = rest - music
     stem = str(info.get("name", "clip")).rsplit(".", 1)[0]
     out = {}
     for name, part in (("speech", speech), ("music", music), ("ambience", ambience)):
-        out[name] = media.import_wav(f"{stem} - {name}.wav", _wav_bytes([part[:, c] for c in range(chans)], rate))
+        out[name] = media.import_wav(f"{stem} - {'effects' if trained and name == 'ambience' else name}.wav", _wav_bytes([part[:, c] for c in range(chans)], rate))
     out["range"] = [start, end]
+    out["method"] = "trained" if trained else "rule"
     return out

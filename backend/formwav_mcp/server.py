@@ -331,10 +331,11 @@ async def formwav_dub_media(media_id: str, language: str = "es", engine: str = "
 
 @mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
 async def formwav_separate_speech_music_ambience(media_id: str) -> dict[str, Any]:
-    """Splits a media into speech, music and ambience, three new media that add up to it exactly (DeepFilterNet3 and
-    harmonic-percussive masks, on this machine)."""
+    """Splits a media into speech, music and effects, three new media that add up to it exactly, on this machine:
+    DeepFilterNet3's speech, then music by the trained TIGER-DnR separator where it is installed (method "trained"; the
+    effects part comes back under ambience) or by harmonic-percussive masks (method "rule")."""
     out = (await _post(f"/api/media/{quote(media_id)}/three-way", {})).json()
-    return {k: _media(out[k]) for k in ("speech", "music", "ambience")}
+    return {**{k: _media(out[k]) for k in ("speech", "music", "ambience")}, "method": out.get("method", "rule")}
 
 
 @mcp.tool(annotations=READ, structured_output=True)

@@ -149,19 +149,19 @@ def acestep_generate(body: dict = Body(...)) -> dict:
 
 
 
-# Speech made on this machine (from formcut): Kokoro, Pocket TTS, Chatterbox, installed on request into their own runtime
+# Models on this machine, installed on request into their own runtime: Kokoro, Pocket TTS and Chatterbox (from formcut), and the trained speech, music and effects separator (TIGER)
 @router.get("/providers/local-speech")
 def local_speech_status() -> dict:
-    from ..services import local_speech
+    from ..services import local_speech, tiger_dnr
 
-    return {"engines": local_speech.status()}
+    return {"engines": [*local_speech.status(), tiger_dnr.status()]}
 
 
 @router.post("/providers/local-speech/{engine}/install", status_code=202)
 def local_speech_install(engine: str) -> dict:
-    from ..services import local_speech
+    from ..services import local_speech, tiger_dnr
 
-    return _run(local_speech.install, engine)
+    return _run(tiger_dnr.install) if engine == "tiger" else _run(local_speech.install, engine)
 
 
 @router.get("/providers/local-speech/{engine}/voices")
