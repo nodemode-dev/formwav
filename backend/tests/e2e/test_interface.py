@@ -193,6 +193,58 @@ def test_the_synth_tab_sets_the_sessions_synth_in_one_undo_step(page, app_url):
     assert _clean(page)["errors"] == []
 
 
+def _mixer_with_a_compressor(page, app_url) -> str:
+    _open(page, app_url)
+    _import_speech(page)
+    clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    page.mouse.click(clip["x"] + 60, clip["y"] + clip["height"] * 0.75)
+    if page.locator(".fw-dock").is_hidden():
+        page.click('.fw-panel-toggle[data-pane="editor"]')
+    page.click('.fw-pane-media .fw-pane-tab[data-tab="effects"]')
+    page.click('.fw-fxlib-item[data-proc="compressor"]')
+    page.click('.fw-dock-tab[data-panel="mixer"]')
+    return '.fw-strip[data-kind="track"]'
+
+
+def test_the_mixers_controls_set_solo_safe_trim_polarity_automation_off_the_pan_law_and_a_bypass_by_kind(page, app_url):
+    strip = _mixer_with_a_compressor(page, app_url)
+    page.click(f"{strip} .fw-strip-solo", modifiers=["Alt"])
+    page.click(f"{strip} .fw-strip-solo", modifiers=["ControlOrMeta"])
+    page.click('[data-mix="clear-solos"]')
+    assert [page.get_attribute(f"{strip} .fw-strip-solo", a) for a in ("aria-pressed", "data-safe")] == ["false", "true"]
+    page.click(f"{strip} details.fw-strip-route > summary")
+    page.focus(f"{strip} .fw-strip-trim")
+    page.keyboard.press("ArrowRight")
+    page.click(f"{strip} .fw-strip-invert")
+    page.select_option(f"{strip} .fw-strip-auto", "off")
+    assert page.locator(f"{strip} .fw-strip-fader").is_enabled()
+    page.select_option(".fw-mix-panlaw", "-3")
+    page.select_option(".fw-mix-bypass", "dynamics")
+    assert page.input_value(".fw-mix-bypass") == ""
+    page.click('[data-agent-tab="history"]')
+    labels = page.evaluate("[...document.querySelectorAll('.fw-history-label')].map((l) => l.textContent)")
+    assert labels[2:] == ["Changed the effects on jfk", "Soloed jfk", "Made jfk solo safe", "Cleared every solo", "Trimmed the input of jfk", "Inverted the polarity of jfk", "Turned off the automation of jfk", "Changed the pan law", "Bypassed inserts"]
+    assert _clean(page)["errors"] == []
+
+
+def test_while_it_plays_a_strip_holds_its_peak_and_latches_a_clip_and_a_dynamics_card_shows_its_reduction(page, app_url):
+    strip = _mixer_with_a_compressor(page, app_url)
+    page.focus(f"{strip} .fw-strip-fader")
+    page.keyboard.press("End")
+    page.click('.fw-tbtn[data-action="play"]')
+    page.wait_for_function(f"document.querySelector('{strip} .fw-strip-clip').dataset.clip === 'true'")
+    page.wait_for_function(f"[...document.querySelectorAll('{strip} .fw-out-hold')].every((h) => h.dataset.on === 'true')")
+    page.click('.fw-dock-tab[data-panel="effects"]')
+    page.wait_for_function("/^GR -\\d+\\.\\d dB$/.test(document.querySelector('.fw-fx-gr').textContent)")
+    page.click('.fw-tbtn[data-action="stop"]')
+    page.wait_for_function("document.querySelector('.fw-fx-gr').textContent === 'GR 0.0 dB'")
+    page.click('.fw-dock-tab[data-panel="mixer"]')
+    page.wait_for_function(f"[...document.querySelectorAll('{strip} .fw-out-hold')].every((h) => h.dataset.on === 'false')")
+    page.click(f"{strip} .fw-strip-clip")
+    assert page.get_attribute(f"{strip} .fw-strip-clip", "data-clip") == "false"
+    assert _clean(page)["errors"] == []
+
+
 def test_settings_agents_lists_six_clients_and_does_not_move_as_they_load(page, app_url):
     _open(page, app_url)
     page.locator(".fw-settings-menu .fw-menu-btn").click()

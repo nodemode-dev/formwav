@@ -56,8 +56,9 @@ try {
           fxAuto: (c.fxAuto ?? []).map((a) => [a.stage, a.param, pairs(a.points)]),
           comp: c.comp ?? null,
         })),
-        buses: plan.buses.map((b) => ({ gain: b.gain, pan: b.pan, stages: named(chunk(b.stages ?? [], 6), plan.processors) })),
+        buses: plan.buses.map((b) => ({ gain: b.gain, pan: b.pan, stages: named(chunk(b.stages ?? [], 6), plan.processors), fxAuto: (b.fxAuto ?? []).map((a) => [a.stage, a.param, pairs(a.points)]) })),
         master: named(chunk(player.flatStages(doc.masterFx, masterProcessors), 6), masterProcessors),
+        panLaw: plan.panLaw,
       },
     };
   });

@@ -74,6 +74,27 @@ def _cases() -> dict:
         buses=[{"id": "b1", "name": "b", "gainDb": -2, "pan": 0.3, "fx": [FULL["compressor"]]}, {"id": "b2", "name": "muted", "gainDb": 0, "pan": 0, "mute": True}],
         vcas=[{"id": "v1", "name": "v", "gainDb": -4}],
     )
+    # PLAN_v13 S2: solo safe, trim and polarity ahead of the track's inserts (after a clip's own compressor),
+    # automation Off (the lanes kept, the static fader, pan and filters played), the pan law
+    cases["the mixer's solo safe, trim, polarity, automation Off and pan law"] = _doc(
+        [
+            _track("t1", [_clip("c1", "a", fx=[FULL["compressor"]])], solo=True, trimDb=-4.5, invert=True),
+            _track("t2", [_clip("c2", "a")], soloSafe=True, autoOff=True, fx=[SWEPT, FULL["echo"]],
+                   automation={"volume": [{"time": 0, "value": -6}, {"time": 30000, "value": 0}]}),
+            _track("t3", [_clip("c3", "a")], gainDb=-2),
+            _track("t4", [_clip("c4", "a")], solo=True, fx=[SWEPT, FULL["gate"]]),
+        ],
+        panLaw="-4.5",
+    )
+    # a placed track keeps its time-based effects per clip, where its place reaches them; a compressor takes it to a bus
+    cases["placed tracks' effects"] = _doc(
+        [
+            _track("t1", [_clip("c1", "a")], fx=[SWEPT, FULL["echo"], FULL["gate"]], surround={"x": 0, "y": 1}),
+            _track("t2", [_clip("c2", "a")], fx=[FULL["chorus"], FULL["compressor"]], surround={"x": -1, "y": -1, "lfeDb": -10}),
+            _track("t3", [_clip("c3", "a")], fx=[SWEPT, FULL["echo"]]),
+        ],
+        surroundFold=True,
+    )
     return cases
 
 
@@ -93,7 +114,7 @@ def browser_plans() -> dict:
 
 
 def _export_plan(doc: dict) -> dict:
-    _, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, _ = render.plan(doc)
+    _, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, _, bus_auto = render.plan(doc)
     media_of = {v: k for k, v in sources.items()}
 
     def env(i: int) -> list | None:
@@ -112,8 +133,12 @@ def _export_plan(doc: dict) -> dict:
             }
             for i, c in enumerate(clips)
         ],
-        "buses": [{"gain": g, "pan": p, "stages": [list(ch[2:]) for ch in chains if ch[0] == 1 and ch[1] == k]} for k, (_, g, p) in enumerate(buses)],
+        "buses": [
+            {"gain": g, "pan": p, "stages": [list(ch[2:]) for ch in chains if ch[0] == 1 and ch[1] == k], "fxAuto": [[s, prm, env(e)] for bi, s, prm, e in bus_auto if bi == k]}
+            for k, (_, g, p) in enumerate(buses)
+        ],
         "master": [list(s) for s in (render._stage(f) for f in (doc.get("masterFx") or [])) if s],
+        "panLaw": render.PAN_LAWS.get(doc.get("panLaw"), 0),
     }
 
 
