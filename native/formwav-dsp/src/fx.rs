@@ -1182,6 +1182,134 @@ impl DeClick {
     }
 }
 
+/// One of formwav's studio processors (native/formwav-studio), made from a spec "id;param=value;...".
+pub const PROCESSOR: u8 = 20;
+
+pub struct Processor {
+    info: &'static formwav_studio::Spec,
+    values: Vec<f32>,
+    rate: f32,
+    inner: Option<Box<dyn formwav_studio::Processor>>,
+}
+
+impl Processor {
+    pub fn design(spec: &str, rate: f32) -> Option<Processor> {
+        let mut parts = spec.split(';');
+        let info = formwav_studio::spec(parts.next()?.trim())?;
+        let mut values: Vec<f32> = info.params.iter().map(|p| p.default).collect();
+        for part in parts {
+            let Some((key, value)) = part.split_once('=') else { continue };
+            let (Some(i), Ok(v)) = (info.index(key.trim()), value.trim().parse::<f32>()) else { continue };
+            values[i] = info.params[i].clamp(v);
+        }
+        Processor::made(info, values, rate)
+    }
+
+    fn made(info: &'static formwav_studio::Spec, values: Vec<f32>, rate: f32) -> Option<Processor> {
+        let mut inner = formwav_studio::build(info.id, rate)?;
+        for (i, v) in values.iter().enumerate() {
+            inner.set(i, *v);
+        }
+        inner.reset();
+        Some(Processor { info, values, rate, inner: Some(inner) })
+    }
+
+    pub fn id(&self) -> &'static str {
+        self.info.id
+    }
+
+    pub fn latency(&self) -> usize {
+        self.inner.as_ref().map_or(0, |p| p.latency())
+    }
+
+    pub fn tail(&self) -> usize {
+        self.inner.as_ref().map_or(0, |p| p.tail())
+    }
+
+    pub fn gain_reduction_db(&self) -> f32 {
+        self.inner.as_ref().map_or(0.0, |p| p.reduction_db())
+    }
+
+    pub fn reset(&mut self) {
+        if let Some(p) = self.inner.as_mut() {
+            p.reset();
+        }
+    }
+
+    #[inline]
+    pub fn process(&mut self, l: f32, r: f32) -> (f32, f32) {
+        let Some(p) = self.inner.as_mut() else { return (l, r) };
+        let (mut a, mut b) = ([l], [r]);
+        p.run(&mut a, &mut b);
+        (a[0], b[0])
+    }
+
+    pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let Some(p) = self.inner.as_mut() else { return };
+        let n = left.len().min(right.len());
+        p.run(&mut left[..n], &mut right[..n]);
+    }
+}
+
+impl Clone for Processor {
+    fn clone(&self) -> Self {
+        Processor::made(self.info, self.values.clone(), self.rate).unwrap_or_else(|| Processor { info: self.info, values: self.values.clone(), rate: self.rate, inner: None })
+    }
+}
+
+impl PartialEq for Processor {
+    fn eq(&self, other: &Self) -> bool {
+        self.info.id == other.info.id && self.values == other.values && self.rate == other.rate
+    }
+}
+
+impl std::fmt::Debug for Processor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Processor").field("id", &self.info.id).field("values", &self.values).field("rate", &self.rate).finish()
+    }
+}
+
+fn json_text(s: &str) -> String {
+    s.chars().flat_map(|c| if c == '"' || c == '\\' { vec!['\\', c] } else if c.is_control() { vec![] } else { vec![c] }).collect()
+}
+
+/// The studio processors as JSON for the interface and the engine: each one's id, name, short name, category and
+/// parameters (id, name, range, default, unit, taper, choices).
+pub fn processors_json() -> String {
+    let items: Vec<String> = formwav_studio::catalog()
+        .iter()
+        .map(|i| {
+            let params: Vec<String> = i
+                .params
+                .iter()
+                .map(|p| {
+                    let choices: Vec<String> = p.choices.iter().map(|c| format!("\"{}\"", json_text(c))).collect();
+                    format!(
+                        "{{\"id\":\"{}\",\"name\":\"{}\",\"min\":{},\"max\":{},\"default\":{},\"unit\":\"{}\",\"taper\":\"{}\",\"choices\":[{}]}}",
+                        json_text(p.id),
+                        json_text(p.name),
+                        p.min,
+                        p.max,
+                        p.default,
+                        p.unit.name(),
+                        p.taper.name(),
+                        choices.join(",")
+                    )
+                })
+                .collect();
+            format!(
+                "{{\"id\":\"{}\",\"name\":\"{}\",\"short\":\"{}\",\"category\":\"{}\",\"params\":[{}]}}",
+                json_text(i.id),
+                json_text(i.name),
+                json_text(i.short),
+                i.category.name(),
+                params.join(",")
+            )
+        })
+        .collect();
+    format!("[{}]", items.join(","))
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stage {
     Filter(Biquad),
@@ -1199,9 +1327,25 @@ pub enum Stage {
     DeHum(Box<DeHum>),
     DeClick(Box<DeClick>),
     DeReverb(Box<DeReverb>),
+    Processor(Box<Processor>),
 }
 
 impl Stage {
+    pub fn processor(spec: &str, rate: f32) -> Option<Stage> {
+        Processor::design(spec, rate).map(|p| Stage::Processor(Box::new(p)))
+    }
+
+    /// A block through this stage in place; the same samples as `process` frame by frame.
+    pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32]) {
+        if let Stage::Processor(x) = self {
+            x.process_block(left, right);
+            return;
+        }
+        for (l, r) in left.iter_mut().zip(right.iter_mut()) {
+            (*l, *r) = self.process(*l, *r);
+        }
+    }
+
     /// The samples this stage delays its signal by (RX-16): a mixer reading a chain's input that far ahead cancels it.
     /// Voice, DeClick and DeReverb delay their signal; every other stage runs without delay.
     pub fn latency(&self) -> usize {
@@ -1209,6 +1353,7 @@ impl Stage {
             Stage::Voice(_) => 2 * VOICE_FRAME,
             Stage::DeClick(x) => x.latency(),
             Stage::DeReverb(x) => x.latency(),
+            Stage::Processor(x) => x.latency(),
             _ => 0,
         }
     }
@@ -1268,6 +1413,7 @@ impl Stage {
             Stage::DeHum(x) => x.process(l, r),
             Stage::DeClick(x) => x.process(l, r),
             Stage::DeReverb(x) => x.process(l, r),
+            Stage::Processor(x) => x.process(l, r),
         }
     }
 
@@ -1288,6 +1434,7 @@ impl Stage {
             Stage::DeHum(x) => x.reset(),
             Stage::DeClick(x) => x.reset(),
             Stage::DeReverb(x) => x.reset(),
+            Stage::Processor(x) => x.reset(),
         }
     }
 }

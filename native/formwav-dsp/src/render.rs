@@ -341,6 +341,27 @@ impl Player {
         true
     }
 
+    pub fn add_master_processor(&mut self, spec: &str) -> bool {
+        let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
+        match crate::fx::Stage::processor(spec, rate) {
+            Some(s) => {
+                self.master_fx.push(s);
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn add_bus_processor(&mut self, spec: &str) -> bool {
+        let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
+        let (Some(chain), Some(s)) = (self.bus_fx.last_mut(), crate::fx::Stage::processor(spec, rate)) else {
+            return false;
+        };
+        chain.push(s);
+        self.bus_primed.clear();
+        true
+    }
+
     fn reset_fx(&mut self) {
         self.bus_primed.clear();
         for f in self.clip_fx.iter_mut().chain(self.meter_fx.iter_mut()).flatten() {
@@ -429,15 +450,8 @@ impl Player {
                 }
                 self.live_scratch = scratch;
             }
-            if !self.master_fx.is_empty() {
-                for i in done..done + len {
-                    let (mut l, mut r) = (left[i], right[i]);
-                    for s in self.master_fx.iter_mut() {
-                        (l, r) = s.process(l, r);
-                    }
-                    left[i] = l;
-                    right[i] = r;
-                }
+            for s in self.master_fx.iter_mut() {
+                s.process_block(&mut left[done..done + len], &mut right[done..done + len]);
             }
             self.meter_tracks(from, len);
             done += len;
@@ -768,11 +782,8 @@ impl Player {
                 let [prime_left, prime_right] = &mut prime;
                 self.mix(fx, &mut prime_left[..ahead], &mut prime_right[..ahead], from, |c| c.bus == id);
                 if let Some(chain) = bus_fx.get_mut(k) {
-                    for i in 0..ahead {
-                        let (mut l, mut r) = (prime_left[i], prime_right[i]);
-                        for s in chain.iter_mut() {
-                            (l, r) = s.process(l, r);
-                        }
+                    for s in chain.iter_mut() {
+                        s.process_block(&mut prime_left[..ahead], &mut prime_right[..ahead]);
                     }
                 }
             }
@@ -780,14 +791,9 @@ impl Player {
                 primed[k] = true;
             }
             self.mix(fx, &mut scratch_left[..n], &mut scratch_right[..n], from + ahead as u64, |c| c.bus == id);
-            if let Some(chain) = bus_fx.get_mut(k).filter(|c| !c.is_empty()) {
-                for i in 0..n {
-                    let (mut l, mut r) = (scratch_left[i], scratch_right[i]);
-                    for s in chain.iter_mut() {
-                        (l, r) = s.process(l, r);
-                    }
-                    scratch_left[i] = l;
-                    scratch_right[i] = r;
+            if let Some(chain) = bus_fx.get_mut(k) {
+                for s in chain.iter_mut() {
+                    s.process_block(&mut scratch_left[..n], &mut scratch_right[..n]);
                 }
             }
             let (pan_left, pan_right) = pan_gains(bus.pan);

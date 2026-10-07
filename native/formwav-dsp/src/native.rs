@@ -87,6 +87,9 @@ struct Mix {
     buses: Vec<MixBus>,
     #[serde(default)]
     master_fx: Option<Vec<f32>>,
+    /// The processor stages' specs, which a stage [20, k, ...] names by k.
+    #[serde(default)]
+    processors: Vec<String>,
     #[serde(default)]
     master_db: f64,
     #[serde(default)]
@@ -286,12 +289,20 @@ impl NativeOutput {
             for b in &mix.buses {
                 p.add_bus(Bus { id: b.id, gain: b.gain, pan: b.pan });
                 for st in b.stages.as_deref().unwrap_or(&[]).chunks_exact(6) {
-                    p.add_bus_stage(st[0] as u8, st[1], st[2], st[3], st[4], st[5]);
+                    if st[0] as u8 == crate::fx::PROCESSOR {
+                        p.add_bus_processor(mix.processors.get(st[1] as usize).map(String::as_str).unwrap_or(""));
+                    } else {
+                        p.add_bus_stage(st[0] as u8, st[1], st[2], st[3], st[4], st[5]);
+                    }
                 }
             }
             p.clear_master_fx();
             for st in mix.master_fx.as_deref().unwrap_or(&[]).chunks_exact(6) {
-                p.add_master_stage(st[0] as u8, st[1], st[2], st[3], st[4], st[5]);
+                if st[0] as u8 == crate::fx::PROCESSOR {
+                    p.add_master_processor(mix.processors.get(st[1] as usize).map(String::as_str).unwrap_or(""));
+                } else {
+                    p.add_master_stage(st[0] as u8, st[1], st[2], st[3], st[4], st[5]);
+                }
             }
             p.set_master_db(mix.master_db);
             // PT-38, AA-11: the placements and fold mode after the master chain, as the worklet applies them

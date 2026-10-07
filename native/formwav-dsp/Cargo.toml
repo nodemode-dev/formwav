@@ -22,6 +22,8 @@ asio = ["native", "cpal/asio"]
 # RX-16: the live dialogue isolate, RNNoise's network and weights in pure Rust (so it builds for the browser's audio
 # worklet too); BSD-3-Clause; its optional features (file I/O, a resampler, a command-line tool) left out
 nnnoiseless = { version = "0.5.2", default-features = false }
+# formwav's studio processors (native/formwav-studio)
+formwav-studio = { path = "../formwav-studio" }
 pyo3 = { version = "0.29.2", features = ["extension-module", "abi3-py310"], optional = true }
 cpal = { version = "0.18", optional = true }
 # AU-37: MIDI devices read by the engine itself (the macOS app's WebKit has no Web MIDI); MIT licence

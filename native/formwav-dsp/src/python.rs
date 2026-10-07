@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0, processors = Vec::new()))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -30,7 +30,9 @@ fn render<'py>(
     places: Vec<(usize, [f32; 6])>,
     fold: bool,
     surround_format: u8,
+    processors: Vec<String>,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
+    let spec = |a: f32| processors.get(a as usize).map(String::as_str).unwrap_or("");
     let n_clips = clips.len();
     let mut player = Player::new();
     player.set_master_db(master_db);
@@ -71,11 +73,19 @@ fn render<'py>(
     for (index, (id, gain, pan)) in buses.into_iter().enumerate() {
         player.add_bus(crate::render::Bus { id, gain, pan });
         for &(_, _, kind, a, b, c, d, e) in chains.iter().filter(|s| s.0 == 1 && s.1 == index) {
-            player.add_bus_stage(kind, a, b, c, d, e);
+            if kind == crate::fx::PROCESSOR {
+                player.add_bus_processor(spec(a));
+            } else {
+                player.add_bus_stage(kind, a, b, c, d, e);
+            }
         }
     }
     for &(_, _, kind, a, b, c, d, e) in chains.iter().filter(|s| s.0 == 2) {
-        player.add_master_stage(kind, a, b, c, d, e);
+        if kind == crate::fx::PROCESSOR {
+            player.add_master_processor(spec(a));
+        } else {
+            player.add_master_stage(kind, a, b, c, d, e);
+        }
     }
     if !places.is_empty() {
         // PT-38, AA-11: a 5.1 mix through the six-channel master bus, its channels interleaved in SMPTE order (L R C
@@ -394,8 +404,14 @@ impl PyMidiInput {
     }
 }
 
+#[pyfunction]
+fn processors() -> String {
+    crate::fx::processors_json()
+}
+
 #[pymodule]
 fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(processors, m)?)?;
     #[cfg(feature = "native")]
     m.add_class::<PyNativeOutput>()?;
     #[cfg(feature = "native")]

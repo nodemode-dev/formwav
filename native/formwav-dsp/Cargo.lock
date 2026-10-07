@@ -316,12 +316,17 @@ name = "formwav-dsp"
 version = "2.13.1"
 dependencies = [
  "cpal",
+ "formwav-studio",
  "midir",
  "nnnoiseless",
  "pyo3",
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "formwav-studio"
+version = "0.1.0"
 
 [[package]]
 name = "futures-core"

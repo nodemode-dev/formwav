@@ -199,6 +199,22 @@ pub unsafe extern "C" fn fw_add_bus_stage(player: *mut Player, kind: u32, a: f32
     (*player).add_bus_stage(kind as u8, a, b, c, d, e) as u32
 }
 
+/// # Safety
+/// `player` must come from `fw_player_new`; `ptr` must point to `len` readable bytes (a spec "id;param=value;...").
+#[no_mangle]
+pub unsafe extern "C" fn fw_add_master_processor(player: *mut Player, ptr: *const u8, len: usize) -> u32 {
+    let spec = std::str::from_utf8(std::slice::from_raw_parts(ptr, len)).unwrap_or("");
+    (*player).add_master_processor(spec) as u32
+}
+
+/// # Safety
+/// As `fw_add_master_processor`.
+#[no_mangle]
+pub unsafe extern "C" fn fw_add_bus_processor(player: *mut Player, ptr: *const u8, len: usize) -> u32 {
+    let spec = std::str::from_utf8(std::slice::from_raw_parts(ptr, len)).unwrap_or("");
+    (*player).add_bus_processor(spec) as u32
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_take_peaks(player: *mut Player, out: *mut f32) {
     let (left, right) = (*player).take_peaks();
