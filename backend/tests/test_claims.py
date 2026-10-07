@@ -35,7 +35,14 @@ def _stated(pattern: str) -> list[int]:
 
 def _live_kinds() -> int:
     doc = (ROOT / "frontend/src/engine/document.ts").read_text(encoding="utf-8")
-    return len(re.findall(r'"[a-z]+"', re.search(r"const FX_KINDS: ReadonlySet<string> = new Set\(\[([^\]]*)\]", doc).group(1)))
+    # the processor kind holds the library's processors, counted on their own below
+    return len([k for k in re.findall(r'"([a-z]+)"', re.search(r"const FX_KINDS: ReadonlySet<string> = new Set\(\[([^\]]*)\]", doc).group(1)) if k != "processor"])
+
+
+def _studio_processors() -> int:
+    from app.services import media
+
+    return len(json.loads(media._require_core().processors()))
 
 
 def _mcp_tools() -> int:
@@ -58,6 +65,7 @@ def _export_formats() -> int:
 
 CLAIMS = [
     ("live effect kinds", r"\b" + NUMBER + r" (?:realtime effects|effect kinds)", _live_kinds),
+    ("studio processors", r"\b" + NUMBER + r" studio processors", _studio_processors),
     ("MCP tools", r"\b([\w-]+) `formwav_\*` tools", _mcp_tools),
     ("theme profiles", r"\b(\d+) theme(?: profile|s)", _themes),
     ("undo depth", r"\b(\d+) deep", _undo_depth),
