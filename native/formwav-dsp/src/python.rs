@@ -176,13 +176,14 @@ fn onsets(data: &[u8], sensitivity: f32) -> PyResult<(u32, Vec<u64>)> {
 }
 
 /// The built-in instrument (crate::synth): notes as (start frame, held frames, MIDI pitch, velocity) rendered at
-/// `rate` with the given patch; returns mono 32-bit float samples, the release included.
+/// `rate` with the given patch (a cutoff of 0 leaves it unfiltered); returns mono 32-bit float samples, the release
+/// included.
 #[pyfunction]
-#[pyo3(signature = (notes, rate = 48000, wave = "triangle", attack = 0.005, decay = 0.15, sustain = 0.7, release = 0.2, gain = 0.25))]
+#[pyo3(signature = (notes, rate = 48000, wave = "triangle", attack = 0.005, decay = 0.15, sustain = 0.7, release = 0.2, gain = 0.25, cutoff = 0.0, resonance = 0.707))]
 #[allow(clippy::too_many_arguments)]
-fn render_notes<'py>(py: Python<'py>, notes: Vec<(u64, u64, u8, u8)>, rate: u32, wave: &str, attack: f32, decay: f32, sustain: f32, release: f32, gain: f32) -> PyResult<Bound<'py, PyBytes>> {
+fn render_notes<'py>(py: Python<'py>, notes: Vec<(u64, u64, u8, u8)>, rate: u32, wave: &str, attack: f32, decay: f32, sustain: f32, release: f32, gain: f32, cutoff: f32, resonance: f32) -> PyResult<Bound<'py, PyBytes>> {
     let wave = crate::synth::Wave::parse(wave).ok_or_else(|| PyValueError::new_err(format!("no waveform named {wave}")))?;
-    let patch = crate::synth::Patch { wave, attack, decay, sustain, release, gain };
+    let patch = crate::synth::Patch { wave, attack, decay, sustain, release, gain, cutoff, resonance };
     let notes: Vec<crate::synth::Note> = notes.into_iter().map(|(start, length, pitch, velocity)| crate::synth::Note { start, length, pitch, velocity }).collect();
     let samples = crate::synth::render(&notes, rate, &patch);
     let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
@@ -195,7 +196,7 @@ fn render_notes<'py>(py: Python<'py>, notes: Vec<(u64, u64, u8, u8)>, rate: u32,
 #[allow(clippy::too_many_arguments)]
 fn render_sampled<'py>(py: Python<'py>, notes: Vec<(u64, u64, u8, u8)>, rate: u32, sample: &[u8], sample_rate: u32, root: u8, attack: f32, decay: f32, sustain: f32, release: f32, gain: f32) -> PyResult<Bound<'py, PyBytes>> {
     let sample: Vec<f32> = sample.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
-    let patch = crate::synth::Patch { wave: crate::synth::Wave::Sine, attack, decay, sustain, release, gain };
+    let patch = crate::synth::Patch { wave: crate::synth::Wave::Sine, attack, decay, sustain, release, gain, ..Default::default() };
     let notes: Vec<crate::synth::Note> = notes.into_iter().map(|(start, length, pitch, velocity)| crate::synth::Note { start, length, pitch, velocity }).collect();
     let samples = crate::synth::render_sampled(&notes, rate, &patch, &sample, sample_rate, root);
     let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();

@@ -37,11 +37,55 @@ pub struct Patch {
     pub release: f32,
     /// overall level of one full-velocity note
     pub gain: f32,
+    /// the low-pass filter's cutoff in Hz; 0, or at or above 0.45 of the rate, leaves the sound unfiltered
+    pub cutoff: f32,
+    /// the filter's resonance, as the Q of its two poles (0.707 flat at the cutoff)
+    pub resonance: f32,
 }
 
 impl Default for Patch {
     fn default() -> Self {
-        Patch { wave: Wave::Triangle, attack: 0.005, decay: 0.15, sustain: 0.7, release: 0.2, gain: 0.25 }
+        Patch { wave: Wave::Triangle, attack: 0.005, decay: 0.15, sustain: 0.7, release: 0.2, gain: 0.25, cutoff: 0.0, resonance: 0.707 }
+    }
+}
+
+/// The patch's low-pass: a two-pole resonant filter (the RBJ cookbook's) over the summed voices, in transposed direct
+/// form II, so render and the live instrument run the same arithmetic on the same samples.
+#[derive(Clone, Copy, Debug)]
+struct Lowpass {
+    b0: f64,
+    b1: f64,
+    b2: f64,
+    a1: f64,
+    a2: f64,
+    z1: f64,
+    z2: f64,
+}
+
+impl Lowpass {
+    fn design(patch: &Patch, rate: f64) -> Option<Lowpass> {
+        let f = patch.cutoff as f64;
+        if !(f > 0.0 && f < 0.45 * rate) {
+            return None;
+        }
+        let q = (patch.resonance as f64).clamp(0.3, 24.0);
+        let w0 = std::f64::consts::TAU * f / rate;
+        let (sin, cos) = w0.sin_cos();
+        let alpha = sin / (2.0 * q);
+        let a0 = 1.0 + alpha;
+        Some(Lowpass { b0: (1.0 - cos) / 2.0 / a0, b1: (1.0 - cos) / a0, b2: (1.0 - cos) / 2.0 / a0, a1: -2.0 * cos / a0, a2: (1.0 - alpha) / a0, z1: 0.0, z2: 0.0 })
+    }
+
+    /// The same filter with new coefficients and the running state kept, so a live change does not click.
+    fn retune(self, patch: &Patch, rate: f64) -> Option<Lowpass> {
+        Lowpass::design(patch, rate).map(|f| Lowpass { z1: self.z1, z2: self.z2, ..f })
+    }
+
+    fn process(&mut self, x: f64) -> f64 {
+        let y = self.b0 * x + self.z1;
+        self.z1 = self.b1 * x - self.a1 * y + self.z2;
+        self.z2 = self.b2 * x - self.a2 * y;
+        y
     }
 }
 
@@ -144,6 +188,11 @@ pub fn render(notes: &[Note], rate: u32, patch: &Patch) -> Vec<f32> {
             }
         }
     }
+    if let Some(mut lowpass) = Lowpass::design(patch, rate_f) {
+        for v in out.iter_mut() {
+            *v = lowpass.process(*v);
+        }
+    }
     out.into_iter().map(|v| v as f32).collect()
 }
 
@@ -185,6 +234,7 @@ pub struct Synth {
     patch: Patch,
     rate: f64,
     voices: Vec<Voice>,
+    filter: Option<Lowpass>,
 }
 
 #[derive(Debug, Clone)]
@@ -199,12 +249,17 @@ struct Voice {
 
 impl Synth {
     pub fn new(patch: Patch, rate: u32) -> Synth {
-        Synth { patch, rate: rate.max(1) as f64, voices: Vec::new() }
+        let rate = rate.max(1) as f64;
+        Synth { patch, rate, voices: Vec::new(), filter: Lowpass::design(&patch, rate) }
     }
 
-    /// A new patch for the notes to come (and the ones still sounding).
+    /// A new patch for the notes to come (and the ones still sounding); the filter keeps its state through the change.
     pub fn set_patch(&mut self, patch: Patch) {
         self.patch = patch;
+        self.filter = match self.filter {
+            Some(f) => f.retune(&patch, self.rate),
+            None => Lowpass::design(&patch, self.rate),
+        };
     }
 
     /// Starts a note; a velocity of 0 ends it, as MIDI's note-on with velocity 0 does.
@@ -255,7 +310,11 @@ impl Synth {
                 }
                 v.t += 1;
             }
-            *sample += sum as f32;
+            let y = match self.filter.as_mut() {
+                Some(f) => f.process(sum),
+                None => sum,
+            };
+            *sample += y as f32;
         }
         self.voices.retain(|v| v.held.map_or(true, |h| v.t < h.saturating_add(release)));
     }
@@ -307,7 +366,7 @@ mod tests {
     fn the_sampler_plays_its_sample_at_the_notes_pitch() {
         let rate = 48000u32;
         let sample: Vec<f32> = (0..4800).map(|i| ((i as f32) * 0.037).sin() * 0.5).collect();
-        let patch = Patch { wave: Wave::Sine, attack: 0.0, decay: 0.0, sustain: 1.0, release: 0.0, gain: 1.0 };
+        let patch = Patch { wave: Wave::Sine, attack: 0.0, decay: 0.0, sustain: 1.0, release: 0.0, gain: 1.0, ..Patch::default() };
         let at_root = render_sampled(&[Note { start: 0, length: 2000, pitch: 60, velocity: 127 }], rate, &patch, &sample, rate, 60);
         assert!((1..2000).all(|i| (at_root[i] - sample[i]).abs() < 1e-6), "at the root the sample plays as it is");
         let octave = render_sampled(&[Note { start: 0, length: 2000, pitch: 72, velocity: 127 }], rate, &patch, &sample, rate, 60);
@@ -321,8 +380,8 @@ mod tests {
     #[test]
     fn the_live_instrument_plays_exactly_what_render_makes() {
         let rate = 48000u32;
-        for wave in [Wave::Sine, Wave::Triangle, Wave::Saw, Wave::Square] {
-            let patch = Patch { wave, attack: 0.01, decay: 0.1, sustain: 0.6, release: 0.15, gain: 0.3 };
+        for (wave, cutoff) in [(Wave::Sine, 0.0), (Wave::Triangle, 0.0), (Wave::Saw, 0.0), (Wave::Square, 0.0), (Wave::Saw, 900.0), (Wave::Square, 2400.0)] {
+            let patch = Patch { wave, attack: 0.01, decay: 0.1, sustain: 0.6, release: 0.15, gain: 0.3, cutoff, resonance: 4.0 };
             // overlapping notes, a repeated pitch, a soft one, a very short one
             let notes = [
                 Note { start: 0, length: 24000, pitch: 60, velocity: 100 },
@@ -347,8 +406,26 @@ mod tests {
                 at = until;
                 step = step % 128 + 7; // uneven block sizes
             }
-            assert!(got == want, "{wave:?}: the live instrument differs from render");
+            assert!(got == want, "{wave:?} at {cutoff} Hz: the live instrument differs from render");
             assert_eq!(synth.sounding(), 0, "{wave:?}: a voice outlived its release");
         }
+    }
+
+    /// The low-pass: a saw an octave over the cutoff loses its top (its RMS falls well under the open saw's) while a
+    /// sine far under the cutoff passes unchanged within a hair; a cutoff of 0 or past 0.45 of the rate is no filter.
+    #[test]
+    fn the_cutoff_takes_the_top_off_and_leaves_the_low_end() {
+        let rate = 48000u32;
+        let rms = |v: &[f32]| (v[4800..36000].iter().map(|x| (*x as f64).powi(2)).sum::<f64>() / 31200.0).sqrt();
+        let note = [Note { start: 0, length: 40000, pitch: 69, velocity: 127 }];
+        let open = render(&note, rate, &Patch { wave: Wave::Saw, ..Patch::default() });
+        let shut = render(&note, rate, &Patch { wave: Wave::Saw, cutoff: 220.0, ..Patch::default() });
+        assert!(rms(&shut) < rms(&open) * 0.5, "the saw kept {:.3} of {:.3}", rms(&shut), rms(&open));
+        let low = [Note { start: 0, length: 40000, pitch: 33, velocity: 127 }];
+        let sine = render(&low, rate, &Patch { wave: Wave::Sine, ..Patch::default() });
+        let through = render(&low, rate, &Patch { wave: Wave::Sine, cutoff: 8000.0, ..Patch::default() });
+        assert!((rms(&through) / rms(&sine) - 1.0).abs() < 0.01, "a 55 Hz sine under an 8 kHz cutoff changed");
+        let past = render(&note, rate, &Patch { wave: Wave::Saw, cutoff: 0.46 * rate as f32, ..Patch::default() });
+        assert!(past == open, "a cutoff past 0.45 of the rate filtered");
     }
 }

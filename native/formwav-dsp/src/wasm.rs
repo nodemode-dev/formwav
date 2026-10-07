@@ -243,19 +243,21 @@ pub unsafe extern "C" fn fw_live_note(player: *mut Player, pitch: u32, velocity:
     (*player).live_note(pitch.min(127) as u8, velocity.min(127) as u8);
 }
 
-/// The live instrument's patch: wave 0 sine, 1 triangle, 2 saw, 3 square; the envelope in seconds, sustain 0 to 1.
+/// The live instrument's patch: wave 0 sine, 1 triangle, 2 saw, 3 square; the envelope in seconds, sustain 0 to 1; the
+/// low-pass cutoff in Hz (0 for none) and its resonance as a Q.
 ///
 /// # Safety
 /// `player` must come from `fw_player_new` and not have been freed.
 #[no_mangle]
-pub unsafe extern "C" fn fw_live_patch(player: *mut Player, wave: u32, attack: f32, decay: f32, sustain: f32, release: f32, gain: f32) {
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C" fn fw_live_patch(player: *mut Player, wave: u32, attack: f32, decay: f32, sustain: f32, release: f32, gain: f32, cutoff: f32, resonance: f32) {
     let wave = match wave {
         0 => crate::synth::Wave::Sine,
         2 => crate::synth::Wave::Saw,
         3 => crate::synth::Wave::Square,
         _ => crate::synth::Wave::Triangle,
     };
-    (*player).set_live_patch(crate::synth::Patch { wave, attack, decay, sustain, release, gain });
+    (*player).set_live_patch(crate::synth::Patch { wave, attack, decay, sustain, release, gain, cutoff, resonance });
 }
 
 /// Releases every live note.

@@ -31,6 +31,8 @@ class Patch(BaseModel):
     sustain: float = Field(0.7, ge=0, le=1)
     release: float = Field(0.2, ge=0, le=10)
     gain: float = Field(0.25, ge=0, le=2)
+    cutoff: float = Field(0.0, ge=0, le=96000)
+    resonance: float = Field(0.707, ge=0.3, le=24)
 
 
 class Sampler(BaseModel):
@@ -128,7 +130,10 @@ def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Samp
         raw = core.render_sampled(frames, rate, mono.tobytes(), int(sample_rate), sampler.root, patch.attack, patch.decay, patch.sustain, patch.release, patch.gain)
         out = np.frombuffer(raw, dtype="<f4").copy()
         return media.import_wav(f"{name}.wav", _wav_bytes([out, out], rate))
-    raw = core.render_notes(frames, rate, patch.wave, patch.attack, patch.decay, patch.sustain, patch.release, patch.gain)
+    try:
+        raw = core.render_notes(frames, rate, patch.wave, patch.attack, patch.decay, patch.sustain, patch.release, patch.gain, patch.cutoff, patch.resonance)
+    except TypeError:
+        raw = core.render_notes(frames, rate, patch.wave, patch.attack, patch.decay, patch.sustain, patch.release, patch.gain)
     mono = np.frombuffer(raw, dtype="<f4").copy()
     return media.import_wav(f"{name}.wav", _wav_bytes([mono, mono], rate))
 
