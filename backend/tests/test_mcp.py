@@ -34,6 +34,8 @@ def probe(engine_url, tmp_path_factory):
 def test_each_tool_works_or_says_what_is_missing(probe, check):
     results, _ = probe
     assert check in results, f"the probe never ran {check}"
+    if results[check].get("skip"):
+        pytest.skip(results[check]["skip"])
     assert results[check]["ok"], results[check]["detail"]
 
 

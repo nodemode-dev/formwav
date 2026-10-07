@@ -41,6 +41,18 @@ def model(path: Path, install: str) -> Path:
     return path
 
 
+def whisper(*names: str) -> None:
+    import importlib.util
+
+    from app.services import transcript
+
+    if importlib.util.find_spec("faster_whisper") is None:
+        pytest.skip("needs backend/requirements_transcript.txt for Whisper")
+    for name in names or (transcript.DEFAULT_MODEL,):
+        if not (transcript.MODELS_ROOT / f"models--Systran--faster-whisper-{name}").is_dir():
+            pytest.skip(f"needs Whisper {name} in {transcript.MODELS_ROOT} (a transcript fetches it on first use)")
+
+
 @pytest.fixture(scope="session")
 def client():
     from fastapi.testclient import TestClient

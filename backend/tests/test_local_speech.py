@@ -1,9 +1,9 @@
-import importlib.util
 import re
 
 import pytest
 
 from app.services import local_speech
+from conftest import whisper
 
 SENTENCE = "Formwav can now make speech on this machine, with nothing sent anywhere."
 
@@ -24,8 +24,7 @@ def test_kokoro_offers_its_voices(client, kokoro):
 
 
 def test_a_spoken_sentence_is_heard_back_by_whisper(client, kokoro):
-    if importlib.util.find_spec("faster_whisper") is None:
-        pytest.skip("needs backend/requirements_transcript.txt for Whisper")
+    whisper()
     from app.services import transcript
 
     spoken = client.post("/api/providers/local-speech/kokoro/speak", json={"text": SENTENCE, "voice": "af_heart"})

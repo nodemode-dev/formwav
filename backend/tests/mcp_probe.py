@@ -16,6 +16,10 @@ def record(name, ok, detail):
     results[name] = {"ok": bool(ok), "detail": str(detail)[:400]}
 
 
+def absent(name, reason):
+    results[name] = {"ok": True, "skip": reason, "detail": ""}
+
+
 def engine(method, path, body=None):
     request = urllib.request.Request(ENGINE + path, method=method, data=json.dumps(body).encode() if body is not None else None, headers={"Content-Type": "application/json", "x-formwav-local": "1"})
     return json.loads(urllib.request.urlopen(request, timeout=600).read() or b"{}")
@@ -58,8 +62,11 @@ async def main():
         err, jfk, text = await call("formwav_import_audio", {"path": JFK})
         record("formwav_import_audio", not err and abs(jfk["seconds"] - 11.0) < 0.01, text[:120])
         media_id = jfk.get("media_id")
-        err, out, text = await call("formwav_speech_regions", {"media_id": media_id})
-        record("formwav_speech_regions", not err and len(out["regions"]) >= 1 and out["speech_seconds"] > 5, text[:160])
+        if (Path(BACKEND) / "models" / "vad" / "silero_vad.onnx").is_file():
+            err, out, text = await call("formwav_speech_regions", {"media_id": media_id})
+            record("formwav_speech_regions", not err and len(out["regions"]) >= 1 and out["speech_seconds"] > 5, text[:160])
+        else:
+            absent("formwav_speech_regions", "needs backend/models/vad/silero_vad.onnx, which the tool fetches on first use")
         err, out, text = await call("formwav_transcribe_media", {"media_id": media_id})
         record("formwav_transcribe_media", (not err and "fellow Americans" in out["text"]) or says(err, text, "requirements_transcript"), (out or {}).get("text", text)[:120])
         err, out, text = await call("formwav_transcribe_with_speakers", {"media_id": media_id})
@@ -69,8 +76,12 @@ async def main():
         err, out, text = await call("formwav_dub_media", {"media_id": media_id, "language": "es"})
         dubbed = not err and abs(out["seconds"] - 11.0) < 0.01 and "ustedes" in json.dumps(out.get("sentences", []), ensure_ascii=False)
         record("formwav_dub_media local es", dubbed if spanish and "kokoro" in installed else says(err, text, "install"), text[:160])
-        err, out, text = await call("formwav_separate_speech_music_ambience", {"media_id": media_id})
-        record("formwav_separate_speech_music_ambience", (not err and all(abs(out[k]["seconds"] - 11.0) < 0.01 for k in ("speech", "music", "ambience"))) or says(err, text, "DeepFilterNet"), text[:160])
+        folder = Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(BACKEND) / "models"))
+        if os.environ.get("FORMWAV_DEEPFILTER") or any((folder / "deepfilter").glob("deep-filter-*")):
+            err, out, text = await call("formwav_separate_speech_music_ambience", {"media_id": media_id})
+            record("formwav_separate_speech_music_ambience", (not err and all(abs(out[k]["seconds"] - 11.0) < 0.01 for k in ("speech", "music", "ambience"))) or says(err, text, "DeepFilterNet"), text[:160])
+        else:
+            absent("formwav_separate_speech_music_ambience", "needs DeepFilterNet in the models folder, which the tool fetches on first use")
 
         err, out, text = await call("formwav_analyze_media", {"media_id": media_id})
         record("formwav_analyze_media", not err, text[:120])

@@ -1,4 +1,3 @@
-import importlib.util
 import os
 import re
 import subprocess
@@ -7,7 +6,7 @@ import numpy as np
 import pytest
 
 from app.services import local_speech, media
-from conftest import BACKEND
+from conftest import BACKEND, whisper
 
 HUMAN = "Y así, mis compatriotas estadounidenses, no pregunten qué puede hacer su país por ustedes, pregunten qué pueden hacer ustedes por su país."
 
@@ -26,8 +25,7 @@ def _f1(a: str, b: str) -> float:
 def dubbed(client, jfk_wav):
     if not local_speech.installed("kokoro") or not (BACKEND / "models" / "translate" / "en_es" / "model" / "model.bin").exists():
         pytest.skip("needs Kokoro and the Spanish dubbing model (Create tab: Install dubbing language)")
-    if importlib.util.find_spec("faster_whisper") is None:
-        pytest.skip("needs backend/requirements_transcript.txt for Whisper")
+    whisper("base.en", "tiny")
     source = client.post("/api/media", content=jfk_wav, headers={"X-Filename": "jfk.wav"}).json()
     reply = client.post("/api/providers/local-dub/es", json={"media_id": source["id"]})
     assert reply.status_code in (200, 201), reply.text[:300]
