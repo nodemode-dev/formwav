@@ -51,7 +51,15 @@ frontend/
     │   ├── arm.ts               record arming: the armed track (interface state) and the track being recorded
     │   ├── mixer.ts             console-style mixer: a strip per track and bus (meter, fader, pan, mute, solo, output)
     │   ├── record.ts            Record button and R key, input meter, takes into the session
-    │   └── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
+    │   ├── projects.ts          session name, Save, Open popover, Cmd or Ctrl S and O
+    │   ├── agent-pane.ts        the Agent column: the in-app agent's 30 tools on the open session, its run loop, Undo run
+    │   ├── agents.ts            Settings > Agents: formwav's MCP server added to an agent client
+    │   ├── launcher.ts          the session view: slots, scenes, launch quantize
+    │   ├── step-sequencer.ts    patterns: rows, velocity and swing per step, placed as note clips
+    │   ├── clip-tab.ts          the Clip tab: the selected clip's settings and its tools
+    │   ├── share.ts             shared editing of one session from several devices
+    │   ├── inputs.ts            track inputs, native interfaces among them
+    │   └── cloud.ts             File > Cloud: Google Drive and Dropbox
     ├── audio/
     │   ├── player.ts            AudioContext at the session rate, media into the worklet, bounce()
     │   ├── player-worklet.ts    AudioWorklet hosting the wasm player (public/core, built at install)
@@ -70,6 +78,14 @@ frontend/
 
 ## Table of contents
 
+- [src/ui/agent-pane.ts](#src-ui-agent-pane)
+- [src/ui/agents.ts](#src-ui-agents)
+- [src/ui/launcher.ts](#src-ui-launcher)
+- [src/ui/step-sequencer.ts](#src-ui-step-sequencer)
+- [src/ui/clip-tab.ts](#src-ui-clip-tab)
+- [src/ui/share.ts](#src-ui-share)
+- [src/ui/inputs.ts](#src-ui-inputs)
+- [src/ui/cloud.ts](#src-ui-cloud)
 - [index.html](#index-html)
 - [vite.config.ts](#vite-config)
 - [src/main.ts](#src-main)
@@ -107,7 +123,7 @@ frontend/
 
 ---
 
-## index.html {#index-html}
+## src/ui/agent-pane.ts {#src-ui-agent-pane}
 
 ### The in-app agent does what the MCP server does, in the open session
 - refers-to: frontend/src/ui/agent-pane.ts (local_models_status, list_voices, generate_speech, generate_music, generate_sound_effect, mark_speech, separate_clip, dub_clip, transcribe_with_speakers; place, range, postJson); CLAUDE.md; AGENTS.md
@@ -116,12 +132,27 @@ frontend/
 
 PLAN_v11's 3.3. The MCP server works on media and saved sessions from outside; the Agent column works on the open session through the same commands as the interface. Nine tools give it what the server gained, each placing its result in the session as one undo step: the models' status and the voices; speech, music and sound effects on a new track at the playhead or a given time; a clip's speech as Speech regions; a clip split into speech, music and ambience on three tracks under it (its track muted when it was alone there); a clip dubbed into es, fr, it or pt under it (here, or through ElevenLabs with its job polled); and Scribe's words with speakers. Each tool that makes sound reports the new track and clip, so the next tool can work on them, and clip spans are read in the media's own samples (sourceIn) and the session's (length). Checked with a scripted model in Chromium, each step built from the last result: the status (Kokoro installed), a Kokoro sentence on a new track, its Speech region 0.128 to 2.848 s, its three parts with the original muted, its Spanish dub, and ElevenLabs music failing with the key's instruction; five tracks added, one undo taking back only the dub, no page error. The agent's tools: 30.
 
+### The agent edits by transcript: words read, cut and rewritten as the Transcript tab does
+- refers-to: frontend/src/ui/agent-pane.ts (get_transcript, delete_words, remove_fillers, rewrite_words); src/ui/transcript-pane.ts (sessionWords, rangesOf exported); sidecar verification/verify_agent_transcript.md
+- kind: explainer
+- logged: v2.11.2 (in progress) · 2026-10-06
+
+The comparison's Descript row: the agent could not edit by the words. It now has four tools built on the Transcript tab's own functions, so its edits behave as the person's: get_transcript (every word in session order with index, speaker, times and a filler flag; clips not yet transcribed are transcribed on this machine), delete_words (ranges of indexes cut with clear-ranges across every track, the gap closed, as Delete does), remove_fillers, and rewrite_words (words in one clip spoken again in the speaker's cloned voice through Regenerate, ElevenLabs or a cloning engine installed here, later clips on the track moved by the change). Checked with a scripted model through a scratch engine and the ElevenLabs stand-in: "my fellow" cut (0.8 s), the opening rewritten, two later clips moved, the timeline ending at 10.450 s as computed, two undos restoring the clip, no page error.
+
+---
+
+## src/ui/agents.ts {#src-ui-agents}
+
 ### Settings > Agents moved what was below it as its clients arrived
 - refers-to: frontend/src/styles/workspace.css (.fw-agents-list)
 - kind: fix
 - logged: v2.12.3 (in progress) · 2026-10-06
 
 Found by the v2.12.3 gate's interface run: opening Settings > Agents made a layout shift of 0.0108. The dialog opened with a one-line note and grew when the six clients arrived from the engine, moving its status line and Close button down after the input that opened it. The list's height is now reserved from the start (min(56vh, 520px), scrolling inside); opening Settings, the dialog, the list arriving and closing, twice under 4x throttling with each step labelled, make no layout-shift entry.
+
+---
+
+## src/ui/launcher.ts {#src-ui-launcher}
 
 ### A session view that plays: slots kept with the session, launch quantize choices, launching starts playback
 - refers-to: frontend/src/ui/launcher.ts; src/engine/document.ts (LauncherState, launcher, set-launcher-slot, set-launcher); src/ui/media-pane.ts and src/main.ts (the player passed to the launcher); src/styles/workspace.css (a playing slot)
@@ -130,12 +161,20 @@ Found by the v2.12.3 gate's interface run: opening Settings > Agents made a layo
 
 The comparison's L10. The clip launcher had four scenes, its slots only in the page's lists (lost on reload), every launch on the next bar, and nothing playing until the transport was started. Now the slots, the number of scenes (1 to 16) and the quantize choice are kept in the session (set-launcher-slot and set-launcher, each an undo step); a launch lands now, on the next beat, bar, two bars or four bars; launching while stopped starts playback; a slot is lit while its launched loop is under the playhead. Launches are still written into the arrangement as launched repeats (as a session performance is recorded), and a new launch on a track ends that track's previous loop where it lands, so the player, exports and undo treat them as clips. Checked in Chromium at 120 BPM from a playhead at 1.30 s: landing at 62,400 (now), 72,000 (beat), 96,000 (bar), 192,000 (two bars) and 384,000 (four bars), playback started each time; six scenes and two slots kept through a reload of the document and shown in the cells; a scene launched from zero lighting both its slots while playing, none once stopped; no layout shift without input, no page error. The first scene check counted one lit slot after five launches and undos, the quantize changes being undo steps too; a clean run lights both.
 
+---
+
+## src/ui/step-sequencer.ts {#src-ui-step-sequencer}
+
 ### Patterns that play: rows, velocity and swing per step, kept with the session, heard before placing
 - refers-to: frontend/src/ui/step-sequencer.ts; src/engine/document.ts (StepPattern, patterns, save-pattern, delete-pattern); src/styles/workspace.css (.fw-step velocity levels)
 - kind: explainer
 - logged: v2.11.7 (in progress) · 2026-10-06
 
 The comparison's L12: the step sequencer had four rows of on-off steps, placed only. Now 1 to 16 rows (8 by default, C6 to C3), a velocity per step (a click lights a step at 100, a Shift-click cycles it through ghost 60, accent 127 and normal 100, shown dimmer or brighter), swing on the off-beat sixteenths (50 straight to 75; 66.7 a triplet feel), Hear (rendered as Place renders, played, nothing added) and patterns kept in the session (save-pattern and delete-pattern, each one undo step, a list bringing one back). Checked in Chromium: rows 8 to 10; a ghost and an accent where Shift-clicked; at 66.7 percent swing and 120 BPM the off-beat notes at 8,004 and 20,004 samples (6,000 a sixteenth plus the 2,004 swing), the velocities 60, 100 and 127 as set; saved, cleared, and loaded back with ten rows, the swing and every level; Hear's play() resolving on the rendered pattern (7.81 s for four bars), the button Stop while it played, no track added; the save undone in one step; no layout shift without input, no page error.
+
+---
+
+## src/ui/clip-tab.ts {#src-ui-clip-tab}
 
 ### Speech regions misplaced on media at another rate than the session's
 - refers-to: frontend/src/ui/clip-tab.ts (Mark where people speak)
@@ -144,6 +183,10 @@ The comparison's L12: the step sequencer had four rows of on-off steps, placed o
 
 Found while writing the three-way split: a clip's sourceIn counts the media's samples and its length the session's (sessionWords in the transcript pane reads them so), and Mark where people speak (1.7, v2.11.1) divided both by the session's rate. For a 44.1 kHz file in a 48 kHz session every region would have been stretched by 8.8 percent; the JFK check, 48 kHz in 48 kHz, could not show it. Now each is read in its own rate. Checked in Chromium: the JFK speech resampled to 44.1 kHz in a 48 kHz session marks the same four stretches as the 48 kHz original, to the hundredth of a second.
 
+---
+
+## src/ui/share.ts {#src-ui-share}
+
 ### Shared editing: one session edited from several devices at once
 - refers-to: backend/app/routers/share.py; backend/app/main.py; frontend/src/ui/share.ts; src/engine/index.ts (share hooks, applyShared, reportHistory); src/engine/document.ts (RestorePatch, computeRestore, restore); src/main.ts; src/styles/workspace.css (.fw-share-chip); sidecar verification/verify_share.md
 - kind: explainer
@@ -151,6 +194,10 @@ Found while writing the three-way split: a clip's sourceIn counts the media's sa
 
 The comparison grades cloud save without shared editing partial; this is the shared editing. formwav's edits are commands applied by one pure reducer, so editors who apply the same commands in the same order hold the same session: the engine is the hub that fixes the order (it keeps the document as sharing began and every command since, numbered as they arrive), every editor applies them in that order, the sender's own edits included, and a late joiner replays them. Two things a snapshot editor does not need were built for it. Commands that create things (an import makes a track) took ids from a random source, so editors applying one command would have made different ids and drifted; a shared command's ids are seeded by its op id, so all make the same. And undo replaced the whole document with an earlier one, which while sharing would wipe everyone else's edits; shared undo is each editor's own: each of their edits keeps what it changed (computeRestore: lists of things with ids by id and order, the media table entry by entry, since putting it back whole would drop media someone else just added), and undoing sends that back as an edit, so another's later edit elsewhere survives (two on one track: the later wins). Desktop: File > Share this session, once Devices on this network is on; a paired device opening formwav joins; a chip in the status bar shows how many are editing, its place kept when off. Checked in two browsers through an engine serving the interface (verification/verify_share.md): the guest joined holding the host's session; after five interleaved edits from both, a file import among them, the documents were identical and the imported track had the same id on both; the guest's two undos took back its import and then its mute and nothing of the host's, redo put the mute back, identical after each; stopping told the guest. The chip first grew past its reserved width as its text filled in (0.0004); with a fixed width, sharing and stopping make no layout-shift entry; no page error on either side.
 Moved at the v2.10.8 gate: the chip's reserved width in the status bar left the bar's information (the notices, the engine and the session's rate, tracks and length) 15 px beside the transport, and the bar 10 px over its width; the chip now sits in the menu bar's middle, beside the session's name, where there is room: every bar fits, the information has 157 px again, and sharing and stopping still make no layout-shift entry.
+
+---
+
+## src/ui/inputs.ts {#src-ui-inputs}
 
 ### Recording through native capture: tracks on an interface's channels, each take on its own track
 - refers-to: frontend/src/ui/inputs.ts (native interfaces in the list); src/audio/recorder.ts (startNativeRecordings); src/ui/record.ts; src/ui/lanes.ts (the arm button's title)
@@ -167,12 +214,20 @@ The input list now offers the engine's native interfaces beside the browser's, l
 The comparison's Multitrack recording row noted the channel choice was held in the page, not the session. A track's input (its device, the device's label, the channels it records) is now Track.input, set by set-track-input: saved with the session, one undo step, and found again on another machine by its label when the device's id is not present there. inputs.ts keeps its getters, so the recorder and the Inspector read as before; its maps are now rebuilt from the document and the devices present. Checked in Chromium with fake inputs: an input chosen in the Inspector reached the document with its label, the session saved and reopened in a fresh page through the projects module's own path came back with it (the Inspector showing it), and an unknown device id with a known label was matched by the label; no page error.
 Measured on the way, and sourced: a synthetic eight-channel stream through Chromium's media-stream path delivered its first two channels and silence on the other six. That is the browser, not formwav: Chrome's audio team said on the W3C audio list that getUserMedia does not support more than two channels, a 2024 note on the W3C WebRTC list points to the limit of two in Chromium's source, and Firefox's tracker has the same limit open as bug 1393401. A browser recorder therefore cannot take more than two channels of one interface; recording eight inputs needs capture through the engine (the Rust core and cpal), the next step.
 
+---
+
+## src/ui/cloud.ts {#src-ui-cloud}
+
 ### Cloud projects, the interface: File > Cloud, adapted from formcut 2.6.3
 - refers-to: frontend/src/ui/cloud.ts; src/ui/projects.ts (savedSessionName, fw-open-project); src/ui/shell.ts (File > Cloud); src/main.ts; src/styles/workspace.css (.fw-cloud-*)
 - kind: explainer
 - logged: v2.10.8 (in progress) · 2026-10-06
 
 formcut's three cloud pieces (a browser, an upload dialog, settings rows) became one dialog in formwav's export-dialog style, opened from File > Cloud: a Google Drive or Dropbox switch; set up with the app's client ID (and Google's desktop secret, and the opt-in full-Drive scope); Connect, with Google finishing in the browser and Dropbox's code pasted back; then the service's files with folders and paging, where a session (.fmw) opens through the projects module's own path (its unsaved-changes guard included, by an fw-open-project event) and any other file comes in as media on a new track at the playhead, and Save this session here sends the saved session up whole, refusing while there are unsaved changes so what goes up is what was saved. Checked in Chromium under 4x throttling against formcut's fake services through a scratch engine, every click on a visible control: set up, Google connected through its redirect, browsed, a file imported onto a new track, an unsaved save refused, Dropbox connected by its pasted code. The check found a Refresh a Google user needed that sat inside the hidden file section (a user would have been stuck; the connect step now has its own), and layout shifts as the dialog's sections changed (up to 0.05 in all): the dialog now holds a fixed height with its title and service switch on top, one scrolling body, and its note and Close pinned below, and More keeps its place, invisible when there is no next page. Re-run: no layout-shift entry over the whole flow, no page error; the design audit at 0 FAIL, 0 WARN.
+
+---
+
+## index.html {#index-html}
 
 ### index.html · critical style and theme boot
 - refers-to: index.html :: head `style` and inline `script`

@@ -26,15 +26,24 @@ backend/
 │   │   ├── paths.py             data and media folders
 │   │   └── version.py           VERSION, one of the version sites
 │   ├── routers/
+│   │   ├── agents.py            Settings > Agents: formwav's MCP server added to an agent client's configuration
 │   │   ├── health.py            GET /api/health, with the audio core's version
 │   │   ├── media.py             POST /api/media, GET /api/media/{id}, GET /api/media/{id}/peaks, GET /api/media/{id}/audio
 │   │   ├── projects.py          GET /api/projects, PUT and GET /api/projects/{name}, GET /api/projects/{name}/file
 │   │   └── render.py            POST /api/render: session document in, float32 stereo WAV out
 │   └── services/
+│       ├── acestep.py           ACE-Step 1.5 through its own REST server
+│       ├── adm.py               ADM BWF objects (moving, with a bed) for export
 │       ├── local_dub.py         dubbing on this machine: Whisper's words, Argos Translate's models, Kokoro's voices
+│       ├── local_speech.py      speech made on this machine (Kokoro, Pocket TTS, Chatterbox) and Regenerate's path
 │       ├── media.py             import, probe, atomic storage, peak levels through formwav_dsp
 │       ├── projects.py          .fmw packages in data/projects: atomic save, verified open, list
-│       └── render.py            clip plan from the document, native render, WAV encoding
+│       ├── providers.py         the cloud models (ElevenLabs, fal) and Regenerate's splice
+│       ├── render.py            clip plan from the document, native render, WAV encoding
+│       ├── sync.py              takes lined up by their sound
+│       ├── three_way.py         speech, music and ambience from one clip
+│       └── vad.py               Silero VAD: where people speak, and the speech-safe cut
+├── formwav_mcp/server.py        the MCP server (28 tools over the engine's HTTP API), in its own venv
 └── tests/                       pytest, run from backend: python -m pytest tests (written on the owner's ask, v2.12.5)
     ├── requirements.txt         pytest and Playwright, pinned; requirements_ear.txt the EBU renderer's own venv
     ├── conftest.py              a fresh data folder, no paid keys, the shared speech, a real engine on a free port
@@ -51,6 +60,18 @@ backend/
 
 ## Table of contents
 
+- [app/routers/agents.py](#app-routers-agents)
+- [../.claude/skills/formwav-harness, CLAUDE.md and AGENTS.md](#harness-skill)
+- [formwav_mcp/server.py](#formwav-mcp-server)
+- [app/services/adm.py](#app-services-adm)
+- [../README.md and its claims audit](#readme-claims)
+- [app/services/local_dub.py](#app-services-local-dub)
+- [app/services/three_way.py](#app-services-three-way)
+- [app/services/local_speech.py](#app-services-local-speech)
+- [app/services/vad.py](#app-services-vad)
+- [app/services/acestep.py](#app-services-acestep)
+- [app/services/providers.py](#app-services-providers)
+- [app/services/sync.py](#app-services-sync)
 - [oc_install](#oc-install)
 - [boot_backend](#boot-backend)
 - [requirements.txt and its platform sets](#requirements)
@@ -66,7 +87,6 @@ backend/
 - [app/services/projects.py](#app-services-projects)
 - [app/routers/render.py](#app-routers-render)
 - [app/services/render.py](#app-services-render)
-- [app/services/local_dub.py](#app-services-local-dub)
 - [tests/requirements.txt and tests/requirements_ear.txt](#tests-requirements)
 - [tests/conftest.py](#tests-conftest)
 - [tests/fixtures](#tests-fixtures)
@@ -93,7 +113,7 @@ backend/
 
 ---
 
-## boot_backend {#boot-backend}
+## app/routers/agents.py {#app-routers-agents}
 
 ### Settings > Agents: formwav added to Claude Code, Codex, Cursor or Claude Desktop in one click
 - refers-to: backend/app/routers/agents.py; backend/app/main.py; frontend/src/ui/agents.ts; src/main.ts; src/styles/workspace.css (.fw-agents-*); .claude/skills/formwav-harness/sub-skills/setup/SUB-SKILL.md; sidecar verification/verify_agents.py
@@ -102,12 +122,20 @@ backend/
 
 PLAN_v11's 3.2, ported from formcut's agent_connect.py (the same author's). The engine answers with the command an MCP client runs for this copy of formwav (backend/formwav_mcp/serve; on Windows the server's Python with the module and PYTHONPATH) and each client's exact text and file, with whether formwav is in it already; it adds formwav in one click to Claude Code (through claude mcp add, when claude is installed), Codex, Cursor and Claude Desktop. Where formcut wrote Codex's file and showed the rest, formwav also merges into Cursor's and Claude Desktop's JSON, keeping every other server, leaving the previous file as a backup, and refusing a file that is not valid rather than overwriting it; a request through the network listener is refused, these being the person's own files. Checked against a scratch home folder: six clients shown and the command present; Codex's TOML still valid with its setting and its other server kept, a second add not duplicating, a backup left; Cursor's GitHub server kept beside formwav; Claude Desktop's file made; a broken file refused and left byte for byte; Claude Code without claude answered plainly; a paired device refused; and the command Cursor's written file names started by the MCP SDK's client, formwav_status answering. In Chromium (a scratch engine whose home is temporary): Settings > Agents lists the six, three Add buttons here (Claude Code's waits for claude), Copy puts formwav's entry on the clipboard, Add to Cursor writes it and the row reads formwav added, no layout shift, no page error, the real home untouched. The harness skill's setup sub-skill now names this path first.
 
+---
+
+## ../.claude/skills/formwav-harness, CLAUDE.md and AGENTS.md {#harness-skill}
+
 ### The formwav-harness skill, CLAUDE.md and AGENTS.md
 - refers-to: .claude/skills/formwav-harness (SKILL.md, five sub-skills, references and checklists, EVALS.json); CLAUDE.md; AGENTS.md; README.md (Connect an agent); sidecar harness/ (the tools-reference generator, the trigger phrases, dist/formwav-harness.skill)
 - kind: explainer
 - logged: v2.12.2 (in progress) · 2026-10-06
 
 PLAN_v11's 3.0, the owner's harness, emulating formcut's for formwav and made with the god-tier-skill-creator skill through its director (intake, architecture, description, body, payload, audit, evaluation and packaging; media skipped, none carried) with its connector specialist (mcp-skill-builder). The skill is the knowledge layer over the MCP server's 28 tools: the master body's spine is three workflows with exact tool names (repair a recording, work by the words, deliver a session), ground rules (status first, the models status before generating, sources never change, measure before and after, paths from the person), recovery for the four failures (the engine not running, a key or install missing, a tool name that does not resolve, a workflow stopped partway) and the direct-call test that tells a skill failure from a server failure. Sub-skills: harness-director, tools (its reference generated from the server's own listing, the generator refusing when its groups and the server disagree), workflows (nine, step by step), setup (Claude Code, Codex, Cursor and Claude Desktop, over stdio or HTTP, with the troubleshooting checklist), development (the tool-change checklist). Ledger: description 973 of 1024 characters, its 16 should-trigger phrases all covered, 8 near misses sharing words only where an exclusion is named or a setup phrase is generic (none names formwav, which every trigger does); body 62 of 500 lines; 11 of 200 files; 0 of 67 media; 0.04 MB of 30; validator FAIL 0, WARN 0; five evaluations with observable behaviours; packaged as formwav-harness.skill (0.02 MB, archive root formwav-harness/). The evaluations are written, not yet run by a model here. CLAUDE.md and AGENTS.md give agents working on formwav's code its conventions, the silent invariants this sprint learned (commands dispatched, an effect kind's many places, sourceIn in media samples, freq not hz, the loopback rule) and the two agent surfaces.
+
+---
+
+## formwav_mcp/server.py {#formwav-mcp-server}
 
 ### The MCP server reaches what formwav has gained: 28 tools, each checked by a real MCP client
 - refers-to: backend/formwav_mcp/server.py; sidecar verification/verify_mcp.py
@@ -116,12 +144,20 @@ PLAN_v11's 3.0, the owner's harness, emulating formcut's for formwav and made wi
 
 PLAN_v11's 3.1. The server had twelve tools (media, effects, repairs, sessions, render, Whisper). Sixteen join them, each a thin call to a route the engine already serves and its earlier checks cover: the local models' status (which engines and dubbing languages are installed, which providers have keys); voices; speech (Kokoro here or ElevenLabs); music and songs (ElevenLabs or ACE-Step's server); sound effects; speech regions (Silero VAD); transcription with speakers (Scribe v2); Regenerate in the speaker's cloned voice (ElevenLabs, Pocket TTS or Chatterbox); dubbing (here, or ElevenLabs with its job polled); speech, music and ambience as three media; native inputs and a timed native take; and the cloud's status, files, import and save. The render tool gains what: a stereo mix, 5.1, or ADM objects with their paths and the bed. Checked as an agent meets it: the MCP SDK's own client (2.2.0) starts the server over stdio, lists 28 tools and calls each against the running engine; 34 of 34 checks pass. Where it can work here it returns its result (54 Kokoro voices, speech and its regions, the JFK transcript, the Spanish dub saying ustedes, three stems of 11 s, a saved session rendered as a mix, 5.1 and ADM, that ADM 99 percent left at the start and 100 percent right at the end with its bed 100 percent centre in EAR); where a key, an install or a device is missing here it fails with what a person needs to do (ELEVENLABS_API_KEY, acestep-api, not installed, Connect Dropbox first, the audio device). Not yet tools: mixing edits on a saved session, and cutting words out of media; the in-app agent has its own word tools.
 
+---
+
+## app/services/adm.py {#app-services-adm}
+
 ### Objects that move and a bed, checked in the EBU's own renderer
 - refers-to: backend/app/services/adm.py (paths as block sequences, a 5.1 bed on the common definitions, an explicit CHNA); frontend/src/engine/document.ts (surround.path, surround.bed); src/ui/inspector-pane.ts (Add point at playhead, Clear path, Bed); sidecar verification/verify_adm_ear.py, ear_share.py, earvenv (EAR 2.1.0)
 - kind: explainer
 - logged: v2.12.0 (in progress) · 2026-10-06
 
 The comparison's L2 in part. formwav's ADM BWF export wrote one still block per object and no bed. A track's surround now carries a path (points of time and place, set from the inspector: Add point at playhead takes the dot's place, Clear path, the pad's drag and the controls keeping the path) and a bed flag. The export writes a moving object as blocks: still until its first point (or for 1 ms when it starts at zero), then one block per segment whose position is the segment's end, which a renderer reaches by interpolating over the block; bed tracks are mixed by render_51, as formwav's 5.1 export mixes them, and written as six DirectSpeakers channels on BS.2094's common definitions (AP_00010003). Checked in the EBU ADM Renderer (EAR 2.1.0, BSD-3-Clause-Clear, run in its own venv): the export as it was placed static objects exactly (+30, -30 and 0 degrees in M+030, M-030 and M+000, all 100 percent), so the structure was sound; a moving object first stayed at its destination throughout, since a renderer interpolates from the previous block and the first point had none, and the 1 ms block fixed it (99 percent left at the start, 50 and 50 midway, 100 percent right after); the bed's centre and left surround 100 percent in M+000 and M+110. End to end from the interface: a path built with the buttons and the pad, a track ticked Bed, the file from the export route, the same figures in EAR, no layout shift, no page error. That test's first run measured nothing real: /api/generate takes freq, not hz, and gave two 440 Hz tones; the file itself was right. Not yet: hearing the objects inside formwav through a renderer, and an OMF reader.
+
+---
+
+## ../README.md and its claims audit {#readme-claims}
 
 ### The claims audit: the README's counts checked against the code, and kept checked
 - refers-to: README.md; backend/app/services/local_speech.py (engine sizes); sidecar verification/audit_claims.py (in the release gate from v2.11.8)
@@ -130,12 +166,27 @@ The comparison's L2 in part. formwav's ADM BWF export wrote one still block per 
 
 PLAN_v11 Phase 2's claims audit. A script reads each countable claim from the README and computes its truth from the code or the live engine: the live effect kinds (the document's kind set), formwav's own catalogue (the engine's effects less the plug-ins found on the machine, 256 here, which is why the 114 holds while the engine lists 370), the MCP server's tools, the theme profiles, the undo depth, the export formats, the memory arithmetic, the version, and whether the loopback sentence admits the network listener; it also lists the interface's and the engine's size strings for review. Its first run found the README four times saying sixteen live effect kinds (there are nineteen since de-hum, de-click and de-reverb), eight export formats (seven, MP3 at two bitrates in the dialog), "nothing listens on the network unless HOST says so" while Settings > Devices opens a listener (off by default, paired devices only), Kokoro's install as about 400 MB (570 MB measured), and Pocket TTS's and Chatterbox's sizes stated as figures nobody measured. The audit's own first faults were fixed before it was trusted (a pattern matching "the realtime effects", the Status history counted as current, a theme count of zero from a misread module). The README's descriptions were brought to what exists (the menus' Cloud, Share and Devices; the Clip tab's new actions; the agent's transcript tools; the models; the routers), and its Not built list gained every limit found since: models checked against stand-ins and not run with real keys or servers, Pocket TTS and Chatterbox unrun, Enhance speech behind Adobe, no local sound effects, shared editing and remote recording on the local network only.
 
+---
+
+## app/services/local_dub.py {#app-services-local-dub}
+
+### app/services/local_dub.py · the translation model's download names formwav as its User-Agent
+- refers-to: app/services/local_dub.py :: `install` (the request for LANGS[lang][3]); app/core/version.py :: VERSION
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Install dubbing language failed for everyone: on 2026-10-06 argos-net.com answered urllib's default User-Agent (Python-urllib/3.12) with 403 Forbidden, while the same address fetched with another User-Agent returned the model. The download now sends `formwav/<version>`. Checked through the engine: POST /api/providers/local-dub/es/install brought the English to Spanish model in (model.bin and sentencepiece.model in models/translate/en_es), after which tests/test_local_dub.py ran.
+
 ### Dubbing made on this machine: Whisper's words, Argos Translate's models, Kokoro's voices
 - refers-to: backend/app/services/local_dub.py; app/routers/providers.py (/api/providers/local-dub...); frontend/src/ui/models-pane.ts; sidecar verification/verify_local_dub.py
 - kind: explainer
 - logged: v2.11.6 (in progress) · 2026-10-06
 
 The comparison's open-weight paths (PLAN_v11 2.M5): dubbing needed ElevenLabs. Now the clip's transcript (Whisper) is grouped into whole sentences, translated by Argos Translate's model for the pair (a CTranslate2 model and its SentencePiece tokenizer, run in the speech runtime with ctranslate2 and sentencepiece alone, since the argostranslate package brings stanza and PyTorch; the model's README names its training data, the OPUS corpora, and states no licence, so none is claimed), spoken by Kokoro in a voice of the language, and each sentence placed where it began, sped up with ffmpeg's pitch-keeping atempo by at most 1.35 times when it would run into the next. Spanish, French, Italian and Portuguese install on request (about 90 MB each). Measured on the JFK speech into Spanish, in 8.6 s here: the translation against the standard human rendering, word F1 0.93; the dub transcribed back by a multilingual Whisper told the language, word F1 0.90 against what was to be said; placed at 0.00 s, no speed-up or cut needed, the length the source's to the millisecond. The first run split the sentence at JFK's 1.4 s pause after "my fellow Americans": the second half, translated alone, came back in the informal singular (F1 0.65); sentences are now whole (end punctuation, a break over 1.5 s, or past 15 s). In the Create tab's Models: Dub a clip on this machine and Install a dubbing language, the language list following the task; in Chromium the clip dubbed onto a new track at its start and of its length, no layout shift, no page error.
+
+---
+
+## app/services/three_way.py {#app-services-three-way}
 
 ### Speech, music and ambience as three faders
 - refers-to: backend/app/services/three_way.py; app/routers/media.py (POST /api/media/{id}/three-way); frontend/src/ui/clip-tab.ts (Speech, music and ambience to three tracks); sidecar verification/verify_three_way.py
@@ -144,19 +195,9 @@ The comparison's open-weight paths (PLAN_v11 2.M5): dubbing needed ElevenLabs. N
 
 The comparison's Adobe row (PLAN_v11 2.M4): a clip split into speech, music and ambience, each on its own track at the clip, so the session's faders are the three faders; the original track is muted in the same undo step when the clip is alone on it. Speech is DeepFilterNet3's dialogue (RX-16's model); the rest is split as separate.deconstruct splits a range (harmonic and percussive separation, RX's Deconstruct as reference), ported to numpy so it runs without PyTorch, with soft masks: a bin is music in proportion to how far its tonal or transient median stands over the other, all of it at twice; the ambience is defined as the remainder less the music, so the three add up to the clip sample for sample. Measured on a stereo mix with known parts (speech in the centre; chords, bass, kick and hat 8 dB under; decorrelated pink noise swelling 14 dB under): the stems' sum within 3.2e-8 of the mix (float storage); SI-SDR against each true part, speech 12.1 dB (the mix itself 7.0), music 0.7 (-8.2), ambience -3.9 (-14.5), gains of 5.1, 8.8 and 10.6 dB. Deconstruct's binary masks gave music -1.9 and ambience -5.5 on the same mix; soft masks were adopted for that and for their absence of musical noise. Music and ambience still carry each other's leakage (DeepFilterNet leaves some speech in the remainder, and a steady chord and steady noise differ only in degree); Demucs where it is installed separates music further. In Chromium: three tracks the clip's length at its place, the original muted, one undo restoring it, no layout shift, no page error.
 
-### The agent edits by transcript: words read, cut and rewritten as the Transcript tab does
-- refers-to: frontend/src/ui/agent-pane.ts (get_transcript, delete_words, remove_fillers, rewrite_words); src/ui/transcript-pane.ts (sessionWords, rangesOf exported); sidecar verification/verify_agent_transcript.md
-- kind: explainer
-- logged: v2.11.2 (in progress) · 2026-10-06
+---
 
-The comparison's Descript row: the agent could not edit by the words. It now has four tools built on the Transcript tab's own functions, so its edits behave as the person's: get_transcript (every word in session order with index, speaker, times and a filler flag; clips not yet transcribed are transcribed on this machine), delete_words (ranges of indexes cut with clear-ranges across every track, the gap closed, as Delete does), remove_fillers, and rewrite_words (words in one clip spoken again in the speaker's cloned voice through Regenerate, ElevenLabs or a cloning engine installed here, later clips on the track moved by the change). Checked with a scripted model through a scratch engine and the ElevenLabs stand-in: "my fellow" cut (0.8 s), the opening rewritten, two later clips moved, the timeline ending at 10.450 s as computed, two undos restoring the clip, no page error.
-
-### Regenerate doubled a clip rewritten from its first word
-- refers-to: backend/app/services/providers.py (_splice); sidecar verification/verify_elevenlabs.py (exact lengths at the start and the end)
-- kind: fix
-- logged: v2.11.2 (in progress) · 2026-10-06
-
-Found by the agent's rewrite_words check: rewriting "And so" at the very start of the JFK clip made a clip 12 s long instead of 1 s. The splice shared one crossfade length by both ends, at least one frame: with the words starting at frame 0 it was forced to one, and x[: a - f] read as x[:-1], the whole recording, so the new media held the source and then the splice (1,068,477 frames where 540,480 were due). A rewrite of the opening is common, and the same trap sat at the very end. Each end now has its own crossfade, none where there is nothing to fade from. Measured: at the start, in the middle and to the end of the JFK media the new lengths are the source less the replaced span plus the new speech less 480 frames per faded end (none at an edge), exactly. verify_elevenlabs.py now checks exact lengths at the very start and the very end; against the code before the fix both fail (198k and 110k frames where 109,809 are due).
+## app/services/local_speech.py {#app-services-local-speech}
 
 ### Speech made on this machine: Kokoro, Pocket TTS and Chatterbox from formcut, and Regenerate's open-weight path
 - refers-to: backend/app/services/local_speech.py; app/services/providers.py (_splice, shared by ElevenLabs' and local regeneration); app/routers/providers.py (/api/providers/local-speech...); frontend/src/ui/models-pane.ts; sidecar verification/verify_local_speech.py, elevenlabs_contract.py (voices/add; literal paths first), verify_elevenlabs.py (Regenerate)
@@ -165,12 +206,20 @@ Found by the agent's rewrite_words check: rewriting "And so" at the very start o
 
 From formcut's local speech, the same author's: Kokoro (Apache-2.0, ONNX, 54 voices, no cloning), Pocket TTS (Kyutai, MIT code and CC-BY-4.0 weights, voices and cloning) and Chatterbox (Resemble AI, MIT, cloning, every output watermarked), installed on request into a speech runtime of their own in formwav's data folder, never into the engine, and run there as workers. Their cloning gives Regenerate an open-weight path: the speaker cloned from up to 20 s of the same clip around the selection, the new words made at the clip's rate and spliced in by the same code as ElevenLabs' (the splice now shared, _splice; ElevenLabs' Regenerate re-checked through its contract stand-in, which had matched /v1/voices/add as /v1/voices/{voice_id} until literal paths were tried first). Kokoro was installed here through formwav's own path (the runtime, kokoro-onnx 0.6.1, its two model files, about 570 MB) and run on this CPU: 54 voices; a sentence spoken in 4.3 s for 4.04 s of audio, which formwav's Whisper transcribed back with 92 percent of the words (the one miss, the invented word formwav heard as Form WAV). Local Regenerate's pipeline, with Kokoro standing in for the cloning model, took its reference from the same clip at its 48 kHz, replaced 3.30 to 4.38 s with 1.05 s, and the new media came to the source plus the reported delta exactly. Pocket TTS and Chatterbox bring PyTorch, about 1 and 2 GB, which this machine has no room for (629 MB free after Kokoro): their cloning is unrun here. In the Create tab's Models: speech by Kokoro with its voices, speech in a clip's voice and on-machine Regenerate for Pocket TTS and Chatterbox (each naming its install and size until installed), and Install a speech engine on this machine with its progress; Kokoro spoke from the pane in a chosen voice onto a new track, no layout shift, no page error.
 
+---
+
+## app/services/vad.py {#app-services-vad}
+
 ### Where people speak: Silero VAD from formcut, speech regions and the speech-safe cut
 - refers-to: backend/app/services/vad.py; app/routers/media.py (GET /api/media/{id}/speech, /speech/cut); frontend/src/ui/clip-tab.ts (Mark where people speak); sidecar verification/verify_vad.py
 - kind: explainer
 - logged: v2.11.1 (in progress) · 2026-10-06
 
 Asked by the owner (proper speech detection), from formcut's speech module, the same author's: Silero VAD (MIT, ONNX, 2.3 MB, fetched once from Silero's repository and checked against the hash it had when this was written) gives a speech probability every 32 ms, under music too, which word times and loudness pauses cannot. From it come speech regions (above 0.5, at least 250 ms, gaps under 300 ms joined) and formcut's speech-safe cut rule (unsafe with speech on both sides within 100 ms). Measured: the JFK speech gave four stretches, 7.58 s of speech in 11 s; under a music bed 6 dB below it, chords and plucks, four stretches agreeing on 96.2 percent of the clean speech's time; the bed alone, none; a cut inside speech unsafe and one in a pause safe. In the Clip tab, Mark where people speak adds the clip's speech as regions in one undo step: in Chromium, four Speech regions matching the engine's, one undo removing them, no layout shift, no page error.
+
+---
+
+## app/services/acestep.py {#app-services-acestep}
 
 ### ACE-Step 1.5 on this machine: songs, covers, repaints, layers, extraction and completion
 - refers-to: backend/app/services/acestep.py; app/services/providers.py (the provider entry); app/routers/providers.py (/api/providers/acestep, /generate); frontend/src/ui/models-pane.ts; sidecar verification/acestep_contract.py, verify_acestep.py
@@ -179,6 +228,17 @@ Asked by the owner (proper speech detection), from formcut's speech module, the 
 
 Asked by the owner: ACE-Step integrated locally, correctly. Until now formwav reached ACE-Step only through fal's hosted service. It now drives ACE-Step 1.5's own REST server (acestep-api, MIT), which the owner runs where a GPU or enough memory is (the standard download is 10.09 GB; this build machine has 3 GB of memory and no GPU, so it cannot run it here). Every request follows ACE-Step's API.md (research/acestep): a task released with POST /release_task, JSON for text2music and multipart with the clip as src_audio for cover, repaint, lego, extract and complete; polled with POST /query_result until its status is 1 (or 2, failed); the audio fetched from /v1/audio. One result per task in lossless WAV, where the server's default is two; the documented ranges kept (10 to 600 s, a repaint's end after its start or -1 for the end, cover strength 0 to 1); the server's bearer key sent when ACESTEP_API_KEY is set. API.md names no field for which instrument lego adds or extract takes beyond an instruction it writes from the task, so the layer is described in the prompt and no field is invented. ACE-Step is in the providers list as ready only when its server answers, and a stopped server is reported as where it was looked for and how to start it. Checked by a stand-in holding every request to API.md: all seven calls pass (a 5 s request raised to the 10 s floor, a repaint ending before its start sent as to the end), none of 30 requests breaking the document; the negative control caught an unknown field, an unknown task, 700 s, a batch of nine, a cover with no source and a missing key. In the interface, the Create tab's Models offers six ACE-Step tasks (a song; a cover with its strength; a repaint of From to To seconds in the clip, or the time selection where it falls on the clip; a layer added; a part extracted; a clip completed), each landing at the clip's start; run through it, 26 requests conforming, no layout shift, no page error; with the server stopped, each task names what it needs. Unrun on the real server here; the owner's run is what will say how they sound.
 
+---
+
+## app/services/providers.py {#app-services-providers}
+
+### Regenerate doubled a clip rewritten from its first word
+- refers-to: backend/app/services/providers.py (_splice); sidecar verification/verify_elevenlabs.py (exact lengths at the start and the end)
+- kind: fix
+- logged: v2.11.2 (in progress) · 2026-10-06
+
+Found by the agent's rewrite_words check: rewriting "And so" at the very start of the JFK clip made a clip 12 s long instead of 1 s. The splice shared one crossfade length by both ends, at least one frame: with the words starting at frame 0 it was forced to one, and x[: a - f] read as x[:-1], the whole recording, so the new media held the source and then the splice (1,068,477 frames where 540,480 were due). A rewrite of the opening is common, and the same trap sat at the very end. Each end now has its own crossfade, none where there is nothing to fade from. Measured: at the start, in the middle and to the end of the JFK media the new lengths are the source less the replaced span plus the new speech less 480 frames per faded end (none at an edge), exactly. verify_elevenlabs.py now checks exact lengths at the very start and the very end; against the code before the fix both fail (198k and 110k frames where 109,809 are due).
+
 ### ElevenLabs, every model the API offers, each request checked against ElevenLabs' own contract
 - refers-to: backend/app/services/providers.py (elevenlabs_models, _change_voice, _music, _stems, _isolate, _sound, _transcribe, _design, _save_voice, _dialogue, _align, _dub_transcript); app/routers/providers.py; frontend/src/ui/models-pane.ts; sidecar verification/elevenlabs_contract.py, verify_elevenlabs.py
 - kind: explainer
@@ -186,12 +246,20 @@ Asked by the owner: ACE-Step integrated locally, correctly. Until now formwav re
 
 Asked by the owner, verified as he asked: every request built from ElevenLabs' OpenAPI document (fetched from api.elevenlabs.io, research/NOTES_v11_program.md), not from memory. Added: the account's models with what each can do (the voice changer lists the voice-conversion ones rather than a hard-coded id, the document naming only an English one); the voice changer (speech to speech, background noise removed on request); music and songs (prompt, lyrics sung, 3 s to 10 min, music_v1, v2 or v2_5, instrumental only); stems (six, or vocals and the rest, unzipped into media); voice isolation; sound effects now with loop and prompt influence (eleven_text_to_sound_v2); Scribe v2 transcription (speakers told apart, sounds such as laughter tagged, key terms, entities), written where formwav keeps transcripts, so the Transcript tab, transcript editing and subtitles use it as their own; voice design (three previews) and keeping one as a voice; multi-voice dialogue; forced alignment of a script, kept as the clip's transcript; a dub's translated subtitles. The document has no music inpainting endpoint, only a flag that stores a song for it, so none is claimed. Checked by a stand-in that holds every request to the document (path and method, the key, content type, required and unknown fields, enums, numeric ranges, one level into arrays, query parameters): formwav's existing calls already conformed; all 18 routes, old and new, pass with no request breaking the contract. A negative control caught an invalid model, an unknown field, an undeclared query, a missing key and a missing required field, and missed a 45 s sound effect: the document gives that range in words only, so the stand-in now reads ranges stated in a field's description too (it then caught 45 s and a 1 s song, accepted 12 s and 30 s), and formwav's own clamps keep both in range. In the interface, the Create tab's Models pane offers the fourteen ElevenLabs tasks; run through it against the stand-in: music, a changed voice, an isolated voice, six stems on their own tracks in one undo step, a Scribe transcript (two speakers, a laughter event), three designed previews and one kept, a dialogue, an aligned script and a looping sound, with all eleven requests conforming, no layout shift and no page error. Unrun with a real key: the stand-in answers as the document describes, not as ElevenLabs' models sound.
 
+---
+
+## app/services/sync.py {#app-services-sync}
+
 ### Takes lined up by their sound: formcut's multicam sync, refined to a fraction of a sample
 - refers-to: backend/app/services/sync.py; app/routers/media.py (POST /api/media/sync); frontend/src/ui/clip-tab.ts (Line up by sound); sidecar verification/verify_sync.py
 - kind: explainer
 - logged: v2.10.8 (in progress) · 2026-10-06
 
 The comparison's Multitrack recording row noted takes from different devices sitting about 2 ms apart, each device keeping its own clock; a remote room's takes line up by a shared clock only to the network's round trip. formcut's multicam sync (the same author's) lines camera angles up by their sound on ten-millisecond loudness envelopes, right for pictures and too coarse for audio, so it is the first stage here, ported with its sign, normalisation, confidence floor and its rule that among near-equal peaks the smallest lag wins; the second stage cross-correlates the waveforms at full rate with the phase transform, a few envelope steps either side, and places the peak between samples by a parabola. Measured against known delays through differently coloured copies of the JFK speech (another microphone: duller, half the level, its own noise): 2.317 ms found as 2.3144 (0.125 samples off), -37.5 ms as -37.4982 (0.086), 450 ms as 449.9969 (0.149), and unrelated noise refused at a match of 0.074. A first run showed every lag 0.593 ms off by the same amount; the cause was the test's colouring filter, one-sided and convolved centred, which moved the copies; a symmetric filter colours without moving. In the Clip tab, Line up by sound takes the selected clip as the reference, measures every clip on another track that overlaps it over the stretch both cover, and moves the strong matches in one undo step; a take that would cross the session's start stays at zero and slips its sound instead (clamping it there would have left the commonest case, takes started together, unmoved). In Chromium: a take 2.317 ms late slipped 111 samples at zero, one 37.5 ms early moved 1,800 samples, the noise was left and named, one undo restored all three, no page error; two layout-shift entries of 0.0001 as the clips moved, to attribute at the gate.
+
+---
+
+## boot_backend {#boot-backend}
 
 ### boot_backend · host and port
 - refers-to: boot_backend :: the uvicorn line (last line)
@@ -1959,17 +2027,6 @@ The comparison's Remote recording row (none). Devices paired through the network
 
 ---
 
-## app/services/local_dub.py {#app-services-local-dub}
-
-### app/services/local_dub.py · the translation model's download names formwav as its User-Agent
-- refers-to: app/services/local_dub.py :: `install` (the request for LANGS[lang][3]); app/core/version.py :: VERSION
-- kind: rationale
-- logged: v2.12.5 (in progress) · 2026-10-06
-
-Install dubbing language failed for everyone: on 2026-10-06 argos-net.com answered urllib's default User-Agent (Python-urllib/3.12) with 403 Forbidden, while the same address fetched with another User-Agent returned the model. The download now sends `formwav/<version>`. Checked through the engine: POST /api/providers/local-dub/es/install brought the English to Spanish model in (model.bin and sentencepiece.model in models/translate/en_es), after which the dubbing tests below ran.
-
----
-
 ## tests/requirements.txt and tests/requirements_ear.txt {#tests-requirements}
 
 ### tests/requirements.txt · what the tests add to the engine's environment
@@ -2061,7 +2118,7 @@ Ported from formcut's own tests with the cloud service (v2.10.8). A local server
 ## tests/test_elevenlabs.py {#tests-elevenlabs}
 
 ### tests/test_elevenlabs.py · every ElevenLabs route checked against ElevenLabs' contract
-- refers-to: tests/test_elevenlabs.py; app/services/elevenlabs.py
+- refers-to: tests/test_elevenlabs.py; app/services/providers.py (the ElevenLabs functions); app/routers/providers.py
 - kind: explainer
 - logged: v2.12.5 (in progress) · 2026-10-06
 
