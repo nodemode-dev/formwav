@@ -239,7 +239,7 @@ export function mountShell(host: HTMLElement, engine: Engine): void {
         ? `The engine, version ${finalLink.engineVersion ?? "unknown"}, is running on this computer`
         : "The engine is not answering; start it with the formwav launcher";
     if (chip.title !== title) chip.title = title;
-    if (stale) setText(host.querySelector(".fw-notice"), `Run formwav_oc_install: the audio core is from v${core}, this formwav is v${finalLink.engineVersion}`);
+    if (stale) setText(host.querySelector(".fw-notice"), `Run formwav_oc_install: the audio core is v${core}`);
   };
 
   const dismissConnecting = delayedIndicator(
