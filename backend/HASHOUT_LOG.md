@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v2.13.0
-Last updated: 2026-10-07 · v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
+Current build version: v2.13.1
+Last updated: 2026-10-07 · v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
 
 ---
 
@@ -42,13 +42,14 @@ backend/
 │       ├── providers.py         the cloud models (ElevenLabs, fal) and Regenerate's splice
 │       ├── render.py            clip plan from the document, native render, WAV encoding
 │       ├── sync.py              takes lined up by their sound
-│       ├── three_way.py         speech, music and ambience from one clip
+│       ├── three_way.py         speech, music and effects (or ambience, by rule) from one clip
+│       ├── tiger_dnr.py         the trained dialogue, music and effects separator, installed on request
 │       └── vad.py               Silero VAD: where people speak, and the speech-safe cut
 ├── formwav_mcp/server.py        the MCP server (28 tools over the engine's HTTP API), in its own venv; ../mcp/ is its top-level entry
 └── tests/                       pytest, run from backend: python -m pytest tests (written on the owner's ask, v2.12.5)
     ├── requirements.txt         pytest and Playwright, pinned; requirements_ear.txt the EBU renderer's own venv
     ├── conftest.py              a fresh data folder, no paid keys, the shared speech, a real engine on a free port
-    ├── fixtures/                JFK's public-domain speech and ElevenLabs' contract extract (README: their sources)
+    ├── fixtures/                JFK's public-domain speech, CC BY recorded music and ElevenLabs' contract extract (README: their sources)
     ├── stand_ins/               ElevenLabs, ACE-Step and Anthropic answering by their own documents
     ├── test_*.py                one file per area; kinds_probe.mjs and player_plan.mjs load the interface's modules
     ├── mcp_probe.py             the MCP SDK's client against the server, run in the server's venv
@@ -61,6 +62,8 @@ backend/
 
 ## Table of contents
 
+- [app/services/tiger_dnr.py](#app-services-tiger-dnr)
+- [tests/test_claims.py](#tests-claims)
 - [app/core/trust.py](#app-core-trust)
 - [app/services/vamp.py and app/services/nyquist.py](#app-services-vamp-nyquist)
 - [app/services/effects.py · LEARNS_NOISE](#app-services-effects-learns-noise)
@@ -118,6 +121,24 @@ backend/
 - [.github/workflows](#workflows)
 
 ---
+
+## app/services/tiger_dnr.py {#app-services-tiger-dnr}
+
+### A trained model for music and effects, installed on request
+- refers-to: app/services/tiger_dnr.py :: `install`, `installed`, `separate`, `WORKER`, `CODE`, `PACKAGES`, `WEIGHTS`; app/routers/providers.py :: the local-speech status and install routes
+- kind: explainer
+- logged: v2.13.1 · 2026-10-07
+
+The v12 comparison kept the dialogue, music and effects row partial because music and ambience were told apart by a harmonic-percussive rule, not a trained model as RX's and Adobe's are (PLAN_v12 R1). Four candidates were read for licence and size (sidecar research/NOTES_v12_models.md): TIGER-DnR (Xu, Li and others, ICASSP 2025) has MIT code and Apache-2.0 weights of 17 MB, trained on the Divide and Remaster set for exactly these three stems; MERL's MRX is the second choice; the Bandit checkpoints are CC BY-SA and CC BY-NC and are not used; a LiteRT port is declined by XNNPACK on CPU. The model needs PyTorch, so it goes where formwav's open models already go, the speech runtime (data/speech-runtime), never the engine's venv. Its repository is not a package and its layers package imports librosa, torch_complex, typeguard and distutils (gone from Python 3.12), so the installer fetches only the four files the DnR model uses (tiger_dnr.py, base_model.py, activations.py, normalizations.py) from raw.githubusercontent.com at commit 9f18d4a, checks each against a pinned SHA-256, and writes three package files of formwav's own that import nothing else; the weights come from a pinned Hugging Face revision, checked the same way. PyTorch is pinned to 2.6.0, the version Chatterbox pins, so both share one install, and taken from PyTorch's CPU index off macOS (PyPI's Linux wheel pulls the CUDA libraries). The worker runs a sub-model's own overlapped 12 s windows (wav_chunk_inference) on each channel at 44.1 kHz, ffmpeg resampling there and back. Measured here: about 11 times the clip's length per sub-model at the model's 4 s hop on two cores (122 s for 11 s), 45 s at an 8 s hop; 900 MB of runtime with PyTorch. Install on this build machine took 30 s.
+
+## tests/test_claims.py {#tests-claims}
+
+### The README's counts in the suite
+- refers-to: tests/test_claims.py; sidecar verification/audit_claims.py (where it came from)
+- kind: rationale
+- logged: v2.13.1 · 2026-10-07
+
+The claims audit ran from the sidecar at each release (v2.11.8 on), so it held only while someone remembered to run it, and the v12 comparison still found a README line the code had outgrown (files larger than memory, which play from a window since v1.81.0). The audit's checks are now tests the CI runs: the live effect kinds against the document's FX_KINDS, the catalogue effects against the engine's own list, the MCP tools against the server's decorators, the theme profiles, the undo depth, the export formats, the version the opening names against package.json, and the loopback sentence against the Devices listener. A memory figure for long files is checked only where the README still gives one. The Status section is history and is left out.
 
 ## app/core/trust.py {#app-core-trust}
 
@@ -238,6 +259,13 @@ The comparison's open-weight paths (PLAN_v11 2.M5): dubbing needed ElevenLabs. N
 ---
 
 ## app/services/three_way.py {#app-services-three-way}
+
+### The music mask from a trained model, measured against the rule
+- refers-to: app/services/three_way.py :: `trained_mask`, `split` (method, the effects file's name), `TRAINED_HOP`; sidecar verification/verify_dnr_split.py and .json
+- kind: rationale
+- logged: v2.13.1 · 2026-10-07
+
+With TIGER-DnR installed, the music mask is the model's instead of the harmonic-percussive rule; everything else stays: DeepFilterNet3's speech, one soft mask for every channel (the stereo picture kept), the third part the rest, so the three still add up to the clip sample for sample. Four ways were measured on two known mixes (verify_dnr_split.py): the rule; TIGER's music of what speech leaves, as a mask over it, at the model's 4 s hop and at 8 s; and TIGER's music of the whole mix as a mask over what speech leaves. On the mix of recordings (JFK, Kevin MacLeod's "Local Forecast - Elevator" 8 dB under, the stock library's impact, whoosh, riser and air-conditioning tone 6 dB under) the last was best: music from -8.96 to 7.57 dB SI-SDR and effects from -6.65 to 3.17, where the rule reached -4.09 and -6.77 (its third fader moved almost nothing of what it names) and the music of the remainder alone 4.39 and 2.66, 3 dB worse, the model having been trained on whole mixes. On the synthetic mix (chords and drums, pink noise for ambience) the trained mask lifted music from 0.65 to 5.28 dB and left the noise floor 2.8 dB less clean than the rule (-6.76 against -3.93), stationary noise being furthest from the effects it was trained on. The 4 s hop stays: 8 s costs 0.4 dB of music for 2.5 times the speed. The third part's file is named effects when the model ran; the response keeps the key ambience, which the interface, the in-app agent and the MCP tool read, and adds method ("trained" or "rule").
 
 ### Speech, music and ambience as three faders
 - refers-to: backend/app/services/three_way.py; app/routers/media.py (POST /api/media/{id}/three-way); frontend/src/ui/clip-tab.ts (Speech, music and ambience to three tracks); sidecar verification/verify_three_way.py
@@ -2102,6 +2130,13 @@ Adopted from formcut's conftest. Every key or address that could reach a paid se
 
 ## tests/fixtures {#tests-fixtures}
 
+### tests/fixtures · recorded music
+- refers-to: tests/fixtures/music_elevator.flac, README.md
+- kind: explainer
+- logged: v2.13.1 · 2026-10-07
+
+A trained separator is judged on what it was trained for, recordings, so the three-way test needed real music: 11.2 s of Kevin MacLeod's "Local Forecast - Elevator" (CC BY 4.0, credited in the README with its SHA-256), 48 kHz mono 16-bit FLAC, 539 KB. The effects stay generated (the stock library's), so the folder holds one more file.
+
 ### tests/fixtures · real speech and one service's contract
 - refers-to: tests/fixtures/README.md, jfk.wav, elevenlabs_contract.json
 - kind: explainer
@@ -2300,6 +2335,13 @@ The speech delayed by fractions of a sample in the frequency domain (2.317 ms la
 
 ## tests/test_three_way.py {#tests-three-way}
 
+### tests/test_three_way.py · both paths, and a mix of recordings
+- refers-to: tests/test_three_way.py :: `split` (the rule, tiger_dnr.installed patched off), `trained` (skipped where the model is not installed), `_recorded`; fixtures/music_elevator.flac
+- kind: explainer
+- logged: v2.13.1 · 2026-10-07
+
+The rule's tests keep their mix and their bars, with the trained separator switched off for them, so they hold wherever the model is installed. The trained path is tested on that mix and on one of recordings (JFK, the CC BY music excerpt, the stock library's effects), with bars a little under what was measured here (verify_dnr_split.json): on the recordings speech 5 dB nearer its part than the mix was (measured 7.4), music 12 (16.5), effects 6 (9.8); on the synthetic mix music 10 (13.4), its noise floor 6 (7.7). It also checks the three still sum exactly, the method is reported and the third file is named effects. About four minutes on two cores, so CI, which does not install the model, skips it.
+
 ### tests/test_three_way.py · speech, music and ambience, each nearer its own part than the mix was
 - refers-to: tests/test_three_way.py; app/services/three_way.py, deepfilter.py
 - kind: explainer
@@ -2310,6 +2352,13 @@ The sidecar's verify_three_way.py made a test. A stereo mix of known parts: the 
 ---
 
 ## tests/e2e/test_interface.py {#tests-e2e-interface}
+
+### tests/e2e/test_interface.py · nothing clipped, wrapped, cut or hidden at three sizes
+- refers-to: tests/e2e/test_interface.py :: `CUT`, `ACTIONS_IN_VIEW`, `STATES`, `test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes`; sidecar verification/interface/audit.js (its origin)
+- kind: rationale
+- logged: v2.13.1 · 2026-10-07
+
+The interface's overflow audit lived in the sidecar, so a later phase could break the agreed canvas with every repository test passing. It is now a test at 1280 by 674, 1440 by 900 and 1710 by 940 over the editor's tabs, the mixer's Route, the More panels, the browser's tabs and History, failing on text clipped by its own box, a select's or a search box's text cut, a control's or label's text wrapped onto two lines (paragraphs wrap by design and are not checked), and a text or control cut or hidden by an ancestor that clips without scrolling, or cut sideways by one that scrolls (outside the arrangement); and on any of the Clip tab's four actions outside the editor. A check that passes is worth something only if it fails where it should: injected into the running page, v2.13.0's first layouts made it fail (the Inspector's row of cards: hidden and cut items; the Clip tab's three rows: all four actions out of view; the old placeholder, "Search media, effects, sounds": cut), and the shipped layout passes. Each ancestor up the chain is checked, not only the nearest: the first version stopped at a card that held its text whole and missed the card itself cut by the panel.
 
 ### tests/e2e/test_interface.py · the canvas's footer, More, History and the Synth tab
 - refers-to: tests/e2e/test_interface.py :: `FIT`, `test_the_in_app_agent_carries_out_a_chain_of_tools`, `test_history_lists_each_edit_and_goes_back_to_any_of_them`, `test_the_synth_tab_sets_the_sessions_synth_in_one_undo_step`

@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v2.13.0
-Last updated: 2026-10-07 · v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
+Current build version: v2.13.1
+Last updated: 2026-10-07 · v2.13.1: the Clip tab's Separate row names speech, music and effects and says which method split them (src/ui/clip-tab.ts), the agent's separate_clip reports its method (src/ui/agent-pane.ts), Sounds > Models installs any model on this machine (src/ui/models-pane.ts). v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
 
 ---
 
@@ -463,6 +463,13 @@ The comparison's L12: the step sequencer had four rows of on-off steps, placed o
 ---
 
 ## src/ui/clip-tab.ts {#src-ui-clip-tab}
+
+### Speech, music and effects, and which method split them
+- refers-to: frontend/src/ui/clip-tab.ts (the Separate row's button, its progress text and the result line); src/ui/agent-pane.ts (separate_clip's description and method); src/ui/models-pane.ts (Install a model on this machine); backend app/services/three_way.py
+- kind: rationale
+- logged: v2.13.1 · 2026-10-07
+
+With the trained separator (PLAN_v12 R1) the third part is effects, what a film's mix calls sound effects and ambience, so the button reads Speech, music and effects to three tracks. The result line says which method ran, the trained model or the rule, and where the model is installed when the rule ran, in the two lines the state output holds at 1280 wide (at most 96 characters here). The engine's install list now carries a model that is not a speech engine, so Sounds > Models' task reads Install a model on this machine. The agent's separate_clip passes the method on, and its description says the effects part comes back under the key ambience, which the engine keeps for its callers.
 
 ### The Clip tab in the canvas's two rows
 - refers-to: frontend/src/ui/clip-tab.ts (the grid's field order)
