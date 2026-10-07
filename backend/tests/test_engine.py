@@ -44,6 +44,7 @@ def test_every_version_site_states_the_same_version():
         "src-tauri/tauri.conf.json": json.loads((ROOT / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))["version"],
         "README.md, the badge": _match("README.md", r"badge/version-([0-9.]+)-"),
         "README.md, the badge's text": _match("README.md", r'alt="version ([0-9.]+)"'),
+        "README.md, the opening": _match("README.md", r"At v([0-9.]+) it is"),
         "backend/HASHOUT_LOG.md": _match("backend/HASHOUT_LOG.md", r"^Current build version: v(\S+)"),
         "frontend/HASHOUT_LOG.md": _match("frontend/HASHOUT_LOG.md", r"^Current build version: v(\S+)"),
         "native/HASHOUT_LOG.md": _match("native/HASHOUT_LOG.md", r"^Current build version: v(\S+)"),

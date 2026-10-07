@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v2.12.4
-Last updated: 2026-09-30 · no Rust change since v0.64.0's transient detection (the last entry below); the header had read v0.35.0
+Current build version: v2.12.5
+Last updated: 2026-10-07 · v2.12.5: tests/stages.rs, Stage::latency's doc comment (src/fx.rs), and the L6 and native capture entries filed under their sources; most stages added since v1.11.0 have no entry in this log
 
 ---
 
