@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
 Current build version: v2.14.0
-Last updated: 2026-10-07 · v2.14.0: the studio processors, formwav's own library (src/engine/processors.ts; the processor entry in src/engine/document.ts; src/audio/player.ts and player-worklet.ts; the browser's list in src/ui/browser-effects.ts, the cards in src/ui/editor-tabs.ts, the rows in src/ui/inspector-pane.ts, the agent's tool in src/ui/agent-pane.ts; the chain wrapping in src/styles/canvas.css). v2.13.1: the Clip tab's Separate row names speech, music and effects and says which method split them (src/ui/clip-tab.ts), the agent's separate_clip reports its method (src/ui/agent-pane.ts), Sounds > Models installs any model on this machine (src/ui/models-pane.ts). v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
+Last updated: 2026-10-07 · v2.14.1: the mixer basics (src/ui/mixer.ts: solo safe and solo alone, Clear solos and mutes, trim, polarity, Off, bypass by kind, the pan law, the peak hold and the clip light; the commands in src/engine/document.ts and describe.ts; every kind but the filters on a track's bus with its filter automation, and gain reduction by insert, in src/audio/player.ts and player-worklet.ts; a dynamics card's reduction in src/ui/editor-tabs.ts; src/styles/canvas.css). v2.14.0: the studio processors, formwav's own library (src/engine/processors.ts; the processor entry in src/engine/document.ts; src/audio/player.ts and player-worklet.ts; the browser's list in src/ui/browser-effects.ts, the cards in src/ui/editor-tabs.ts, the rows in src/ui/inspector-pane.ts, the agent's tool in src/ui/agent-pane.ts; the chain wrapping in src/styles/canvas.css). v2.13.1: the Clip tab's Separate row names speech, music and effects and says which method split them (src/ui/clip-tab.ts), the agent's separate_clip reports its method (src/ui/agent-pane.ts), Sounds > Models installs any model on this machine (src/ui/models-pane.ts). v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
 
 ---
 
@@ -91,6 +91,9 @@ frontend/
 
 ## Table of contents
 
+- [src/ui/mixer.ts · the mixer basics (PLAN_v13 S2)](#src-ui-mixer-s2)
+- [src/audio/player.ts · the mixer basics (PLAN_v13 S2)](#src-audio-player-s2)
+- [src/ui/editor-tabs.ts · gain reduction (PLAN_v13 S2)](#src-ui-editor-tabs-s2)
 - [src/engine/describe.ts](#src-engine-describe)
 - [src/styles/canvas.css](#src-styles-canvas)
 - [src/styles/tokens.css](#src-styles-tokens)
@@ -152,6 +155,35 @@ frontend/
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
+
+## src/ui/mixer.ts · the mixer basics (PLAN_v13 S2) {#src-ui-mixer-s2}
+
+### Solo safe and solo alone, clearing, trim, polarity, Off, bypass by kind, the pan law, the peak hold and the clip light
+- refers-to: src/ui/mixer.ts (stripNode, updateStrip, the bar's clear-solos, clear-mutes, .fw-mix-bypass and .fw-mix-panlaw, the strips' click, input and change handlers, hold); src/engine/document.ts (Track.soloSafe, trimDb, invert and autoOff, SessionDoc.panLaw, set-track-solo's exclusive, set-track-solo-safe, set-track-trim, set-track-invert, set-track-automation-off, clear-solos, clear-mutes, set-pan-law, bypass-fx-category, FxCategory, fxCategory); src/engine/describe.ts (their words); src/styles/canvas.css (.fw-dock .fw-mixer-bar as a grid, .fw-out-hold, .fw-strip-clip, .fw-strip-solo[data-safe], .fw-strip-invert, .fw-strip-trim-row)
+- kind: rationale
+- logged: v2.14.1 · 2026-10-07
+
+Pro Tools' mixer has these and formwav's did not. Solo keeps its plain click; Alt-click solos the track alone (set-track-solo with exclusive, the others unsoloed in the same step), and Cmd or Ctrl-click makes it solo safe (as Pro Tools does), marked by a line under S and its title; the player and the export leave a solo-safe track in a soloed mix. Clear solos and Clear mutes act on every track at once, one step each. Trim (plus or minus 24 dB, in 0.1 dB) and Invert sit in Route, after the routing, since the strip has no room beside M and S at the dock's height (Route scrolls inside its box, as it did for the send and the automation mode); the trim's slider is held by a dragging flag, like the fader, so an undo while it keeps focus still moves it. Off joins the automation modes: it is the one mode kept in the document (autoOff), because the export must play it too; Read and the recording modes stay the strip's own, as before. With Off the fader, pan and filters play as set and the lanes stay; the fader is usable in every mode but Read. Bypass inserts takes a kind (all, EQ, Dynamics, Reverb, Delay, Modulation; the processors by their library's category) and bypasses it on the selected clips' tracks, or on every track with none selected, or switches it back on when every such insert is already off; the menu returns to its label after. The pan law menu shows the session's law (0 dB, the balance, when none is set).
+
+Each strip's meter has a hold mark per channel: a full-width span whose right edge is the mark, moved with translateX, shown at the highest peak for 2 s, then falling at 20 dB a second, gone at a stop; and a clip light (track, bus and output strips), lit at a peak of 0 dBFS or more until clicked. Both write transforms and data attributes only, so a meter never moves its strip; the light sits in the kind row's free end (for the output strip, the column the pan knob takes on the others, where it no longer covers "Output").
+
+## src/audio/player.ts · the mixer basics (PLAN_v13 S2) {#src-audio-player-s2}
+
+### Every kind but the filters on a track's bus, with its filter automation; gain reduction by insert
+- refers-to: src/audio/player.ts (FILTERS, PLACED_ON_THE_SUM, PAN_LAWS, flatStagesAuto, planClips, clipChain, ClipPlan.processorTracks and panLaw, sendPlan, bounce, handlePosition, onReductions); src/audio/player-worklet.ts (WorkletBus.fxAuto, the clips message's panLaw, the position reply's reductions, fw_add_bus_fx_auto, fw_set_pan_law, fw_take_reductions)
+- kind: rationale
+- logged: v2.14.1 · 2026-10-07
+
+As the export does (backend log, app/services/render.py, S2): a track carrying any kind but the five filters plays through a bus of its own, so an echo's or a gate's tail rings past a clip's end; flatStagesAuto numbers the filters' automation by that bus chain's stages for the core's bus automation, where it was dropped before on a track with a compressor. A track with a surround place keeps the old rule (PLACED_ON_THE_SUM), its time-based effects per clip where its place reaches them. Solo safe, Off (no volume, pan or filter automation sent), the trim and the polarity (both in the clip's gain, ahead of the track's inserts; a clip's own compressor, a clip insert, is not moved by the trim) and the pan law's code are planned here as in the export; tests/test_plan_parity.py holds the two planners equal. processorTracks names whose each processor is, in the order the core reports gain reduction (buses' processors as null), so the reply's reductions come out keyed by track and insert while playing, and empty when stopped.
+
+## src/ui/editor-tabs.ts · gain reduction (PLAN_v13 S2) {#src-ui-editor-tabs-s2}
+
+### A dynamics processor's card shows its gain reduction
+- refers-to: src/ui/editor-tabs.ts (the card's .fw-fx-gr, the onReductions listener); src/styles/canvas.css (.fw-fx-gr)
+- kind: rationale
+- logged: v2.14.1 · 2026-10-07
+
+The five Dynamics processors (compressor, expander/gate, de-esser, maximizer, channel strip) report their gain reduction; their cards show it in the head, "GR -6.2 dB" as it plays and "GR 0.0 dB" stopped, in a mono readout 11ch wide so a changing number never moves the buttons beside it. The listener reads nothing while the Effects tab is hidden or holds no such card.
 
 ## src/engine/describe.ts {#src-engine-describe}
 

@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
 Current build version: v2.14.0
-Last updated: 2026-10-07 · v2.14.0: studio processors in exports (app/services/render.py: processor_spec, native_chains, ON_THE_SUM; app/services/surround.py), tests/test_processors.py, the processor kind in tests/test_plan_parity.py, tests/player_plan.mjs and tests/test_kinds.py, the processor count in tests/test_claims.py, the fit test with processor cards (tests/e2e/test_interface.py). v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
+Last updated: 2026-10-07 · v2.14.1: the mixer basics in exports (app/services/render.py: every kind but the filters on a track's sum with its filter automation, a placed track's exception, trim, polarity, solo safe, automation Off and the pan law; app/services/surround.py; the thumbnail in app/services/projects.py), tests/test_mixer.py, two cases in tests/test_plan_parity.py, the mixer's controls and meters in tests/e2e/test_interface.py. v2.14.0: studio processors in exports (app/services/render.py: processor_spec, native_chains, ON_THE_SUM; app/services/surround.py), tests/test_processors.py, the processor kind in tests/test_plan_parity.py, tests/player_plan.mjs and tests/test_kinds.py, the processor count in tests/test_claims.py, the fit test with processor cards (tests/e2e/test_interface.py). v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
 
 ---
 
@@ -62,6 +62,7 @@ backend/
 
 ## Table of contents
 
+- [app/services/render.py · the mixer basics (PLAN_v13 S2)](#app-services-render-s2)
 - [app/services/tiger_dnr.py](#app-services-tiger-dnr)
 - [tests/test_claims.py](#tests-claims)
 - [app/core/trust.py](#app-core-trust)
@@ -121,6 +122,17 @@ backend/
 - [.github/workflows](#workflows)
 
 ---
+
+## app/services/render.py · the mixer basics (PLAN_v13 S2) {#app-services-render-s2}
+
+### Every kind but the filters on a track's sum; trim, polarity, solo safe, automation Off and the pan law in the plan
+- refers-to: app/services/render.py :: `ON_THE_SUM`, `PLACED_ON_THE_SUM`, `PAN_LAWS`, `plan` (the solo check, off, trim_db, polarity, on_sum, bus_auto), `render`; app/services/surround.py :: `_bus`; app/services/projects.py :: `_overview_png`; tests/test_mixer.py; tests/test_plan_parity.py (the S2 and placed-track cases) and tests/player_plan.mjs (a bus's fxAuto, panLaw); tests/e2e/test_interface.py (the mixer's controls, and the hold, the clip light and the reduction while playing)
+- kind: rationale
+- logged: v2.14.1 · 2026-10-07
+
+ON_THE_SUM held the kinds that must see a track's sum (compressor, reverb, dialogue isolate, de-click, de-reverb, processor); the rest ran per clip, so an echo, a chorus or a gate stopped dead at each clip's end. Every kind but the five linear filters now takes a track to a bus of its own, where a tail rings on into the gap after its clip (measured: an echo's repeats 250 ms apart at -21.9, -32.3 and -42.8 dB RMS after the clip, where the dry export is silent). The filters go with the chain, and so does their automation (PT-19), numbered by the bus chain's stages and applied by the core's add_bus_fx_auto; on a bus a sweep is the same sample for sample as on the clip's chain, where before a compressor on the track had dropped it. A track with a 5.1 or ambisonic place is the exception: on its own bus it plays on L and R in a 5.1 mix (the S1 finding, for S16), so it goes there only for the old six kinds (PLACED_ON_THE_SUM), its time-based effects staying per clip where its place reaches them, and a tail there still stops at the clip's end.
+
+Trim and polarity are in the clip's gain, which a track's own bus receives first, so both act ahead of the track's inserts (a limiter at -18 dBFS holds a tone trimmed to -12); a clip's own compressor is a clip insert, ahead of the track, so its threshold follows the clip's gain only, not the trim. The track's fader is in that gain too, as it always was; the fader after the inserts is S17's. Solo safe keeps a track in a soloed mix. Automation Off plays the static fader and pan and the filters as set, the lanes kept in the document. The pan law goes to the core by its code (PAN_LAWS; absent is the balance, so an old session is unchanged). The session thumbnail follows solo safe and trim too.
 
 ## app/services/tiger_dnr.py {#app-services-tiger-dnr}
 

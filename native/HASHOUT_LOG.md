@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
 Current build version: v2.14.0
-Last updated: 2026-10-07 · v2.14.0: formwav's own studio processors (the formwav-studio crate) run as a processor stage (src/fx.rs `Processor`, kind 20), entries in src/render.rs, src/wasm.rs, src/python.rs and src/native.rs; bus and master chains run stage by stage over a block; tests/processors.rs. v2.13.1: no change to the core (the version only). v2.13.0: the synth's low-pass, in render() and the live instrument alike (src/synth.rs), and its two new parameters through src/python.rs and src/wasm.rs; most stages added since v1.11.0 have no entry in this log
+Last updated: 2026-10-07 · v2.14.1: a filter's automation on a bus (src/render.rs `add_bus_fx_auto`, `run_bus_chain`), the -3, -4.5 and -6 dB pan laws for a mono source (`law_gains`, `set_pan_law`, `clip_pan`), each processor's gain reduction (`take_reductions`), their entries in src/wasm.rs, src/python.rs and src/native.rs; tests/mixer.rs. v2.14.0: formwav's own studio processors (the formwav-studio crate) run as a processor stage (src/fx.rs `Processor`, kind 20), entries in src/render.rs, src/wasm.rs, src/python.rs and src/native.rs; bus and master chains run stage by stage over a block; tests/processors.rs. v2.13.1: no change to the core (the version only). v2.13.0: the synth's low-pass, in render() and the live instrument alike (src/synth.rs), and its two new parameters through src/python.rs and src/wasm.rs; most stages added since v1.11.0 have no entry in this log
 
 ---
 
@@ -64,8 +64,22 @@ native/
 - [formwav-dsp/src/synth.rs](#src-synth)
 - [formwav-dsp/tests/stages.rs](#tests-stages)
 - [formwav-studio and the processor stage](#formwav-studio)
+- [The mixer basics in the core (PLAN_v13 S2)](#mixer-s2)
 
 ---
+
+## The mixer basics in the core (PLAN_v13 S2) {#mixer-s2}
+
+### src/render.rs · a filter's automation on a bus, the pan law, each processor's gain reduction
+- refers-to: render.rs :: `bus_fx_spec`, `bus_fx_auto`, `add_bus_stage`, `add_bus_processor`, `add_bus_fx_auto`, `run_bus_chain`, `mix_buses`, `pan_law`, `set_pan_law`, `clip_pan`, `mix_one`, `take_reductions`, `clear_buses`, `add_bus`; wasm.rs :: `fw_add_bus_fx_auto`, `fw_set_pan_law`, `fw_take_reductions`; python.rs :: `render(bus_auto=..., pan_law=...)`; native.rs :: `MixBus.fx_auto`, `Mix.pan_law`; tests/mixer.rs
+- kind: rationale
+- logged: v2.14.1 · 2026-10-07
+
+Every kind but the five filters now runs on a track's sum (a bus of its own), so a track with an echo or a gate takes its filters onto that bus too; their automation went only to clip chains, so it would have been lost there, as it already was on a track with a compressor. A bus stage's automation is added as a clip's is (the stage, parameter 0 to 2 for frequency, gain and Q, an envelope), for the five filters only, refused otherwise; add_bus_stage now keeps each stage's kind and settings (bus_fx_spec, a processor's as kind 20) so an automated filter can be redesigned. run_bus_chain runs a chain stage by stage over the block as before when nothing on the bus is automated; otherwise it splits the block on the same absolute 32-sample grid the clip chains retune on, redesigns each automated filter from its envelopes at the piece's start, then runs the stages over the piece, so a sweep on a track's bus equals the same sweep on its clip sample for sample (measured in backend/tests/test_mixer.py). The read-ahead is kept: the primed samples are retuned at `from`, the block at `from + ahead`, its own session time.
+
+The pan law (law_gains) is a session setting coded 1 to 3, the three a console offers; 0, and any other code, is the balance every session had, so no old session changes. With p the pan from 0 (left) to 1 (right): 1 is constant power, the cosine and sine of p times a quarter turn, whose squares always sum to one (-3.01 dB each side at the centre); 3 is linear, 1 - p and p, whose gains always sum to one (-6.02 dB); 2 is the geometric mean of the two (-4.52 dB), halfway between them in decibels everywhere. It applies to a mono source only, the clip's pan and its pan automation alike: a stereo source's pan stays the balance it was, its image kept whole at the centre. The centre is measured in the export (tests/mixer.rs, within 0.02 dB of -3.0103, -4.5154 and -6.0206).
+
+take_reductions writes each processor's gain_reduction_db in the order the bus chains and then the master hold them, and returns the count whatever the room, so a caller with too little room knows it was cut. The browser's plan names whose each processor is in the same order.
 
 ## formwav-studio and the processor stage {#formwav-studio}
 
