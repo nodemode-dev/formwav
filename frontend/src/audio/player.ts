@@ -22,6 +22,33 @@ export interface ClipPlan {
   masterDb: number;
   /** The processor stages' specs, which a stage [20, k, ...] names by k. */
   processors: string[];
+  /** Whose each processor is, by k: a track's insert (its place in the track's fx), or a bus's (null). */
+  processorTracks: ({ trackId: string; fx: number } | null)[];
+  /** The pan law for a mono source, in the core's codes (0 the balance, 1 to 3 for -3, -4.5 and -6 dB). */
+  panLaw: number;
+}
+
+const FILTERS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf"]);
+/** A track with a 5.1 or ambisonic place goes to its own bus only for these, as in exports. */
+const PLACED_ON_THE_SUM: ReadonlySet<string> = new Set(["compressor", "reverb", "voice", "declick", "dereverb", "processor"]);
+const PAN_LAWS: Readonly<Record<string, number>> = { "-3": 1, "-4.5": 2, "-6": 3 };
+
+/** The filters' automation for a bus chain flatStages builds (a track's own bus), numbered by its stages; param 0
+ *  frequency, 1 gain, 2 Q; points flat [time, value, ...]. */
+export function flatStagesAuto(fx: readonly TrackFx[] | undefined): { stage: number; param: number; points: number[] }[] {
+  const out: { stage: number; param: number; points: number[] }[] = [];
+  let stage = 0;
+  for (const f of fx ?? []) {
+    if (f.bypass) continue;
+    if (f.kind === "highpass" || f.kind === "lowpass" || f.kind === "peak" || f.kind === "lowshelf" || f.kind === "highshelf") {
+      (["freq", "gain", "q"] as const).forEach((key, param) => {
+        const pts = f.automation?.[key];
+        if (pts?.length) out.push({ stage, param, points: pts.flatMap((p) => [p.time, p.value]) });
+      });
+    }
+    stage++;
+  }
+  return out;
 }
 
 export function dbToGain(db: number): number {
@@ -208,6 +235,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
   const mutedBuses = new Set<string>();
   const buses: WorkletBus[] = [];
   const processors: string[] = [];
+  const processorTracks: ({ trackId: string; fx: number } | null)[] = [];
   for (const bus of doc.buses ?? []) {
     if (bus.mute) {
       mutedBuses.add(bus.id);
@@ -216,6 +244,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     const id = buses.length + 1;
     busIndex.set(bus.id, id);
     const busStages = flatStages(bus.fx, processors);
+    while (processorTracks.length < processors.length) processorTracks.push(null);
     buses.push({ id, gain: dbToGain(bus.gainDb), pan: bus.pan ?? 0, ...(busStages.length ? { stages: busStages } : {}) });
   }
   const clips: WorkletClip[] = [];
@@ -226,22 +255,27 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
   let skipped = 0;
   for (const track of doc.tracks) {
     const vca = track.vcaId !== undefined ? (doc.vcas ?? []).find((v) => v.id === track.vcaId) : undefined;
-    if (track.mute || vca?.mute || (soloed && !track.solo) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
+    if (track.mute || vca?.mute || (soloed && !track.solo && !track.soloSafe) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
     let bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
+    const off = track.autoOff === true;
     let fxFlat = flatFx(track.fx);
-    let fxAuto = flatFxAuto(track.fx);
-    if (bus === 0 && (track.fx ?? []).some((f) => (f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice" || f.kind === "declick" || f.kind === "dereverb" || f.kind === "processor") && !f.bypass)) {
-      // A compressor must see the track's sum, a reverb's tail must ring on past each clip's end (PT-22), and a stage
-      // that delays its signal is read ahead only on a bus (RX-16): its own bus (unity, centre) carries the whole
-      // chain, as in exports.
-      // (Bus chains are not automated yet, so the automation stays with the clip chain it was written for.)
+    let fxAuto = off ? [] : flatFxAuto(track.fx);
+    if (bus === 0 && (track.fx ?? []).some((f) => (track.surround ? PLACED_ON_THE_SUM.has(f.kind) : !FILTERS.has(f.kind)) && !f.bypass)) {
+      // Every stage but the five filters runs on the track's sum, as in exports: a compressor or a gate must see the
+      // sum, a reverb's or an echo's tail rings on past each clip's end, and a stage that delays its signal is read
+      // ahead only on a bus (RX-16); its own bus (unity, centre) carries the whole chain and the filters' automation.
+      // A placed track keeps its time-based effects per clip, where its 5.1 or ambisonic place reaches them.
       bus = buses.length + 1;
-      buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx, processors) });
+      buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx, processors), ...(off ? {} : { fxAuto: flatStagesAuto(track.fx) }) });
+      // flatStages adds one spec per live processor, in the chain's order
+      (track.fx ?? []).forEach((f, i) => {
+        if (f.kind === "processor" && !f.bypass) processorTracks.push({ trackId: track.id, fx: i });
+      });
       fxFlat = [];
       fxAuto = [];
     }
-    const volumePoints = track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
-    const panPoints = track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
+    const volumePoints = !off && track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
+    const panPoints = !off && track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
     // PT-38, AA-11: a session hearing its 5.1 as a fold-down gives the core each placed clip's speaker gains, and the
     // core plays its six-channel bus folded to stereo (the engine's stereo mix does the same)
     const s = track.surround;
@@ -265,7 +299,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         start: clip.start,
         sourceIn: clip.sourceIn,
         length: clip.length,
-        gain: dbToGain((volumePoints ? 0 : track.gainDb) + (vca?.gainDb ?? 0) + clip.gainDb),
+        gain: (track.invert ? -1 : 1) * dbToGain((volumePoints ? 0 : track.gainDb) + (vca?.gainDb ?? 0) + (track.trimDb ?? 0) + clip.gainDb),
         pan: panPoints ? 0 : track.pan ?? 0,
         gainPoints: envPoints,
         panPoints,
@@ -288,7 +322,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       end = Math.max(end, clip.start + clip.length);
     }
   }
-  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0, places, fold: !!doc.surroundFold && places.length > 0, surroundFormat: doc.spatialFormat === "foa" ? 1 : 0, processors };
+  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0, places, fold: !!doc.surroundFold && places.length > 0, surroundFormat: doc.spatialFormat === "foa" ? 1 : 0, processors, processorTracks, panLaw: PAN_LAWS[doc.panLaw ?? ""] ?? 0 };
 }
 
 function send(node: AudioWorkletNode, message: WorkletMessage, transfer: Transferable[] = []): void {
@@ -541,7 +575,7 @@ export class Player {
   private module: Promise<ArrayBuffer> | null = null;
   private sources = new Map<string, number>();
   private counter = 0;
-  private lastPlan: ClipPlan = { clips: [], end: 0, skipped: 0, buses: [], masterDb: 0, processors: [] };
+  private lastPlan: ClipPlan = { clips: [], end: 0, skipped: 0, buses: [], masterDb: 0, processors: [], processorTracks: [], panLaw: 0 };
   private pending = new Map<string, Promise<void>>();
 
   constructor(private readonly engine: Engine) {
@@ -638,7 +672,7 @@ export class Player {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
     const processors = [...this.lastPlan.processors];
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx, processors), processors, timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true, places: this.lastPlan.places, fold: this.lastPlan.fold, surroundFormat: this.lastPlan.surroundFormat });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx, processors), processors, panLaw: this.lastPlan.panLaw, timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true, places: this.lastPlan.places, fold: this.lastPlan.fold, surroundFormat: this.lastPlan.surroundFormat });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
@@ -663,6 +697,21 @@ export class Player {
     }
     const six = this.engine.get("transport").playing && reply.surroundPeaks?.length === 6 ? reply.surroundPeaks : null;
     for (const listener of this.surroundListeners) listener(six);
+    // each track processor's gain reduction while playing, by the track and its place in the chain; none when stopped
+    const playing = this.engine.get("transport").playing;
+    const reductions = new Map<string, number>();
+    (reply.reductions ?? []).forEach((db, k) => {
+      const owner = this.lastPlan.processorTracks[k];
+      if (owner && playing) reductions.set(`${owner.trackId}:${owner.fx}`, db);
+    });
+    for (const listener of this.reductionListeners) listener(reductions);
+  }
+
+  private reductionListeners = new Set<(byInsert: ReadonlyMap<string, number>) => void>();
+
+  /** Each track processor's gain reduction in dB as it plays, keyed "trackId:fxIndex" (empty when stopped). */
+  onReductions(listener: (byInsert: ReadonlyMap<string, number>) => void): void {
+    this.reductionListeners.add(listener);
   }
 
   private onReply = (e: MessageEvent<WorkletReply>): void => {
@@ -906,7 +955,7 @@ export class Player {
     await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter, streamInfo(doc, id, 0), true)));
     const plan = planClips(doc, sources);
     const processors = [...plan.processors];
-    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterFx: flatStages(doc.masterFx, processors), processors, timeTrack, timeTrackLog: doc.timeTrackLog === true, places: plan.places, fold: plan.fold, surroundFormat: plan.surroundFormat });
+    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterFx: flatStages(doc.masterFx, processors), processors, panLaw: plan.panLaw, timeTrack, timeTrackLog: doc.timeTrackLog === true, places: plan.places, fold: plan.fold, surroundFormat: plan.surroundFormat });
     send(node, { type: "play" });
     await request(node, { type: "seek", position: 0 }, (r) => r.type === "position");
     const rendered = await ctx.startRendering();

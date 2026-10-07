@@ -1,6 +1,6 @@
 import type { Player } from "../audio/player";
 import type { Engine, SessionDoc, Track } from "../engine";
-import type { Bus, Vca } from "../engine/document";
+import { fxCategory, type Bus, type FxCategory, type Vca } from "../engine/document";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 import { icon as fcIcon } from "../vendor/formcut/icons";
 import { knobify, syncKnob } from "./knob";
@@ -13,17 +13,20 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
   node.dataset.kind = kind;
   node.innerHTML =
     `<div class="fw-strip-name"></div><span class="fw-strip-kind">${kind === "track" ? "Track" : kind === "bus" ? "Bus" : kind === "vca" ? "VCA" : "Output"}</span>` +
-    `<div class="fw-strip-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div>${kind === "master" ? ["L", "R", "C", "LFE", "Ls", "Rs"].map((ch) => `<div class="fw-out-track fw-out-51" data-ch="${ch}" title="5.1 ${ch}" hidden><div class="fw-out-bar"></div></div>`).join("") : ""}</div>` +
+    `<button type="button" class="fw-strip-clip" data-clip="false" aria-label="Clip indicator, click to reset" title="Reached 0 dBFS (click to reset)"${kind === "vca" ? " hidden" : ""}></button>` +
+    `<div class="fw-strip-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div><span class="fw-out-hold"></span></div><div class="fw-out-track"><div class="fw-out-bar"></div><span class="fw-out-hold"></span></div>${kind === "master" ? ["L", "R", "C", "LFE", "Ls", "Rs"].map((ch) => `<div class="fw-out-track fw-out-51" data-ch="${ch}" title="5.1 ${ch}" hidden><div class="fw-out-bar"></div></div>`).join("") : ""}</div>` +
     `<input class="fw-strip-fader" type="range" min="-60" max="12" step="0.1" data-default="0" aria-label="Volume">` +
     `<output class="fw-strip-db"></output>` +
     `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" data-default="0" aria-label="Pan"${kind === "master" || kind === "vca" ? " hidden" : ""}>` +
-    `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute">M</button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo"${kind !== "track" ? " hidden" : ""}>S</button></div>` +
+    `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute">M</button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo (Alt-click solos it alone; Cmd or Ctrl-click makes it solo safe)"${kind !== "track" ? " hidden" : ""}>S</button></div>` +
     `<details class="fw-strip-route"${kind === "master" ? " hidden" : ""}><summary>${kind === "track" ? "Route" : "More"}</summary><div class="fw-route-box">` +
     `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>` +
     `<select class="fw-strip-vca" aria-label="VCA"${kind !== "track" ? " hidden" : ""}></select>` +
     `<select class="fw-strip-send" aria-label="Send to bus" title="Send this track, after its inserts and fader, to a bus as well"${kind !== "track" ? " hidden" : ""}></select>` +
     `<input class="fw-strip-send-level" type="range" min="-60" max="12" step="0.5" value="-12" data-default="-12" aria-label="Send level" title="Send level, dB"${kind !== "track" ? " hidden" : ""}>` +
-    `<select class="fw-strip-auto" aria-label="Automation mode" title="Read plays the volume automation; Write, Touch, Latch and Trim record the fader into it while playing"${kind !== "track" ? " hidden" : ""}><option value="read">Read</option><option value="write">Write</option><option value="touch">Touch</option><option value="latch">Latch</option><option value="trim">Trim</option></select>` +
+    `<select class="fw-strip-auto" aria-label="Automation mode" title="Read plays the automation; Write, Touch, Latch and Trim record the fader into it while playing; Off plays the fader, pan and filters as set and keeps the lanes"${kind !== "track" ? " hidden" : ""}><option value="off">Off</option><option value="read" selected>Read</option><option value="write">Write</option><option value="touch">Touch</option><option value="latch">Latch</option><option value="trim">Trim</option></select>` +
+    `<label class="fw-strip-trim-row"${kind !== "track" ? " hidden" : ""}><span>Trim</span><input class="fw-strip-trim" type="range" min="-24" max="24" step="0.5" value="0" data-default="0" aria-label="Input trim" title="Input trim, dB, ahead of the inserts"></label>` +
+    `<button type="button" class="fw-ibtn fw-strip-invert" aria-pressed="false" aria-label="Invert polarity" title="Invert the polarity, ahead of the inserts"${kind !== "track" ? " hidden" : ""}>Invert</button>` +
     `<button type="button" class="fw-ibtn fw-strip-remove"${kind === "bus" || kind === "vca" ? "" : " hidden"} title="Remove; its tracks go back to the master or leave the VCA">Remove</button>` +
     `</div></details>`;
   return node;
@@ -51,15 +54,23 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
   }
   const fader = node.querySelector<HTMLInputElement>(".fw-strip-fader");
   const pan = node.querySelector<HTMLInputElement>(".fw-strip-pan");
-  const automation = strip.kind === "track" ? strip.item.automation : undefined;
+  const off = strip.kind === "track" && strip.item.autoOff === true;
+  const automation = strip.kind === "track" && !off ? strip.item.automation : undefined;
+  const mode = node.querySelector<HTMLSelectElement>(".fw-strip-auto");
+  if (strip.kind === "track" && mode) {
+    if (off && mode.value !== "off") mode.value = "off";
+    else if (!off && mode.value === "off") mode.value = "read";
+  }
   const volumeAuto = !!automation?.volume?.length;
   const panAuto = !!automation?.pan?.length;
+  // the fader follows the automation in Read; in Write, Touch, Latch and Trim it records over it
+  const followed = volumeAuto && (mode?.value ?? "read") === "read";
   if (fader && node.dataset.dragging !== "fader") {
     const value = String(strip.item.gainDb);
     if (fader.value !== value) fader.value = value;
-    if (fader.disabled !== volumeAuto) fader.disabled = volumeAuto;
-    setAttr(fader, "title", volumeAuto ? "Volume follows this track's automation" : "Volume");
-    setText(node.querySelector(".fw-strip-db"), volumeAuto ? "auto" : dbText(strip.item.gainDb));
+    if (fader.disabled !== followed) fader.disabled = followed;
+    setAttr(fader, "title", followed ? "Volume follows this track's automation (choose Touch, Latch, Write or Trim to record over it)" : "Volume");
+    setText(node.querySelector(".fw-strip-db"), followed ? "auto" : dbText(strip.item.gainDb));
   }
   if (pan && strip.kind !== "vca") {
     knobify(pan);
@@ -72,6 +83,16 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
   setAttr(node.querySelector(".fw-strip-mute"), "aria-pressed", String(!!strip.item.mute));
   if (strip.kind === "track") {
     setAttr(node.querySelector(".fw-strip-solo"), "aria-pressed", String(strip.item.solo));
+    const solo = node.querySelector<HTMLElement>(".fw-strip-solo");
+    if (solo && (solo.dataset.safe === "true") !== !!strip.item.soloSafe) solo.dataset.safe = String(!!strip.item.soloSafe);
+    setAttr(solo, "title", strip.item.soloSafe ? "Solo safe: plays through other tracks' solos (Cmd or Ctrl-click to clear)" : "Solo (Alt-click solos it alone; Cmd or Ctrl-click makes it solo safe)");
+    setAttr(node.querySelector(".fw-strip-invert"), "aria-pressed", String(!!strip.item.invert));
+    const trim = node.querySelector<HTMLInputElement>(".fw-strip-trim");
+    if (trim && node.dataset.dragging !== "trim") {
+      const value = String(strip.item.trimDb ?? 0);
+      if (trim.value !== value) trim.value = value;
+      setAttr(trim, "title", `Input trim ${dbText(strip.item.trimDb ?? 0)}, ahead of the inserts`);
+    }
     const out = node.querySelector<HTMLSelectElement>(".fw-strip-out");
     if (out) {
       const options = [["", "Master"], ...(doc.buses ?? []).map((b) => [b.id, b.name])];
@@ -131,12 +152,39 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   // Buses and VCAs are made here: buses had routing but no way to be created from the interface.
   const bar = document.createElement("div");
   bar.className = "fw-mixer-bar";
-  bar.innerHTML = `<button type="button" class="fw-ibtn" data-mix="add-bus">Add bus</button><button type="button" class="fw-ibtn" data-mix="add-vca" title="A fader for a group of tracks, with no audio through it">Add VCA</button>`;
+  bar.innerHTML =
+    `<button type="button" class="fw-ibtn" data-mix="add-bus">Add bus</button><button type="button" class="fw-ibtn" data-mix="add-vca" title="A fader for a group of tracks, with no audio through it">Add VCA</button>` +
+    `<button type="button" class="fw-ibtn" data-mix="clear-solos" title="Unsolo every track">Clear solos</button><button type="button" class="fw-ibtn" data-mix="clear-mutes" title="Unmute every track">Clear mutes</button>` +
+    `<select class="fw-mix-bypass" aria-label="Bypass inserts" title="Bypass or switch on a kind of insert on every track (the selected clip's tracks when clips are selected)"><option value="">Bypass inserts</option><option value="all">All inserts</option><option value="eq">EQ</option><option value="dynamics">Dynamics</option><option value="reverb">Reverb</option><option value="delay">Delay</option><option value="modulation">Modulation</option></select>` +
+    `<select class="fw-mix-panlaw" aria-label="Pan law" title="How loud a mono track panned to the centre plays: 0 dB balance, or -3, -4.5 or -6 dB in each side"><option value="0">Pan law 0 dB</option><option value="-3">Pan law -3 dB</option><option value="-4.5">Pan law -4.5 dB</option><option value="-6">Pan law -6 dB</option></select>`;
+  let selectedClips: string[] = [];
+  host.addEventListener("fw-selection", (e) => {
+    selectedClips = (e as CustomEvent<string[]>).detail ?? [];
+  });
   bar.addEventListener("click", (e) => {
     const action = (e.target as HTMLElement).closest<HTMLElement>("[data-mix]")?.dataset.mix;
     const doc = engine.get("document");
     if (action === "add-bus") engine.dispatch({ type: "add-bus", name: `Bus ${(doc.buses ?? []).length + 1}` });
     else if (action === "add-vca") engine.dispatch({ type: "add-vca", name: `VCA ${(doc.vcas ?? []).length + 1}` });
+    else if (action === "clear-solos") engine.dispatch({ type: "clear-solos" });
+    else if (action === "clear-mutes") engine.dispatch({ type: "clear-mutes" });
+  });
+  bar.addEventListener("change", (e) => {
+    const el = e.target as HTMLSelectElement;
+    const doc = engine.get("document");
+    if (el.classList.contains("fw-mix-panlaw")) {
+      const law = el.value === "-3" || el.value === "-4.5" || el.value === "-6" ? el.value : "0";
+      engine.dispatch({ type: "set-pan-law", law });
+    } else if (el.classList.contains("fw-mix-bypass") && el.value) {
+      const category = el.value as FxCategory;
+      const chosen = doc.tracks.filter((t) => t.clips.some((c) => selectedClips.includes(c.id)));
+      const tracks = chosen.length ? chosen : doc.tracks;
+      // bypass when any matching insert is on; when all are already off, switch them back on
+      const anyOn = tracks.some((t) => (t.fx ?? []).some((f) => !f.bypass && (category === "all" || fxCategory(f) === category)));
+      engine.dispatch({ type: "bypass-fx-category", trackIds: tracks.map((t) => t.id), category, bypass: anyOn });
+      el.value = "";
+      el.blur();
+    }
   });
   panel.append(bar, strips);
   if (transport) transport.before(panel);
@@ -144,6 +192,8 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
 
   const render = (doc: SessionDoc) => {
     if (panel.hidden) return;
+    const law = bar.querySelector<HTMLSelectElement>(".fw-mix-panlaw");
+    if (law && law.value !== (doc.panLaw ?? "0")) law.value = doc.panLaw ?? "0";
     const items: Strip[] = [
       ...doc.tracks.map((item) => ({ kind: "track" as const, item })),
       ...(doc.buses ?? []).map((item) => ({ kind: "bus" as const, item })),
@@ -214,6 +264,7 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   };
   panel.addEventListener("input", (e) => {
     const s = stripOf(e.target);
+    if (s && (e.target as HTMLElement).classList.contains("fw-strip-trim")) s.node.dataset.dragging = "trim";
     if (!s || !(e.target as HTMLElement).classList.contains("fw-strip-fader")) return;
     s.node.dataset.dragging = "fader";
     const now = Number((e.target as HTMLInputElement).value);
@@ -285,6 +336,16 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
         .map((x) => ({ type: "set-track-send", trackId: s.id, busId: x.busId, gainDb: null }));
       if (busId) commands.push({ type: "set-track-send", trackId: s.id, busId, gainDb });
       if (commands.length) engine.dispatch({ type: "batch", commands });
+    } else if (el.classList.contains("fw-strip-trim")) {
+      delete s.node.dataset.dragging;
+      engine.dispatch({ type: "set-track-trim", trackId: s.id, trimDb: Number(el.value) });
+    } else if (el.classList.contains("fw-strip-auto")) {
+      // Off is kept in the document (the export plays it too); Read and the recording modes live in the strip
+      const doc = engine.get("document");
+      const track = doc.tracks.find((t) => t.id === s.id);
+      if (!track) return;
+      if (!!track.autoOff !== (el.value === "off")) engine.dispatch({ type: "set-track-automation-off", trackId: s.id, off: el.value === "off" });
+      else updateStrip(s.node, { kind: "track", item: track }, doc);
     } else if (el.classList.contains("fw-strip-out")) {
       engine.dispatch({ type: "route-track", trackId: s.id, busId: el.value || null });
     } else if (el.classList.contains("fw-strip-vca")) {
@@ -295,6 +356,10 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     const s = stripOf(e.target);
     const button = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
     if (!s || !button) return;
+    if (button.classList.contains("fw-strip-clip")) {
+      if (button.dataset.clip !== "false") button.dataset.clip = "false";
+      return;
+    }
     const on = button.getAttribute("aria-pressed") !== "true";
     const vca = s.node.dataset.kind === "vca";
     if (button.classList.contains("fw-strip-remove")) {
@@ -305,7 +370,11 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     if (button.classList.contains("fw-strip-mute")) {
       if (vca) engine.dispatch({ type: "set-vca-mute", vcaId: s.id, mute: on });
       else engine.dispatch(s.bus ? { type: "set-bus-mute", busId: s.id, mute: on } : { type: "set-track-mute", trackId: s.id, mute: on });
-    } else if (button.classList.contains("fw-strip-solo") && !s.bus && !vca) engine.dispatch({ type: "set-track-solo", trackId: s.id, solo: on });
+    } else if (button.classList.contains("fw-strip-solo") && !s.bus && !vca) {
+      if (e.metaKey || e.ctrlKey) engine.dispatch({ type: "set-track-solo-safe", trackId: s.id, soloSafe: button.dataset.safe !== "true" });
+      else if (e.altKey) engine.dispatch({ type: "set-track-solo", trackId: s.id, solo: true, exclusive: true });
+      else engine.dispatch({ type: "set-track-solo", trackId: s.id, solo: on });
+    } else if (button.classList.contains("fw-strip-invert") && !s.bus && !vca) engine.dispatch({ type: "set-track-invert", trackId: s.id, invert: on });
   });
 
   const shown = new Map<string, number[]>();
@@ -321,6 +390,36 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
       const transform = `scaleX(${Math.max(0, Math.min(1, (db + 60) / 60)).toFixed(3)})`;
       if (bar.style.transform !== transform) bar.style.transform = transform;
     });
+  };
+  // PLAN_v13 S2: a strip's peak hold marks its highest peak for 2 s, then falls at 20 dB/s; its clip latch lights at
+  // 0 dBFS and stays lit until clicked
+  const holds = new Map<string, { db: number; at: number }[]>();
+  const marked = new WeakMap<HTMLElement, string>();
+  const hold = (key: string, pair: number[], now: number, fall: number) => {
+    const node = panel.querySelector<HTMLElement>(`.fw-strip[data-key="${key}"]`);
+    if (!node) return;
+    const stopped = !engine.get("transport").playing && pair.every((p) => p === 0);
+    const previous = holds.get(key) ?? [];
+    const next = pair.map((peak, c) => {
+      const db = peak > 0 ? 20 * Math.log10(peak) : -Infinity;
+      const p = previous[c] ?? { db: -Infinity, at: now };
+      if (stopped) return { db: -Infinity, at: now };
+      if (db >= p.db) return { db, at: now };
+      return now - p.at < 2000 ? p : { db: Math.max(db, p.db - fall), at: p.at };
+    });
+    holds.set(key, next);
+    node.querySelectorAll<HTMLElement>(".fw-strip-meter > .fw-out-track > .fw-out-hold").forEach((mark, c) => {
+      const db = next[c]?.db ?? -Infinity;
+      const transform = `translateX(${((Math.max(0, Math.min(1, (db + 60) / 60)) - 1) * 100).toFixed(1)}%)`;
+      if (marked.get(mark) !== transform) {
+        marked.set(mark, transform);
+        mark.style.transform = transform;
+      }
+      const on = String(db > -60);
+      if (mark.dataset.on !== on) mark.dataset.on = on;
+    });
+    const clip = node.querySelector<HTMLElement>(".fw-strip-clip");
+    if (clip && pair.some((p) => p >= 1) && clip.dataset.clip !== "true") clip.dataset.clip = "true";
   };
   // PT-38, AA-11: the 5.1 bus's six channels (L R C LFE Ls Rs) on the master strip while it plays, from the core's own
   // six-channel peaks; hidden when the session plays plain stereo
@@ -338,11 +437,13 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     const now = performance.now();
     drive("master51", '.fw-strip[data-kind="master"] .fw-out-51 .fw-out-bar', six ?? [0, 0, 0, 0, 0, 0], !six, ((now - lastTime) / 1000) * 20);
   });
-  player.onOutputLevel((left, right, _tracks, _loudness, buses) => {
+  player.onOutputLevel((left, right, tracks, _loudness, buses) => {
     const now = performance.now();
     const fall = ((now - lastTime) / 1000) * 20;
     lastTime = now;
     drive("master", '.fw-strip[data-kind="master"] .fw-strip-meter .fw-out-bar', [left, right], left === 0 && right === 0, fall);
+    hold("master", [left, right], now, fall);
+    engine.get("document").tracks.forEach((track, i) => hold(track.id, [tracks[2 * i] ?? 0, tracks[2 * i + 1] ?? 0], now, fall));
     // The core meters buses in plan order, which leaves muted buses out; walk the document's buses the same way.
     let k = 0;
     for (const bus of engine.get("document").buses ?? []) {
@@ -350,6 +451,7 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
       const pair: [number, number] = live ? [buses[2 * k] ?? 0, buses[2 * k + 1] ?? 0] : [0, 0];
       if (live) k++;
       drive(bus.id, `.fw-strip[data-key="${bus.id}"] .fw-strip-meter .fw-out-bar`, pair, !live || buses.length === 0, fall);
+      hold(bus.id, pair, now, fall);
     }
   });
 }

@@ -194,7 +194,8 @@ export function mountEditorTabs(host: HTMLElement, engine: Engine, player: Playe
         return `<div class="fw-knob" data-i="${i}" data-key="${p[0]}" tabindex="0" role="slider" aria-label="${k.label} ${p[1]}" aria-valuemin="${p[2]}" aria-valuemax="${p[3]}" aria-valuenow="${value}"><svg viewBox="0 0 48 48" aria-hidden="true"><path class="fw-knob-track" d="${TRACK_ARC}"></path><path class="fw-knob-arc" d="${arc(toT(value, p))}"></path><circle cx="24" cy="24" r="11"></circle></svg><span class="fw-knob-value">${shown(value, p)}</span><span class="fw-knob-label">${p[1]}</span></div>`;
       })
       .join("");
-    return `<div class="fw-fx-card${k.params.length > 3 ? " fw-fx-card-wide" : ""}" data-i="${i}"><div class="fw-fx-top"><span class="fw-fx-names"><span class="fw-fx-name">${k.label}</span><span class="fw-fx-sub">${k.sub}</span></span><button type="button" class="fw-fx-bypass" data-i="${i}" aria-pressed="${!f.bypass}" aria-label="${k.label} on" title="On or bypassed">${POWER}</button><button type="button" class="fw-fx-remove" data-i="${i}" aria-label="Remove ${k.label}" title="Remove">${CROSS}</button></div><div class="fw-fx-knobs">${knobs}</div></div><span class="fw-fx-link" aria-hidden="true">${ARROW}</span>`;
+    const gr = f.kind === "processor" && PROCESSOR_BY_ID.get(f.id)?.category === "Dynamics" ? `<span class="fw-fx-gr" data-i="${i}" title="Gain reduction as it plays">GR 0.0 dB</span>` : "";
+    return `<div class="fw-fx-card${k.params.length > 3 ? " fw-fx-card-wide" : ""}" data-i="${i}"><div class="fw-fx-top"><span class="fw-fx-names"><span class="fw-fx-name">${k.label}</span><span class="fw-fx-sub">${k.sub}</span></span>${gr}<button type="button" class="fw-fx-bypass" data-i="${i}" aria-pressed="${!f.bypass}" aria-label="${k.label} on" title="On or bypassed">${POWER}</button><button type="button" class="fw-fx-remove" data-i="${i}" aria-label="Remove ${k.label}" title="Remove">${CROSS}</button></div><div class="fw-fx-knobs">${knobs}</div></div><span class="fw-fx-link" aria-hidden="true">${ARROW}</span>`;
   };
   const addCard = `<button type="button" class="fw-fx-add fw-fx-add-btn" title="Pick an effect in the browser's Effects tab; it joins this track's chain">${PLUS}<span>Add an effect</span></button>`;
   let shape = "";
@@ -223,6 +224,14 @@ export function mountEditorTabs(host: HTMLElement, engine: Engine, player: Playe
       }
     });
   };
+  player.onReductions((byInsert) => {
+    if (chain.hidden || !row.querySelector(".fw-fx-gr")) return;
+    const track = target();
+    for (const el of row.querySelectorAll<HTMLElement>(".fw-fx-gr")) {
+      const db = (track && byInsert.get(`${track.id}:${el.dataset.i}`)) || 0;
+      setText(el, `GR ${db >= 0.05 ? "-" : ""}${db.toFixed(1)} dB`);
+    }
+  });
   const setFx = (fn: (list: TrackFx[]) => TrackFx[]) => {
     const track = target();
     if (track) engine.dispatch({ type: "set-track-fx", trackId: track.id, fx: fn([...(track.fx ?? [])]) });

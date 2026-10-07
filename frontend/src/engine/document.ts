@@ -333,6 +333,20 @@ export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocit
 
 const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice", "dehum", "declick", "dereverb", "processor"]);
 
+/** The bypass groups (Pro Tools' Track > Bypass Inserts): every insert, or those of one kind of processing. */
+export type FxCategory = "all" | "eq" | "dynamics" | "reverb" | "delay" | "modulation";
+const KIND_CATEGORY: Readonly<Record<string, FxCategory>> = { highpass: "eq", lowpass: "eq", peak: "eq", lowshelf: "eq", highshelf: "eq", compressor: "dynamics", limiter: "dynamics", gate: "dynamics", reverb: "reverb", echo: "delay", chorus: "modulation", flanger: "modulation", phaser: "modulation", tremolo: "modulation" };
+const PROCESSOR_CATEGORY: Readonly<Record<string, FxCategory>> = { Eq: "eq", Dynamics: "dynamics", Reverb: "reverb", Delay: "delay", Modulation: "modulation" };
+
+/** The bypass group an effect belongs to, or none (the repairs, the harmonic, pitch and utility processors). */
+export function fxCategory(f: TrackFx): FxCategory | undefined {
+  if (f.kind === "processor") {
+    const c = PROCESSOR_BY_ID.get(f.id)?.category;
+    return c ? PROCESSOR_CATEGORY[c] : undefined;
+  }
+  return KIND_CATEGORY[f.kind];
+}
+
 /** Known kinds only, values clamped to the core's ranges, bypass kept only when set; for track and master alike. */
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
   const clamp = (v: number, lo: number, hi: number, fallback: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
@@ -423,6 +437,13 @@ export interface Track {
   gainDb: number;
   mute: boolean;
   solo: boolean;
+  /** Not muted when other tracks are soloed (Pro Tools' solo safe). */
+  soloSafe?: boolean;
+  /** Input trim in dB and polarity, ahead of the inserts. */
+  trimDb?: number;
+  invert?: boolean;
+  /** Automation Off: the static fader, pan and filter settings play; the lanes are kept. */
+  autoOff?: boolean;
   pan?: number;
   busId?: string;
   /** The VCA whose gain and mute also apply to this track (its own fader stays where it is). */
@@ -534,6 +555,8 @@ export interface SessionDoc {
   view?: SessionView;
   /** Master fader in dB, applied after the buses; absent means 0 dB. */
   masterGainDb?: number;
+  /** The pan law for a mono source: -3, -4.5 or -6 dB at the centre; absent is the balance every session had (0 dB). */
+  panLaw?: "-3" | "-4.5" | "-6";
   /** Realtime effects on the summed mix, before the master fader (Audacity's master stack). */
   masterFx?: TrackFx[];
   /** The session tempo, for the bars ruler, beat snapping and Quantize (set by hand or detected). */
@@ -654,7 +677,15 @@ export type Command =
   | { type: "set-track-gain"; trackId: string; gainDb: number }
   | { type: "set-track-pan"; trackId: string; pan: number }
   | { type: "set-track-mute"; trackId: string; mute: boolean }
-  | { type: "set-track-solo"; trackId: string; solo: boolean }
+  | { type: "set-track-solo"; trackId: string; solo: boolean; exclusive?: boolean }
+  | { type: "set-track-solo-safe"; trackId: string; soloSafe: boolean }
+  | { type: "set-track-trim"; trackId: string; trimDb: number }
+  | { type: "set-track-invert"; trackId: string; invert: boolean }
+  | { type: "set-track-automation-off"; trackId: string; off: boolean }
+  | { type: "clear-solos" }
+  | { type: "clear-mutes" }
+  | { type: "set-pan-law"; law: "0" | "-3" | "-4.5" | "-6" }
+  | { type: "bypass-fx-category"; trackIds: string[]; category: FxCategory; bypass: boolean }
   | { type: "set-bus-mute"; busId: string; mute: boolean }
   | { type: "set-master-gain"; gainDb: number }
   | { type: "add-clip"; trackId: string; mediaId: string; start: number; sourceIn: number; length: number }
@@ -1622,8 +1653,65 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "set-track-mute":
       return mapTrack(doc, cmd.trackId, (t) => (t.mute === cmd.mute ? t : { ...t, mute: cmd.mute }));
-    case "set-track-solo":
-      return mapTrack(doc, cmd.trackId, (t) => (t.solo === cmd.solo ? t : { ...t, solo: cmd.solo }));
+    case "set-track-solo": {
+      const next = mapTrack(doc, cmd.trackId, (t) => (t.solo === cmd.solo ? t : { ...t, solo: cmd.solo }));
+      if (!cmd.exclusive || !cmd.solo) return next;
+      // X-OR solo: soloing one track unsolos the others, in the same step
+      const tracks = next.tracks.map((t) => (t.id !== cmd.trackId && t.solo ? { ...t, solo: false } : t));
+      return tracks.some((t, i) => t !== next.tracks[i]) ? { ...next, tracks } : next;
+    }
+    case "set-track-solo-safe":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        if (!!t.soloSafe === cmd.soloSafe) return t;
+        const { soloSafe: _old, ...rest } = t;
+        return cmd.soloSafe ? { ...rest, soloSafe: true } : rest;
+      });
+    case "set-track-trim":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const trimDb = Number.isFinite(cmd.trimDb) ? Math.round(Math.min(24, Math.max(-24, cmd.trimDb)) * 10) / 10 : 0;
+        if ((t.trimDb ?? 0) === trimDb) return t;
+        const { trimDb: _old, ...rest } = t;
+        return trimDb ? { ...rest, trimDb } : rest;
+      });
+    case "set-track-invert":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        if (!!t.invert === cmd.invert) return t;
+        const { invert: _old, ...rest } = t;
+        return cmd.invert ? { ...rest, invert: true } : rest;
+      });
+    case "set-track-automation-off":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        if (!!t.autoOff === cmd.off) return t;
+        const { autoOff: _old, ...rest } = t;
+        return cmd.off ? { ...rest, autoOff: true } : rest;
+      });
+    case "clear-solos":
+    case "clear-mutes": {
+      const key = cmd.type === "clear-solos" ? "solo" : "mute";
+      if (!doc.tracks.some((t) => t[key])) return doc;
+      return { ...doc, tracks: doc.tracks.map((t) => (t[key] ? { ...t, [key]: false } : t)) };
+    }
+    case "set-pan-law": {
+      const law = cmd.law === "-3" || cmd.law === "-4.5" || cmd.law === "-6" ? cmd.law : undefined;
+      if (doc.panLaw === law) return doc;
+      const { panLaw: _old, ...rest } = doc;
+      return law ? { ...rest, panLaw: law } : rest;
+    }
+    case "bypass-fx-category": {
+      const ids = new Set(cmd.trackIds);
+      let changed = false;
+      const tracks = doc.tracks.map((t) => {
+        if (!ids.has(t.id) || !t.fx?.some((f) => fxCategory(f) === cmd.category || cmd.category === "all")) return t;
+        const fx = t.fx.map((f) => {
+          if ((cmd.category !== "all" && fxCategory(f) !== cmd.category) || !!f.bypass === cmd.bypass) return f;
+          changed = true;
+          const { bypass: _old, ...rest } = f;
+          return (cmd.bypass ? { ...rest, bypass: true } : rest) as TrackFx;
+        });
+        return { ...t, fx };
+      });
+      return changed ? { ...doc, tracks } : doc;
+    }
     case "set-master-gain": {
       const gainDb = Math.max(-60, Math.min(12, Math.round(cmd.gainDb * 10) / 10));
       return (doc.masterGainDb ?? 0) === gainDb ? doc : { ...doc, masterGainDb: gainDb };

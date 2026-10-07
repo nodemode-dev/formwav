@@ -31,6 +31,9 @@ interface CoreExports {
   fw_add_bus_stage(player: number, kind: number, a: number, b: number, c: number, d: number, e: number): number;
   fw_add_master_processor(player: number, ptr: number, len: number): number;
   fw_add_bus_processor(player: number, ptr: number, len: number): number;
+  fw_add_bus_fx_auto(player: number, stage: number, param: number, envelope: number): number;
+  fw_set_pan_law(player: number, law: number): void;
+  fw_take_reductions(player: number, out: number, max: number): number;
   fw_take_peaks(player: number, out: number): void;
   fw_set_places(player: number, ptr: number, count: number): void;
   fw_set_fold_51(player: number, on: number): void;
@@ -82,6 +85,8 @@ export interface WorkletBus {
   pan: number;
   /** The bus's chain as flat [kind, a, b, c, d, e, ...] (core fx.rs Stage::design); a track's own bus carries its compressor. */
   stages?: number[];
+  /** Its filters' automation, numbered by the stages above; points flat [time, value, ...]. */
+  fxAuto?: { stage: number; param: number; points: number[] }[];
 }
 
 export type WorkletMessage =
@@ -90,7 +95,7 @@ export type WorkletMessage =
   | { type: "alloc"; id: number; rate: number; channels: number; frames: number; window?: number }
   | { type: "stats" }
   | { type: "write"; id: number; offset: number; data: Float32Array }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; processors?: string[]; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean; surroundFormat?: number }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; processors?: string[]; panLaw?: number; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean; surroundFormat?: number }
   | { type: "play" }
   | { type: "speed"; value: number }
   | { type: "rate-ratio"; value: number }
@@ -106,7 +111,7 @@ export type WorkletReply =
   | { type: "error"; message: string }
   | { type: "loaded"; id: number; frames: number }
   | { type: "stats"; bytes: number }
-  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; correlation?: number | null; trackPeaks: number[]; loudness: number[]; busPeaks: number[]; surroundPeaks?: number[] }
+  | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; correlation?: number | null; trackPeaks: number[]; loudness: number[]; busPeaks: number[]; surroundPeaks?: number[]; reductions?: number[] }
   | { type: "ended"; position: number };
 
 /** The AudioWorkletGlobalScope's context sample rate. */
@@ -153,6 +158,8 @@ class PlayerProcessor extends AudioWorkletProcessor {
   /** PT-38, AA-11: whether the core folds its six-channel bus, and where the six peaks are read into. */
   private fold51 = false;
   private peaks51 = 0;
+  /** Where each processor's gain reduction is read into, in the plan's order. */
+  private reductions = 0;
   private views: { buffer: ArrayBuffer; frames: number; left: Float32Array; right: Float32Array } | null = null;
 
   constructor() {
@@ -180,6 +187,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
     core.fw_loudness(this.player, loudnessAt);
     const busesAt = loudnessAt + 12;
     const buses = core.fw_take_bus_peaks(this.player, busesAt, MAX_METERED_BUSES);
+    const reduced = Math.min(MAX_METERED_BUSES, core.fw_take_reductions(this.player, this.reductions, MAX_METERED_BUSES));
     const peaks = new Float32Array(core.memory.buffer, this.peaks, 2 + tracks * 2);
     this.reply({
       type: "position",
@@ -191,6 +199,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       trackPeaks: Array.from(peaks.subarray(2)),
       loudness: Array.from(new Float32Array(core.memory.buffer, loudnessAt, 3)),
       busPeaks: Array.from(new Float32Array(core.memory.buffer, busesAt, buses * 2)),
+      ...(reduced ? { reductions: Array.from(new Float32Array(core.memory.buffer, this.reductions, reduced)) } : {}),
       ...(this.fold51 ? { surroundPeaks: (core.fw_take_peaks_51(this.player, this.peaks51), Array.from(new Float32Array(core.memory.buffer, this.peaks51, 6))) } : {}),
     });
   }
@@ -206,6 +215,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       this.right = core.fw_alloc(MAX_FRAMES * 4);
       this.peaks = core.fw_alloc(8 + MAX_METERED_TRACKS * 8 + 12 + MAX_METERED_BUSES * 8);
       this.peaks51 = core.fw_alloc(24);
+      this.reductions = core.fw_alloc(MAX_METERED_BUSES * 4);
       this.reply({ type: "ready" });
       return;
     }
@@ -291,7 +301,12 @@ class PlayerProcessor extends AudioWorkletProcessor {
             if (st[k] === 20) processor(false, st[k + 1]);
             else core.fw_add_bus_stage(this.player, st[k], st[k + 1], st[k + 2], st[k + 3], st[k + 4], st[k + 5]);
           }
+          for (const a of b.fxAuto ?? []) {
+            const env = envelope(a.points, false);
+            if (env) core.fw_add_bus_fx_auto(this.player, a.stage, a.param, env);
+          }
         }
+        core.fw_set_pan_law(this.player, msg.panLaw ?? 0);
         core.fw_clear_master_fx(this.player);
         const mfx = msg.masterFx ?? [];
         for (let k = 0; k + 5 < mfx.length; k += 6) {

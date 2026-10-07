@@ -60,6 +60,14 @@ const WORDS: Record<Command["type"], Words> = {
   "set-track-pan": ["Panned {t}", "Panned a track"],
   "set-track-mute": ["Muted {t}", "Muted a track"],
   "set-track-solo": ["Soloed {t}", "Soloed a track"],
+  "set-track-solo-safe": ["Made {t} solo safe", "Made a track solo safe"],
+  "set-track-trim": ["Trimmed the input of {t}", "Trimmed a track's input"],
+  "set-track-invert": ["Inverted the polarity of {t}", "Inverted a track's polarity"],
+  "set-track-automation-off": ["Turned off the automation of {t}", "Turned off a track's automation"],
+  "clear-solos": ["Cleared every solo", "Cleared every solo"],
+  "clear-mutes": ["Cleared every mute", "Cleared every mute"],
+  "set-pan-law": ["Changed the pan law", "Changed the pan law"],
+  "bypass-fx-category": ["Bypassed inserts", "Bypassed inserts"],
   "set-bus-mute": ["Muted a bus", "Muted a bus"],
   "set-master-gain": ["Changed the master volume", "Changed the master volume"],
   "add-clip": ["Added a clip on {t}", "Added a clip"],
@@ -109,5 +117,9 @@ export function describeCommand(command: Command, before: SessionDoc): string {
   if (command.type === "import-media") words = words.replace("{m}", command.media.name || "audio");
   if (command.type === "set-track-mute" && !command.mute) words = words.replace("Muted", "Unmuted");
   if (command.type === "set-track-solo" && !command.solo) words = words.replace("Soloed", "Unsoloed");
+  if (command.type === "set-track-solo-safe" && !command.soloSafe) words = words.replace("Made", "Took").replace("solo safe", "out of solo safe");
+  if (command.type === "set-track-invert" && !command.invert) words = words.replace("Inverted", "Restored");
+  if (command.type === "set-track-automation-off" && !command.off) words = words.replace("Turned off", "Turned on");
+  if (command.type === "bypass-fx-category" && !command.bypass) words = words.replace("Bypassed", "Switched on");
   return words;
 }
