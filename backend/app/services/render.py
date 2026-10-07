@@ -10,7 +10,33 @@ class RenderError(ValueError):
 
 
 #: Track effect kinds, as the core's stage codes (formwav-dsp fx.rs).
-FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11, "tremolo": 12, "gate": 13, "phaser": 14, "flanger": 15, "voice": 16, "dehum": 17, "declick": 18, "dereverb": 19}
+FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11, "tremolo": 12, "gate": 13, "phaser": 14, "flanger": 15, "voice": 16, "dehum": 17, "declick": 18, "dereverb": 19, "processor": 20}
+#: The stages that must see a track's sum, so a track carrying one plays through a bus of its own.
+ON_THE_SUM = (6, 8, 16, 18, 19, 20)
+
+
+def _number(v: float) -> str:
+    return str(int(v)) if float(v).is_integer() else repr(float(v))
+
+
+def processor_spec(f: dict) -> str:
+    """A processor entry as the core's spec, "id;param=value;...", numbers written as the browser writes them."""
+    values = f.get("values") if isinstance(f.get("values"), dict) else {}
+    parts = [str(f.get("id", ""))]
+    parts += [f"{k}={_number(v)}" for k, v in values.items() if isinstance(k, str) and not set(k) & {";", "="} and isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)]
+    return ";".join(parts)
+
+
+def native_chains(chains: list[tuple]) -> tuple[list[tuple], list[str]]:
+    """Chains as the core takes them: each processor stage's spec moved to a list the stage names by its place."""
+    processors: list[str] = []
+    out = []
+    for ch in chains:
+        if ch[2] == 20:
+            processors.append(ch[3])
+            ch = (*ch[:3], float(len(processors) - 1), *ch[4:])
+        out.append(ch)
+    return out, processors
 
 
 def _stage(f: dict) -> tuple | None:
@@ -19,6 +45,8 @@ def _stage(f: dict) -> tuple | None:
     kind = FX_KINDS.get(f.get("kind")) if isinstance(f, dict) else None
     if not kind or f.get("bypass"):
         return None
+    if kind == 20:
+        return (20, processor_spec(f), 0.0, 0.0, 0.0, 0.0)
     if kind == 17:  # L6: de-hum, a = the hum in Hz, b = harmonics, c = Q
         return (17, float(f.get("baseHz", 60)), float(f.get("harmonics", 8)), float(f.get("q", 30)), 0.0, 0.0)
     if kind == 19:  # L6: de-reverb, a = reverb time T60 in s, b = the most taken down in dB
@@ -136,7 +164,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
 
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
-        if bus_index == 0 and any(s[0] in (6, 8, 16, 18, 19) for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency)
+        if bus_index == 0 and any(s[0] in ON_THE_SUM for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency), a processor
             # A compressor is nonlinear, so it must see the track's sum: the track plays through a bus of its own
             # (unity gain, centre) whose chain is the track's whole chain, in order.
             buses[f"__track:{track.get('id')}"] = (len(buses) + 1, 1.0, 0.0)
@@ -146,13 +174,13 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         else:
             # Filters are linear and run per clip; a compressor, a reverb or a dialogue isolate on a track routed to a
             # user bus is not placed yet, as the browser's flatFx leaves them out.
-            stages = [s[:4] for s in stages if s[0] not in (6, 8, 16)]
+            stages = [s[:4] for s in stages if s[0] not in (6, 8, 16, 20)]
         # The filters' parameter automation (PT-19), numbered by the clip stages above (bypassed, unknown, compressor,
         # reverb and dialogue isolate entries skipped, as the browser's flatFxAuto does); each becomes one envelope
         # (natural units) for the track.
         auto_envs: list[tuple[int, int, int]] = []
         if stages:
-            filters = [f for f in (track.get("fx") or []) if (_stage(f) or (6,))[0] not in (6, 8, 16)]
+            filters = [f for f in (track.get("fx") or []) if (_stage(f) or (6,))[0] not in (6, 8, 16, 20)]
             for si, f in enumerate(filters):
                 for param, key in enumerate(("freq", "gain", "q")):
                     pts = (f.get("automation") or {}).get(key)
@@ -184,7 +212,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             # the clip gain, which the core applies after the chain), then the track's filters, whose automation moves
             # past the clip's stages
             own = [s for s in (_stage(f) for f in (clip.get("fx") or [])) if s]
-            own_filters = [s[:4] for s in own if s[0] not in (6, 8, 16)]
+            own_filters = [s[:4] for s in own if s[0] not in (6, 8, 16, 20)]
             own_comp = next((s for s in own if s[0] == 6), None)
             ahead = len(own_filters) + (1 if own_comp else 0)
             chain = own_filters + stages
@@ -241,7 +269,8 @@ def render(doc: object) -> dict:
     # PT-42: in the session's format, the 5.1 bus or first-order ambisonics (folded through two cardioids)
     spatial = 1 if isinstance(doc, dict) and doc.get("spatialFormat") == "foa" else 0
     places = places_for(doc, owners, spatial) if isinstance(doc, dict) and doc.get("surroundFold") else []
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial)
+    chains, processors = native_chains(chains)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors)
     frames = max(1, end)
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:

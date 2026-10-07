@@ -136,5 +136,6 @@ def _bus(doc: dict, fmt: int) -> tuple[np.ndarray, int]:
     places = places_for(doc, owners, fmt)
     if not places:
         places = [(len(clips), [0.0] * 6)]  # nothing placed: still the bus (5.1: the stereo on L and R; ambisonics: ahead)
-    interleaved, _, _ = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, False, fmt)
+    chains, processors = render.native_chains(chains)
+    interleaved, _, _ = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, False, fmt, processors)
     return np.frombuffer(bytes(interleaved), dtype="<f4").reshape(-1, 6).astype(np.float64), rate
