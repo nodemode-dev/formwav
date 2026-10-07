@@ -94,7 +94,7 @@ function shellHtml(): string {
   <div class="fw-workspace">
     <aside class="fw-pane fw-pane-media" aria-label="Browser">
       <div class="fw-pane-header"><span class="fw-pane-tabs" role="tablist"><button type="button" class="fw-pane-tab is-active" role="tab" aria-selected="true" data-tab="media">Media</button><button type="button" class="fw-pane-tab" role="tab" aria-selected="false" data-tab="effects">Effects</button><button type="button" class="fw-pane-tab" role="tab" aria-selected="false" data-tab="sounds">Sounds</button></span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>
-      <label class="fw-browse-search">${SEARCH_ICON}<input type="search" data-browse-search placeholder="Search media, effects, sounds" aria-label="Search media, effects and sounds" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
+      <label class="fw-browse-search">${SEARCH_ICON}<input type="search" data-browse-search placeholder="Search" aria-label="Search media, effects and sounds" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
       <div class="fw-pane-body fw-browse" data-panel="media">
         <p class="fw-browse-hint">Click adds to the selected track, or drag onto any track</p>
         <span class="fw-browse-head">In this session</span>

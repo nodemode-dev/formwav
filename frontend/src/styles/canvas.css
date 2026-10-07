@@ -436,11 +436,13 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]) { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; column-gap: 10px; inline-size: 100%; min-block-size: 30px; block-size: auto; padding: 4px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-13); text-align: start; }
 .fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]) > span:last-child { grid-column: 2; }
 .fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]):is(:hover, :focus-visible) { background: var(--accent-soft); color: var(--accent-ink); outline: none; }
-.fw-dock-context { margin-inline-start: auto; display: flex; align-items: center; gap: 6px; min-inline-size: 0; overflow: hidden; font-size: var(--fs-12); color: var(--text-secondary); white-space: nowrap; }
+.fw-dock-context { margin-inline-start: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; align-content: flex-start; min-inline-size: 0; block-size: 18px; overflow: hidden; font-size: var(--fs-12); line-height: 18px; color: var(--text-secondary); white-space: nowrap; }
+.fw-dock-context::before { content: ""; flex: none; inline-size: 1px; block-size: 18px; }
+.fw-dock-who { flex: none; display: flex; align-items: center; gap: 6px; }
 .fw-dock-swatch { flex: none; inline-size: 9px; block-size: 9px; border-radius: 3px; }
 .fw-dock-track { flex: none; color: var(--text-primary); font-weight: 700; }
 .fw-dock-track:empty { display: none; }
-.fw-dock-detail { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.fw-dock-detail { flex: none; margin-inline-start: 6px; }
 .fw-dock .fw-dock-ask { flex: none; margin-inline-start: 8px; min-block-size: 28px; block-size: 28px; padding: 0 10px; border: 1px solid var(--border-light); border-radius: 7px; background: var(--bg-tertiary); color: var(--text-primary); font-size: var(--fs-13); }
 .fw-dock .fw-dock-close { display: none; }
 .fw-dock .fw-dock-grip { inset-block-start: -3px; }
@@ -494,7 +496,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 /* Editor: Mixer */
 .fw-dock .fw-mixer { gap: 10px; padding: 12px 16px; background: transparent; border: 0; }
 .fw-dock .fw-mixer-strips { gap: 10px; }
-.fw-dock .fw-strip { inline-size: 112px; padding: 8px 10px; row-gap: 3px; column-gap: 6px; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-primary); }
+.fw-dock .fw-strip { position: relative; inline-size: 112px; padding: 8px 10px; row-gap: 3px; column-gap: 6px; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-primary); }
 .fw-dock .fw-strip[data-kind="master"] { background: var(--bg-tertiary); }
 .fw-dock .fw-strip-name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-13); font-weight: 700; color: var(--text-primary); }
 .fw-dock .fw-strip-name::before { content: ""; flex: none; inline-size: 9px; block-size: 9px; border-radius: 3px; background: var(--fw-strip-color, var(--text-muted)); }
@@ -507,6 +509,9 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-dock .fw-strip-db { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-primary); }
 .fw-dock .fw-strip-buttons button { inline-size: 24px; block-size: 22px; border: 1px solid var(--border-light); border-radius: 5px; background: var(--bg-tertiary); color: var(--text-secondary); font-size: var(--fs-11); font-weight: 700; }
 .fw-dock .fw-mixer-bar .fw-ibtn { min-block-size: 28px; block-size: 28px; padding: 0 10px; border: 1px solid var(--border-light); border-radius: 7px; background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-dock .fw-strip-route[open] { grid-area: route; }
+.fw-dock .fw-strip-route[open] > summary { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-dock .fw-route-box { position: absolute; inset: 8px 8px 36px; z-index: var(--z-raised); margin: 0; overflow: hidden auto; background: var(--bg-primary); }
 
 /* Editor: Clip */
 .fw-dock .fw-cliptab { padding: 12px 16px; }
@@ -517,7 +522,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-dock .fw-cf input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
 .fw-dock .fw-cf input[type="number"]::-webkit-inner-spin-button { display: none; }
 .fw-dock .fw-cliptab .fw-ibtn { min-block-size: 30px; block-size: auto; padding: 0 12px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-tertiary); color: var(--text-primary); font-size: var(--fs-13); white-space: nowrap; }
-.fw-dock .fw-cf-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.fw-dock .fw-cf-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; padding-block-end: 14px; border-block-end: 1px solid var(--border-color); }
 
 /* The editor's other panels (Spectrum, Transcript, Notes, Labels, Terminal) on the same spacing and controls */
 .fw-dock .fw-piano-head { gap: 12px; min-block-size: 46px; padding: 0 16px; border-block-end: 1px solid var(--border-color); font-size: var(--fs-12); color: var(--text-secondary); }
@@ -532,12 +537,13 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-dock .fw-spectrum-canvas { flex: 1 1 auto; inline-size: auto; block-size: auto; min-block-size: 0; margin: 12px 16px; border-radius: 10px; }
 .fw-dock .fw-term:not(.fw-agent) > .fw-term-head { min-block-size: 46px; padding: 0 16px; background: transparent; border-block-end: 1px solid var(--border-color); }
 
-/* The Inspector under More: its sections as a row of cards, each scrolling on its own, as the Effects chain sits */
-.fw-dock .fw-inspector-body { display: flex; align-items: stretch; gap: 12px; padding: 12px 16px; overflow: auto hidden; columns: auto; column-rule: none; }
-.fw-dock .fw-inspector-body > .fw-insp-section { flex: none; display: flex; flex-direction: column; gap: 8px; inline-size: 320px; min-block-size: 0; max-block-size: 100%; margin: 0; padding: 12px; overflow: hidden auto; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-tertiary); }
+/* The Inspector under More: its sections as cards in balanced columns as wide as the editor, the panel scrolling down */
+.fw-dock .fw-pane-inspector { overflow: hidden auto; }
+.fw-dock .fw-inspector-body { flex: none; display: block; padding: 12px 16px 0; overflow: visible; columns: 300px; column-gap: 12px; column-rule: none; column-fill: balance; }
+.fw-dock .fw-inspector-body > .fw-insp-section { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; padding: 12px; break-inside: avoid; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-tertiary); }
 .fw-dock .fw-inspector-body > .fw-insp-section > * { flex: none; }
 .fw-dock .fw-inspector-body > [hidden] { display: none; }
-.fw-dock .fw-inspector-body > .fw-insp-empty { flex: none; inline-size: 320px; margin: 0; font-size: var(--fs-13); line-height: 1.5; color: var(--text-secondary); }
+.fw-dock .fw-inspector-body > .fw-insp-empty { margin: 0 0 12px; font-size: var(--fs-13); line-height: 1.5; color: var(--text-secondary); }
 .fw-dock .fw-inspector-body .fw-insp-head { font-size: var(--fs-13); font-weight: 700; color: var(--text-primary); text-transform: none; letter-spacing: 0; }
 .fw-dock .fw-inspector-body .fw-ibtn { min-block-size: 28px; padding: 0 10px; border: 1px solid var(--border-light); border-radius: 7px; background: var(--bg-secondary); color: var(--text-primary); font-size: var(--fs-12); }
 .fw-dock .fw-inspector-body :is(select, input[type="number"], input[type="text"], input[type="search"]) { min-block-size: 28px; border: 1px solid var(--border-light); border-radius: 7px; background: var(--bg-primary); color: var(--text-primary); font-size: var(--fs-12); }

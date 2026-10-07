@@ -26,16 +26,16 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
   panel.setAttribute("aria-label", "Clip");
   const field = (label: string, control: string, wide = false) => `<label class="fw-cf${wide ? " fw-cf-wide" : ""}"><span class="fw-cf-label">${label}</span>${control}</label>`;
   panel.innerHTML = `<p class="fw-cliptab-empty">Select a clip to see its settings here.</p><div class="fw-cliptab-grid">${[
-    field("Track name", `<input type="text" data-f="name" maxlength="80">`, true),
-    field("Source", `<output data-f="source"></output>`, true),
+    field("Track name", `<input type="text" data-f="name" maxlength="80">`),
     field("Start (s)", `<input type="number" data-f="start" min="0" step="0.001">`),
     field("Length (s)", `<output data-f="length"></output>`),
     field("Gain (dB)", `<input type="number" data-f="gain" min="-60" max="24" step="0.1">`),
-    field("Sound type", `<select data-f="type">${TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
     field("Fade in (s)", `<input type="number" data-f="fadeIn" min="0" step="0.01">`),
     field("Fade out (s)", `<input type="number" data-f="fadeOut" min="0" step="0.01">`),
     field("Fade shape", `<select data-f="shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
+    field("Sound type", `<select data-f="type">${TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
     `<div class="fw-cf-actions" role="group" aria-label="Clip actions"><button type="button" class="fw-ibtn" data-clip-act="split" title="Split this clip where the playhead is">Split at the playhead</button><button type="button" class="fw-ibtn" data-clip-act="normalize" title="Normalize the selected clips to a loudness target">Normalize</button><button type="button" class="fw-ibtn" data-clip-act="check" title="Measure the recording and list what it needs, in the Inspector">Check the recording</button><button type="button" class="fw-ibtn" data-clip-act="repair" title="Find the clip's problems and propose a repair chain, in the Inspector">Repair assistant</button></div>`,
+    field("Source", `<output data-f="source"></output>`, true),
     `<div class="fw-cf fw-cf-wide"><span class="fw-cf-label">Colour</span><div class="fw-cf-colors" role="group" aria-label="Clip colour"><button type="button" class="fw-cf-color" data-color="" aria-label="The track's colour" title="The track's colour"></button>${COLORS.map((c) => `<button type="button" class="fw-cf-color" data-color="${c}" aria-label="${c}" title="${c}" style="color: var(--fw-color-${c})"></button>`).join("")}</div></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-three"><span class="fw-cf-label">Separate</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-three>Speech, music and ambience to three tracks</button></div><output class="fw-cf-ara-state" data-three-state>Three tracks that add up to this clip exactly</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-speech"><span class="fw-cf-label">Speech</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-speech>Mark where people speak</button></div><output class="fw-cf-ara-state" data-speech-state>Marks speech as regions, even under music</output></div>`,
