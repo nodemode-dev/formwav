@@ -23,7 +23,12 @@ native/
     │   ├── python.rs            pyo3 module: probe() and peaks() (python feature only)
     │   ├── render.rs            Player: sources, clips, position, render to a stereo pair
     │   ├── wasm.rs              C-ABI exports for the wasm32 build (fw_alloc, fw_load_wav, fw_render, ...)
-    │   └── loudness.rs          BS.1770-4 integrated loudness: K-weighting for any rate, 400 ms blocks, two gates
+    │   ├── loudness.rs          BS.1770-4 integrated loudness: K-weighting for any rate, 400 ms blocks, two gates
+    │   ├── fx.rs                the nineteen live stages (filters to de-reverb): design, process, reset, latency
+    │   ├── onsets.rs            transient detection
+    │   ├── synth.rs             the built-in instrument that renders note tracks
+    │   ├── midi.rs              MIDI input read by the engine (feature "native"), for the desktop app
+    │   └── native.rs            native output and capture through cpal (feature "native")
     └── tests/
         └── stages.rs            the 19 live effect kinds held to the interface's catalogue (cargo test)
 ```
@@ -42,32 +47,13 @@ native/
 - [formwav-dsp/src/render.rs](#src-render)
 - [formwav-dsp/src/wasm.rs](#src-wasm)
 - [formwav-dsp/src/loudness.rs](#src-loudness)
+- [formwav-dsp/src/fx.rs](#src-fx)
+- [formwav-dsp/src/native.rs](#src-native)
 - [formwav-dsp/tests/stages.rs](#tests-stages)
 
 ---
 
 ## formwav-dsp/Cargo.toml {#cargo-toml}
-
-### De-reverb in the live rack, and an FFT in the core
-- refers-to: native/formwav-dsp/src/fx.rs (Fft; DeReverb, kind 19; tests); backend/app/services/render.py; frontend/src/engine/document.ts, src/audio/player.ts, src/ui/lanes.ts, src/ui/inspector-pane.ts, src/ui/editor-tabs.ts, src/ui/browser-effects.ts; sidecar verification/verify_dereverb.py
-- kind: explainer
-- logged: v2.11.5 (in progress) · 2026-10-06
-
-The rest of L6. The core had no FFT, so it gained one (iterative radix-2, in place) and a short-time stage on it: late reverberation suppression (Lebart et al. 2001, Habets 2007). Reverb decays at a known rate for a reverb time, so the late reverberation in a band is predicted from the band's power 50 ms before, decayed by that much; a spectral gain takes it out, floored at the reduction allowed, smoothed over time, one gain for both channels; 1024-point frames 256 apart with square-root Hann windows, 1023 samples behind, reported as latency. Rust tests: the FFT against a direct transform; at no reduction the input back delayed within 1e-4 (the first run failed by 1.08, a frame written N places along its ring, found and fixed); bursts in a 1 s room, the tail over 6 dB down and the bursts within 2 dB. Through the export renderer on the JFK speech in a synthetic room (T60 0.8 s, direct and reverberant energy equal), swept: at most 6 dB was the one setting that improved every reading (the tail in the pauses from -23.4 to -25.6 dB against the speech, SI-SDR from -1.7 to -0.5 dB, DNSMOS overall 2.24 to 2.28, background 2.85 to 3.02, speech 2.94 to 2.92), and is the default; at 12 dB the tail went to -26.5 dB but speech quality fell (overall 2.19), as spectral subtraction trades. Wired as de-hum and de-click were; a default edit's guard caught Denoise's export default sharing the line's text and left it alone. In Chromium: 19 effects, De-reverb in all four add lists, a session played with it, no layout shift, no page error.
-
-### Restoration in the live rack: de-hum and de-click while playing
-- refers-to: native/formwav-dsp/src/fx.rs (DeHum, kind 17; DeClick, kind 18; tests); backend/app/services/render.py; frontend/src/engine/document.ts, src/audio/player.ts, src/ui/lanes.ts, src/ui/inspector-pane.ts, src/ui/editor-tabs.ts, src/ui/browser-effects.ts; sidecar verification/verify_live_restoration.py
-- kind: explainer
-- logged: v2.11.3 (in progress) · 2026-10-06
-
-The comparison's L6: repair only offline. Two stages join the core, so they run live in the browser's rack and in export alike. De-hum: notches (RBJ, f64 state) at the hum's frequency and its harmonics, no latency. De-click: a click is a second-difference residual far above its running level (threshold times it, above -80 dBFS, after a 20 ms warm-up); a run longer than a click is an onset and is left alone; a click is replaced by cubic Hermite interpolation from the samples either side, which the stage sees by running 3.5 ms behind, reported as latency and compensated as Voice's is. The first tests caught two faults: de-hum's measurement inside the notch's 0.16 s settling (the test now measures after it), and de-click repairing onsets from silence and over-long runs (now a warm-up, and long runs abandoned). Rust tests: harmonics of 60 Hz over 40 dB down, 1 kHz within 0.5 dB; clean audio through de-click bit-exact, ten clicks repaired within 0.05. Through the export renderer on the JFK speech: the hum alone, each of eight harmonics down 122 to 197 dB; the speech alone, -0.23 dB in level and 0.033 dB on average in its spectrum away from the notches; 40 clicks, the worst error at a click 0.60 before and 0.006 after; clean speech through de-click, 46 samples of 527,828 changed (transients taken for clicks). Wired through the document, the player's two maps, automation (none for these), the export table, the inspector's lists and cards and the effects browser's Repair group; TypeScript caught three places treating any unnamed kind as a filter. De-reverb live is not built: it needs a spectral stage with its own latency, the next of L6.
-
-### Native capture: every channel of an interface, through the engine
-- refers-to: native/formwav-dsp/src/native.rs (NativeInput, input_devices, build_input); src/python.rs (NativeInput, native_input_devices); backend/app/routers/native_audio.py (/api/audio/inputs, /record/start, /record/levels, /record/stop); sidecar verification/native_capture
-- kind: explainer
-- logged: v2.10.8 (in progress) · 2026-10-06
-
-The comparison's Multitrack recording row, past two inputs. A browser takes at most two channels of one interface (measured, and sourced, at the previous entry in the interface's log), so capture of more goes through the engine: NativeInput opens an interface through cpal on its own thread, as the native output does, with the most channels it offers at the rate or the count asked (as an I/O set-up names an interface's width), a 1024-frame buffer within the device's range (a device's default can reach for the top of a very wide range), and float or integer samples converted to float. Its callback takes the lock rather than trying it, unlike the output's: a missed render is silence, a missed capture would be a hole in the take. The engine drains the take every quarter second into a file per track holding that track's channels, so a long take with many channels never sits whole in memory, and on stop each becomes a float WAV in the media store with the take's start on the engine's clock. Checked against a virtual eight-channel ALSA interface fed through a pipe at real-time pace with a tone per channel and a click on every channel each half second: the interface listed, opened at eight channels, levels of 0.2 on every channel mid-take (the tones' level), eight takes of one channel each at the same length, each its own channel's tone, and the clicks on identical frames in all eight. Not yet measured: that virtual interface is not clocked (ALSA's null plugin under it runs about 2.1 times real time and pads silence), so level and frequency fidelity in real time wait for a clocked interface; the harness is kept in the sidecar. The recorder choosing native capture for such an interface, and placing its takes, comes next.
 
 ### Cargo.toml · crate type and targets
 - refers-to: Cargo.toml :: `[lib]`
@@ -407,6 +393,42 @@ The v0.94.0 finding at 2048 tracks (the realtime thread taking the whole core, t
 - logged: v1.11.0 (in progress) · 2026-10-01
 
 A long file had to arrive whole before it could play. A source can now be allocated silent at its full length and filled with interleaved frames written at any offset (clipped to the length; an unknown source or an offset past the end writes nothing), so the player can start on the piece under the playhead and fill the rest behind it. Verified: the new unit test (written frames read back, silence around them, writes clipped at the end, unknown sources ignored) and the other seven pass; through the wasm core a 70 s stereo file streamed in 2 s pieces and bounced matched the engine's export to 0.0 at 3371 points across the file. Stated: the source is still held whole in memory once filled; this changes when the audio arrives, not how much is held.
+
+---
+
+## formwav-dsp/src/fx.rs {#src-fx}
+
+### src/fx.rs · Stage::latency names every stage that delays, and where that delay is cancelled
+- refers-to: src/fx.rs :: `Stage::latency`; src/render.rs :: `mix_buses`, `mix_one`; backend app/services/render.py :: `plan`; frontend src/audio/player.ts :: `planClips`
+- kind: warning-context
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Its doc comment said every stage but Voice runs without delay; DeClick (round(rate × 0.0035) + 4 samples, 172 at 48 kHz) and DeReverb (1023 samples) delay theirs too, and it now says so. The core cancels a chain's latency only on a bus, reading the bus's clips that far ahead (mix_buses, primed after a seek, a loop's wrap or a new stage). The de-click entry below calls it "compensated as Voice's is", but the planners that choose a stage's chain sent only a compressor, a reverb or the dialogue isolate to a track's own bus, so de-click and de-reverb on a track played and exported late by those amounts until v2.12.5 added them to that rule (the backend log's render entry; the measurements there). A clip's chain (mix_one) and the master chain have no read-ahead, so these stages there still play late: a read-ahead per clip chain would belong in mix_one with priming state per chain as the buses keep (bus_primed), and the master's would read the whole mix ahead.
+
+### De-reverb in the live rack, and an FFT in the core
+- refers-to: native/formwav-dsp/src/fx.rs (Fft; DeReverb, kind 19; tests); backend/app/services/render.py; frontend/src/engine/document.ts, src/audio/player.ts, src/ui/lanes.ts, src/ui/inspector-pane.ts, src/ui/editor-tabs.ts, src/ui/browser-effects.ts; sidecar verification/verify_dereverb.py
+- kind: explainer
+- logged: v2.11.5 (in progress) · 2026-10-06
+
+The rest of L6. The core had no FFT, so it gained one (iterative radix-2, in place) and a short-time stage on it: late reverberation suppression (Lebart et al. 2001, Habets 2007). Reverb decays at a known rate for a reverb time, so the late reverberation in a band is predicted from the band's power 50 ms before, decayed by that much; a spectral gain takes it out, floored at the reduction allowed, smoothed over time, one gain for both channels; 1024-point frames 256 apart with square-root Hann windows, 1023 samples behind, reported as latency. Rust tests: the FFT against a direct transform; at no reduction the input back delayed within 1e-4 (the first run failed by 1.08, a frame written N places along its ring, found and fixed); bursts in a 1 s room, the tail over 6 dB down and the bursts within 2 dB. Through the export renderer on the JFK speech in a synthetic room (T60 0.8 s, direct and reverberant energy equal), swept: at most 6 dB was the one setting that improved every reading (the tail in the pauses from -23.4 to -25.6 dB against the speech, SI-SDR from -1.7 to -0.5 dB, DNSMOS overall 2.24 to 2.28, background 2.85 to 3.02, speech 2.94 to 2.92), and is the default; at 12 dB the tail went to -26.5 dB but speech quality fell (overall 2.19), as spectral subtraction trades. Wired as de-hum and de-click were; a default edit's guard caught Denoise's export default sharing the line's text and left it alone. In Chromium: 19 effects, De-reverb in all four add lists, a session played with it, no layout shift, no page error.
+
+### Restoration in the live rack: de-hum and de-click while playing
+- refers-to: native/formwav-dsp/src/fx.rs (DeHum, kind 17; DeClick, kind 18; tests); backend/app/services/render.py; frontend/src/engine/document.ts, src/audio/player.ts, src/ui/lanes.ts, src/ui/inspector-pane.ts, src/ui/editor-tabs.ts, src/ui/browser-effects.ts; sidecar verification/verify_live_restoration.py
+- kind: explainer
+- logged: v2.11.3 (in progress) · 2026-10-06
+
+The comparison's L6: repair only offline. Two stages join the core, so they run live in the browser's rack and in export alike. De-hum: notches (RBJ, f64 state) at the hum's frequency and its harmonics, no latency. De-click: a click is a second-difference residual far above its running level (threshold times it, above -80 dBFS, after a 20 ms warm-up); a run longer than a click is an onset and is left alone; a click is replaced by cubic Hermite interpolation from the samples either side, which the stage sees by running 3.5 ms behind, reported as latency and compensated as Voice's is. The first tests caught two faults: de-hum's measurement inside the notch's 0.16 s settling (the test now measures after it), and de-click repairing onsets from silence and over-long runs (now a warm-up, and long runs abandoned). Rust tests: harmonics of 60 Hz over 40 dB down, 1 kHz within 0.5 dB; clean audio through de-click bit-exact, ten clicks repaired within 0.05. Through the export renderer on the JFK speech: the hum alone, each of eight harmonics down 122 to 197 dB; the speech alone, -0.23 dB in level and 0.033 dB on average in its spectrum away from the notches; 40 clicks, the worst error at a click 0.60 before and 0.006 after; clean speech through de-click, 46 samples of 527,828 changed (transients taken for clicks). Wired through the document, the player's two maps, automation (none for these), the export table, the inspector's lists and cards and the effects browser's Repair group; TypeScript caught three places treating any unnamed kind as a filter. De-reverb live is not built: it needs a spectral stage with its own latency, the next of L6.
+
+---
+
+## formwav-dsp/src/native.rs {#src-native}
+
+### Native capture: every channel of an interface, through the engine
+- refers-to: native/formwav-dsp/src/native.rs (NativeInput, input_devices, build_input); src/python.rs (NativeInput, native_input_devices); backend/app/routers/native_audio.py (/api/audio/inputs, /record/start, /record/levels, /record/stop); sidecar verification/native_capture
+- kind: explainer
+- logged: v2.10.8 (in progress) · 2026-10-06
+
+The comparison's Multitrack recording row, past two inputs. A browser takes at most two channels of one interface (measured, and sourced, at the previous entry in the interface's log), so capture of more goes through the engine: NativeInput opens an interface through cpal on its own thread, as the native output does, with the most channels it offers at the rate or the count asked (as an I/O set-up names an interface's width), a 1024-frame buffer within the device's range (a device's default can reach for the top of a very wide range), and float or integer samples converted to float. Its callback takes the lock rather than trying it, unlike the output's: a missed render is silence, a missed capture would be a hole in the take. The engine drains the take every quarter second into a file per track holding that track's channels, so a long take with many channels never sits whole in memory, and on stop each becomes a float WAV in the media store with the take's start on the engine's clock. Checked against a virtual eight-channel ALSA interface fed through a pipe at real-time pace with a tone per channel and a click on every channel each half second: the interface listed, opened at eight channels, levels of 0.2 on every channel mid-take (the tones' level), eight takes of one channel each at the same length, each its own channel's tone, and the clicks on identical frames in all eight. Not yet measured: that virtual interface is not clocked (ALSA's null plugin under it runs about 2.1 times real time and pads silence), so level and frequency fidelity in real time wait for a clocked interface; the harness is kept in the sidecar. The recorder choosing native capture for such an interface, and placing its takes, comes next.
 
 ---
 

@@ -1203,7 +1203,7 @@ pub enum Stage {
 
 impl Stage {
     /// The samples this stage delays its signal by (RX-16): a mixer reading a chain's input that far ahead cancels it.
-    /// Every stage but Voice runs without delay.
+    /// Voice, DeClick and DeReverb delay their signal; every other stage runs without delay.
     pub fn latency(&self) -> usize {
         match self {
             Stage::Voice(_) => 2 * VOICE_FRAME,

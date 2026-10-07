@@ -471,6 +471,13 @@ Space toggles play and Home goes to the start, both ignored in form fields and o
 
 ## src/audio/player.ts {#src-audio-player}
 
+### src/audio/player.ts · de-click and de-reverb take a track to its own bus
+- refers-to: src/audio/player.ts :: `planClips` (the rule sending a track through a bus of its own); backend app/services/render.py :: `plan`; backend tests/test_plan_parity.py, tests/test_restoration.py
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+The core reads a chain ahead by its latency only on a bus (RX-16), and this rule sent a track there for a compressor, a reverb or the dialogue isolate, not for de-click (3.5 ms behind) or de-reverb (1023 samples), which the catalogue offers as running "3.5 ms behind" and "21 ms behind" and the core's L6 entries call compensated. On a track they played and exported that late against the other tracks. They now join the rule, here and in the export's plan (the backend log's render entry has the measurements: the peak against the dry export from 172 and 1023 samples to 0). The backend's parity test loads this module through Vite and holds its plan to the export's on 96 sessions, so the two rules cannot drift apart again unseen. As for the kinds before them, a track sent to its own bus loses its filter automation (bus chains are not automated). Still late, for the owner: these stages in a clip's chain, the master's, or on a track routed to a user bus.
+
 ### src/audio/player.ts · contexts and loading
 - refers-to: src/audio/player.ts :: `Player.ensure`, `loadInto`, `planClips`
 - kind: rationale

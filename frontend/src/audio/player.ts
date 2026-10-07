@@ -221,9 +221,10 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     let bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
     let fxFlat = flatFx(track.fx);
     let fxAuto = flatFxAuto(track.fx);
-    if (bus === 0 && (track.fx ?? []).some((f) => (f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice") && !f.bypass)) {
-      // A compressor must see the track's sum, and a reverb's tail must ring on past each clip's end (PT-22): its own
-      // bus (unity, centre) carries the whole chain, as in exports.
+    if (bus === 0 && (track.fx ?? []).some((f) => (f.kind === "compressor" || f.kind === "reverb" || f.kind === "voice" || f.kind === "declick" || f.kind === "dereverb") && !f.bypass)) {
+      // A compressor must see the track's sum, a reverb's tail must ring on past each clip's end (PT-22), and a stage
+      // that delays its signal is read ahead only on a bus (RX-16): its own bus (unity, centre) carries the whole
+      // chain, as in exports.
       // (Bus chains are not automated yet, so the automation stays with the clip chain it was written for.)
       bus = buses.length + 1;
       buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx) });

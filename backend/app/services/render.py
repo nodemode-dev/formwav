@@ -136,7 +136,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
 
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
-        if bus_index == 0 and any(s[0] in (6, 8, 16) for s in stages):  # a compressor, a reverb's tail (PT-22), the voice stage (RX-16: buses are where the core cancels its latency)
+        if bus_index == 0 and any(s[0] in (6, 8, 16, 18, 19) for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency)
             # A compressor is nonlinear, so it must see the track's sum: the track plays through a bus of its own
             # (unity gain, centre) whose chain is the track's whole chain, in order.
             buses[f"__track:{track.get('id')}"] = (len(buses) + 1, 1.0, 0.0)
@@ -144,13 +144,15 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             chains.extend((1, bus_index - 1, *s) for s in stages)
             stages = []
         else:
-            # Filters are linear and run per clip; a compressor on a track routed to a user bus is not placed yet.
-            stages = [s[:4] for s in stages if s[0] != 6]
-        # The filters' parameter automation (PT-19), numbered by the clip stages above (bypassed, unknown and compressor
-        # entries skipped, as the browser's flatFxAuto does); each becomes one envelope (natural units) for the track.
+            # Filters are linear and run per clip; a compressor, a reverb or a dialogue isolate on a track routed to a
+            # user bus is not placed yet, as the browser's flatFx leaves them out.
+            stages = [s[:4] for s in stages if s[0] not in (6, 8, 16)]
+        # The filters' parameter automation (PT-19), numbered by the clip stages above (bypassed, unknown, compressor,
+        # reverb and dialogue isolate entries skipped, as the browser's flatFxAuto does); each becomes one envelope
+        # (natural units) for the track.
         auto_envs: list[tuple[int, int, int]] = []
         if stages:
-            filters = [f for f in (track.get("fx") or []) if (_stage(f) or (6,))[0] != 6]
+            filters = [f for f in (track.get("fx") or []) if (_stage(f) or (6,))[0] not in (6, 8, 16)]
             for si, f in enumerate(filters):
                 for param, key in enumerate(("freq", "gain", "q")):
                     pts = (f.get("automation") or {}).get(key)
@@ -182,7 +184,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             # the clip gain, which the core applies after the chain), then the track's filters, whose automation moves
             # past the clip's stages
             own = [s for s in (_stage(f) for f in (clip.get("fx") or [])) if s]
-            own_filters = [s[:4] for s in own if s[0] != 6]
+            own_filters = [s[:4] for s in own if s[0] not in (6, 8, 16)]
             own_comp = next((s for s in own if s[0] == 6), None)
             ahead = len(own_filters) + (1 if own_comp else 0)
             chain = own_filters + stages
