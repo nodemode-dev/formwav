@@ -1,0 +1,10 @@
+[package]
+name = "formwav-studio"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "formwav's studio processors: equalisers, dynamics, reverbs, delays, modulation, colour, pitch and utilities, each a stereo block processor with named parameters"
+publish = false
+
+[lints.rust]
+unsafe_code = "forbid"
