@@ -11,8 +11,14 @@ class RenderError(ValueError):
 
 #: Track effect kinds, as the core's stage codes (formwav-dsp fx.rs).
 FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11, "tremolo": 12, "gate": 13, "phaser": 14, "flanger": 15, "voice": 16, "dehum": 17, "declick": 18, "dereverb": 19, "processor": 20}
-#: The stages that must see a track's sum, so a track carrying one plays through a bus of its own.
-ON_THE_SUM = (6, 8, 16, 18, 19, 20)
+#: The stages that must see a track's sum, so a track carrying one plays through a bus of its own: every kind but the
+#: five filters, which are linear and run per clip.
+ON_THE_SUM = (6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+#: A track with a 5.1 or ambisonic place goes to a bus of its own only for these, the others staying per clip where its
+#: place still reaches them (a track on its own bus plays on L and R in 5.1 until PLAN_v13 S16).
+PLACED_ON_THE_SUM = (6, 8, 16, 18, 19, 20)
+#: The session's pan law for a mono source (the core's codes; absent is the balance every session had).
+PAN_LAWS = {"-3": 1, "-4.5": 2, "-6": 3}
 
 
 def _number(v: float) -> str:
@@ -142,6 +148,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     fx: list[tuple] = []
     fx_auto: list[tuple] = []
     comps: list[tuple] = []  # PT-33: (clip index, filters ahead of it, threshold dB, ratio, attack ms, release ms, makeup dB)
+    bus_auto: list[tuple] = []  # (bus index, stage, param, envelope): a track's filter automation on its own bus
     chains: list[tuple] = list(bus_chains)
     end = 0
     skipped = 0
@@ -149,10 +156,15 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     for track in tracks:
         # A VCA (Pro Tools' VCA masters) scales and mutes its members without carrying their audio.
         vca = vcas.get(track.get("vcaId"))
-        if track.get("mute") or (vca and vca.get("mute")) or (soloed and not track.get("solo")) or track.get("busId") in muted_buses:
+        if track.get("mute") or (vca and vca.get("mute")) or (soloed and not track.get("solo") and not track.get("soloSafe")) or track.get("busId") in muted_buses:
             continue
         bus_index = buses[track["busId"]][0] if track.get("busId") in buses else 0
-        automation = track.get("automation") or {}
+        # automation Off plays the static fader and pan and the filters as set, the lanes kept
+        off = bool(track.get("autoOff"))
+        automation = {} if off else (track.get("automation") or {})
+        # input trim and polarity come before the inserts: in the clip's gain, which reaches a track's own bus first
+        trim_db = float(track.get("trimDb") or 0)
+        polarity = -1.0 if track.get("invert") else 1.0
         gain_env = pan_env = 0
         if automation.get("volume"):
             envelopes.append(([(int(p["time"]), float(p["value"])) for p in automation["volume"]], True))
@@ -164,12 +176,23 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
 
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
-        if bus_index == 0 and any(s[0] in ON_THE_SUM for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency), a processor
+        on_sum = PLACED_ON_THE_SUM if isinstance(track.get("surround"), dict) else ON_THE_SUM
+        if bus_index == 0 and any(s[0] in on_sum for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency), a processor
             # A compressor is nonlinear, so it must see the track's sum: the track plays through a bus of its own
             # (unity gain, centre) whose chain is the track's whole chain, in order.
             buses[f"__track:{track.get('id')}"] = (len(buses) + 1, 1.0, 0.0)
             bus_index = len(buses)
             chains.extend((1, bus_index - 1, *s) for s in stages)
+            # the filters' automation (PT-19) goes with them onto the bus, numbered by the bus chain's stages
+            live = [f for f in (track.get("fx") or []) if _stage(f)]
+            for si, f in enumerate([] if off else live):
+                if FX_KINDS.get(f.get("kind")) not in (1, 2, 3, 4, 5):
+                    continue
+                for param, key in enumerate(("freq", "gain", "q")):
+                    pts = (f.get("automation") or {}).get(key)
+                    if pts:
+                        envelopes.append(([(int(p["time"]), float(p["value"])) for p in pts], False))
+                        bus_auto.append((bus_index - 1, si, param, len(envelopes)))
             stages = []
         else:
             # Filters are linear and run per clip; a compressor, a reverb or a dialogue isolate on a track routed to a
@@ -179,7 +202,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         # reverb and dialogue isolate entries skipped, as the browser's flatFxAuto does); each becomes one envelope
         # (natural units) for the track.
         auto_envs: list[tuple[int, int, int]] = []
-        if stages:
+        if stages and not off:
             filters = [f for f in (track.get("fx") or []) if (_stage(f) or (6,))[0] not in (6, 8, 16, 20)]
             for si, f in enumerate(filters):
                 for param, key in enumerate(("freq", "gain", "q")):
@@ -197,7 +220,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
                 skipped += 1
                 continue
             source = sources.setdefault(play_id, len(sources) + 1)
-            gain = math.pow(10, (track_db + float(clip.get("gainDb", 0))) / 20)
+            gain = polarity * math.pow(10, (track_db + trim_db + float(clip.get("gainDb", 0))) / 20)
             start, length = int(clip["start"]), int(clip["length"])
             fade_shape = {"linear": 0, "equal-power": 1, "s-curve": 2, "exponential": 3}.get(clip.get("fadeShape") or "linear", 0)
             clip_env = gain_env
@@ -236,7 +259,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
                 owners.append(tracks.index(track))
                 add_chain(len(clips) - 1)
             end = max(end, start + length)
-    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains, fx_auto, comps, owners
+    return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains, fx_auto, comps, owners, bus_auto
 
 
 def wav_float32_stereo(interleaved: bytes, rate: int) -> bytes:
@@ -253,7 +276,7 @@ def dbfs(peak: float) -> str:
 
 def render(doc: object) -> dict:
     native = media._require_core()
-    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, owners = plan(doc)
+    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = plan(doc)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -270,7 +293,7 @@ def render(doc: object) -> dict:
     spatial = 1 if isinstance(doc, dict) and doc.get("spatialFormat") == "foa" else 0
     places = places_for(doc, owners, spatial) if isinstance(doc, dict) and doc.get("surroundFold") else []
     chains, processors = native_chains(chains)
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0))
     frames = max(1, end)
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:

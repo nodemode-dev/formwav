@@ -124,7 +124,7 @@ def _bus(doc: dict, fmt: int) -> tuple[np.ndarray, int]:
         raise render.RenderError("there are no tracks to mix")
     native = media._require_core()
     unfolded = {k: v for k, v in doc.items() if k != "surroundFold"}
-    rate, sources, clips, end, _skipped, buses, envelopes, fx, chains, fx_auto, comps, owners = render.plan(unfolded)
+    rate, sources, clips, end, _skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = render.plan(unfolded)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -137,5 +137,5 @@ def _bus(doc: dict, fmt: int) -> tuple[np.ndarray, int]:
     if not places:
         places = [(len(clips), [0.0] * 6)]  # nothing placed: still the bus (5.1: the stereo on L and R; ambisonics: ahead)
     chains, processors = render.native_chains(chains)
-    interleaved, _, _ = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, False, fmt, processors)
+    interleaved, _, _ = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, False, fmt, processors, bus_auto, render.PAN_LAWS.get(doc.get("panLaw"), 0))
     return np.frombuffer(bytes(interleaved), dtype="<f4").reshape(-1, 6).astype(np.float64), rate

@@ -102,7 +102,7 @@ def _overview_png(doc: dict, rate: int, end: int) -> bytes | None:
     tracks = doc.get("tracks", [])
     soloed = any(t.get("solo") for t in tracks)
     for t in tracks:
-        if t.get("mute") or (soloed and not t.get("solo")):
+        if t.get("mute") or (soloed and not t.get("solo") and not t.get("soloSafe")):
             continue
         for c in t.get("clips", []):
             if c.get("mediaId") not in (doc.get("media") or {}):
@@ -116,7 +116,7 @@ def _overview_png(doc: dict, rate: int, end: int) -> bytes | None:
             v = np.abs(x[np.clip(src + pos - start, 0, len(x) - 1)].astype(np.float64)).max(axis=1)
             if x.dtype == np.int16:
                 v /= 32768.0
-            v *= 10 ** ((float(t.get("gainDb") or 0) + float(c.get("gainDb") or 0)) / 20)
+            v *= 10 ** ((float(t.get("gainDb") or 0) + float(t.get("trimDb") or 0) + float(c.get("gainDb") or 0)) / 20)
             np.maximum.at(cols, np.minimum(width - 1, (pos / span).astype(int)), v)
     half = np.round(np.sqrt(np.clip(cols, 0, 1)) * height / 2).astype(int)
     img = np.zeros((height, width, 4), dtype=np.uint8)
