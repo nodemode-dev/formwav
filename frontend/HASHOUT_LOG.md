@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
 Current build version: v2.13.0
-Last updated: 2026-10-07 · v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts); 160 older entries still sit under the v0.38.0 heading
+Last updated: 2026-10-07 · v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
 
 ---
 
@@ -163,6 +163,39 @@ frontend/
 The agreed canvas (and overdub before it) puts History beside the Agent. The engine's undo stack holds documents only, so each dispatch now also records an entry: the command in a few words, who made it (you, or the agent while its run lasts) and when. WORDS is a Record over Command["type"], so a new command type does not compile until it has its words; `{t}` takes the track's name from the session before the command ran, `{m}` the imported media's name, and mute and solo read Unmuted and Unsoloed when they turn off. A batch reads as its first command (a synth change with the note clips it re-renders is "Changed the synth").
 
 ## src/styles/canvas.css {#src-styles-canvas}
+
+### The Inspector as balanced columns that scroll down
+- refers-to: frontend/src/styles/canvas.css (.fw-dock .fw-pane-inspector, .fw-dock .fw-inspector-body and its sections)
+- kind: removed-code
+- logged: v2.13.0 · 2026-10-07
+
+The release's last check in Firefox at 1710 by 940 found the row of cards below cut where the editor ends: Analyze's Spectrogram and Transients cut mid-word, Playlists wholly past the window's edge, and each card's own scroll cutting its last rows at the bottom. The cards are now laid out in columns at least 300 px wide across the editor (two at 1280 and 1440, three at 1710), the body at its own height so the columns balance, inside the pane, which scrolls down. frame.css's columns had split cards because the body had a fixed height (column-fill auto made overflow columns sideways); with the height free and break-inside avoid, each card stays whole, measured at all three sizes: one fragment per card and nothing wider than the editor.
+
+```css
+.fw-dock .fw-inspector-body { display: flex; align-items: stretch; gap: 12px; padding: 12px 16px; overflow: auto hidden; columns: auto; column-rule: none; }
+.fw-dock .fw-inspector-body > .fw-insp-section { flex: none; display: flex; flex-direction: column; gap: 8px; inline-size: 320px; min-block-size: 0; max-block-size: 100%; margin: 0; padding: 12px; overflow: hidden auto; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-tertiary); }
+```
+
+### The editor head's context shows whole or not at all
+- refers-to: frontend/src/styles/canvas.css (.fw-dock-context and its ::before, .fw-dock-who, .fw-dock-detail); src/ui/dock.ts (the head's markup)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+At 1280 the head had about 40 px left for "Live instrument" and cut it to "Live", and with More reading Inspector the track's name vanished under the clip. The context is now one line of a wrapping row with a fixed height and overflow hidden: what does not fit wraps to the hidden second line, so the swatch and the name (one item, .fw-dock-who) show together or not at all, and the detail goes first. The 1px by 18px ::before holds the first line: a zero-width first item let the name sit beside it however little room there was, and with no height the first line had none, so the second showed in its place.
+
+### Route opens over its strip
+- refers-to: frontend/src/styles/canvas.css (.fw-dock .fw-strip position, .fw-dock .fw-strip-route[open], .fw-dock .fw-route-box)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+Route's box (output, VCA, send and its level, automation mode) opened as a new row under the strip, below the editor's height, so at the default height a click on Route only pushed Route out of view. It now covers the strip above its M, S and Route row, opaque, scrolling if a short editor leaves it too little room; Route, still in place, closes it.
+
+### The Clip tab's actions end with a rule
+- refers-to: frontend/src/styles/canvas.css (.fw-dock .fw-cf-actions)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+With the canvas's two rows of fields and its four actions filling the editor at its default height, the next row (Source and Colour) showed the top few pixels of its labels at the editor's bottom edge. The actions row now ends with 14 px and a rule, which pushes that row out of view and marks where the tab's further tools begin.
 
 ### The agreed canvas, region by region, over the older layers
 - refers-to: frontend/src/styles/canvas.css (all of it); src/main.ts (imported last before scrollbars.css)
@@ -431,6 +464,22 @@ The comparison's L12: the step sequencer had four rows of on-off steps, placed o
 
 ## src/ui/clip-tab.ts {#src-ui-clip-tab}
 
+### The Clip tab in the canvas's two rows
+- refers-to: frontend/src/ui/clip-tab.ts (the grid's field order)
+- kind: removed-code
+- logged: v2.13.0 · 2026-10-07
+
+The canvas sets the Clip tab as two rows of four fields over its four actions, all inside the editor's default height. The tab had three rows (the track's name and the source two columns wide each), so the fades sat half under the footer and the actions below the fold at 1280, 1440 and 1710. The name now takes one column beside start, length and gain; fades, fade shape and sound type make the second row; the source, which only reads, moved below the actions beside the colour.
+
+```ts
+field("Track name", `<input type="text" data-f="name" maxlength="80">`, true),
+field("Source", `<output data-f="source"></output>`, true),
+field("Start (s)", `<input type="number" data-f="start" min="0" step="0.001">`),
+field("Length (s)", `<output data-f="length"></output>`),
+field("Gain (dB)", `<input type="number" data-f="gain" min="-60" max="24" step="0.1">`),
+field("Sound type", `<select data-f="type">...</select>`),
+```
+
 ### The canvas's four clip actions, and status lines that never cut a word
 - refers-to: frontend/src/ui/clip-tab.ts (.fw-cf-actions and its click handler, the default status texts); src/styles/canvas.css (.fw-cf-ara-state)
 - kind: explainer
@@ -613,6 +662,13 @@ Twelve icons copied byte for byte from the stylized-nodemode mirror of the NodeM
 ---
 
 ## src/ui/shell.ts {#src-ui-shell}
+
+### src/ui/shell.ts · the browser's search reads Search
+- refers-to: src/ui/shell.ts :: the browser's `[data-browse-search]` placeholder
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+The canvas's placeholder, "Search media, effects, sounds", measured 186 px against the field's 145 and showed cut on every screen (the canvas cuts it too). It reads Search; the three tabs above say what it searches, and its accessible name still says media, effects and sounds.
 
 ### src/ui/shell.ts · the canvas's markup
 - refers-to: src/ui/shell.ts :: `shellHtml` (header, browser, toolbar and store, ruler title, editor anchor, footer), `PANEL_ICONS`, `writeFinal`, the empty stage's actions
