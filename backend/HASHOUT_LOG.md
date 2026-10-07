@@ -43,6 +43,8 @@ backend/
     ├── test_*.py                one file per area; kinds_probe.mjs and player_plan.mjs load the interface's modules
     ├── mcp_probe.py             the MCP SDK's client against the server, run in the server's venv
     └── e2e/test_interface.py    the built interface in Chromium against a real engine
+
+../.github/workflows/            checks.yml on every push and pull request (three platforms); builds.yml the app's three builds
 ```
 
 ---
@@ -87,6 +89,7 @@ backend/
 - [tests/test_sync.py](#tests-sync)
 - [tests/test_three_way.py](#tests-three-way)
 - [tests/e2e/test_interface.py](#tests-e2e-interface)
+- [.github/workflows](#workflows)
 
 ---
 
@@ -2117,7 +2120,7 @@ Kokoro offers its 54 voices; a spoken sentence is heard back by Whisper with at 
 - kind: rationale
 - logged: v2.12.5 (in progress) · 2026-10-06
 
-mcp_probe.py runs in the MCP server's own venv (its Starlette and the engine's FastAPI do not share one) against a real engine, starts the server over stdio with the SDK's client and calls every tool. Each of the 34 checks passes only when the tool works where its work can run, or fails with the instruction a person needs (a key, an install, a device), never with a stack trace; de-bleed is asked to use the recording as its own reference and must refuse. The ADM the server renders is judged by the EBU renderer as test_adm judges the engine's. A check the probe ran that this list does not know fails too, so a new tool cannot go unchecked.
+mcp_probe.py runs in the MCP server's own venv (its Starlette and the engine's FastAPI do not share one) against a real engine, starts the server over stdio with the SDK's client and calls every tool. Each of the 34 checks passes only when the tool works where its work can run, or fails with the instruction a person needs (a key, an install, a device), never with a stack trace; de-bleed is asked to use the recording as its own reference and must refuse. The two tools that fetch a model on first use (formwav_speech_regions, Silero VAD; formwav_separate_speech_music_ambience, DeepFilterNet) are skipped where it is absent, so the test never downloads. The ADM the server renders is judged by the EBU renderer as test_adm judges the engine's. A check the probe ran that this list does not know fails too, so a new tool cannot go unchecked.
 
 ---
 
@@ -2206,3 +2209,14 @@ The sidecar's verify_three_way.py made a test. A stereo mix of known parts: the 
 - logged: v2.12.5 (in progress) · 2026-10-06
 
 What the release gate's interface run checked, kept. An engine serves the built app with its own data and home folders and the Anthropic stand-in as its model; each test opens a fresh browser at 1288 by 683, the smallest window the app is held to, watching page errors, console errors and every layout-shift entry from the first paint. The app boots under a CPU slowed four times with no error and no shift; the page does not scroll and the transport bar neither overflows nor wraps, with OUT, the phase meter and IN in view; every menu item's target exists once, and each View menu item reaches its control; an imported file becomes one track that plays; Settings > Agents lists the six clients and its dialog does not move as they load; and the in-app agent carries out the stand-in's chain (three model calls, each with the 30 tools and the key, the three tool results without an error, Undo run offered, the marker named agent at 00:01.000 in the Labels tab). Skips where the interface is not built or Chromium is missing.
+
+---
+
+## .github/workflows {#workflows}
+
+### .github/workflows/checks.yml and builds.yml · the repository's checks on every push, and the app built on each platform
+- refers-to: .github/workflows/checks.yml (jobs interface, engine, shell), .github/workflows/builds.yml (jobs macos, linux, windows); build_macos_app, build_linux_app, build_windows_app.ps1; frontend/oc_install; backend/oc_install
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+PLAN_v11 4.2, modelled on formcut's checks.yml and release.yml. checks runs on pushes to main and pull requests into it (a push that changes only Markdown skips; a pull request always runs, so a ruleset requiring the checks never waits), on macOS, Windows and Linux. interface: npm ci and npm run build, the one place a type error stops a change (the dev server does not type-check). engine: the system's ffmpeg (the tests make and read media through it) and, on Linux, ALSA's headers (the core's native audio builds against them); the core's Rust tests; clippy reported but not blocking (the core carries 18 warnings nobody has cleared, and each Rust release can add lints); the engine's requirements and the tests' own, with the core built by maturin as the installer builds it (features python and native, from its pyproject); the MCP server's venv and the EBU renderer's, each apart as on a person's machine; the core built for the browser into frontend/public/core and the interface built over it, exactly as frontend/oc_install does (debug info stripped), since the interface tests play audio and test_kinds designs stages in that WebAssembly; Playwright's Chromium; compileall over the engine, its MCP server and the tests; ruff 0.16.8, pinned (formcut learned that an unpinned ruff fails a push that changed nothing), held to the rules that are errors rather than style (syntax errors, undefined names; E9, F63, F7, F82), which the engine passes today; then the tests, the skips listed with their reasons. Not checked, on purpose: formatting. Neither the core nor the shell has ever been formatted by rustfmt (245 places would change in the core, 3 statements in the shell, and a wider max_width still leaves 27 and 5), and ruff format would change 69 of the engine's 92 files; making either pass would be a one-time rewrite of the code, which the hand-edit law leaves to the owner. shell (Ubuntu 24.04): WebKitGTK's and GTK's headers, stand-ins for the five sidecars (formwav-engine, fwhost, fwnyq, fwvamp, fwlv2) named for the host triple and for the built interface (tauri checks externalBin and frontendDist when the crate compiles; the release builds make the real ones), cargo check, and clippy reported. builds runs each platform's own build script on every release commit pushed to main (a commit message starting chore(release)) and on request, and keeps a .dmg (macos-latest, Apple silicon), a .deb (ubuntu-22.04, the oldest runner, for the lowest glibc floor) and an NSIS installer (windows-latest, its MSYS2 at C:\msys64 given the C helpers' packages first) as the run's artifacts; unsigned, as the scripts make them. Both files pass actionlint 1.7.12 with shellcheck. Neither has run on GitHub yet: this build cannot push, so their first runs are the owner's next push, and the README's Not built list says so.

@@ -1,0 +1,152 @@
+name: checks
+
+# Every change to main is checked on macOS, Windows and Linux: the interface type-checks and builds; the audio core
+# passes its Rust tests; the engine, its MCP server and the built interface pass backend/tests; the desktop shell
+# compiles. Pushes to main and pull requests into it run; a push that changes only Markdown does not, while a pull
+# request always does, so a ruleset that requires these checks never waits on one. The reasons for each step are in
+# backend/HASHOUT_LOG.md (.github/workflows).
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - "**"
+      - "!**/*.md"
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  interface:
+    name: interface (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      # tsc, then vite: the dev server does not type-check, so this is where a type error stops a change
+      - run: npm run build
+        working-directory: frontend
+
+  engine:
+    name: engine and interface tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      # the tests make and read media through ffmpeg, and the core's native audio builds against ALSA on Linux
+      - name: system packages (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libasound2-dev pkg-config
+      - name: system packages (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: system packages (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+      - name: the audio core's tests
+        working-directory: native/formwav-dsp
+        run: cargo test --locked
+      # reported, not blocking: the core carries warnings nobody has cleared yet
+      - name: clippy
+        continue-on-error: true
+        working-directory: native/formwav-dsp
+        run: cargo clippy --locked --all-targets
+      - name: the engine, with the audio core built into it as the installer builds it
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt -r backend/tests/requirements.txt "ruff==0.16.8"
+          maturin build --release -m native/formwav-dsp/Cargo.toml -o native-dist
+          python -m pip install native-dist/*.whl
+      - name: the MCP server's own environment
+        run: |
+          python -m venv backend/formwav_mcp/venv
+          if [ "$RUNNER_OS" = Windows ]; then mcp=backend/formwav_mcp/venv/Scripts/python.exe; else mcp=backend/formwav_mcp/venv/bin/python; fi
+          "$mcp" -m pip install -r backend/formwav_mcp/requirements.txt
+      - name: the EBU ADM Renderer, judge of the ADM tests, in its own environment
+        run: |
+          python -m venv backend/tests/.venv-ear
+          if [ "$RUNNER_OS" = Windows ]; then ear=backend/tests/.venv-ear/Scripts/python.exe; else ear=backend/tests/.venv-ear/bin/python; fi
+          "$ear" -m pip install -r backend/tests/requirements_ear.txt
+      - name: the interface with its audio core, for the interface tests
+        env:
+          CARGO_PROFILE_RELEASE_STRIP: debuginfo
+        run: |
+          cargo build --release --locked --target wasm32-unknown-unknown --lib --manifest-path native/formwav-dsp/Cargo.toml
+          mkdir -p frontend/public/core
+          cp native/formwav-dsp/target/wasm32-unknown-unknown/release/formwav_dsp.wasm frontend/public/core/formwav_dsp.wasm
+          cd frontend && npm ci && npm run build
+      - name: Chromium for the interface tests
+        run: python -m playwright install --with-deps chromium
+      - name: compile and lint
+        run: |
+          python -m compileall -q -x '[/\\]\.?venv' backend/app backend/formwav_mcp backend/tests
+          ruff check --select E9,F63,F7,F82 --target-version py312 --extend-exclude .venv-ear backend
+      - name: tests
+        working-directory: backend
+        run: python -m pytest tests -q -rs
+
+  shell:
+    name: desktop shell
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: system libraries for tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      # tauri checks its externalBin and frontendDist when the crate compiles; the release builds make the real ones,
+      # so stand-ins named for the host triple let this job compile in minutes, and never leave the runner
+      - name: stand-ins for the sidecars and the built interface
+        run: |
+          triple=$(rustc -vV | awk '/^host:/ {print $2}')
+          mkdir -p src-tauri/binaries frontend/dist
+          for bin in formwav-engine fwhost fwnyq fwvamp fwlv2; do
+            printf '#!/bin/sh\n' > "src-tauri/binaries/$bin-$triple"
+            chmod +x "src-tauri/binaries/$bin-$triple"
+          done
+          printf '<!doctype html><title>formwav</title>\n' > frontend/dist/index.html
+      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+      - name: clippy
+        continue-on-error: true
+        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets
