@@ -135,7 +135,7 @@ The owner's Mac log showed the engine's HTTPS fetches through urllib (the RNNois
 - kind: rationale
 - logged: v2.13.0 · 2026-10-07
 
-The owner unpacked a zip that carried Linux builds of fwvamp and fwnyq into his Mac's checkout; running them raised OSError "Exec format error", which reached the routes as a 500. That error is now a MediaError naming the host as built for another computer and the script that builds it here (native/formwav-vamp/build_fwvamp, native/formwav-nyquist/build_fwnyq), which the routes answer as they answer a missing host. The release zips carry tracked files only, so the binaries are built on the machine that runs them.
+The v2.12.4 and v2.12.5 zips carried untracked Linux builds of fwvamp and fwlv2 into the owner's Mac checkout; running fwvamp there raised OSError "Exec format error", which reached the routes as a 500. That error is now a MediaError naming the host as built for another computer and the script that builds it here (native/formwav-vamp/build_fwvamp, and native/formwav-nyquist/build_fwnyq for the Nyquist host, given the same guard), which the routes answer as they answer a missing host. The release zips now carry tracked files only, so the hosts are built on the machine that runs them.
 
 ## app/services/effects.py · LEARNS_NOISE {#app-services-effects-learns-noise}
 
