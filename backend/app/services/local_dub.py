@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ..core.version import VERSION
 from . import local_speech, media, transcript
 from .audacity import _wav_bytes
 from .providers import ProviderError
@@ -85,7 +86,8 @@ def install(lang: str) -> dict:
                 base.parent.mkdir(parents=True, exist_ok=True)
                 with tempfile.TemporaryDirectory() as tmp:
                     pkg = Path(tmp) / "pkg.argosmodel"
-                    with urllib.request.urlopen(LANGS[lang][3], timeout=600) as res, open(pkg, "wb") as out:
+                    request = urllib.request.Request(LANGS[lang][3], headers={"User-Agent": f"formwav/{VERSION}"})
+                    with urllib.request.urlopen(request, timeout=600) as res, open(pkg, "wb") as out:
                         shutil.copyfileobj(res, out)
                     with zipfile.ZipFile(pkg) as z:
                         for name in z.namelist():
