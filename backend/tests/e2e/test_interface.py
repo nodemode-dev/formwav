@@ -223,3 +223,106 @@ def test_the_in_app_agent_carries_out_a_chain_of_tools(page, app_url):
     labels = page.evaluate("[...document.querySelectorAll('.fw-labels-list .fw-label-row')].map((r) => [r.querySelector('.fw-label-time').textContent, r.querySelector('.fw-label-text').value])")
     assert labels == [["00:01.000", "agent"]]
     assert _clean(page)["errors"] == []
+
+
+CUT = """(() => {
+  const out = [];
+  const controls = 'button, [role=tab], [role=menuitem], [role=menuitemradio], label, select, input, .fw-cf-label, .fw-knob-label, .fw-knob-value, .fw-dock-track, .fw-dock-detail';
+  const shown = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || r.right < 0 || r.bottom < 0 || r.left > innerWidth || r.top > innerHeight) return false;
+    for (let n = el; n; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
+      if (n.parentElement?.tagName === 'DETAILS' && !n.parentElement.open && n.tagName !== 'SUMMARY') return false;
+    }
+    return true;
+  };
+  const say = (el) => (el.tagName === 'SELECT' ? el.options[el.selectedIndex]?.text : el.tagName === 'INPUT' ? el.value || el.placeholder : el.textContent.trim()).slice(0, 50);
+  for (const el of document.querySelectorAll('body *')) {
+    if (el.closest('svg') || el.closest('.fw-vh') || !shown(el)) continue;
+    const texts = [...el.childNodes].filter((n) => n.nodeType === 3 && n.textContent.trim());
+    const control = /^(INPUT|SELECT|BUTTON)$/.test(el.tagName);
+    if (!texts.length && !control) continue;
+    const cs = getComputedStyle(el);
+    if (el.tagName !== 'TEXTAREA' && !(el.tagName === 'INPUT' && el.type === 'number') && el.scrollWidth > el.clientWidth + 1 && (cs.overflowX !== 'visible' || cs.textOverflow === 'ellipsis')) out.push(['clipped', say(el)]);
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (el.tagName === 'SELECT' && el.options[el.selectedIndex] && c.measureText(el.options[el.selectedIndex].text).width > room - 15) out.push(['select cut', say(el)]);
+    if (el.tagName === 'INPUT' && !el.value && el.placeholder && c.measureText(el.placeholder).width > room + 1) out.push(['placeholder cut', el.placeholder]);
+    if (el.closest(controls)) {
+      for (const t of texts) {
+        const range = document.createRange();
+        range.selectNodeContents(t);
+        if (new Set([...range.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top))).size > 1) out.push(['wrapped', t.textContent.trim().slice(0, 50)]);
+      }
+    }
+    const r = el.getBoundingClientRect();
+    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+      const acs = getComputedStyle(a);
+      const cx = acs.overflowX !== 'visible', cy = acs.overflowY !== 'visible';
+      if (!cx && !cy) continue;
+      const scrolls = /auto|scroll/.test(`${cx ? acs.overflowX : ''} ${cy ? acs.overflowY : ''}`);
+      const ar = a.getBoundingClientRect();
+      const left = ar.left + a.clientLeft, top = ar.top + a.clientTop, right = left + a.clientWidth, bottom = top + a.clientHeight;
+      const outside = r.right <= left || r.left >= right || r.bottom <= top || r.top >= bottom;
+      if (outside) {
+        if (!scrolls && !(acs.display.includes('flex') && acs.flexWrap === 'wrap')) out.push(['hidden', say(el)]);
+        break;
+      }
+      const sideways = cx && (r.left < left - 1 || r.right > right + 1);
+      const below = cy && (r.top < top - 1 || r.bottom > bottom + 1);
+      if (!scrolls && (sideways || below)) { out.push(['cut', say(el)]); break; }
+      if (scrolls && sideways && !el.closest('.fw-stage')) { out.push(['cut sideways', say(el)]); break; }
+      if (sideways || below) break;
+    }
+  }
+  return out;
+})()"""
+ACTIONS_IN_VIEW = """(() => {
+  const panel = document.querySelector('.fw-dock .fw-cliptab').getBoundingClientRect();
+  return [...document.querySelectorAll('.fw-dock .fw-cf-actions button')].filter((b) => { const r = b.getBoundingClientRect(); return r.top < panel.top || r.bottom > panel.bottom; }).map((b) => b.textContent);
+})()"""
+STATES = [
+    ["clip"], ["effects"], ["mixer"], ["mixer", "route"], ["synth"], ["pads"], ["spectrum"], ["transcript"],
+    ["more", "inspector"], ["more", "notes"], ["more", "labels"],
+]
+
+
+@pytest.mark.parametrize("size", [(1280, 674), (1440, 900), (1710, 940)], ids=["1280", "1440", "1710"])
+def test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes(browser, app_url, size):
+    context = browser.new_context(viewport={"width": size[0], "height": size[1]})
+    page = context.new_page()
+    try:
+        _open(page, app_url)
+        _import_speech(page)
+        clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+        page.mouse.click(clip["x"] + 60, clip["y"] + clip["height"] * 0.75)
+        if page.locator(".fw-dock").is_hidden():
+            page.click('.fw-panel-toggle[data-pane="editor"]')
+        found = {}
+        for state in STATES:
+            for step in state:
+                if step == "more":
+                    page.click(".fw-dock-more > .fw-menu-btn")
+                elif step == "route":
+                    page.click("details.fw-strip-route > summary")
+                elif state[0] == "more":
+                    page.click(f'.fw-dock-more [data-panel="{step}"]')
+                else:
+                    page.click(f'.fw-dock-tab[data-panel="{step}"]')
+                page.wait_for_timeout(250)
+            found[" ".join(state)] = page.evaluate(CUT)
+            if state == ["clip"]:
+                found["clip actions in view"] = page.evaluate(ACTIONS_IN_VIEW)
+        for tab in ("effects", "sounds", "media"):
+            page.click(f'.fw-pane-media .fw-pane-tab[data-tab="{tab}"]')
+            page.wait_for_timeout(250)
+            found[f"browser {tab}"] = page.evaluate(CUT)
+        page.click('[data-agent-tab="history"]')
+        page.wait_for_timeout(250)
+        found["history"] = page.evaluate(CUT)
+        assert {k: v for k, v in found.items() if v} == {}
+    finally:
+        context.close()
