@@ -29,6 +29,7 @@ FULL = {
     "dehum": {"kind": "dehum", "baseHz": 50, "harmonics": 6, "q": 25},
     "declick": {"kind": "declick", "sensitivity": 9, "maxMs": 1.2},
     "dereverb": {"kind": "dereverb", "t60": 0.9, "reductionDb": 7},
+    "processor": {"kind": "processor", "id": "compressor", "values": {"threshold": -18, "ratio": 3, "knee": 4, "lookahead": 2, "mix": 80, "sidechain_filter": 1}},
 }
 SWEPT = {"kind": "peak", "freq": 800, "gainDb": 3, "q": 1, "automation": {"freq": [{"time": 0, "value": 400}, {"time": 48000, "value": 4000}], "gain": [{"time": 24000, "value": -6}]}}
 

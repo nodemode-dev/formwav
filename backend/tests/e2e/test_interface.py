@@ -285,7 +285,7 @@ ACTIONS_IN_VIEW = """(() => {
   return [...document.querySelectorAll('.fw-dock .fw-cf-actions button')].filter((b) => { const r = b.getBoundingClientRect(); return r.top < panel.top || r.bottom > panel.bottom; }).map((b) => b.textContent);
 })()"""
 STATES = [
-    ["clip"], ["effects"], ["mixer"], ["mixer", "route"], ["synth"], ["pads"], ["spectrum"], ["transcript"],
+    ["clip"], ["effects"], ["studio", "effects"], ["mixer"], ["mixer", "route"], ["synth"], ["pads"], ["spectrum"], ["transcript"],
     ["more", "inspector"], ["more", "notes"], ["more", "labels"],
 ]
 
@@ -308,6 +308,11 @@ def test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes(bro
                     page.click(".fw-dock-more > .fw-menu-btn")
                 elif step == "route":
                     page.click("details.fw-strip-route > summary")
+                elif step == "studio":
+                    # two processors from the library on the clip's track: the largest card (22 controls) and a small one
+                    page.click('.fw-pane-media .fw-pane-tab[data-tab="effects"]')
+                    page.click('.fw-fxlib-item[data-proc="channel_strip"]')
+                    page.click('.fw-fxlib-item[data-proc="dither"]')
                 elif state[0] == "more":
                     page.click(f'.fw-dock-more [data-panel="{step}"]')
                 else:

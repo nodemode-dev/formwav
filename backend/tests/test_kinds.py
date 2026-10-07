@@ -10,7 +10,8 @@ from conftest import BACKEND, ROOT
 
 FRONTEND = ROOT / "frontend"
 FX_RS = ROOT / "native" / "formwav-dsp" / "src" / "fx.rs"
-KINDS = sorted(render.FX_KINDS)
+# the processor library (kind 20) is one kind holding many processors; tests/test_processors.py holds it to the core
+KINDS = sorted(k for k in render.FX_KINDS if k != "processor")
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +35,7 @@ def _core_kinds() -> dict[str, int]:
 
 def test_every_place_names_the_same_nineteen_kinds(interface):
     assert len(KINDS) == 19
-    assert set(interface["kinds"]) == set(KINDS) == set(interface["catalogue"]) == set(_core_kinds())
+    assert set(interface["kinds"]) == set(KINDS) == set(interface["catalogue"]) == set(_core_kinds()) - {"processor"}
 
 
 @pytest.mark.parametrize("kind", KINDS)

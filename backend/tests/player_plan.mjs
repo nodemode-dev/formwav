@@ -14,6 +14,8 @@ const server = await createServer({
 
 const chunk = (xs, n) => Array.from({ length: Math.floor((xs?.length ?? 0) / n) }, (_, i) => xs.slice(i * n, i * n + n));
 const pairs = (xs) => (xs ? chunk(xs, 2) : null);
+// a processor stage names its spec by its place in the plan's list; the export's plan carries the spec itself
+const named = (stages, specs) => stages.map((s) => (s[0] === 20 ? [20, specs[s[1]], 0, 0, 0, 0] : s));
 
 try {
   const player = await server.ssrLoadModule("/src/audio/player.ts");
@@ -30,6 +32,7 @@ try {
     if (doc.masterFx) doc.masterFx = cleanFx(doc.masterFx);
     const ids = Object.keys(doc.media);
     const plan = player.planClips(doc, new Map(ids.map((id, i) => [id, i + 1])));
+    const masterProcessors = [];
     return {
       doc,
       fadeShapes: FADE_SHAPES,
@@ -53,8 +56,8 @@ try {
           fxAuto: (c.fxAuto ?? []).map((a) => [a.stage, a.param, pairs(a.points)]),
           comp: c.comp ?? null,
         })),
-        buses: plan.buses.map((b) => ({ gain: b.gain, pan: b.pan, stages: chunk(b.stages ?? [], 6) })),
-        master: chunk(player.flatStages(doc.masterFx), 6),
+        buses: plan.buses.map((b) => ({ gain: b.gain, pan: b.pan, stages: named(chunk(b.stages ?? [], 6), plan.processors) })),
+        master: named(chunk(player.flatStages(doc.masterFx, masterProcessors), 6), masterProcessors),
       },
     };
   });
