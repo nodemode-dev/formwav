@@ -3,11 +3,13 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .core import trust
 from .core.config import cors_origins
 from .core.security import LocalOnly
 from .core.version import VERSION
 from .routers import agent, agents, cloud, health, remote, room, share, media, midi, native_audio, presets, projects, providers, render, terminal
 
+trust.install()
 app = FastAPI(title="formwav engine", version=VERSION)
 app.add_middleware(
     CORSMiddleware,

@@ -316,6 +316,8 @@ def run(media_id: str, code: str | None = None, plugin: str | None = None, value
             done = subprocess.run([binary(), str(runtime_dir()), str(media.media_dir() / f"{media_id}.wav"), str(out), str(script)], capture_output=True, timeout=600)
         except subprocess.TimeoutExpired as err:
             raise media.MediaError("Nyquist did not finish within 10 minutes") from err
+        except OSError as err:
+            raise media.MediaError(f"Nyquist was built for another computer; run native/formwav-nyquist/build_fwnyq here ({err.strerror})") from err
         printed = (done.stderr or b"").decode("utf-8", errors="replace")
         lines = [ln for ln in (done.stdout or b"").decode("utf-8", errors="replace").splitlines() if ln.startswith("{")]
         if done.returncode != 0 or not lines:

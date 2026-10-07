@@ -372,7 +372,17 @@ def _noise_range(params: dict | None, duration: float) -> tuple[float, float] | 
     return start, min(end, duration)
 
 
-LEARNS_NOISE = frozenset(key for key, chain in ALL_CHAINS.items() if "afftdn" in chain) | frozenset(key for key, (_, builder) in PARAMS.items() if callable(builder) and "afftdn" in builder({k: v[3] for k, v in PARAMS[key][0].items()}))
+def _learns_noise(key: str) -> bool:
+    spec, builder = PARAMS[key]
+    if not callable(builder):
+        return False
+    try:
+        return "afftdn" in builder({k: v[3] for k, v in spec.items()})
+    except media.MediaError:
+        return False
+
+
+LEARNS_NOISE = frozenset(key for key, chain in ALL_CHAINS.items() if "afftdn" in chain) | frozenset(key for key in PARAMS if _learns_noise(key))
 
 
 def _controls(key: str) -> list[dict]:

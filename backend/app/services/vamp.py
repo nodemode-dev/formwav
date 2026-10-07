@@ -39,6 +39,8 @@ def _run(args: list[str], timeout: float):
         done = subprocess.run([binary(), *args], capture_output=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired as err:
         raise media.MediaError("the Vamp plugin did not finish in time") from err
+    except OSError as err:
+        raise media.MediaError(f"Vamp hosting was built for another computer; run native/formwav-vamp/build_fwvamp here ({err.strerror})") from err
     if done.returncode != 0:
         tail = [ln for ln in (done.stderr or b"").decode("utf-8", errors="replace").splitlines() if ln.strip()][-1:]
         raise media.MediaError("Vamp: " + (tail[0] if tail else f"exit status {done.returncode}")[:300])
