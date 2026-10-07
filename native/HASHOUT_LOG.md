@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v2.12.5
-Last updated: 2026-10-07 · v2.12.5: tests/stages.rs, Stage::latency's doc comment (src/fx.rs), and the L6 and native capture entries filed under their sources; most stages added since v1.11.0 have no entry in this log
+Current build version: v2.13.0
+Last updated: 2026-10-07 · v2.13.0: the synth's low-pass, in render() and the live instrument alike (src/synth.rs), and its two new parameters through src/python.rs and src/wasm.rs; most stages added since v1.11.0 have no entry in this log
 
 ---
 
@@ -26,7 +26,7 @@ native/
     │   ├── loudness.rs          BS.1770-4 integrated loudness: K-weighting for any rate, 400 ms blocks, two gates
     │   ├── fx.rs                the nineteen live stages (filters to de-reverb): design, process, reset, latency
     │   ├── onsets.rs            transient detection
-    │   ├── synth.rs             the built-in instrument that renders note tracks
+    │   ├── synth.rs             the built-in instrument: note tracks rendered, the live instrument, a resonant low-pass on both
     │   ├── midi.rs              MIDI input read by the engine (feature "native"), for the desktop app
     │   └── native.rs            native output and capture through cpal (feature "native")
     └── tests/
@@ -49,7 +49,19 @@ native/
 - [formwav-dsp/src/loudness.rs](#src-loudness)
 - [formwav-dsp/src/fx.rs](#src-fx)
 - [formwav-dsp/src/native.rs](#src-native)
+- [formwav-dsp/src/synth.rs](#src-synth)
 - [formwav-dsp/tests/stages.rs](#tests-stages)
+
+---
+
+## formwav-dsp/src/synth.rs {#src-synth}
+
+### src/synth.rs · Cutoff and Resonance, the same filter live and rendered
+- refers-to: src/synth.rs :: `Patch` (cutoff, resonance), `Lowpass` (design, retune, process), `render`, `Synth` (filter, set_patch, render); tests the_cutoff_takes_the_top_off_and_leaves_the_low_end, the_live_instrument_plays_exactly_what_render_makes
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The Synth tab's two filter knobs. The patch gains cutoff (0 is open, and so is anything at or above 0.45 of the rate) and resonance (the low-pass's Q, 0.707 flat). Lowpass is the RBJ cookbook low-pass in transposed direct form II, in f64, applied to the sum of the voices, once in render() over the whole note buffer and per sample in the live Synth; set_patch retunes the coefficients and keeps the filter's state, so a knob turned while a note holds does not click. Because both paths filter the same sum the same way, the live instrument still renders exactly what render() makes, which its test holds; the cutoff test checks that a 440 Hz saw under a 220 Hz cutoff keeps under half its level, that a 55 Hz sine under 8 kHz changes by under 1 percent, and that a cutoff past 0.45 of the rate leaves the output identical to an open one. cargo test --release --lib: 30 passed.
 
 ---
 
@@ -163,6 +175,13 @@ Level 0 takes the min and max of every `base` samples (256 by default); each nex
 
 ## formwav-dsp/src/python.rs {#src-python}
 
+### src/python.rs · render_notes takes the filter
+- refers-to: src/python.rs :: `render_notes` (cutoff = 0.0, resonance = 0.707)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+Two keyword arguments with defaults that leave older callers' sound unchanged; the engine's /api/midi/render passes the patch's values (backend/HASHOUT_LOG.md, app/routers/midi.py).
+
 ### src/python.rs · module surface
 - refers-to: src/python.rs :: `probe`, `peaks`, `formwav_dsp`
 - kind: explainer
@@ -184,6 +203,13 @@ Holds decoded sources by small integer id and a flat list of clips (source, star
 ---
 
 ## formwav-dsp/src/wasm.rs {#src-wasm}
+
+### src/wasm.rs · fw_live_patch takes the filter
+- refers-to: src/wasm.rs :: `fw_live_patch` (cutoff, resonance after gain)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The worklet's live-patch message passes the session's cutoff and resonance, so the Synth keys, Pads and a MIDI keyboard sound through the same filter the note clips render with. frontend/public/core/formwav_dsp.wasm is built at install (it is not tracked), so a checkout picks the new export up with its next install.
 
 ### src/wasm.rs · export surface
 - refers-to: src/wasm.rs :: all `fw_*` functions

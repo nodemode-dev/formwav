@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v2.12.5
-Last updated: 2026-10-07 · v2.12.5: the tests (the tests/ sections) and CI (.github/workflows), the latency and parity fixes (app/services/render.py), the dubbing download (app/services/local_dub.py), and the entries since v2.10.8 filed under their scripts; 222 older entries still sit under app/services/render.py
+Current build version: v2.13.0
+Last updated: 2026-10-07 · v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
 
 ---
 
@@ -24,6 +24,7 @@ backend/
 │   ├── core/
 │   │   ├── config.py            env-driven settings (CORS origins)
 │   │   ├── paths.py             data and media folders
+│   │   ├── trust.py             certifi's roots for urllib when the Python has none (python.org's macOS builds)
 │   │   └── version.py           VERSION, one of the version sites
 │   ├── routers/
 │   │   ├── agents.py            Settings > Agents: formwav's MCP server added to an agent client's configuration
@@ -43,7 +44,7 @@ backend/
 │       ├── sync.py              takes lined up by their sound
 │       ├── three_way.py         speech, music and ambience from one clip
 │       └── vad.py               Silero VAD: where people speak, and the speech-safe cut
-├── formwav_mcp/server.py        the MCP server (28 tools over the engine's HTTP API), in its own venv
+├── formwav_mcp/server.py        the MCP server (28 tools over the engine's HTTP API), in its own venv; ../mcp/ is its top-level entry
 └── tests/                       pytest, run from backend: python -m pytest tests (written on the owner's ask, v2.12.5)
     ├── requirements.txt         pytest and Playwright, pinned; requirements_ear.txt the EBU renderer's own venv
     ├── conftest.py              a fresh data folder, no paid keys, the shared speech, a real engine on a free port
@@ -60,6 +61,11 @@ backend/
 
 ## Table of contents
 
+- [app/core/trust.py](#app-core-trust)
+- [app/services/vamp.py and app/services/nyquist.py](#app-services-vamp-nyquist)
+- [app/services/effects.py · LEARNS_NOISE](#app-services-effects-learns-noise)
+- [app/routers/midi.py](#app-routers-midi)
+- [../mcp/ and ../.mcp.json](#top-mcp)
 - [app/routers/agents.py](#app-routers-agents)
 - [../.claude/skills/formwav-harness, CLAUDE.md and AGENTS.md](#harness-skill)
 - [formwav_mcp/server.py](#formwav-mcp-server)
@@ -112,6 +118,51 @@ backend/
 - [.github/workflows](#workflows)
 
 ---
+
+## app/core/trust.py {#app-core-trust}
+
+### Certificates for urllib where the Python ships none
+- refers-to: app/core/trust.py :: `install`; app/main.py :: `trust.install()` before the app is made
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+The owner's Mac log showed the engine's HTTPS fetches through urllib (the RNNoise model first of all, then language packs and the sound catalogue) failing certificate checks: python.org's macOS builds leave the default context without roots until "Install Certificates.command" is run. install() looks at the default context and, only when it holds no CA certificate, installs an opener whose context loads certifi's bundle; a Python that has its own roots, or a machine whose proxy supplies them through the environment, is left as it is. Verification is never turned off.
+
+## app/services/vamp.py and app/services/nyquist.py {#app-services-vamp-nyquist}
+
+### A host built for another machine answers as missing, not as a crash
+- refers-to: app/services/vamp.py :: the host's run (the OSError branch); app/services/nyquist.py :: the same; app/routers/media.py :: the 503 and 422 answers
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+The owner unpacked a zip that carried Linux builds of fwvamp and fwnyq into his Mac's checkout; running them raised OSError "Exec format error", which reached the routes as a 500. That error is now a MediaError naming the host as built for another computer and the script that builds it here (native/formwav-vamp/build_fwvamp, native/formwav-nyquist/build_fwnyq), which the routes answer as they answer a missing host. The release zips carry tracked files only, so the binaries are built on the machine that runs them.
+
+## app/services/effects.py · LEARNS_NOISE {#app-services-effects-learns-noise}
+
+### Which effects learn a noise profile, asked without failing
+- refers-to: app/services/effects.py :: `_learns_noise`, `LEARNS_NOISE`
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+LEARNS_NOISE was built at import by asking each parameterised effect for its filter chain. The dialogue isolate's builder fetches its RNNoise model, and on the owner's Mac that fetch failed certificate verification (app/core/trust.py), so its MediaError at import took the engine down. _learns_noise answers False for an effect whose chain cannot be built here; checked with the model absent and every urllib fetch failing: the engine imports and GET /api/effects answers 200.
+
+## app/routers/midi.py {#app-routers-midi}
+
+### The patch carries the synth's filter
+- refers-to: app/routers/midi.py :: `Patch` (cutoff, resonance), the render call; native/formwav-dsp/src/synth.rs; frontend/src/ui/editor-tabs.ts
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The Synth tab's Cutoff and Resonance reach the note render: cutoff 0 (the default) leaves the voices unfiltered, anything up to 96 kHz is accepted and the core bypasses a cutoff at or above 0.45 of the rate; resonance is the low-pass's Q, 0.3 to 24 (0.707, flat, by default). The render passes both to formwav_dsp.render_notes, which filters the summed voices as the live instrument does. A core built before v2.13.0 takes eight arguments and raises TypeError for ten; the render then calls it with eight, so notes still render (without the filter) until formwav_oc_install rebuilds the core, which the interface asks for when /api/health reports a core older than the engine.
+
+## ../mcp/ and ../.mcp.json {#top-mcp}
+
+### The MCP server at the top of the repository, as formcut has it
+- refers-to: ../mcp/formwav_mcp.py, ../mcp/requirements.txt, ../mcp/oc_install and .bat; ../.mcp.json; formwav_mcp/server.py
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The owner looked for the MCP file at the top of the checkout and found none (formcut keeps its server there). mcp/formwav_mcp.py runs the same server from a checkout (it adds backend to the path and calls formwav_mcp.server's main), mcp/requirements.txt points at the server's own requirements, mcp/oc_install makes its venv, and .mcp.json registers it for Claude Code through backend/formwav_mcp/serve. The server itself, its 28 tools and its tests are unchanged.
 
 ## app/routers/agents.py {#app-routers-agents}
 
@@ -2259,6 +2310,13 @@ The sidecar's verify_three_way.py made a test. A stereo mix of known parts: the 
 ---
 
 ## tests/e2e/test_interface.py {#tests-e2e-interface}
+
+### tests/e2e/test_interface.py · the canvas's footer, More, History and the Synth tab
+- refers-to: tests/e2e/test_interface.py :: `FIT`, `test_the_in_app_agent_carries_out_a_chain_of_tools`, `test_history_lists_each_edit_and_goes_back_to_any_of_them`, `test_the_synth_tab_sets_the_sessions_synth_in_one_undo_step`
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The footer holds Out, Phase and LUFS (the input meter shows only while a track is armed), so the fit check looks for those three at 1288 by 683; the Labels panel is reached through the editor's More, opening the editor first if it is closed. Two tests join the suite: History lists "Session start" and "Added jfk.wav", a click on the first undoes the import (no lane left) and a click on the second redoes it; the Synth tab's Saw and the Warm bass preset each set the session's synth (Cutoff reads 600 Hz) and History reads "Changed the synth" twice. Eight interface tests pass.
 
 ### tests/e2e/test_interface.py · the built interface in Chromium against a real engine
 - refers-to: tests/e2e/test_interface.py, tests/stand_ins/anthropic.py; frontend/dist; frontend/src/ui/shell.ts, agents.ts, agent-pane.ts, labels-pane.ts, meter.ts, record.ts

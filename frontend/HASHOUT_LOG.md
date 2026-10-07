@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
-Current build version: v2.12.5
-Last updated: 2026-10-07 · v2.12.5: de-click and de-reverb take a track to its own bus (src/audio/player.ts), and the entries since v2.10.8 filed under their scripts; 160 older entries still sit under the v0.38.0 heading
+Current build version: v2.13.0
+Last updated: 2026-10-07 · v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts); 160 older entries still sit under the v0.38.0 heading
 
 ---
 
@@ -22,8 +22,9 @@ frontend/
 └── src/
     ├── main.ts                  entry: fonts, styles, theme, engine, extensions, shell, reveal
     ├── engine/
-    │   ├── index.ts             headless state with granular events; dispatch, undo, redo, setSelection
+    │   ├── index.ts             headless state with granular events; dispatch, undo, redo, setSelection, the History tab's entries
     │   ├── document.ts          session model and the pure command reducer
+    │   ├── describe.ts          each command in a few plain words for the History tab
     │   └── history.ts           snapshot undo and redo, 200 steps
     ├── extensions/
     │   ├── registry.ts          register, activateAll, disposeAll
@@ -36,7 +37,17 @@ frontend/
     │   └── render-client.ts     renderMix: POST /api/render, the WAV with its frames, peaks and loudness
     ├── ui/
     │   ├── icons.ts             fifteen NodeMode icons plus the icon() helper
-    │   ├── shell.ts             mounts the shell once, patches status and clock in place
+    │   ├── shell.ts             the canvas's header, browser, arrangement, editor and footer, mounted once; clock and engine chip patched in place
+    │   ├── browser.ts           the browser column: one search, the click hint, effect groups, Sounds sections that fold, media rows
+    │   ├── browser-effects.ts   the browser's Effects tab: the realtime effects in four groups (FX_GROUPS)
+    │   ├── toolbar.ts           the arrangement's toolbar: Add a track, Select, Split, Fade, Draw, zoom, Fit, Follow; the hidden store
+    │   ├── musical.ts           the footer's Tempo, Meter and Snap with their popovers
+    │   ├── dock.ts              the bottom editor: tabs, More, what the open tab works on, Ask the agent, floating panels
+    │   ├── editor-tabs.ts       the editor's Effects cards, Synth and Pads
+    │   ├── media-pane.ts        the session's media rows, the Sounds library as rows, Generate
+    │   ├── status-bar.ts        the footer's rate and length, the toolbar hint
+    │   ├── theme-menu.ts        the header's theme picker and accents; Settings repeats the accents when narrow
+    │   ├── workspace-layout.ts  the browser and agent columns' widths and visibility, kept between visits
     │   ├── session.ts           wires lanes, import, undo and redo buttons, shortcuts
     │   ├── lanes.ts             keyed track lanes, clip boxes, canvas waveforms
     │   ├── import.ts            Import button, file picker, drop on the stage, notice line
@@ -63,10 +74,12 @@ frontend/
     ├── audio/
     │   ├── player.ts            AudioContext at the session rate, media into the worklet, bounce()
     │   ├── player-worklet.ts    AudioWorklet hosting the wasm player (public/core, built at install)
+    │   ├── notes.ts             note clips rendered through the engine with the session's synth (renderNoteMedia)
     │   ├── recorder.ts          microphone into the player's context, take assembly, float32 WAV encoder
     │   └── recorder-worklet.ts  AudioWorklet capturing input chunks and peak levels
     ├── styles/
-    │   └── shell.css            formwav shell, tokens only, no z-index
+    │   ├── shell.css            formwav shell, tokens only, no z-index
+    │   └── canvas.css           the agreed canvas region by region, loaded after the older layers it overrides
     └── vendor/
         └── nodemode/            verbatim MIT copies (see NOTICE)
             ├── tokens.css       tokens, 14-profile base, declared z scale
@@ -78,6 +91,23 @@ frontend/
 
 ## Table of contents
 
+- [src/engine/describe.ts](#src-engine-describe)
+- [src/styles/canvas.css](#src-styles-canvas)
+- [src/styles/tokens.css](#src-styles-tokens)
+- [src/audio/notes.ts](#src-audio-notes)
+- [src/ui/browser.ts](#src-ui-browser)
+- [src/ui/browser-effects.ts](#src-ui-browser-effects)
+- [src/ui/dock.ts](#src-ui-dock)
+- [src/ui/editor-tabs.ts](#src-ui-editor-tabs)
+- [src/ui/file-menu.ts](#src-ui-file-menu)
+- [src/ui/media-pane.ts](#src-ui-media-pane)
+- [src/ui/midi-input.ts](#src-ui-midi-input)
+- [src/ui/musical.ts](#src-ui-musical)
+- [src/ui/status-bar.ts](#src-ui-status-bar)
+- [src/ui/theme-menu.ts](#src-ui-theme-menu)
+- [src/ui/toolbar.ts](#src-ui-toolbar)
+- [src/ui/voice-pane.ts](#src-ui-voice-pane)
+- [src/ui/workspace-layout.ts](#src-ui-workspace-layout)
 - [src/ui/agent-pane.ts](#src-ui-agent-pane)
 - [src/ui/agents.ts](#src-ui-agents)
 - [src/ui/launcher.ts](#src-ui-launcher)
@@ -123,7 +153,225 @@ frontend/
 
 ---
 
+## src/engine/describe.ts {#src-engine-describe}
+
+### Every command in plain words, for the History tab
+- refers-to: frontend/src/engine/describe.ts (WORDS, describeCommand, HistoryEntry); src/engine/index.ts (done, undone, setAuthor, historyEntries)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The agreed canvas (and overdub before it) puts History beside the Agent. The engine's undo stack holds documents only, so each dispatch now also records an entry: the command in a few words, who made it (you, or the agent while its run lasts) and when. WORDS is a Record over Command["type"], so a new command type does not compile until it has its words; `{t}` takes the track's name from the session before the command ran, `{m}` the imported media's name, and mute and solo read Unmuted and Unsoloed when they turn off. A batch reads as its first command (a synth change with the note clips it re-renders is "Changed the synth").
+
+## src/styles/canvas.css {#src-styles-canvas}
+
+### The agreed canvas, region by region, over the older layers
+- refers-to: frontend/src/styles/canvas.css (all of it); src/main.ts (imported last before scrollbars.css)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+The owner's verdict on v2.12.5: the redesign agreed over six turns (the "formwav redesign target" Design artifact) had not been built. This file is that canvas: header 44 px, browser 240 px, track heads 168 px and lanes 78 px, the editor 222 px with its tabs, the agent column 296 px, the footer 58 px, each region with the canvas's own recipes mapped onto formwav's tokens (--bg to --bg-primary, --panel to --bg-secondary, --raised to --bg-tertiary, --node to --bg-node, --line to --border-color, --line2 to --border-light). It loads after shell.css, workspace.css, frame.css and surfaces.css and wins by order and specificity; the rules it overrides there stay as debt for a cleanup pass, so read a region here first. The editor's head hides its detail below 880 px of its own width (a container query), so "Ask the agent" never wraps at 1280.
+
+### Nothing moves when a tab, a label or a list changes
+- refers-to: frontend/src/styles/canvas.css (`[data-label]::after`, .fw-browse-hint, .fw-media-list, .fw-synth-knobs .fw-knob, .fw-fx-card .fw-knob, .fw-status .fw-engine, .fw-st-rate)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+Selected tabs are bold, which would widen them: each tab (the editor's, the agent column's, the toolbar's tools and Draw's label) carries its label in data-label, and a hidden bold copy in ::after shares its grid cell, so the box is always the bold width. The browser hint keeps two lines (it reads "Click adds to a new track" or "Click adds to {track}"), the media list keeps one row's height when empty, the knobs split their row evenly whatever their values read, the engine chip is 112 px and the rate 7ch. Measured with CPU at 4x and a 1.6 Mbit/s, 150 ms network, every path of this release driven with real input: no layout shift outside 500 ms of an input.
+
+### The Inspector under More as a row of cards
+- refers-to: frontend/src/styles/canvas.css (.fw-dock .fw-inspector-body and its sections)
+- kind: removed-code
+- logged: v2.13.0 · 2026-10-07
+
+frame.css laid the docked Inspector out in CSS columns, which split a section taller than the dock across columns (Time track's Apply curve at the top of the next one, 5876 px of columns at 1440). The sections are now 320 px cards in a row that scrolls sideways, each scrolling on its own; a section is a flex column whose children do not shrink, because as a grid with a capped height its rows with overflow hidden (the heads among them) collapsed to 0.
+
+```css
+.fw-dock .fw-inspector-body { flex: 1 1 auto; min-block-size: 0; overflow: auto hidden; padding: 10px 14px; column-width: 300px; column-gap: 28px; column-rule: 1px solid var(--line-1); column-fill: auto; }
+```
+
+### A selected clip shows its border only
+- refers-to: frontend/src/styles/canvas.css (.fw-clip[aria-selected="true"]:not(:hover) .fw-gain-line, .fw-fade-handle; .fw-gain-line::after)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+At 0 dB the gain line runs through the clip's name chip, and its dB label sat on the chip too. As on the canvas, a selected clip shows its accent border; the gain line and fade handles appear on hover, and the line's dB label shows at the clip's right only while the line itself is hovered or dragged.
+
+## src/styles/tokens.css {#src-styles-tokens}
+
+### The canvas's two colours as tokens
+- refers-to: frontend/src/styles/tokens.css (--fw-agent-ink, --fw-meter, body.theme-light)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The canvas names the agent in blue on its clips and edits and draws the meters in green; both now live here (the light themes take a darker blue), so canvas.css carries no raw colour and the design audit passes (0 FAIL, 0 WARN).
+
+## src/audio/notes.ts {#src-audio-notes}
+
+### Note clips render with the session's synth
+- refers-to: frontend/src/audio/notes.ts (renderNoteMedia, renderNotes); src/ui/midi-input.ts; src/ui/step-sequencer.ts
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+Every place that renders notes through /api/midi/render (the piano roll, a recorded MIDI take, a step pattern) now sends the session's synth patch, so what the Synth tab sets is what the note clips sound like and what exports. renderNoteMedia returns the media without dispatching, so the Synth tab can commit the patch and every re-rendered clip as one batch.
+
+## src/ui/browser.ts {#src-ui-browser}
+
+### The browser column of the canvas
+- refers-to: frontend/src/ui/browser.ts (mountBrowser, SOUNDS_ORDER, filter); src/ui/shell.ts (.fw-pane-media)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+Media, Effects and Sounds share one search (the / key reaches it); the hint names where a click adds (the selected clip's track, or a new one); the Media tab lists the session's media, then the effect groups (each opens the Effects tab at its group), then Made by the agent. A media row adds on a click or a drag onto a lane. The Sounds tab's sections (Library, Models, Speech on this computer, Generate, Step sequencer, Clip launcher) fold under their heads, the first open.
+
+## src/ui/browser-effects.ts {#src-ui-browser-effects}
+
+### The effects moved to their own tab
+- refers-to: frontend/src/ui/browser-effects.ts (FX_GROUPS, mountBrowserEffects)
+- kind: removed-code
+- logged: v2.13.0 · 2026-10-07
+
+The groups lived under the media list in the Media tab; they are the Effects tab now, with a note that the other effects render into a clip from the Inspector. FX_GROUPS is exported for the Media tab's group rows.
+
+```ts
+// After the media list rather than inside it, so a new file (an import, a render) never pushes it; marked as part of
+// the media panel, so the pane's other tabs hide it with the list
+section.dataset.panel = "media";
+media.after(section);
+```
+
+## src/ui/dock.ts {#src-ui-dock}
+
+### The editor of the canvas: seven tabs, More, context, Ask the agent
+- refers-to: frontend/src/ui/dock.ts (mountDock, MORE, context, sync)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+Clip, Effects, Mixer, Synth, Pads, Spectrum and Transcript are tabs; Inspector, Notes, Labels and Terminal sit under More, whose label becomes the open one. Each panel's hidden flag stays the truth and its module's toggle opens it, so a terminal survives a tab switch. The head's right names what the open tab works on (the selected clip's track and clip with its live effects, or the live instrument for Synth and Pads; "No clip selected" otherwise, the same words before and after an import, so the label does not move on its own) and Ask the agent prefills the agent with it. A tab's label is also in data-label for canvas.css's bold reserve.
+
+## src/ui/editor-tabs.ts {#src-ui-editor-tabs}
+
+### Synth: the session's built-in synth, with real controls
+- refers-to: frontend/src/ui/editor-tabs.ts (SYNTH_PARAMS, SYNTH_PRESETS, paintSynth, commitSynth); src/engine/document.ts (SynthPatch, set-synth); src/audio/player.ts (setLivePatch)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The owner found no way to control the synth. The tab now has a preset menu (Soft triangle, Glass pad, Pluck, Warm bass, Square lead, Bell, Custom), the wave (Sine, Triangle, Saw, Square) and the canvas's four knobs, Attack, Release, Cutoff and Resonance (log scales; the top of Cutoff is Open, no filter), beside two octaves of keys. A knob drag is heard at once through the live instrument; letting go commits the patch with every note clip it re-renders as one batch, one undo step; a failed render puts the old patch back. The chip reads "MIDI keyboards play it too" (the full sentence is its title), short enough that the preset name never truncates.
+
+### De-hum's third knob reads Q
+- refers-to: frontend/src/ui/editor-tabs.ts (KINDS.dehum)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+The knobs now split a card's row evenly (64 px each with three), and "Narrowness" measured 63 px in 59; Q is what the other filters' cards call the same thing.
+
+## src/ui/file-menu.ts {#src-ui-file-menu}
+
+### mountMenu serves the editor's More too
+- refers-to: frontend/src/ui/file-menu.ts (mountMenu, items)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+Exported for dock.ts, and its keyboard and click handling take menuitemradio and menuitemcheckbox as well as menuitem, so More's checked panel items move with the arrows like the menu bar's.
+
+## src/ui/media-pane.ts {#src-ui-media-pane}
+
+### The Library as rows, the catalogue without its empty box
+- refers-to: frontend/src/ui/media-pane.ts (lib, .fw-snd-list, catSearch, emptyText)
+- kind: removed-code
+- logged: v2.13.0 · 2026-10-07
+
+The library's ten sounds were one select whose options ran past the column ("Reference tone, 1 kHz at" cut at 1280). They are rows now, grouped by category, as the media rows look: the name and its length on one line, the rest of the name below, a click adding it on a new track at the playhead and a play button previewing it. The Wikimedia results list keeps no reserved 176 px box while empty, and its notes are short enough for the column. The media list's empty words no longer point at the + button the canvas header does not show.
+
+```html
+<label class="fw-field fw-field-stack"><span>Sound</span><select data-l="item" aria-label="Library sound"></select></label>
+<div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-l="preview" disabled>Preview</button><button type="button" class="fw-ibtn" data-l="add" disabled>Add on a new track</button></div>
+```
+
+## src/ui/midi-input.ts {#src-ui-midi-input}
+
+### A recorded MIDI take renders with the session's synth
+- refers-to: frontend/src/ui/midi-input.ts (the render request's patch)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The take's notes go to /api/midi/render with the Synth tab's patch at a fixed 0.25 gain, as the piano roll and step patterns send it (src/audio/notes.ts).
+
+## src/ui/musical.ts {#src-ui-musical}
+
+### Tempo, Meter and Snap in the footer
+- refers-to: frontend/src/ui/musical.ts (mountMusical)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The canvas's footer shows the tempo, the meter and the snap as small labels over their values. Tempo (with Tap, four taps or more) and Meter open a small dialog above the readout that sets the session's tempo (set-tempo); Snap steps Off, Grid, Beats (set-snap, which Grid and Bars follow). The input meter shows only while a track is armed (.fw-status.is-armed), so the footer otherwise holds what the canvas holds.
+
+## src/ui/status-bar.ts {#src-ui-status-bar}
+
+### The rate always shows
+- refers-to: frontend/src/ui/status-bar.ts (render)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+The rate appeared only once a track existed, which moved the output choice after it when the first import landed; the session has a rate from the start, so it shows from the start.
+
+## src/ui/theme-menu.ts {#src-ui-theme-menu}
+
+### Settings no longer repeats the header's theme picker
+- refers-to: frontend/src/ui/theme-menu.ts (mountThemeMenu)
+- kind: removed-code
+- logged: v2.13.0 · 2026-10-07
+
+The header always shows the theme select, so Settings' fifteen theme items (which ran past a 674 px window) are gone; the accents stay in Settings for windows under 1200 px, where the header hides its swatches.
+
+```ts
+const themes = Object.entries(THEMES)
+  .map(([id, t]) => `<button class="fw-ibtn fw-theme-item" type="button" role="menuitem" data-theme="${id}" aria-checked="${id === choice.theme}"><span class="fw-check" aria-hidden="true"></span><span>${t.label}</span></button>`)
+  .join("");
+pop.addEventListener("click", (e) => {
+  const item = (e.target as HTMLElement).closest<HTMLElement>(".fw-theme-item");
+  if (!item?.dataset.theme) return;
+  setTheme(item.dataset.theme);
+  markTheme(item.dataset.theme);
+});
+```
+
+## src/ui/toolbar.ts {#src-ui-toolbar}
+
+### The arrangement's toolbar in words, the older options in a hidden store
+- refers-to: frontend/src/ui/toolbar.ts (mountToolbar, HINTS, setTool); src/ui/shell.ts (.fw-tray-store)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+Add a track, the Select, Split, Fade and Draw tools, zoom out, in and Fit, and Follow, with the hint for the tool in hand at the right. The older buttons (Grid, Shuffle, Spot, Punch, Bars, Picture, the spectrogram views, layouts, speed, recording settings, the room) keep their modules and bindings inside the hidden store; the menus reach them as items that press the stored button and mirror its state. Draw's label carries data-label for the bold reserve.
+
+## src/ui/voice-pane.ts {#src-ui-voice-pane}
+
+### Speech on this computer lives in the Sounds tab
+- refers-to: frontend/src/ui/voice-pane.ts (refresh on the sounds tab)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The local speech engines' list refreshes when the Sounds tab opens, where the section now sits, not on the old Voice tab.
+
+## src/ui/workspace-layout.ts {#src-ui-workspace-layout}
+
+### A new key, so a stale layout cannot hide the columns
+- refers-to: frontend/src/ui/workspace-layout.ts (KEY, DEFAULTS, shown)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+On the owner's Mac a layout kept under formwav.layout from an older version hid both side columns. The key is formwav.panes, the defaults are the canvas's 240 px and 296 px, and the right column follows the agent's own hidden flag (0 px when hidden, no strip).
+
+---
+
 ## src/ui/agent-pane.ts {#src-ui-agent-pane}
+
+### Agent and History, as the canvas has them
+- refers-to: frontend/src/ui/agent-pane.ts (.fw-agent-tabs, renderHistory, the history list's click, run's setAuthor); src/engine/describe.ts
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The column's head is two tabs. History lists the session's edits oldest first from "Session start", each with who made it (you, or Claude for edits made while a run lasts: run sets the engine's author and puts it back when it ends), the current one marked and undone ones dimmed; a click undoes or redoes to that point. Rows are patched by key (patchList), filled in create and update alike. The keys line reads "Enter sends. Cmd / asks from anywhere." so it fits one line of the 296 px column (the full keys are its title).
 
 ### The in-app agent does what the MCP server does, in the open session
 - refers-to: frontend/src/ui/agent-pane.ts (local_models_status, list_voices, generate_speech, generate_music, generate_sound_effect, mark_speech, separate_clip, dub_clip, transcribe_with_speakers; place, range, postJson); CLAUDE.md; AGENTS.md
@@ -165,6 +413,13 @@ The comparison's L10. The clip launcher had four scenes, its slots only in the p
 
 ## src/ui/step-sequencer.ts {#src-ui-step-sequencer}
 
+### Patterns render with the session's synth
+- refers-to: frontend/src/ui/step-sequencer.ts (the render request's patch)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+A placed pattern's notes go to /api/midi/render with the Synth tab's patch (wave, envelope, cutoff, resonance at 0.25 gain), so the pattern sounds as the Synth tab plays.
+
 ### Patterns that play: rows, velocity and swing per step, kept with the session, heard before placing
 - refers-to: frontend/src/ui/step-sequencer.ts; src/engine/document.ts (StepPattern, patterns, save-pattern, delete-pattern); src/styles/workspace.css (.fw-step velocity levels)
 - kind: explainer
@@ -175,6 +430,13 @@ The comparison's L12: the step sequencer had four rows of on-off steps, placed o
 ---
 
 ## src/ui/clip-tab.ts {#src-ui-clip-tab}
+
+### The canvas's four clip actions, and status lines that never cut a word
+- refers-to: frontend/src/ui/clip-tab.ts (.fw-cf-actions and its click handler, the default status texts); src/styles/canvas.css (.fw-cf-ara-state)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+Split at the playhead (split-clip, or a notice when the playhead is outside the clip), Normalize (the footer's Loudness), Check the recording and Repair assistant (the Inspector's mic check and repair assistant, the Inspector opened and its findings scrolled into view). The status lines under Separate, Speech, Line up by sound and ARA had one line and an ellipsis; their resting texts are now short enough for 1280, and a longer result shows on up to two reserved lines.
 
 ### Speech regions misplaced on media at another rate than the session's
 - refers-to: frontend/src/ui/clip-tab.ts (Mark where people speak)
@@ -258,6 +520,13 @@ The overlay and toast roots are direct children of `body` so nothing they render
 
 ## src/main.ts {#src-main}
 
+### src/main.ts · the canvas's modules mounted
+- refers-to: src/main.ts :: imports (canvas.css), the mount sequence (mountBrowser, mountDock with the engine, mountMusical, mountToolbar)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+canvas.css is imported after the older style layers; mountBrowser follows mountBrowserEffects (it lists FX_GROUPS), mountDock takes the engine for its context line, and mountMusical and mountToolbar follow mountAgents, once every button they adopt or press exists.
+
 ### src/main.ts · boot order
 - refers-to: src/main.ts :: module body
 - kind: warning-context
@@ -268,6 +537,13 @@ Order matters: fonts and styles, then `applyTheme()` (idempotent re-apply of wha
 ---
 
 ## src/engine/index.ts {#src-engine-index}
+
+### src/engine/index.ts · the History tab's entries move with the documents
+- refers-to: src/engine/index.ts :: `done`, `undone`, `setAuthor`, `historyEntries`, `dispatchLocal`, `undo`, `redo`, `loadDocument`, `setShareHooks`
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+Each local dispatch pushes an entry (describeCommand, the author, the time) beside the document it records, trimmed at the same 200 steps; undo moves the last entry to undone and redo moves it back, both before commit fires the history event the tab listens to; loading a session clears both. setShareHooks now also clears the local undo stack and the entries: while shared, undo is each editor's own (ui/share.ts), and after leaving, the reported history was empty while engine.undo() could still pop documents from before the share and drop its edits.
 
 ### src/engine/index.ts · granular events
 - refers-to: src/engine/index.ts :: `Engine.subscribe`, `Engine.update`
@@ -297,6 +573,13 @@ From the dev-rules template. A feature is a folder under `extensions/` that call
 ---
 
 ## src/extensions/engine-link/index.ts {#src-extensions-engine-link}
+
+### src/extensions/engine-link/index.ts · an audio core older than the engine is named
+- refers-to: src/extensions/engine-link/index.ts :: `setup` (coreVersion); src/engine/index.ts :: `LinkState.coreVersion`; src/io/engine-client.ts :: `HealthReply.core`; src/ui/shell.ts :: `writeFinal` (the stale state)
+- kind: rationale
+- logged: v2.13.0 · 2026-10-07
+
+The audio cores are built at install (the Python module in the engine's venv, the WebAssembly in public/core), so an unpacked release runs on the cores the last install built until formwav_oc_install runs again. /api/health reports the core's version; when it differs from the engine's, the chip's dot turns to the warning colour, its title says which versions differ, and the notice line asks for formwav_oc_install. The engine also renders notes on an older Python core, without the synth's filter (backend/HASHOUT_LOG.md, app/routers/midi.py), and an older WebAssembly core ignores the two extra arguments of fw_live_patch.
 
 ### src/extensions/engine-link/index.ts · setup
 - refers-to: src/extensions/engine-link/index.ts :: `setup`
@@ -330,6 +613,13 @@ Twelve icons copied byte for byte from the stylized-nodemode mirror of the NodeM
 ---
 
 ## src/ui/shell.ts {#src-ui-shell}
+
+### src/ui/shell.ts · the canvas's markup
+- refers-to: src/ui/shell.ts :: `shellHtml` (header, browser, toolbar and store, ruler title, editor anchor, footer), `PANEL_ICONS`, `writeFinal`, the empty stage's actions
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The header is the canvas's: the waveform mark in the accent (it replaces the favicon image), the menus (formcut has File, Edit and View too), the session name, Theme with its accents, undo and redo, Export and the three panel toggles. The footer holds the transport, the position, Tempo, Meter and Snap, Out, Phase and LUFS, and the status column, whose chip reads "Engine connected" (the version moved to its title). The empty session offers Import audio and Open a session as buttons.
 
 ### src/ui/shell.ts · mount once, patch in place
 - refers-to: src/ui/shell.ts :: `mountShell`
@@ -392,6 +682,13 @@ Verbatim copies of `assets/site/` from the stylized-nodemode pack v1.0.0 (NodeMo
 
 ## src/engine/document.ts {#src-engine-document}
 
+### src/engine/document.ts · the session's synth, an empty track, who made a clip
+- refers-to: src/engine/document.ts :: `SynthPatch`, `DEFAULT_SYNTH`, `cleanSynth`, `SessionDoc.synth`, `Clip.by`, commands `set-synth`, `add-track`, `import-media` (by)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+SessionDoc.synth is the built-in synth's patch (wave, attack, decay, sustain, release, cutoff 0 for open, resonance), cleaned into range on every set-synth; Add a track dispatches add-track; media the agent places carries by: "agent", which the clip keeps and the lanes show as "Claude" where yours read "you".
+
 ### src/engine/document.ts · units and identity
 - refers-to: src/engine/document.ts :: `Clip`, `SessionDoc`, `sessionLength`
 - kind: rationale
@@ -442,6 +739,13 @@ Called once from main.ts after the shell mounts. The undo and redo buttons chang
 ---
 
 ## src/ui/lanes.ts {#src-ui-lanes}
+
+### src/ui/lanes.ts · who made a clip, at its top right
+- refers-to: src/ui/lanes.ts :: the clip node's `.fw-clip-by` (created with the clip, written in the clip's update)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+As on the canvas, each clip names its author opposite its name: "Claude" for media the agent placed (Clip.by), "you" for the rest; the chip is made once with the clip and only its text and data-by are written after.
 
 ### src/ui/lanes.ts · rendering without rebuilds
 - refers-to: src/ui/lanes.ts :: `mountLanes`, `updateLane`, `updateClip`
@@ -508,6 +812,13 @@ The head is sticky on the left so names stay visible when the timeline scrolls; 
 
 ## src/ui/transport.ts {#src-ui-transport}
 
+### src/ui/transport.ts · Follow
+- refers-to: src/ui/transport.ts :: `setFollow`, the paging condition
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The toolbar's Follow turns the view's paging after the playhead on and off (on by default, as before).
+
 ### src/ui/transport.ts · what changes during playback
 - refers-to: src/ui/transport.ts :: `placePlayhead`, `renderTransport`
 - kind: rationale
@@ -525,6 +836,13 @@ Space toggles play and Home goes to the start, both ignored in form fields and o
 ---
 
 ## src/audio/player.ts {#src-audio-player}
+
+### src/audio/player.ts · the live instrument plays the session's synth
+- refers-to: src/audio/player.ts :: `sendPatch`, `setLivePatch`, the patch sent on start and on a document change; src/audio/player-worklet.ts :: the live-patch message
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The worklet's live instrument (the Synth keys, Pads, the touchpad, a MIDI keyboard) gets the session's patch when it starts and whenever the document's synth changes; setLivePatch sends a draft while a Synth knob is dragged, so the change is heard before it is committed. The core's synth filters the voices' sum with the same low-pass as render(), so the live sound and the rendered note clips match sample for sample (native/HASHOUT_LOG.md).
 
 ### src/audio/player.ts · de-click and de-reverb take a track to its own bus
 - refers-to: src/audio/player.ts :: `planClips` (the rule sending a track through a bus of its own); backend app/services/render.py :: `plan`; backend tests/test_plan_parity.py, tests/test_restoration.py
@@ -557,6 +875,13 @@ Renders the session through the same worklet and core in an OfflineAudioContext.
 ---
 
 ## src/audio/player-worklet.ts {#src-audio-player-worklet}
+
+### src/audio/player-worklet.ts · live-patch
+- refers-to: src/audio/player-worklet.ts :: the `live-patch` message branch
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+A live-patch message calls the core's fw_live_patch with the wave index, the envelope, the gain, the cutoff and the resonance; the core's set_patch swaps the patch and retunes its filter without clearing the voices, so a held note is not cut.
 
 ### src/audio/player-worklet.ts · starting the core
 - refers-to: src/audio/player-worklet.ts :: `PlayerProcessor` constructor, the `init` branch
@@ -607,6 +932,13 @@ The two output views are kept and rebuilt only when wasm memory grows (its buffe
 ---
 
 ## src/ui/record.ts {#src-ui-record}
+
+### src/ui/record.ts · the input meter's label in words
+- refers-to: src/ui/record.ts :: the input meter's label
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+"In" rather than "IN", as the canvas writes Out; the input meter shows in the footer while a track is armed (src/ui/musical.ts).
 
 ### src/ui/record.ts · flow
 - refers-to: src/ui/record.ts :: `begin`, `finish`, `toggle`
@@ -672,6 +1004,13 @@ Since v0.4.0, `play()` set playing true and then the worklet's reply to the prec
 ---
 
 ## src/ui/projects.ts {#src-ui-projects}
+
+### src/ui/projects.ts · the line under the session's name
+- refers-to: src/ui/projects.ts :: `writeState`, `savedAt`
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+As the canvas's "Saved two minutes ago": Nothing to save yet, Not saved yet, Unsaved changes, Saved at (the time of the last save) or No changes since opening, written on every document change and after a save or an open.
 
 ### src/ui/projects.ts · save and open
 - refers-to: src/ui/projects.ts :: `save`, `open`, `withNotice`
@@ -817,6 +1156,13 @@ Each window remembers the name and revision of the session it last saved or open
 
 ## src/ui/ruler.ts and the v0.13.0 timeline {#src-ui-ruler}
 
+### src/ui/ruler.ts · the corner's title
+- refers-to: src/ui/ruler.ts :: the ruler's corner markup
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The corner above the track heads reads "Sections, time", as on the canvas, naming the ruler's two rows.
+
 ### src/ui/ruler.ts · one canvas
 - refers-to: src/ui/ruler.ts :: `mountRuler`, `draw`, `label`
 - kind: rationale
@@ -923,6 +1269,13 @@ In Grid mode a click on empty lane space or on the ruler moves the playhead to t
 ---
 
 ## src/ui/meter.ts and the output level path (v0.17.0) {#src-ui-meter}
+
+### src/ui/meter.ts · Phase in words, in the footer
+- refers-to: src/ui/meter.ts :: `mountOutputMeter` (the phase meter's label); src/styles/canvas.css (.fw-status .fw-phase-meter)
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The canvas's footer has Out and LUFS; the correlation meter stays between them as "Phase" (it was a bare φ), 44 px wide, green when positive and red when cancelling. Below 1440 px the footer's gaps and the Out bars narrow so the transport fits at 1288 by 683.
 
 ### src/audio/player-worklet.ts and player.ts · peaks to listeners
 - refers-to: src/audio/player-worklet.ts :: `report`, `peaks`; src/audio/player.ts :: `onOutputLevel`, `emitLevel`, `onReply`, `stop`
@@ -1053,6 +1406,13 @@ Spot mode (a button beside Grid and Shuffle, or T) turns a press on a clip body 
 ---
 
 ## src/ui/normalize.ts and group trims (v0.24.0) {#src-ui-normalize}
+
+### src/ui/normalize.ts · Loudness sits in the footer
+- refers-to: src/ui/normalize.ts :: the button's place, `open`
+- kind: explainer
+- logged: v2.13.0 · 2026-10-07
+
+The Loudness button moved from beside Export to the footer, after the LUFS readout it acts on; its dialog opens above the button when the window has no room below it, and stays inside the window's width.
 
 ### src/ui/normalize.ts · loudness normalization
 - refers-to: src/ui/normalize.ts :: `mountNormalize`; src/io/render-client.ts :: `renderMix`; src/main.ts :: mount
