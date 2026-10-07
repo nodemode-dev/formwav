@@ -2,7 +2,7 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v2.14.0
+Current build version: v2.14.1
 Last updated: 2026-10-07 · v2.14.1: the mixer basics in exports (app/services/render.py: every kind but the filters on a track's sum with its filter automation, a placed track's exception, trim, polarity, solo safe, automation Off and the pan law; app/services/surround.py; the thumbnail in app/services/projects.py), tests/test_mixer.py, two cases in tests/test_plan_parity.py, the mixer's controls and meters in tests/e2e/test_interface.py. v2.14.0: studio processors in exports (app/services/render.py: processor_spec, native_chains, ON_THE_SUM; app/services/surround.py), tests/test_processors.py, the processor kind in tests/test_plan_parity.py, tests/player_plan.mjs and tests/test_kinds.py, the processor count in tests/test_claims.py, the fit test with processor cards (tests/e2e/test_interface.py). v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
 
 ---
