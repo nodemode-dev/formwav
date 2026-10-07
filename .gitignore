@@ -4,6 +4,7 @@ build/
 venv/
 .venv/
 __pycache__/
+.pytest_cache/
 *.pyc
 *.pyo
 target/
@@ -27,6 +28,9 @@ Icon?
 src-tauri/target/
 src-tauri/gen/
 src-tauri/binaries/
+
+# the EBU ADM Renderer's own venv, which the ADM tests run (backend/tests/requirements_ear.txt)
+backend/tests/.venv-ear/
 
 # the desktop build's freeze venv and output
 backend/.venv-package/

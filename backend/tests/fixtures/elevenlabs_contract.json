@@ -1,0 +1,1900 @@
+{
+ "info": "1.0",
+ "paths": {
+  "/v1/audio-isolation": {
+   "post": {
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "properties": {
+         "audio": {
+          "format": "binary",
+          "type": "string"
+         },
+         "file_format": {
+          "anyOf": [
+           {
+            "enum": [
+             "pcm_s16le_16",
+             "other"
+            ],
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "preview_b64": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         }
+        },
+        "required": [
+         "audio"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/dubbing": {
+   "post": {
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "properties": {
+         "background_audio_file": {
+          "anyOf": [
+           {
+            "format": "binary",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "csv_file": {
+          "anyOf": [
+           {
+            "format": "binary",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "csv_fps": {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "disable_voice_cloning": {
+          "type": "boolean"
+         },
+         "drop_background_audio": {
+          "type": "boolean"
+         },
+         "dubbing_studio": {
+          "type": "boolean"
+         },
+         "end_time": {
+          "anyOf": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "file": {
+          "anyOf": [
+           {
+            "format": "binary",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "foreground_audio_file": {
+          "anyOf": [
+           {
+            "format": "binary",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "highest_resolution": {
+          "type": "boolean"
+         },
+         "mode": {
+          "enum": [
+           "automatic",
+           "manual"
+          ],
+          "type": "string"
+         },
+         "name": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "num_speakers": {
+          "type": "integer"
+         },
+         "source_lang": {
+          "type": "string"
+         },
+         "source_url": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "start_time": {
+          "anyOf": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "target_accent": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "target_lang": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "use_profanity_filter": {
+          "anyOf": [
+           {
+            "type": "boolean"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "watermark": {
+          "type": "boolean"
+         }
+        },
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/dubbing/{dubbing_id}": {
+   "get": {
+    "parameters": []
+   }
+  },
+  "/v1/dubbing/{dubbing_id}/audio/{language_code}": {
+   "get": {
+    "parameters": []
+   }
+  },
+  "/v1/dubbing/{dubbing_id}/transcript/{language_code}": {
+   "get": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "format_type",
+      "schema": {
+       "enum": [
+        "srt",
+        "webvtt",
+        "json"
+       ],
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/v1/forced-alignment": {
+   "post": {
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "properties": {
+         "file": {
+          "format": "binary",
+          "type": "string"
+         },
+         "text": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "file",
+         "text"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/models": {
+   "get": {
+    "parameters": []
+   }
+  },
+  "/v1/music": {
+   "post": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "output_format",
+      "schema": {
+       "enum": [
+        "auto",
+        "mp3_48000_128",
+        "mp3_48000_192",
+        "mp3_48000_240",
+        "mp3_48000_320",
+        "mp3_22050_32",
+        "mp3_24000_48",
+        "mp3_44100_32",
+        "mp3_44100_64",
+        "mp3_44100_96",
+        "mp3_44100_128",
+        "mp3_44100_192",
+        "pcm_8000",
+        "pcm_16000",
+        "pcm_22050",
+        "pcm_24000",
+        "pcm_32000",
+        "pcm_44100",
+        "pcm_48000",
+        "ulaw_8000",
+        "alaw_8000",
+        "opus_48000_32",
+        "opus_48000_64",
+        "opus_48000_96",
+        "opus_48000_128",
+        "opus_48000_192"
+       ],
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "composition_plan": {
+          "anyOf": [
+           {},
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "finetune_id": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "finetune_strength": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 2.0,
+          "type": "number"
+         },
+         "force_instrumental": {
+          "type": "boolean"
+         },
+         "generation_mode": {
+          "anyOf": [
+           {
+            "enum": [
+             "track",
+             "loop",
+             "ambience",
+             "video_to_music"
+            ],
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "lyrics_text": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "model_id": {
+          "enum": [
+           "music_v1",
+           "music_v2",
+           "music_v2_5"
+          ],
+          "type": "string"
+         },
+         "music_length_ms": {
+          "anyOf": [
+           {
+            "maximum": 600000.0,
+            "minimum": 3000.0,
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "maximum": 600000.0,
+          "minimum": 3000.0
+         },
+         "music_prompt": {
+          "anyOf": [
+           {
+            "properties": {
+             "negative_global_styles": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array"
+             },
+             "positive_global_styles": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array"
+             },
+             "sections": {
+              "items": {
+               "properties": {
+                "duration_ms": {
+                 "maximum": 120000.0,
+                 "minimum": 3000.0,
+                 "type": "integer"
+                },
+                "lines": {
+                 "items": {
+                  "type": "string"
+                 },
+                 "type": "array"
+                },
+                "negative_local_styles": {
+                 "items": {
+                  "type": "string"
+                 },
+                 "type": "array"
+                },
+                "positive_local_styles": {
+                 "items": {
+                  "type": "string"
+                 },
+                 "type": "array"
+                },
+                "section_name": {
+                 "type": "string"
+                },
+                "source_from": {
+                 "anyOf": [
+                  {
+                   "properties": {
+                    "negative_ranges": {
+                     "items": {
+                      "properties": {
+                       "end_ms": {
+                        "type": "integer"
+                       },
+                       "start_ms": {
+                        "type": "integer"
+                       }
+                      },
+                      "required": [
+                       "start_ms",
+                       "end_ms"
+                      ],
+                      "type": "object"
+                     },
+                     "type": "array"
+                    },
+                    "range": {
+                     "properties": {
+                      "end_ms": {
+                       "type": "integer"
+                      },
+                      "start_ms": {
+                       "type": "integer"
+                      }
+                     },
+                     "required": [
+                      "start_ms",
+                      "end_ms"
+                     ],
+                     "type": "object"
+                    },
+                    "song_id": {
+                     "type": "string"
+                    }
+                   },
+                   "required": [
+                    "song_id",
+                    "range"
+                   ],
+                   "type": "object"
+                  },
+                  {
+                   "type": "null"
+                  }
+                 ]
+                }
+               },
+               "required": [
+                "section_name",
+                "positive_local_styles",
+                "negative_local_styles",
+                "duration_ms",
+                "lines"
+               ],
+               "type": "object"
+              },
+              "type": "array"
+             }
+            },
+            "required": [
+             "positive_global_styles",
+             "negative_global_styles",
+             "sections"
+            ],
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "prompt": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "respect_sections_durations": {
+          "type": "boolean"
+         },
+         "seed": {
+          "anyOf": [
+           {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "sign_with_c2pa": {
+          "type": "boolean"
+         },
+         "store_for_inpainting": {
+          "type": "boolean"
+         },
+         "use_phonetic_names": {
+          "type": "boolean"
+         }
+        },
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/music/stem-separation": {
+   "post": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "output_format",
+      "schema": {
+       "enum": [
+        "mp3_22050_32",
+        "mp3_24000_48",
+        "mp3_44100_32",
+        "mp3_44100_64",
+        "mp3_44100_96",
+        "mp3_44100_128",
+        "mp3_44100_192",
+        "pcm_8000",
+        "pcm_16000",
+        "pcm_22050",
+        "pcm_24000",
+        "pcm_32000",
+        "pcm_44100",
+        "pcm_48000",
+        "ulaw_8000",
+        "alaw_8000",
+        "opus_48000_32",
+        "opus_48000_64",
+        "opus_48000_96",
+        "opus_48000_128",
+        "opus_48000_192"
+       ],
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "properties": {
+         "file": {
+          "format": "binary",
+          "type": "string"
+         },
+         "sign_with_c2pa": {
+          "type": "boolean"
+         },
+         "stem_variation_id": {
+          "enum": [
+           "two_stems_v1",
+           "six_stems_v1"
+          ],
+          "type": "string"
+         }
+        },
+        "required": [
+         "file"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/sound-generation": {
+   "post": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "output_format",
+      "schema": {
+       "enum": [
+        "mp3_22050_32",
+        "mp3_24000_48",
+        "mp3_44100_32",
+        "mp3_44100_64",
+        "mp3_44100_96",
+        "mp3_44100_128",
+        "mp3_44100_192",
+        "pcm_8000",
+        "pcm_16000",
+        "pcm_22050",
+        "pcm_24000",
+        "pcm_32000",
+        "pcm_44100",
+        "pcm_48000",
+        "ulaw_8000",
+        "alaw_8000",
+        "opus_48000_32",
+        "opus_48000_64",
+        "opus_48000_96",
+        "opus_48000_128",
+        "opus_48000_192"
+       ],
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "duration_seconds": {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ],
+          "maximum": 30.0,
+          "minimum": 0.5
+         },
+         "loop": {
+          "type": "boolean"
+         },
+         "model_id": {
+          "enum": [
+           "eleven_text_to_sound_v2"
+          ],
+          "type": "string"
+         },
+         "prompt_influence": {
+          "anyOf": [
+           {
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "text": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "text"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/speech-to-speech/{voice_id}": {
+   "post": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "enable_logging",
+      "schema": {
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "optimize_streaming_latency",
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     {
+      "in": "query",
+      "name": "output_format",
+      "schema": {
+       "enum": [
+        "alaw_8000",
+        "mp3_22050_32",
+        "mp3_24000_48",
+        "mp3_44100_128",
+        "mp3_44100_192",
+        "mp3_44100_32",
+        "mp3_44100_64",
+        "mp3_44100_96",
+        "opus_48000_128",
+        "opus_48000_192",
+        "opus_48000_32",
+        "opus_48000_64",
+        "opus_48000_96",
+        "pcm_16000",
+        "pcm_22050",
+        "pcm_24000",
+        "pcm_32000",
+        "pcm_44100",
+        "pcm_48000",
+        "pcm_8000",
+        "ulaw_8000",
+        "wav_16000",
+        "wav_22050",
+        "wav_24000",
+        "wav_32000",
+        "wav_44100",
+        "wav_48000",
+        "wav_8000"
+       ],
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "properties": {
+         "audio": {
+          "format": "binary",
+          "type": "string"
+         },
+         "file_format": {
+          "anyOf": [
+           {
+            "enum": [
+             "pcm_s16le_16",
+             "other"
+            ],
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "model_id": {
+          "type": "string"
+         },
+         "remove_background_noise": {
+          "type": "boolean"
+         },
+         "seed": {
+          "anyOf": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "voice_settings": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         }
+        },
+        "required": [
+         "audio"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/speech-to-text": {
+   "post": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "token",
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     {
+      "in": "query",
+      "name": "enable_logging",
+      "schema": {
+       "type": "boolean"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "properties": {
+         "additional_formats": {
+          "items": {},
+          "type": "array"
+         },
+         "cloud_storage_url": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "detect_speaker_roles": {
+          "type": "boolean"
+         },
+         "diarization_threshold": {
+          "anyOf": [
+           {
+            "maximum": 0.4,
+            "minimum": 0.1,
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "diarize": {
+          "type": "boolean"
+         },
+         "entity_detection": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "entity_redaction": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "entity_redaction_mode": {
+          "type": "string"
+         },
+         "file": {
+          "anyOf": [
+           {
+            "format": "binary",
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "file_format": {
+          "enum": [
+           "pcm_s16le_16",
+           "other"
+          ],
+          "type": "string"
+         },
+         "keyterms": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "language_code": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "model_id": {
+          "type": "string"
+         },
+         "multichannel_output_style": {
+          "enum": [
+           "separate",
+           "combined"
+          ],
+          "type": "string"
+         },
+         "no_verbatim": {
+          "type": "boolean"
+         },
+         "num_speakers": {
+          "anyOf": [
+           {
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "seed": {
+          "anyOf": [
+           {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "source_url": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "tag_audio_events": {
+          "type": "boolean"
+         },
+         "temperature": {
+          "anyOf": [
+           {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "timestamps_granularity": {
+          "enum": [
+           "none",
+           "word",
+           "character"
+          ],
+          "type": "string"
+         },
+         "transcript_edit": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "use_multi_channel": {
+          "type": "boolean"
+         },
+         "use_speaker_library": {
+          "type": "boolean"
+         },
+         "webhook": {
+          "type": "boolean"
+         },
+         "webhook_id": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "webhook_metadata": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         }
+        },
+        "required": [
+         "model_id"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/text-to-dialogue": {
+   "post": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "output_format",
+      "schema": {
+       "anyOf": [
+        {
+         "enum": [
+          "wav_8000",
+          "wav_16000",
+          "wav_22050",
+          "wav_24000",
+          "wav_32000",
+          "wav_44100",
+          "wav_48000"
+         ],
+         "type": "string"
+        },
+        {
+         "enum": [
+          "mp3_22050_32",
+          "mp3_24000_48",
+          "mp3_44100_32",
+          "mp3_44100_64",
+          "mp3_44100_96",
+          "mp3_44100_128",
+          "mp3_44100_192",
+          "pcm_8000",
+          "pcm_16000",
+          "pcm_22050",
+          "pcm_24000",
+          "pcm_32000",
+          "pcm_44100",
+          "pcm_48000",
+          "ulaw_8000",
+          "alaw_8000",
+          "opus_48000_32",
+          "opus_48000_64",
+          "opus_48000_96",
+          "opus_48000_128",
+          "opus_48000_192"
+         ],
+         "type": "string"
+        }
+       ],
+       "enum": [
+        "alaw_8000",
+        "mp3_22050_32",
+        "mp3_24000_48",
+        "mp3_44100_128",
+        "mp3_44100_192",
+        "mp3_44100_32",
+        "mp3_44100_64",
+        "mp3_44100_96",
+        "opus_48000_128",
+        "opus_48000_192",
+        "opus_48000_32",
+        "opus_48000_64",
+        "opus_48000_96",
+        "pcm_16000",
+        "pcm_22050",
+        "pcm_24000",
+        "pcm_32000",
+        "pcm_44100",
+        "pcm_48000",
+        "pcm_8000",
+        "ulaw_8000",
+        "wav_16000",
+        "wav_22050",
+        "wav_24000",
+        "wav_32000",
+        "wav_44100",
+        "wav_48000",
+        "wav_8000"
+       ]
+      }
+     },
+     {
+      "in": "query",
+      "name": "enable_logging",
+      "schema": {
+       "type": "boolean"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "apply_text_normalization": {
+          "enum": [
+           "auto",
+           "on",
+           "off"
+          ],
+          "type": "string"
+         },
+         "future_text": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "inputs": {
+          "items": {
+           "properties": {
+            "text": {
+             "type": "string"
+            },
+            "voice_id": {
+             "type": "string"
+            }
+           },
+           "required": [
+            "text",
+            "voice_id"
+           ],
+           "type": "object"
+          },
+          "type": "array"
+         },
+         "language_code": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "model_id": {
+          "type": "string"
+         },
+         "next_request_ids": {
+          "anyOf": [
+           {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "previous_request_ids": {
+          "anyOf": [
+           {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "previous_text": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "pronunciation_dictionary_locators": {
+          "anyOf": [
+           {
+            "items": {
+             "properties": {
+              "pronunciation_dictionary_id": {
+               "type": "string"
+              },
+              "version_id": {
+               "anyOf": [
+                {
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              }
+             },
+             "required": [
+              "pronunciation_dictionary_id"
+             ],
+             "type": "object"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "seed": {
+          "anyOf": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "settings": {
+          "anyOf": [
+           {
+            "properties": {
+             "similarity": {
+              "anyOf": [
+               {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "stability": {
+              "anyOf": [
+               {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             }
+            },
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "use_pvc_as_ivc": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "inputs"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/text-to-speech/{voice_id}": {
+   "post": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "enable_logging",
+      "schema": {
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "optimize_streaming_latency",
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     {
+      "in": "query",
+      "name": "output_format",
+      "schema": {
+       "enum": [
+        "alaw_8000",
+        "mp3_22050_32",
+        "mp3_24000_48",
+        "mp3_44100_128",
+        "mp3_44100_192",
+        "mp3_44100_32",
+        "mp3_44100_64",
+        "mp3_44100_96",
+        "opus_48000_128",
+        "opus_48000_192",
+        "opus_48000_32",
+        "opus_48000_64",
+        "opus_48000_96",
+        "pcm_16000",
+        "pcm_22050",
+        "pcm_24000",
+        "pcm_32000",
+        "pcm_44100",
+        "pcm_48000",
+        "pcm_8000",
+        "ulaw_8000",
+        "wav_16000",
+        "wav_22050",
+        "wav_24000",
+        "wav_32000",
+        "wav_44100",
+        "wav_48000",
+        "wav_8000"
+       ],
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "apply_language_text_normalization": {
+          "type": "boolean"
+         },
+         "apply_text_normalization": {
+          "enum": [
+           "auto",
+           "on",
+           "off"
+          ],
+          "type": "string"
+         },
+         "language_code": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "model_id": {
+          "type": "string"
+         },
+         "next_request_ids": {
+          "anyOf": [
+           {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "next_text": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "previous_request_ids": {
+          "anyOf": [
+           {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "previous_text": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "pronunciation_dictionary_locators": {
+          "anyOf": [
+           {
+            "items": {
+             "properties": {
+              "pronunciation_dictionary_id": {
+               "type": "string"
+              },
+              "version_id": {
+               "anyOf": [
+                {
+                 "type": "string"
+                },
+                {
+                 "type": "null"
+                }
+               ]
+              }
+             },
+             "required": [
+              "pronunciation_dictionary_id"
+             ],
+             "type": "object"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "seed": {
+          "anyOf": [
+           {
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "text": {
+          "type": "string"
+         },
+         "use_pvc_as_ivc": {
+          "type": "boolean"
+         },
+         "voice_settings": {
+          "anyOf": [
+           {
+            "properties": {
+             "similarity_boost": {
+              "anyOf": [
+               {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "speed": {
+              "anyOf": [
+               {
+                "type": "number"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "stability": {
+              "anyOf": [
+               {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "style": {
+              "anyOf": [
+               {
+                "type": "number"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             },
+             "use_speaker_boost": {
+              "anyOf": [
+               {
+                "type": "boolean"
+               },
+               {
+                "type": "null"
+               }
+              ]
+             }
+            },
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         }
+        },
+        "required": [
+         "text"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/text-to-voice": {
+   "post": {
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "generated_voice_id": {
+          "type": "string"
+         },
+         "labels": {
+          "anyOf": [
+           {
+            "type": "object"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "played_not_selected_voice_ids": {
+          "anyOf": [
+           {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "voice_description": {
+          "type": "string"
+         },
+         "voice_name": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "voice_name",
+         "voice_description",
+         "generated_voice_id"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/text-to-voice/design": {
+   "post": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "output_format",
+      "schema": {
+       "enum": [
+        "mp3_22050_32",
+        "mp3_24000_48",
+        "mp3_44100_32",
+        "mp3_44100_64",
+        "mp3_44100_96",
+        "mp3_44100_128",
+        "mp3_44100_192",
+        "pcm_8000",
+        "pcm_16000",
+        "pcm_22050",
+        "pcm_24000",
+        "pcm_32000",
+        "pcm_44100",
+        "pcm_48000",
+        "ulaw_8000",
+        "alaw_8000",
+        "opus_48000_32",
+        "opus_48000_64",
+        "opus_48000_96",
+        "opus_48000_128",
+        "opus_48000_192"
+       ],
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "properties": {
+         "auto_generate_text": {
+          "type": "boolean"
+         },
+         "guidance_scale": {
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "type": "number"
+         },
+         "loudness": {
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "type": "number"
+         },
+         "model_id": {
+          "enum": [
+           "eleven_multilingual_ttv_v2",
+           "eleven_ttv_v3"
+          ],
+          "type": "string"
+         },
+         "prompt_strength": {
+          "anyOf": [
+           {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "quality": {
+          "anyOf": [
+           {
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "type": "number"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "reference_audio_base64": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "remixing_session_id": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "remixing_session_iteration_id": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "seed": {
+          "anyOf": [
+           {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "type": "integer"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "should_enhance": {
+          "type": "boolean"
+         },
+         "stream_previews": {
+          "type": "boolean"
+         },
+         "text": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "voice_description": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "voice_description"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/voices": {
+   "get": {
+    "parameters": [
+     {
+      "in": "query",
+      "name": "show_legacy",
+      "schema": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "/v1/voices/add": {
+   "post": {
+    "parameters": [],
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "properties": {
+         "description": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "files": {
+          "items": {
+           "format": "binary",
+           "type": "string"
+          },
+          "type": "array"
+         },
+         "labels": {
+          "anyOf": [
+           {
+            "type": "object"
+           },
+           {
+            "type": "string"
+           },
+           {
+            "type": "null"
+           }
+          ]
+         },
+         "name": {
+          "type": "string"
+         },
+         "remove_background_noise": {
+          "type": "boolean"
+         }
+        },
+        "required": [
+         "name",
+         "files"
+        ],
+        "type": "object"
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "source": "https://api.elevenlabs.io/openapi.json"
+}

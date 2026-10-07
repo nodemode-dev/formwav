@@ -19,21 +19,30 @@ backend/
 ├── oc_install / .bat            venv, requirements, then builds the Rust audio core into the venv
 ├── boot_backend / .bat          loads .env, runs uvicorn on 127.0.0.1:8060
 ├── data/                        runtime data (never committed): media/ holds imported audio and its JSON
-└── app/
-    ├── main.py                  FastAPI app, CORS, router mounts under /api
-    ├── core/
-    │   ├── config.py            env-driven settings (CORS origins)
-    │   ├── paths.py             data and media folders
-    │   └── version.py           VERSION, one of the version sites
-    ├── routers/
-    │   ├── health.py            GET /api/health, with the audio core's version
-    │   ├── media.py             POST /api/media, GET /api/media/{id}, GET /api/media/{id}/peaks, GET /api/media/{id}/audio
-    │   ├── projects.py          GET /api/projects, PUT and GET /api/projects/{name}, GET /api/projects/{name}/file
-    │   └── render.py            POST /api/render: session document in, float32 stereo WAV out
-    └── services/
-        ├── media.py             import, probe, atomic storage, peak levels through formwav_dsp
-        ├── projects.py          .fmw packages in data/projects: atomic save, verified open, list
-        └── render.py            clip plan from the document, native render, WAV encoding
+├── app/
+│   ├── main.py                  FastAPI app, CORS, router mounts under /api
+│   ├── core/
+│   │   ├── config.py            env-driven settings (CORS origins)
+│   │   ├── paths.py             data and media folders
+│   │   └── version.py           VERSION, one of the version sites
+│   ├── routers/
+│   │   ├── health.py            GET /api/health, with the audio core's version
+│   │   ├── media.py             POST /api/media, GET /api/media/{id}, GET /api/media/{id}/peaks, GET /api/media/{id}/audio
+│   │   ├── projects.py          GET /api/projects, PUT and GET /api/projects/{name}, GET /api/projects/{name}/file
+│   │   └── render.py            POST /api/render: session document in, float32 stereo WAV out
+│   └── services/
+│       ├── local_dub.py         dubbing on this machine: Whisper's words, Argos Translate's models, Kokoro's voices
+│       ├── media.py             import, probe, atomic storage, peak levels through formwav_dsp
+│       ├── projects.py          .fmw packages in data/projects: atomic save, verified open, list
+│       └── render.py            clip plan from the document, native render, WAV encoding
+└── tests/                       pytest, run from backend: python -m pytest tests (written on the owner's ask, v2.12.5)
+    ├── requirements.txt         pytest and Playwright, pinned; requirements_ear.txt the EBU renderer's own venv
+    ├── conftest.py              a fresh data folder, no paid keys, the shared speech, a real engine on a free port
+    ├── fixtures/                JFK's public-domain speech and ElevenLabs' contract extract (README: their sources)
+    ├── stand_ins/               ElevenLabs, ACE-Step and Anthropic answering by their own documents
+    ├── test_*.py                one file per area; kinds_probe.mjs and player_plan.mjs load the interface's modules
+    ├── mcp_probe.py             the MCP SDK's client against the server, run in the server's venv
+    └── e2e/test_interface.py    the built interface in Chromium against a real engine
 ```
 
 ---
@@ -55,6 +64,29 @@ backend/
 - [app/services/projects.py](#app-services-projects)
 - [app/routers/render.py](#app-routers-render)
 - [app/services/render.py](#app-services-render)
+- [app/services/local_dub.py](#app-services-local-dub)
+- [tests/requirements.txt and tests/requirements_ear.txt](#tests-requirements)
+- [tests/conftest.py](#tests-conftest)
+- [tests/fixtures](#tests-fixtures)
+- [tests/stand_ins](#tests-stand-ins)
+- [tests/test_acestep.py](#tests-acestep)
+- [tests/test_adm.py](#tests-adm)
+- [tests/test_agents.py](#tests-agents)
+- [tests/test_cloud.py](#tests-cloud)
+- [tests/test_elevenlabs.py](#tests-elevenlabs)
+- [tests/test_engine.py](#tests-engine)
+- [tests/test_kinds.py](#tests-kinds)
+- [tests/test_local_dub.py](#tests-local-dub)
+- [tests/test_local_speech.py](#tests-local-speech)
+- [tests/test_mcp.py and tests/mcp_probe.py](#tests-mcp)
+- [tests/test_plan_parity.py and tests/player_plan.mjs](#tests-plan-parity)
+- [tests/test_remote.py](#tests-remote)
+- [tests/test_restoration.py](#tests-restoration)
+- [tests/test_room.py](#tests-room)
+- [tests/test_speech_regions.py](#tests-speech-regions)
+- [tests/test_sync.py](#tests-sync)
+- [tests/test_three_way.py](#tests-three-way)
+- [tests/e2e/test_interface.py](#tests-e2e-interface)
 
 ---
 
@@ -367,6 +399,13 @@ Takes a session document as the JSON body and returns the mix as a float32 stere
 ---
 
 ## app/services/render.py {#app-services-render}
+
+### app/services/render.py · de-click and de-reverb read ahead on the track's own bus; no reverb or dialogue isolate in a clip's chain
+- refers-to: app/services/render.py :: `plan` (the kinds that take a track to its own bus; the per-clip stages and their automation numbering; a clip's own stages); frontend/src/audio/player.ts :: `planClips`; tests/test_restoration.py, tests/test_plan_parity.py
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Two faults the new tests found, both where this plan and the browser's `planClips` decide which chain a stage runs in. First, latency. The core reads a chain's input ahead by its latency only on a bus (RX-16), so a track whose chain delays its signal plays through a bus of its own; the rule named the compressor, the reverb and the dialogue isolate (6, 8, 16) but not de-click (18, 3.5 ms) or de-reverb (19, 1023 samples), although the core's L6 entries say de-click is "compensated as Voice's is". On a track they ran in each clip's chain and came out late: measured on the JFK speech at 48 kHz, the export's cross-correlation peak against the dry export at 172 samples for de-click and 1023 for de-reverb, the browser planning the same. The sidecar's verify_live_restoration.py and verify_dereverb.py had shifted their readings by exactly those amounts by hand, which is why it went unseen. Both kinds now take a track to its own bus, in the plan and in the player: the peaks at 0, and at transparent settings (de-click at threshold 30, de-reverb at 0 dB) the export equal to the dry one (largest difference 0 and under 1e-4). The cost, as for the three kinds before them: a track that goes to its own bus has no filter automation (bus chains are not automated yet). Second, parity. This plan ran a reverb or a dialogue isolate in a clip's chain, on a track routed to a user bus or among a clip's own effects, where the browser's flatFx has always left them out (RX-16's entry names that exclusion as the design: a clip chain has no read-ahead, and a reverb's tail there stops at the clip's end; the Inspector offers neither on a clip). Such a session played without them and exported with them; the export now leaves them out too, its automation numbering with it, and the README's Bus routing limit names them. Still late, pinned by strict expected failures so a fix shows: de-click and de-reverb in a clip's own chain, in the master's, or on a track routed to a user bus (172 and 1023 samples, as measured); a read-ahead per clip chain and for the master in the core would close them, the owner's call. The re-measured readings, now at lag 0 with nothing shifted: 40 clicks of 0.6 repaired to 0.0059 at worst, 47 of 528,000 samples of clean speech changed by de-click, the room's tail in the pauses from -23.4 to -25.6 dB against the speech (the dry speech's -25.0) and SI-SDR from -1.68 to -0.52 dB, as the L6 entries found with their hand shifts.
 
 ### app/services/render.py · plan mirrors the interface
 - refers-to: app/services/render.py :: `plan`
@@ -1914,3 +1953,256 @@ The ground for remote recording (and for shared editing): formcut's remote modul
 - logged: v2.10.8 (in progress) · 2026-10-06
 
 The comparison's Remote recording row (none). Devices paired through the network listener join a room; the desktop starts and stops a take; every guest records its own microphone where it sits, losslessly (32-bit float through an AudioWorklet, the browser's echo cancellation, noise suppression and gain control off), and sends the take when the desktop stops; the desktop places each take on its own track at the playhead the take started from, moved by its measured start offset. Every room answer carries the engine's clock, so a guest knows, to within its round trip on the local network, when on that clock its first sample was taken. Guests use a small page the engine serves at /room (no editor bundle, so it suits a phone; a tap starts the microphone, as mobile browsers require; the middleware sends an unpaired device to /pair, and pairing now leads to /room). The desktop has Settings > Devices on this network (the listener's switch, the address to open, a pairing code counting down its five minutes, the paired devices with Remove) and Room beside Rec in the transport (who is here and what each is doing, Start take and Stop take). Checked: verify_room.py, 3 of 3 (an unpaired device refused; check-ins, and only the desktop starting and stopping; a take arriving as media with its offset, a stale take and a desktop upload refused, placed takes leaving the list), with remote and cloud at 21 of 21; and in two Chromium browsers through an engine serving the built app, a guest whose microphone was fed the JFK recording: paired, joined, shown as ready and then recording, its take placed on its own track as Studio C (room take).wav, 3.54 s for a take that ran 3.52 s by the host's clock, starting 96 ms after the host's. Found on the way: a take from a guest that had not yet checked in left it out of the room (it now counts as present), and the Room popover's rows slid sideways as their text changed (the transport popover's centring rule won over the room's by load order; its layout now wins): no layout-shift entry on opening the room, starting or stopping, no page error on either side. The room works on the local network (or a VPN joining two networks); its takes line up by clock, which the multitrack step refines by the audio itself.
+
+---
+
+## app/services/local_dub.py {#app-services-local-dub}
+
+### app/services/local_dub.py · the translation model's download names formwav as its User-Agent
+- refers-to: app/services/local_dub.py :: `install` (the request for LANGS[lang][3]); app/core/version.py :: VERSION
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Install dubbing language failed for everyone: on 2026-10-06 argos-net.com answered urllib's default User-Agent (Python-urllib/3.12) with 403 Forbidden, while the same address fetched with another User-Agent returned the model. The download now sends `formwav/<version>`. Checked through the engine: POST /api/providers/local-dub/es/install brought the English to Spanish model in (model.bin and sentencepiece.model in models/translate/en_es), after which the dubbing tests below ran.
+
+---
+
+## tests/requirements.txt and tests/requirements_ear.txt {#tests-requirements}
+
+### tests/requirements.txt · what the tests add to the engine's environment
+- refers-to: tests/requirements.txt, tests/requirements_ear.txt; .gitignore (backend/tests/.venv-ear/, .pytest_cache/)
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+The tests are written on the owner's explicit ask (2026-10-06: tests and fixtures move into the repository and CI runs them on every push). They run in the engine's own venv, which needs two more packages, pinned: pytest 9.1.1 and Playwright 1.63.0 (its Chromium from `python -m playwright install chromium`). The EBU ADM Renderer is the judge for ADM files and lives in a venv of its own beside the tests (`backend/tests/.venv-ear`, Python 3.12, `ear==2.1.0` with `setuptools<70`, which its pkg_resources import needs): its pins conflict with nothing of the engine's only because it is apart. Run from backend: `python -m pytest tests` (the interface tests in tests/e2e need `npm run build` in frontend first). A test that needs a model, a network service or a key skips and says what to install; nothing is downloaded by a test.
+
+---
+
+## tests/conftest.py {#tests-conftest}
+
+### tests/conftest.py · the tests make their own material and never touch the owner's
+- refers-to: tests/conftest.py :: the paid keys removed, FORMWAV_DATA_DIR, `model`, `client`, `jfk_wav`, `speech_48k`, `engine_url`
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Adopted from formcut's conftest. Every key or address that could reach a paid service (ElevenLabs, fal, Anthropic, ACE-Step) is removed from the environment before the engine is imported, so no test can spend money; the stand-ins set their own. The engine's data folder is a fresh temporary folder per run (removed at the end), so media, sessions and settings never mix with the owner's; the speech runtime (Kokoro's environment, 1 GB) is linked in rather than reinstalled. The client sends the local header and a loopback Host as the app does. `speech_48k` is the JFK recording at 48 kHz through ffmpeg, the shared input of most audio tests; `engine_url` starts a real engine on a free port for tests that need one over HTTP (the MCP server, an agent client), and fails with the path of its log if it does not answer within 60 s.
+
+---
+
+## tests/fixtures {#tests-fixtures}
+
+### tests/fixtures · real speech and one service's contract
+- refers-to: tests/fixtures/README.md, jfk.wav, elevenlabs_contract.json
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Only what a test cannot generate is kept: whisper.cpp's public-domain JFK sample (byte-identical, its SHA-256 in the README) and the extract of ElevenLabs' OpenAPI document (37,837 bytes for 18 operations, against the full document's 2.25 MB). Everything else (tones, noise, rooms, music beds, clicks, sessions) is made by the test that uses it, from a fixed seed.
+
+---
+
+## tests/stand_ins {#tests-stand-ins}
+
+### tests/stand_ins · services judged by their own documents, not by formwav's expectations
+- refers-to: tests/stand_ins/elevenlabs.py, acestep.py, anthropic.py, extract_elevenlabs_contract.py
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+A stand-in answers as the service would and records each request's problems against the service's own description, so a test fails when formwav sends something the service would refuse. ElevenLabs' reads the contract extract (methods, paths, required fields, enums and ranges); ACE-Step's follows its API.md (the task types, the fields each takes, the key) and refuses as it would; Anthropic's answers the Messages API with a scripted three-turn plan that reads the tool results it is sent (get_session, then set_track_gain, set_clip_fades and add_marker on the ids it found, then a summary), proving the in-app agent's loop and its chaining by id, never a model's judgement. Each serves on a free port in a thread for the life of its test module.
+
+---
+
+## tests/test_acestep.py {#tests-acestep}
+
+### tests/test_acestep.py · ACE-Step 1.5's REST server, by its API.md
+- refers-to: tests/test_acestep.py; app/services/acestep.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Status reads the server's models; each of the seven tasks the Create tab offers (text to music with lyrics, cover, repaint, an added layer, extraction, completion, a repaint ending before it starts) comes back as media; no request broke the documented API; a repaint whose end precedes its start is sent as -1 (to the end), as API.md defines; the stand-in itself refuses five bad bodies and a missing key, so its approval means something; with the server gone, formwav names the command that starts it (acestep-api).
+
+---
+
+## tests/test_adm.py {#tests-adm}
+
+### tests/test_adm.py · ADM files judged by the EBU's own renderer
+- refers-to: tests/test_adm.py; app/services/adm.py; app/routers/render.py (what=adm)
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+formwav's ADM BWF files are rendered by the EBU ADM Renderer (ear-render, 0+5+0) and the speakers' shares of each object's tone measured: objects that stand still play over 99% from their speaker; a moving object starts over 95% at its first point, sits between 40 and 60% on each side halfway and ends over 99% at its last; a bed plays from its own channels; and the session export route writes moving objects and a bed that the renderer places so. Skips, saying how to install it, where the renderer's venv is missing (FORMWAV_EAR_BIN points elsewhere).
+
+---
+
+## tests/test_agents.py {#tests-agents}
+
+### tests/test_agents.py · Settings > Agents against a scratch home folder
+- refers-to: tests/test_agents.py; app/routers/agents.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+HOME, USERPROFILE and APPDATA point into the test's own folder, so the owner's agent configurations are never read or written. Six clients shown with the server's command present; Codex's TOML keeps its settings and other servers, is backed up, and a second add does not duplicate; Cursor and Claude Desktop merge beside other servers; a broken file is refused and left byte for byte; Claude Code without its command says so; a paired device is refused; and the command Cursor's written file names starts the MCP server, which answers formwav_status through the MCP SDK's own client.
+
+---
+
+## tests/test_cloud.py {#tests-cloud}
+
+### tests/test_cloud.py · Google Drive and Dropbox against a fake of both
+- refers-to: tests/test_cloud.py; app/routers/cloud.py; app/services/projects.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Ported from formcut's own tests with the cloud service (v2.10.8). A local server plays both services: the PKCE challenge is the standard S256 form; Google signs in on the loopback with PKCE and drive.file, asking for read access only for a full drive; Dropbox signs in with a pasted code and no secret; both list in one shape; importing brings media in and opens a session as a project; Google saves into one formwav folder through a resumable session; Dropbox saves small sessions whole and large ones in an upload session; an expiring token is refreshed first and an unknown service refused.
+
+---
+
+## tests/test_elevenlabs.py {#tests-elevenlabs}
+
+### tests/test_elevenlabs.py · every ElevenLabs route checked against ElevenLabs' contract
+- refers-to: tests/test_elevenlabs.py; app/services/elevenlabs.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Each of the 21 routes formwav offers for ElevenLabs is called with media made in the test and must be answered and handled (its media placed, its JSON read); across all of them no request may break the contract extract (a missing required field, a value outside a range, an unknown enum value, a wrong method or path); and Scribe's transcript is kept where formwav keeps transcripts, so the Transcript tab reads it.
+
+---
+
+## tests/test_engine.py {#tests-engine}
+
+### tests/test_engine.py · the engine imports, mounts each route once, states one version and stays on this machine
+- refers-to: tests/test_engine.py; app/main.py; app/core/security.py :: LocalOnly; desktop_entry.py :: main; every version site
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+The import and the routes are formcut's CI check made a test. The version test reads every machine-readable version site (the engine, the MCP server, package.json and its lock's two entries, the core's Cargo.toml and the three lock files that build it, the shell's Cargo.toml, lock and tauri.conf.json, the README's badge and its text, the three logs' headers) against app/core/version.py and checks the form v(major).(middle 0 to 99).(minor 0 to 9), so a release cannot miss one; /api/health must report the same version for the engine and for the core installed beside it, so an engine running a stale core fails. The lockdown is checked from outside: another machine, a rebinding page's Host and a change without the local header are refused with 403 and their reasons, every answer carries nosniff, and the desktop entry serves on 127.0.0.1 (uvicorn.run captured, so nothing listens).
+
+---
+
+## tests/test_kinds.py {#tests-kinds}
+
+### tests/test_kinds.py · one set of nineteen live kinds, one code each, every kept value designable
+- refers-to: tests/test_kinds.py, tests/kinds_probe.mjs; frontend/src/ui/editor-tabs.ts :: KINDS; frontend/src/engine/document.ts :: cleanFx; frontend/src/audio/player.ts :: flatStages; app/services/render.py :: FX_KINDS, `_stage`; native/formwav-dsp/src/fx.rs :: the kind constants, Stage::design; frontend/public/core/formwav_dsp.wasm
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+CLAUDE.md's warning that a live kind lives in many places at once, made a check. kinds_probe.mjs loads the interface's own modules through the project's Vite (its SSR loader, so TypeScript and the worklet's URL import resolve as in the app) and the shipped WebAssembly core: the catalogue's kinds, what the document keeps (its clamps found by passing values far below and above every field, its fallbacks by passing none), the player's stage for each, and whether the core designs that stage (fw_add_master_stage returns 0 for a refused one: an echo of 0.5 ms, a chorus at 12 Hz, an unknown kind). Asserted: the same 19 kinds in the catalogue, the document, the export and the core's constants; one code per kind in all of them; the core designs every kind at the document's fallback, lowest and highest values, so nothing the document keeps is silently skipped; each catalogue knob's both ends are kept by the document and designed by the core; and the export's defaults for a missing field equal the document's fallbacks. All hold. Seen and left for the owner: the catalogue's initial values differ from the Inspector's defaults for two kinds (denoise's sensitivity 0 against 3 dB; reverb's room 0.5 against 0.6, and the catalogue's card has no Mix knob, its mix coming from the fallback 0.25), and the chorus knob stops at 5 Hz where the document and core allow 10.
+
+---
+
+## tests/test_local_dub.py {#tests-local-dub}
+
+### tests/test_local_dub.py · dubbing on this machine judged by a human rendering and by a second listener
+- refers-to: tests/test_local_dub.py; app/services/local_dub.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+JFK's line dubbed into Spanish: the words' F1 against the standard human rendering above 0.7; each sentence placed where it was said within 2 ms and sped up by at most 1.35 times; the dub as long as the source within 0.01 s; and a multilingual Whisper (tiny, another model than the one that transcribed the source) hearing the Spanish that was to be said with an F1 above 0.6. Skips without Kokoro, the Spanish model or faster-whisper.
+
+---
+
+## tests/test_local_speech.py {#tests-local-speech}
+
+### tests/test_local_speech.py · speech made here, heard back by Whisper
+- refers-to: tests/test_local_speech.py; app/services/local_speech.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Kokoro offers its 54 voices; a spoken sentence is heard back by Whisper with at least 80% of its words; Regenerate takes its reference from the clip at the clip's rate and splices to the exact length (the media's frames equal the source's plus the reported change), with Kokoro standing in for a cloning engine, since Pocket TTS and Chatterbox need PyTorch. Skips without Kokoro.
+
+---
+
+## tests/test_mcp.py and tests/mcp_probe.py {#tests-mcp}
+
+### tests/test_mcp.py · the MCP server driven by the MCP SDK's own client, tool by tool
+- refers-to: tests/test_mcp.py, tests/mcp_probe.py; formwav_mcp/server.py
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+mcp_probe.py runs in the MCP server's own venv (its Starlette and the engine's FastAPI do not share one) against a real engine, starts the server over stdio with the SDK's client and calls every tool. Each of the 34 checks passes only when the tool works where its work can run, or fails with the instruction a person needs (a key, an install, a device), never with a stack trace; de-bleed is asked to use the recording as its own reference and must refuse. The ADM the server renders is judged by the EBU renderer as test_adm judges the engine's. A check the probe ran that this list does not know fails too, so a new tool cannot go unchecked.
+
+---
+
+## tests/test_plan_parity.py and tests/player_plan.mjs {#tests-plan-parity}
+
+### tests/test_plan_parity.py · the browser plans what the export renders
+- refers-to: tests/test_plan_parity.py, tests/player_plan.mjs; frontend/src/audio/player.ts :: planClips, flatStages; frontend/src/engine/document.ts :: cleanFx; app/services/render.py :: plan, `_stage`
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+The render entry "plan mirrors the interface" warned that two copies of one rule set drift and that only a null test between the renderers guards them; this is that guard in the repository, at the plan where it is cheap. player_plan.mjs loads planClips through the project's Vite and runs it on each session after cleanFx (as the browser holds it); the test runs the export's plan on the same session and compares them field by field: each clip's media, place, length, gain, pan, fades and shape, bus, gain and pan envelopes, chain, chain automation and compressor, and each bus's gain, pan and stages, with the master's stages. 96 sessions: every kind on a track (an automated filter after it), on a clip's own chain, on a track routed to a user bus, on a bus and on the master, and one fuller session (four fade shapes, pan automation, volume automation under a clip envelope, a pitched clip, a send, a VCA, a muted track, a muted bus, a clip at another rate, a bypassed stage). It found the reverb and dialogue isolate the export ran in clip chains (the render entry above); all 96 now agree.
+
+---
+
+## tests/test_remote.py {#tests-remote}
+
+### tests/test_remote.py · devices on the local network, paired or refused
+- refers-to: tests/test_remote.py; app/routers/remote.py; app/core/security.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Ported from formcut's own tests with the network listener (v2.10.8). The network side refuses everything until paired; a fresh code pairs one device with a strict cookie, works once and not after it expires; five wrong codes cancel every live code; only the desktop manages pairing; removing a device ends its access; a bearer token works for clients without cookies; codes need the listener on while loopback is unchanged; and the real listener marks its requests even from this machine.
+
+---
+
+## tests/test_restoration.py {#tests-restoration}
+
+### tests/test_restoration.py · de-hum, de-click and de-reverb through the export, on time
+- refers-to: tests/test_restoration.py; app/services/render.py; native/formwav-dsp/src/fx.rs :: DeHum, DeClick, DeReverb, Voice
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+The sidecar's verify_live_restoration.py and verify_dereverb.py made tests, read at lag 0 rather than shifted by hand. Measured here: hum alone, each of eight harmonics of 60 Hz down 121.7 to 202.1 dB (asserted under -40); speech through de-hum, its level -0.226 dB and its spectrum away from the notches 0.033 dB from the original on average (under 0.5 and 0.1); 40 clicks of 0.6 repaired to 0.0059 at worst (under 0.05); 47 of 528,000 samples of clean speech changed by de-click (under 0.05%); in a synthetic room (T60 0.8 s, direct and reverberant energy equal), the tail in the pauses from -23.4 to -25.6 dB against the speech and SI-SDR from -1.68 to -0.52 dB (asserted at least 1.5 dB and 0.8 dB better). For de-click, de-reverb and the dialogue isolate on a track and on a bus: the export's cross-correlation peak against the dry export at 0, and at transparent settings the export equal to the dry one. The places with no read-ahead are strict expected failures (a clip's chain, the master's, a track routed to a user bus; 172 and 1023 samples late), so the day a fix lands they fail and are moved over.
+
+---
+
+## tests/test_room.py {#tests-room}
+
+### tests/test_room.py · remote recording's room
+- refers-to: tests/test_room.py; app/routers/room.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+From the v2.10.8 room harness: an unpaired device is refused the room; a guest checks in and only the desktop starts and stops a take; a take arrives as media with its offset and leaves the list once placed.
+
+---
+
+## tests/test_speech_regions.py {#tests-speech-regions}
+
+### tests/test_speech_regions.py · where people speak, under music too
+- refers-to: tests/test_speech_regions.py; app/services/vad.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+Silero VAD on the JFK speech: found in stretches with pauses between, more than 5 s of it; under a music bed 6 dB below the speech (four chords, decaying each second) more than 90% of the clean speech's time still found; the bed alone not taken for speech; a cut inside a word called unsafe and one in a pause safe. Skips without the model (Mark where people speak fetches it).
+
+---
+
+## tests/test_sync.py {#tests-sync}
+
+### tests/test_sync.py · takes lined up by their sound, to a quarter of a sample
+- refers-to: tests/test_sync.py; app/services/sync.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+The speech delayed by fractions of a sample in the frequency domain (2.317 ms late, 37.5 ms early, 450 ms late), each coloured by a different microphone (a 33-point Hann low-pass) with its own noise: each delay is found within 0.25 samples, and unrelated noise is not aligned.
+
+---
+
+## tests/test_three_way.py {#tests-three-way}
+
+### tests/test_three_way.py · speech, music and ambience, each nearer its own part than the mix was
+- refers-to: tests/test_three_way.py; app/services/three_way.py, deepfilter.py
+- kind: explainer
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+The sidecar's verify_three_way.py made a test. A stereo mix of known parts: the JFK speech in the centre, music 8 dB under it (chords, bass, a kick on every beat and a hat between), decorrelated pink noise 14 dB under it swelling at 0.2 Hz. Measured here: the three stems add up to the mix within 2.2e-8 (asserted under 1e-6); SI-SDR against each true part, speech 12.06 dB (the mix 7.00), music 0.65 (-8.16), ambience -3.93 (-14.49), gains of 5.07, 8.81 and 10.56 dB, as at v2.11.4 (asserted above 3, 6 and 8). Skips without DeepFilterNet's build in the models folder.
+
+---
+
+## tests/e2e/test_interface.py {#tests-e2e-interface}
+
+### tests/e2e/test_interface.py · the built interface in Chromium against a real engine
+- refers-to: tests/e2e/test_interface.py, tests/stand_ins/anthropic.py; frontend/dist; frontend/src/ui/shell.ts, agents.ts, agent-pane.ts, labels-pane.ts, meter.ts, record.ts
+- kind: rationale
+- logged: v2.12.5 (in progress) · 2026-10-06
+
+What the release gate's interface run checked, kept. An engine serves the built app with its own data and home folders and the Anthropic stand-in as its model; each test opens a fresh browser at 1288 by 683, the smallest window the app is held to, watching page errors, console errors and every layout-shift entry from the first paint. The app boots under a CPU slowed four times with no error and no shift; the page does not scroll and the transport bar neither overflows nor wraps, with OUT, the phase meter and IN in view; every menu item's target exists once, and each View menu item reaches its control; an imported file becomes one track that plays; Settings > Agents lists the six clients and its dialog does not move as they load; and the in-app agent carries out the stand-in's chain (three model calls, each with the 30 tools and the key, the three tool results without an error, Undo run offered, the marker named agent at 00:01.000 in the Labels tab). Skips where the interface is not built or Chromium is missing.
