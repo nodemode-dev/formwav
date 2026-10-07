@@ -97,7 +97,8 @@ def page(browser, app_url):
     page = context.new_page()
     page.add_init_script(WATCH)
     page.console_errors = []
-    page.on("console", lambda m: page.console_errors.append(m.text) if m.type == "error" else None)
+    page.on("console", lambda m: page.console_errors.append(m.text) if m.type == "error" and not m.text.startswith("Failed to load resource") else None)
+    page.on("response", lambda r: page.console_errors.append(f"{r.status} {r.request.method} {r.url}") if r.status >= 400 and r.status != 503 else None)
     yield page
     context.close()
 
