@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+python3 -m venv .venv
+.venv/bin/pip install -q --upgrade pip
+.venv/bin/pip install -q -r requirements.txt
+echo "formwav MCP server ready. Start formwav, then register the server with your agent:"
+echo "  command: $(pwd)/.venv/bin/python"
+echo "  args:    [\"$(pwd)/formwav_mcp.py\"]"
+echo "  Claude Code: claude mcp add formwav -- $(pwd)/.venv/bin/python $(pwd)/formwav_mcp.py"

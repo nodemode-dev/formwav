@@ -28,7 +28,8 @@ Invariants worth repeating, because breaking them is silent:
   devices; keep it that way.
 
 Agents drive formwav through two surfaces; extend them rather than adding a third. The MCP server in
-`backend/formwav_mcp` (started by `backend/formwav_mcp/serve`) gives 28 tools over the engine's HTTP API; the in-app
+`backend/formwav_mcp` (started by `backend/formwav_mcp/serve`, or from a checkout by `mcp/formwav_mcp.py`; `.mcp.json`
+registers it for Claude Code) gives 28 tools over the engine's HTTP API; the in-app
 agent (`frontend/src/ui/agent-pane.ts`) gives 30 tools over the session's commands, placing what it makes on tracks. The project skill
 `.claude/skills/formwav-harness` teaches an agent to use the MCP tools well: what to check first, which tool fits, the
 order of steps and how to recover; load it before driving formwav, and update its tools reference whenever a tool changes.

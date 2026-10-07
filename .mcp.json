@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "formwav": {
+      "command": "backend/formwav_mcp/serve"
+    }
+  }
+}
