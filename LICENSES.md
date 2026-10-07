@@ -17,6 +17,7 @@ formwav is Apache-2.0 (LICENSE, NOTICE). This ledger covers what the desktop app
 | uvloop | as pinned | MIT or Apache-2.0 | the engine sidecar |
 | httptools, watchfiles, PyYAML | as pinned | MIT | the engine sidecar |
 | formwav-dsp (the native audio core) | formwav's version | Apache-2.0 (formwav's own) | the engine sidecar |
+| formwav-studio (the studio processors, native/formwav-studio) | 0.1.0 | Apache-2.0 (formwav's own) | inside the audio core, in the engine sidecar and the interface |
 
 ## On the user's machine, never bundled (tier 1)
 

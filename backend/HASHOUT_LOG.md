@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
-Current build version: v2.13.1
-Last updated: 2026-10-07 · v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
+Current build version: v2.14.0
+Last updated: 2026-10-07 · v2.14.0: studio processors in exports (app/services/render.py: processor_spec, native_chains, ON_THE_SUM; app/services/surround.py), tests/test_processors.py, the processor kind in tests/test_plan_parity.py, tests/player_plan.mjs and tests/test_kinds.py, the processor count in tests/test_claims.py, the fit test with processor cards (tests/e2e/test_interface.py). v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
 
 ---
 
@@ -549,6 +549,13 @@ Takes a session document as the JSON body and returns the mix as a float32 stere
 ---
 
 ## app/services/render.py {#app-services-render}
+
+### app/services/render.py · a processor's spec in the plan, the specs beside the chains
+- refers-to: app/services/render.py :: `FX_KINDS["processor"]`, `ON_THE_SUM`, `_number`, `processor_spec`, `native_chains`, `_stage`, `plan`, `render`; app/services/surround.py :: `_bus`; tests/test_processors.py, tests/test_plan_parity.py (FULL["processor"]), tests/player_plan.mjs (`named`), tests/test_kinds.py, tests/test_claims.py (`_studio_processors`)
+- kind: rationale
+- logged: v2.14.0 · 2026-10-07
+
+A processor entry (frontend/src/engine/processors.ts) becomes the stage (20, spec, 0, 0, 0, 0), its spec the id and value pairs in the document's order with numbers written as JavaScript writes them (4, not 4.0), so the browser's plan and this one compare equal in the plan parity test. The core takes six numbers per stage, so native_chains moves each spec into a list passed beside the chains and leaves its place in the stage; render and the 5.1 and ambisonic render both use it. ON_THE_SUM names the kinds that take a track to a bus of its own, the processor among them, matching the browser's planClips; on a clip or on a track routed to a user bus a processor is left out, as the browser leaves it. The export's tests judge each processor by what it is for, measured with numpy (a ceiling, a notch's depth beside an untouched tone, a pitch an octave up, a rectified tone's doubled frequency, sibilance taken down with the voice left), and its timing: on a track and on a bus a 5 ms lookahead is read ahead and lands at lag 0; on the master it lands 240 samples late, which the test states so the gap stays visible until S17.
 
 ### app/services/render.py · de-click and de-reverb read ahead on the track's own bus; no reverb or dialogue isolate in a clip's chain
 - refers-to: app/services/render.py :: `plan` (the kinds that take a track to its own bus; the per-clip stages and their automation numbering; a clip's own stages); frontend/src/audio/player.ts :: `planClips`; tests/test_restoration.py, tests/test_plan_parity.py

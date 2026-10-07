@@ -2,8 +2,8 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v2.13.1
-Last updated: 2026-10-07 · v2.13.1: no change to the core (the version only). v2.13.0: the synth's low-pass, in render() and the live instrument alike (src/synth.rs), and its two new parameters through src/python.rs and src/wasm.rs; most stages added since v1.11.0 have no entry in this log
+Current build version: v2.14.0
+Last updated: 2026-10-07 · v2.14.0: formwav's own studio processors (the formwav-studio crate) run as a processor stage (src/fx.rs `Processor`, kind 20), entries in src/render.rs, src/wasm.rs, src/python.rs and src/native.rs; bus and master chains run stage by stage over a block; tests/processors.rs. v2.13.1: no change to the core (the version only). v2.13.0: the synth's low-pass, in render() and the live instrument alike (src/synth.rs), and its two new parameters through src/python.rs and src/wasm.rs; most stages added since v1.11.0 have no entry in this log
 
 ---
 
@@ -11,6 +11,17 @@ Last updated: 2026-10-07 · v2.13.1: no change to the core (the version only). v
 
 ```
 native/
+├── formwav-studio/              the studio processors: 24 stereo block processors with named parameters, no dependencies
+│   ├── src/lib.rs               the catalogue (Spec, Param, Unit, Taper, Category), build(), the Processor trait
+│   ├── src/filters.rs           biquads (RBJ cookbook, f64), the Linkwitz-Riley crossover, Butterworth cascades
+│   ├── src/rng.rs, delay.rs     seeded noise (SplitMix64), delay lines read between samples, the modulation sine
+│   ├── src/eq.rs, strip.rs      Band EQ, 7-Band EQ, Channel Strip
+│   ├── src/dynamics.rs          Compressor, Gate/Expander, De-Esser, Maximizer
+│   ├── src/space.rs             Room (a feedback delay network) and Plate (Dattorro's tank)
+│   ├── src/modulation.rs        Modulated Delay, Chorus, Flanger, Phaser
+│   ├── src/color.rs, pitch.rs   Drive, Bit Crusher, Rectifier; Pitch Shift
+│   ├── src/utility.rs           Time Offset, Gain, Trim, Polarity, DC Block, Test Tone, Dither
+│   └── tests/studio.rs          what each family should do, measured (cargo test)
 └── formwav-dsp/
     ├── Cargo.toml               crate manifest, version site; rlib and cdylib; optional pyo3 behind the python feature
     ├── Cargo.lock               lockfile, version site
@@ -24,13 +35,14 @@ native/
     │   ├── render.rs            Player: sources, clips, position, render to a stereo pair
     │   ├── wasm.rs              C-ABI exports for the wasm32 build (fw_alloc, fw_load_wav, fw_render, ...)
     │   ├── loudness.rs          BS.1770-4 integrated loudness: K-weighting for any rate, 400 ms blocks, two gates
-    │   ├── fx.rs                the nineteen live stages (filters to de-reverb): design, process, reset, latency
+    │   ├── fx.rs                the nineteen live stages (filters to de-reverb) and the processor stage: design, process, reset, latency
     │   ├── onsets.rs            transient detection
     │   ├── synth.rs             the built-in instrument: note tracks rendered, the live instrument, a resonant low-pass on both
     │   ├── midi.rs              MIDI input read by the engine (feature "native"), for the desktop app
     │   └── native.rs            native output and capture through cpal (feature "native")
     └── tests/
-        └── stages.rs            the 19 live effect kinds held to the interface's catalogue (cargo test)
+        ├── stages.rs            the 19 live effect kinds held to the interface's catalogue (cargo test)
+        └── processors.rs        the processor stage against the processor run on its own, its spec, its table
 ```
 
 ---
@@ -51,6 +63,38 @@ native/
 - [formwav-dsp/src/native.rs](#src-native)
 - [formwav-dsp/src/synth.rs](#src-synth)
 - [formwav-dsp/tests/stages.rs](#tests-stages)
+- [formwav-studio and the processor stage](#formwav-studio)
+
+---
+
+## formwav-studio and the processor stage {#formwav-studio}
+
+### formwav-studio · the studio processors, and why a crate of their own
+- refers-to: native/formwav-studio (Cargo.toml, src/lib.rs, each family's file, tests/studio.rs); formwav-dsp/Cargo.toml (the path dependency)
+- kind: rationale
+- logged: v2.14.0 · 2026-10-07
+
+PLAN_v13 asks for studio processors beside the core's nineteen live stages: equalisers, dynamics, two reverbs, delay and modulation, colour, pitch and the utilities a mix needs. A core stage is five numbers, made for clip chains and their automation; a processor has named parameters (the channel strip 22, the 7-band EQ 23) and a description an interface draws its controls from. So they are a crate of their own: no dependencies, unsafe code forbidden, no threads, files or clocks, edition 2021 as the core is, so it builds unchanged for wasm32, the Python module and the native output, and its own tests run on it alone (`cargo test` in native/formwav-studio).
+
+The shape: one static catalogue of Specs (id, name, short name, category, and each parameter's id, name, range, default, unit, taper and choices), build() making a processor at a rate with every parameter at its default and every buffer clear, and the Processor trait (set by index in the spec's order, reset, run a stereo block in place, latency, tail, reduction_db). Values are held to their ranges before they reach a processor (Param::clamp: NaN and infinities to the default, switches and choices to whole numbers), so no processor checks its own; nothing allocates while running, every delay line sized at build for the longest setting at that rate; a parameter takes effect at once, since the core makes a stage anew whenever its settings change. The shared parts: the audio EQ cookbook's biquads (Bristow-Johnson) in transposed direct form II run in f64, first-order sections for the odd slopes and Butterworth cascades for the rest, a fourth-order Linkwitz-Riley split whose two bands sum to an all-pass, a one-pole smoother (filters.rs); delay lines read between samples by cubic Hermite interpolation, and a sine for modulation (delay.rs); SplitMix64 noise with a fixed seed for each processor, so a render repeats exactly (rng.rs).
+
+The families: the Band EQ is one cookbook section of seven types; the 7-Band EQ is a low and a high cut of 6 to 24 dB an octave, two shelves and three bells; the Channel Strip is a four-band EQ behind a low cut, a gate and a compressor, the EQ before or after the dynamics. The compressor reads the louder channel (linked), bends into its ratio over a quadratic knee, moves its reduction by attack and release ballistics, can high-pass its sidechain and look ahead (its latency), with makeup and a dry mix; the gate is a downward expander with a hold and a floor; the de-esser splits at its frequency and turns the upper band down 4 to 1 above the threshold, at most its depth, Listen playing that band alone; the maximizer raises the input by the threshold and holds the ceiling with a gain held at its lowest across a look-ahead window and averaged over it, so the gain has come down by the time a peak leaves the delay, then recovers by the release. The Room is a feedback delay network: four all-passes a side, then eight lines fed back through a Householder matrix, each damped and scaled for the decay time; the Plate is the figure-of-eight tank of Dattorro's "Effect Design, Part 1" (J. Audio Eng. Soc., 1997), its lengths scaled from his 29761 Hz to the session's rate and by the size. The modulated delay sways its time with a sine and darkens its repeats; the chorus is a voice a side, the right one's sweep offset by the spread; the flanger sweeps a short delay with feedback of either sign; the phaser sweeps up to twelve first-order all-passes two octaves either side of its centre, the last fed back to the first. Drive bends the raised input by a hyperbolic tangent (Soft), the same off centre with its offset removed for even harmonics (Warm) or a cubic that meets full scale flat (Hard), then a low pass for the tone; the bit crusher cuts the words to its bits and holds each sample until the next tick of its downsampling clock, with hiss; the rectifier folds the negative half up or removes it. Pitch Shift reads a delay line faster or slower than it is written and, when the read head has drifted across the window, hands over to a new head placed where the last few milliseconds best match those under the old one (a search outward from half a window back, a farther candidate taken only when it matches clearly better), crossfading the two, so a steady tone keeps its new pitch without a beat. The utilities: a time offset in milliseconds plus samples, a gain, a trim with a polarity switch, a polarity flip, a DC block (a first-order high pass), a test tone (four waveforms, pink noise as rows of noise each held twice as long as the last, white noise) and dither (triangular at the target word's step, rounded to it; with shaping, each sample's rounding error taken from the next, which moves the noise toward the top of the band; exact silence stays silent).
+
+tests/studio.rs holds each family to what it is for, measured on tones and noise rather than read back from the code: every processor in the catalogue builds at rates from 22.05 to 192 kHz, its defaults in range and one choice a step; silence stays silent, and noise stays finite with every parameter drawn at random across its range; a bell gives its gain at its frequency and a notch takes its frequency out; a cut falls by its slope an octave past its corner; a compressor settles on its curve and reports its look-ahead as latency; a gate closes to its floor; a de-esser turns down the band above its frequency and leaves the rest; a maximizer never passes its ceiling; each reverb decays 60 dB in about its decay time; an octave up puts 440 Hz at 880 Hz and an octave down at 220 Hz; full-wave rectifying doubles a tone; the utilities do exactly what they say; the test tone plays each wave at its level; dither lands on the word's steps, keeps silence and keeps a tone below a step; the delays and modulators delay, sweep and colour. The browser core grew from 635 kB to 758 kB.
+
+### src/fx.rs · Processor, the stage that runs one of the studio processors
+- refers-to: src/fx.rs :: `PROCESSOR` (20), `Processor` (design, made, latency, tail, gain_reduction_db, reset, process, process_block, Clone, PartialEq, Debug), `processors_json`, `Stage::processor`, `Stage::process_block`; tests/processors.rs
+- kind: rationale
+- logged: v2.14.0 · 2026-10-07
+
+A stage's five numbers cannot carry a processor's parameters (the channel strip has 22, the 7-band EQ 23), so a processor is made from a spec: its id, then param=value pairs by the catalogue's parameter ids, each value held to its parameter's range (Param::clamp, NaN to the default), unknown names and malformed pairs skipped, an unknown id refused. Processor builds it at the session's rate, sets every value, then resets, so a stage starts from silence at its settings, in the browser and the export alike. Clone remakes the processor from its id and values (the master chain is cloned for the 5.1 pairs); a processor that cannot be remade passes audio through. process_block runs a block in place, whatever its length; process runs one frame for the chains that still run frame by frame (clip chains, the 5.1 path). Bus and master chains now run stage by stage over each block (Stage::process_block) instead of frame by frame through the whole chain: each stage sees the same input samples in the same order, so the existing stages give the same output (tests/processors.rs checks five kinds sample for sample), and a processor gets a whole block per call. The processor's latency joins Stage::latency, so a bus reads ahead by it as it does for the core's delaying stages; the master is not read ahead (PLAN_v13 S17). processors_json writes the catalogue for the engine and the interface; the interface's copy (frontend/src/engine/processors.ts) is held equal to it by backend/tests/test_processors.py.
+
+### src/render.rs, src/wasm.rs, src/python.rs, src/native.rs · the entries
+- refers-to: render.rs :: `add_master_processor`, `add_bus_processor`, the master loop in `render`, `mix_buses`; wasm.rs :: `fw_add_master_processor`, `fw_add_bus_processor`; python.rs :: `render(processors=...)`, `processors()`; native.rs :: `Mix.processors`
+- kind: rationale
+- logged: v2.14.0 · 2026-10-07
+
+A chain stays a list of six numbers per stage everywhere it travels; a processor's stage is [20, k, 0, 0, 0, 0], k naming its spec in a list carried beside the chains (the worklet's message, the engine's render call, the native output's mix), so the planners, the plan parity test and the worklet keep their shape. The browser passes the spec as bytes through fw_alloc (the audio worklet has no TextEncoder in every browser, and a spec is ASCII).
 
 ---
 

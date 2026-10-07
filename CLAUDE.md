@@ -21,6 +21,9 @@ Invariants worth repeating, because breaking them is silent:
 - A live effect kind lives in many places at once: the core's stage list, the document's kinds and their normalising,
   the player's two maps and its automation list, the lanes' filter lists, the export table in
   `backend/app/services/render.py`, the inspector and the editor tabs. TypeScript catches some of these, not all.
+- The studio processors (formwav's own library, `native/formwav-studio`) are one kind, `processor`, carrying the
+  library's id and values by name; their table in `frontend/src/engine/processors.ts` must equal the core's
+  (`backend/tests/test_processors.py` holds it).
 - A clip's `sourceIn` counts the media's samples and its `length` the session's; they differ whenever a file's rate
   differs from the session's.
 - `/api/generate` takes `freq`, not `hz`.
