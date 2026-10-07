@@ -3,7 +3,7 @@
  * resize Media and Inspector in pixels (a drag is a pixel gesture), the titlebar toggles show or hide them, and the
  * arrangement is remembered. Sizes are clamped on apply, so a narrow window cannot strand a pane or squeeze the timeline.
  */
-const KEY = "formwav.layout";
+const KEY = "formwav.panes";
 const MIN_SIDE = 200;
 const MIN_TIMELINE = 360;
 const STEP = 16;
@@ -20,7 +20,7 @@ interface Layout {
 }
 type Side = "media" | "inspector";
 
-const DEFAULTS: Layout = { media: 268, inspector: 284, showMedia: true, showInspector: true };
+const DEFAULTS: Layout = { media: 240, inspector: 296, showMedia: true, showInspector: true };
 
 function read(): Layout {
   try {
@@ -43,7 +43,8 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
       /* storage refused: the layout still applies for this visit */
     }
   };
-  const shown = (side: Side) => (side === "media" ? layout.showMedia : layout.showInspector);
+  const agent = ws.querySelector<HTMLElement>(".fw-pane-agent > .fw-agent");
+  const shown = (side: Side) => (side === "media" ? layout.showMedia : !!agent && !agent.hidden);
   const clamp = (side: Side, width: number) => {
     const other: Side = side === "media" ? "inspector" : "media";
     const room = ws.clientWidth - 14 - (shown(other) ? layout[other] + 7 : 0) - 7 - MIN_TIMELINE;
@@ -58,7 +59,7 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
     layout = { ...layout, inspector: clamp("inspector", layout.inspector) };
     // The width variables are inline, which outranks the stylesheet, so a hidden pane is zeroed here.
     setVar("--fw-media-w", shown("media") ? `${layout.media}px` : "0px");
-    setVar("--fw-inspector-w", shown("inspector") ? `${layout.inspector}px` : "var(--fw-strip-w, 46px)");
+    setVar("--fw-inspector-w", shown("inspector") ? `${layout.inspector}px` : "0px");
     for (const side of ["media", "inspector"] as Side[]) {
       const state = shown(side) ? "on" : "off";
       if (ws.dataset[side] !== state) ws.dataset[side] = state;
@@ -169,5 +170,6 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
   }
 
   window.addEventListener("resize", apply);
+  if (agent) new MutationObserver(apply).observe(agent, { attributes: true, attributeFilter: ["hidden"] });
   apply();
 }

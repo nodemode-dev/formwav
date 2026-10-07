@@ -31,7 +31,7 @@ FIT = """(() => {
   return {
     pageScroll: [document.documentElement.scrollWidth - innerWidth, document.documentElement.scrollHeight - innerHeight],
     transportOverflow: [transport.scrollWidth - transport.clientWidth, transport.scrollHeight - transport.clientHeight],
-    metersInView: [inView('.fw-out-meter'), inView('.fw-phase-meter'), inView('.fw-transport .fw-meter')],
+    metersInView: [inView('.fw-out-meter'), inView('.fw-phase-meter'), inView('.fw-lufs')],
   };
 })()"""
 
@@ -164,6 +164,35 @@ def test_an_imported_file_becomes_a_track_that_plays(page, app_url):
     assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
 
 
+def test_history_lists_each_edit_and_goes_back_to_any_of_them(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    page.click('[data-agent-tab="history"]')
+    rows = "[...document.querySelectorAll('.fw-history-row')].map((r) => [r.querySelector('.fw-history-label').textContent, r.dataset.state])"
+    assert page.evaluate(rows) == [["Session start", "done"], ["Added jfk.wav", "now"]]
+    page.click(".fw-history-row:nth-child(1) .fw-history-btn")
+    page.wait_for_function("document.querySelectorAll('.fw-lane').length === 0")
+    assert page.evaluate(rows) == [["Session start", "now"], ["Added jfk.wav", "undone"]]
+    page.click(".fw-history-row:nth-child(2) .fw-history-btn")
+    page.wait_for_function("document.querySelectorAll('.fw-lane').length === 1")
+    assert _clean(page)["errors"] == []
+
+
+def test_the_synth_tab_sets_the_sessions_synth_in_one_undo_step(page, app_url):
+    _open(page, app_url)
+    if page.locator(".fw-dock").is_hidden():
+        page.click('.fw-panel-toggle[data-pane="editor"]')
+    page.click('.fw-dock-tab[data-panel="synth"]')
+    page.click('.fw-wave-seg [data-wave="saw"]')
+    page.wait_for_function("document.querySelector('.fw-wave-seg [data-wave=\"saw\"]').getAttribute('aria-pressed') === 'true'")
+    page.select_option(".fw-synth-preset", "Warm bass")
+    page.wait_for_function("document.querySelector('[data-synth-key=\"cutoff\"] .fw-knob-value').textContent === '600 Hz'")
+    page.click('[data-agent-tab="history"]')
+    labels = page.evaluate("[...document.querySelectorAll('.fw-history-label')].map((l) => l.textContent)")
+    assert labels == ["Session start", "Changed the synth", "Changed the synth"]
+    assert _clean(page)["errors"] == []
+
+
 def test_settings_agents_lists_six_clients_and_does_not_move_as_they_load(page, app_url):
     _open(page, app_url)
     page.locator(".fw-settings-menu .fw-menu-btn").click()
@@ -187,7 +216,10 @@ def test_the_in_app_agent_carries_out_a_chain_of_tools(page, app_url):
     assert all(c["key"] == "stand-in" and len(c["tools"]) == 30 and "get_session" in c["tools"] for c in calls)
     assert len(calls[2]["results"]) == 3 and not any(r.get("is_error") for r in calls[2]["results"])
     assert page.locator('[data-agent="undo"]').is_enabled()
-    page.click('.fw-pane-tab[data-tab="labels"]')
+    if page.locator(".fw-dock").is_hidden():
+        page.click('.fw-panel-toggle[data-pane="editor"]')
+    page.click(".fw-dock-more > .fw-menu-btn")
+    page.click('.fw-dock-more [data-panel="labels"]')
     labels = page.evaluate("[...document.querySelectorAll('.fw-labels-list .fw-label-row')].map((r) => [r.querySelector('.fw-label-time').textContent, r.querySelector('.fw-label-text').value])")
     assert labels == [["00:01.000", "agent"]]
     assert _clean(page)["errors"] == []

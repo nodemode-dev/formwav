@@ -35,10 +35,11 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     field("Fade in (s)", `<input type="number" data-f="fadeIn" min="0" step="0.01">`),
     field("Fade out (s)", `<input type="number" data-f="fadeOut" min="0" step="0.01">`),
     field("Fade shape", `<select data-f="shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
+    `<div class="fw-cf-actions" role="group" aria-label="Clip actions"><button type="button" class="fw-ibtn" data-clip-act="split" title="Split this clip where the playhead is">Split at the playhead</button><button type="button" class="fw-ibtn" data-clip-act="normalize" title="Normalize the selected clips to a loudness target">Normalize</button><button type="button" class="fw-ibtn" data-clip-act="check" title="Measure the recording and list what it needs, in the Inspector">Check the recording</button><button type="button" class="fw-ibtn" data-clip-act="repair" title="Find the clip's problems and propose a repair chain, in the Inspector">Repair assistant</button></div>`,
     `<div class="fw-cf fw-cf-wide"><span class="fw-cf-label">Colour</span><div class="fw-cf-colors" role="group" aria-label="Clip colour"><button type="button" class="fw-cf-color" data-color="" aria-label="The track's colour" title="The track's colour"></button>${COLORS.map((c) => `<button type="button" class="fw-cf-color" data-color="${c}" aria-label="${c}" title="${c}" style="color: var(--fw-color-${c})"></button>`).join("")}</div></div>`,
-    `<div class="fw-cf fw-cf-wide fw-cf-three"><span class="fw-cf-label">Separate</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-three>Speech, music and ambience to three tracks</button></div><output class="fw-cf-ara-state" data-three-state>Three tracks that add up to this clip exactly: their faders set the balance.</output></div>`,
-    `<div class="fw-cf fw-cf-wide fw-cf-speech"><span class="fw-cf-label">Speech</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-speech>Mark where people speak</button></div><output class="fw-cf-ara-state" data-speech-state>Finds speech in this clip, under music too, and marks it as regions.</output></div>`,
-    `<div class="fw-cf fw-cf-wide fw-cf-sync"><span class="fw-cf-label">Line up by sound</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-sync>Line up other tracks' takes to this one</button></div><output class="fw-cf-ara-state" data-sync-state>Takes on other tracks that overlap this clip move to match its sound, to a fraction of a sample.</output></div>`,
+    `<div class="fw-cf fw-cf-wide fw-cf-three"><span class="fw-cf-label">Separate</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-three>Speech, music and ambience to three tracks</button></div><output class="fw-cf-ara-state" data-three-state>Three tracks that add up to this clip exactly</output></div>`,
+    `<div class="fw-cf fw-cf-wide fw-cf-speech"><span class="fw-cf-label">Speech</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-speech>Mark where people speak</button></div><output class="fw-cf-ara-state" data-speech-state>Marks speech as regions, even under music</output></div>`,
+    `<div class="fw-cf fw-cf-wide fw-cf-sync"><span class="fw-cf-label">Line up by sound</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-sync>Line up other tracks' takes to this one</button></div><output class="fw-cf-ara-state" data-sync-state>Overlapping takes move to match this clip's sound</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-ara"><span class="fw-cf-label">ARA plug-in</span><div class="fw-cf-ara-row"><select data-ara-plugin aria-label="ARA plug-in"><option value="">Looking for ARA plug-ins</option></select><button type="button" class="fw-ibtn" data-ara="analyze" disabled>Analyse</button><button type="button" class="fw-ibtn" data-ara="render" disabled>Render</button></div><output class="fw-cf-ara-state" data-ara-state></output></div>`,
   ].join("")}</div>`;
   anchor.before(panel);
@@ -88,7 +89,7 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     for (const b of panel.querySelectorAll<HTMLElement>(".fw-cf-color")) b.setAttribute("aria-pressed", String((b.dataset.color ?? "") === (clip.color ?? "")));
     const ara = clip.ara;
     if (!araBusy) {
-      setText(panel.querySelector("[data-ara-state]"), ara ? `${ara.label}: ${ara.notes} ${ara.notes === 1 ? "note" : "notes"} found; its state is saved with the session` : "Analyse the clip with an ARA plug-in to keep its state with the session.");
+      setText(panel.querySelector("[data-ara-state]"), ara ? `${ara.label}: ${ara.notes} ${ara.notes === 1 ? "note" : "notes"} found; its state is saved with the session` : "Its analysis is saved with the session");
     }
     const select = panel.querySelector<HTMLSelectElement>("[data-ara-plugin]");
     if (select && ara && document.activeElement !== select && [...select.options].some((o) => o.value === ara.plugin) && select.value !== ara.plugin) select.value = ara.plugin;
@@ -134,6 +135,30 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     const hit = b ? find(engine.get("document")) : null;
     if (!b || !hit) return;
     engine.dispatch({ type: "set-clip-color", trackId: hit.track.id, clipId: hit.clip.id, color: b.dataset.color ?? "" });
+  });
+
+  // The canvas's four clip actions: a split through the engine, the rest through the controls that already do them
+  // (the footer's Loudness, the Inspector's recording check and repair assistant, whose findings show in the Inspector)
+  panel.addEventListener("click", (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>("[data-clip-act]")?.dataset.clipAct;
+    const hit = act ? find(engine.get("document")) : null;
+    if (!act || !hit) return;
+    const notice = host.querySelector<HTMLElement>(".fw-notice");
+    if (act === "split") {
+      const at = engine.get("transport").positionSamples;
+      const { track, clip } = hit;
+      if (at > clip.start && at < clip.start + clip.length) engine.dispatch({ type: "split-clip", trackId: track.id, clipId: clip.id, at });
+      else setText(notice, "Move the playhead into the clip to split it there");
+      return;
+    }
+    if (act === "normalize") return void host.querySelector<HTMLButtonElement>(".fw-loud-btn")?.click();
+    const inspector = host.querySelector<HTMLElement>(".fw-pane-inspector");
+    if (inspector?.hidden) host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-inspector]")?.click();
+    const button = host.querySelector<HTMLButtonElement>(act === "check" ? '.fw-pane-inspector [data-an="mic"]' : '.fw-pane-inspector [data-repair-act="analyse"]');
+    button?.click();
+    const card = button?.closest<HTMLElement>(".fw-insp-section");
+    card?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+    card?.querySelectorAll<HTMLElement>(".fw-mic-findings")[act === "check" ? 0 : 1]?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
   });
 
   // Speech, music and ambience (services/three_way.py): three tracks under the clip that sum to it exactly, one undo step

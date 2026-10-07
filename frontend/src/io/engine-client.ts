@@ -2,6 +2,7 @@ export interface HealthReply {
   status: string;
   name: string;
   version: string;
+  core?: string;
 }
 
 export async function fetchHealth(timeoutMs = 5000): Promise<HealthReply> {

@@ -7,7 +7,7 @@
  * render, so the piano roll, the track's instrument and exports treat it as any note clip.
  */
 import type { Engine } from "../engine";
-import type { MediaRef, NoteEvent, StepPattern } from "../engine/document";
+import { cleanSynth, DEFAULT_SYNTH, type MediaRef, type NoteEvent, type StepPattern } from "../engine/document";
 import { setText } from "../vendor/nodemode/dom-stable";
 
 const STEPS = 16;
@@ -86,10 +86,12 @@ export function mountStepSequencer(host: HTMLElement, engine: Engine, notice: HT
     const bpm = doc.tempo?.bpm ?? 120;
     const notes = patternNotes(pat.steps, pat.pitches, pat.bars, bpm, rate, pat.swing);
     if (!notes.length) throw new Error("light at least one step");
+    const p = cleanSynth(doc.synth ?? DEFAULT_SYNTH);
+    const patch = { wave: p.wave, attack: p.attack, decay: p.decay, sustain: p.sustain, release: p.release, gain: 0.25, cutoff: p.cutoff, resonance: p.resonance };
     const res = await fetch("/api/midi/render", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ notes: notes.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })), rate, name: "Pattern" }),
+      body: JSON.stringify({ notes: notes.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })), rate, name: "Pattern", patch }),
     });
     const media = (await res.json().catch(() => ({}))) as Partial<MediaRef> & { detail?: unknown };
     if (!res.ok || !media.id) throw new Error(typeof media.detail === "string" ? media.detail : `the engine answered ${res.status}`);

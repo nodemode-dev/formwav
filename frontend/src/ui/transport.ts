@@ -4,6 +4,12 @@ import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
 import { onZoom, samplesPerPixel } from "./lanes";
 import { snapSamples } from "./grid";
 
+let follow = true;
+/** Whether the view pages to keep the playhead in sight (the toolbar's Follow). */
+export function setFollow(on: boolean): void {
+  follow = on;
+}
+
 export function mountTransport(host: HTMLElement, engine: Engine, player: Player): void {
   const button = (action: string) => host.querySelector<HTMLButtonElement>(`.fw-tbtn[data-action="${action}"]`);
   const toStart = button("to-start");
@@ -67,7 +73,7 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
       lastTransform = x;
       playhead.style.transform = x;
       // Follow the playhead: page the view when it passes 92% of the visible timeline or leaves it on the left.
-      if (followStage) {
+      if (followStage && follow) {
         if (!headWidth) headWidth = followStage.querySelector<HTMLElement>(".fw-lane-head")?.offsetWidth ?? 0;
         const view = followStage.clientWidth - headWidth;
         const left = followStage.scrollLeft;

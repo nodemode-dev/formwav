@@ -16,7 +16,7 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
   meter.setAttribute("role", "group");
   meter.setAttribute("aria-label", "Output level");
   meter.innerHTML =
-    `<span class="fw-meter-label">OUT</span>` +
+    `<span class="fw-meter-label">Out</span>` +
     `<div class="fw-out-track"><div class="fw-out-bar"></div></div>` +
     `<div class="fw-out-track"><div class="fw-out-bar"></div></div>` +
     `<button class="fw-out-clip" type="button" data-clip="false" aria-label="Output clip indicator, click to reset" title="Output reached 0 dBFS (click to reset)"></button>`;
@@ -32,7 +32,7 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
   phase.setAttribute("aria-valuemin", "-1");
   phase.setAttribute("aria-valuemax", "1");
   phase.title = "Phase correlation while playing: +1 mono-safe, 0 unrelated, -1 cancelling in mono";
-  phase.innerHTML = `<span class="fw-meter-label" aria-hidden="true">φ</span><div class="fw-phase-track"><span class="fw-phase-dot"></span></div>`;
+  phase.innerHTML = `<span class="fw-meter-label" aria-hidden="true">Phase</span><div class="fw-phase-track"><span class="fw-phase-dot"></span></div>`;
   transport?.append(phase);
   const dot = phase.querySelector<HTMLElement>(".fw-phase-dot");
   let smooth: number | null = null;
@@ -65,8 +65,11 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
   let integrated: number | undefined;
   let lastWrite = 0;
   const writeLufs = (m?: number, s?: number) => {
-    const text = `M ${show(m)}  S ${show(s)}  I ${show(integrated)} LUFS`;
+    const now = s !== undefined && Number.isFinite(s) ? s : integrated;
+    const text = `${(now !== undefined && Number.isFinite(now) ? now.toFixed(1) : "--").padStart(5, " ")} LUFS`;
     if (lufs.textContent !== text) lufs.textContent = text;
+    const title = `Output loudness (BS.1770): momentary ${show(m).trim()}, short-term ${show(s).trim()}, integrated ${show(integrated).trim()} LUFS`;
+    if (lufs.title !== title) lufs.title = title;
   };
   writeLufs();
   player.onOutputLevel((_left, _right, _tracks, loudness) => {

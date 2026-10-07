@@ -351,7 +351,10 @@ function clipNode(): HTMLElement {
   const name = document.createElement("span");
   name.className = "fw-clip-name";
   name.setAttribute("aria-hidden", "true");
-  node.append(canvas, env, fadeIn, fadeOut, gain, takeBadge, name);
+  const by = document.createElement("span");
+  by.className = "fw-clip-by";
+  by.setAttribute("aria-hidden", "true");
+  node.append(canvas, env, fadeIn, fadeOut, gain, takeBadge, name, by);
   return node;
 }
 
@@ -380,6 +383,9 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
   const clipColor = clip.color ? `var(--fw-color-${clip.color})` : "";
   if (node.style.getPropertyValue("--fw-clip-color") !== clipColor) node.style.setProperty("--fw-clip-color", clipColor);
   setText(node.querySelector(".fw-clip-name"), (doc.media[clip.mediaId]?.name ?? "").replace(/\.[a-z0-9]+$/i, ""));
+  const by = node.querySelector<HTMLElement>(".fw-clip-by");
+  setText(by, clip.by === "agent" ? "Claude" : "you");
+  if (by && by.dataset.by !== (clip.by ?? "you")) by.dataset.by = clip.by ?? "you";
   const left = `${(clip.start / spp).toFixed(2)}px`;
   const width = `${Math.max(1, clip.length / spp).toFixed(2)}px`;
   if (node.dataset.left !== left) {

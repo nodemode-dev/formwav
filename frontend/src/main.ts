@@ -9,6 +9,7 @@ import "./styles/shell.css";
 import "./styles/workspace.css";
 import "./styles/frame.css";
 import "./styles/surfaces.css";
+import "./styles/canvas.css";
 import "./styles/scrollbars.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
@@ -44,6 +45,9 @@ import { mountThemeMenu } from "./ui/theme-menu";
 import { mountEditorTabs } from "./ui/editor-tabs";
 import { mountClipTab } from "./ui/clip-tab";
 import { mountBrowserEffects } from "./ui/browser-effects";
+import { mountBrowser } from "./ui/browser";
+import { mountMusical } from "./ui/musical";
+import { mountToolbar } from "./ui/toolbar";
 import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
@@ -145,7 +149,8 @@ if (host) {
   mountClipTab(host, engine);
   mountEditorTabs(host, engine, player);
   mountBrowserEffects(host, engine);
-  mountDock(host);
+  mountBrowser(host, engine);
+  mountDock(host, engine);
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();
   bindInputs(engine); // track inputs live in the session (Track.input)
   mountProjects(host, engine, player);
@@ -153,6 +158,8 @@ if (host) {
   mountRoom(host, engine);
   mountShare(host, engine);
   mountAgents(host);
+  mountMusical(host, engine);
+  mountToolbar(host, engine);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
 activateAll(engine);

@@ -254,10 +254,13 @@ body.nm-home .nm-canvas-surface { display: none !important; }
   --fw-color-cyan: #3fd4e0;
   --fw-color-pink: #ff7ac6;
   --fw-color-slate: #9aa5b8;
+  /* The agreed canvas: the agent's name on its clips and edits, and the level meters' green */
+  --fw-agent-ink: #8ab4ff;
+  --fw-meter: #5fc79a;
   --z-toast: 3000;
 }
 
-body.theme-light { color-scheme: light; }
+body.theme-light { color-scheme: light; --fw-agent-ink: #2f62c9; }
 
 /* ── Liquid glass (the owner's walkthrough): one look for every menu, dropdown and flyout, from the theme's own surface,
    so it holds in light themes too; scrollbars hidden everywhere while scrolling still works. ── */

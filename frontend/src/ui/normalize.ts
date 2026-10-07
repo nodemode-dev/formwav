@@ -1,7 +1,6 @@
 import type { Engine, SessionDoc } from "../engine";
 import { renderMix } from "../io/render-client";
 import { setText } from "../vendor/nodemode/dom-stable";
-import { ICON_SIZE, icon } from "./icons";
 
 const TARGETS: [number, string][] = [
   [-14, "-14 LUFS (streaming)"],
@@ -16,15 +15,14 @@ const MAX_CLIP_GAIN_DB = 12;
  * clips' gain by the same amount so the measured loudness lands on the target. One undo step.
  */
 export function mountNormalize(host: HTMLElement, engine: Engine): void {
-  const exportButton = host.querySelector<HTMLButtonElement>('[data-action="export"]');
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "fw-ibtn";
-  button.innerHTML = `${icon("waveform", ICON_SIZE.control)}<span>Loudness</span>`;
+  button.className = "fw-ibtn fw-loud-btn";
+  button.textContent = "Loudness";
   button.title = "Normalize the selected clips, or every clip, to a loudness target";
   button.setAttribute("aria-haspopup", "dialog");
   button.setAttribute("aria-expanded", "false");
-  exportButton?.before(button);
+  (host.querySelector<HTMLElement>(".fw-status .fw-transport") ?? host.querySelector<HTMLElement>('[data-action="export"]')?.parentElement)?.append(button);
 
   const pop = document.createElement("div");
   pop.className = "fw-norm";
@@ -48,9 +46,11 @@ export function mountNormalize(host: HTMLElement, engine: Engine): void {
   };
   const open = () => {
     const r = button.getBoundingClientRect();
-    pop.style.transform = `translate(${Math.round(r.left)}px, ${Math.round(r.bottom + 6)}px)`;
     setText(status, "");
     pop.hidden = false;
+    const below = r.bottom + 6 + pop.offsetHeight <= window.innerHeight;
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8));
+    pop.style.transform = `translate(${Math.round(left)}px, ${Math.round(below ? r.bottom + 6 : r.top - 6 - pop.offsetHeight)}px)`;
     button.setAttribute("aria-expanded", "true");
     select.focus();
   };

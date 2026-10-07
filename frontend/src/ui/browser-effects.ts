@@ -1,6 +1,6 @@
 /**
- * The browser's effects, after the approved target (research/ui_reference): under the session's media, the sixteen
- * realtime effects in four groups. Choosing one appends it to the selected clip's track's realtime chain
+ * The browser's Effects tab, after the agreed canvas: the realtime effects in four groups (FX_GROUPS, which the Media
+ * tab lists as rows that open their group here). Choosing one appends it to the selected clip's track's realtime chain
  * (set-track-fx, with the Effects tab's own defaults; the first track when no clip is selected) and opens the editor's
  * Effects tab on it.
  */
@@ -8,7 +8,7 @@ import type { Engine } from "../engine";
 import type { TrackFx } from "../engine/document";
 import { KINDS } from "./editor-tabs";
 
-const GROUPS: Array<[string, string[]]> = [
+export const FX_GROUPS: Array<[string, string[]]> = [
   ["EQ and filters", ["highpass", "lowpass", "peak", "lowshelf", "highshelf"]],
   ["Dynamics", ["compressor", "limiter", "gate"]],
   ["Space and movement", ["reverb", "echo", "chorus", "flanger", "phaser", "tremolo"]],
@@ -16,21 +16,21 @@ const GROUPS: Array<[string, string[]]> = [
 ];
 
 export function mountBrowserEffects(host: HTMLElement, engine: Engine): void {
-  const media = host.querySelector<HTMLElement>('.fw-pane-media [data-panel="media"]');
-  if (!media) return;
+  const panel = host.querySelector<HTMLElement>('.fw-pane-media [data-panel="effects"]');
+  if (!panel) return;
   const section = document.createElement("section");
   section.className = "fw-fxlib";
   section.setAttribute("aria-label", "Effects");
-  section.innerHTML = `<div class="fw-fxlib-head"><span>Effects</span><span class="fw-fxlib-hint">Adds to the selected clip's track</span></div>${GROUPS.map(
+  section.innerHTML = `<div class="fw-fxlib-head"><span>Effects</span><span class="fw-fxlib-hint">Adds to the selected clip's track</span></div>${FX_GROUPS.map(
     ([label, kinds]) =>
       `<div class="fw-fxlib-group" role="group" aria-label="${label}"><span class="fw-fxlib-label">${label}</span>${kinds
-        .map((k) => `<button type="button" class="fw-fxlib-item" data-kind="${k}" title="Add ${KINDS[k].label} to the selected clip's track"><span>${KINDS[k].label}</span><span class="fw-fxlib-sub">${KINDS[k].sub}</span></button>`)
+        .map((k) => `<button type="button" class="fw-fxlib-item" data-kind="${k}" title="Add ${KINDS[k].label} to the selected clip's track, live"><span>${KINDS[k].label}</span><span class="fw-fxlib-sub">${KINDS[k].sub}</span></button>`)
         .join("")}</div>`,
-  ).join("")}`;
-  // After the media list rather than inside it, so a new file (an import, a render) never pushes it; marked as part of
-  // the media panel, so the pane's other tabs hide it with the list
-  section.dataset.panel = "media";
-  media.after(section);
+  ).join("")}<p class="fw-fxlib-more">These play live on the track. The other effects render into a clip, from the Inspector.<br><button type="button" class="fw-ibtn" data-open-inspector>Open the Inspector</button></p>`;
+  panel.append(section);
+  section.querySelector("[data-open-inspector]")?.addEventListener("click", () => {
+    if (host.querySelector<HTMLElement>(".fw-pane-inspector")?.hidden) host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-inspector]")?.click();
+  });
 
   let selected: string[] = [];
   host.addEventListener("fw-selection", (e) => {

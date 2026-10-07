@@ -77,6 +77,8 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
           const saved = await saveProject(name, { ...doc, view: currentView(engine) }, base);
           known = { name, revision: saved.revision };
           lastSaved = doc;
+          savedAt = new Date();
+          writeState();
           return `Saved ${name}`;
         } catch (err) {
           if (!(err instanceof RevisionConflict) || attempt > 0) return `Could not save: ${reason(err)}`;
@@ -156,6 +158,8 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       engine.loadDocument(opened.document);
       lastSaved = engine.get("document");
       known = { name: opened.name, revision: opened.revision };
+      savedAt = null;
+      writeState();
       if (nameField && nameField.value !== opened.name) nameField.value = opened.name;
       return `Opened ${opened.name}`;
     });
@@ -163,6 +167,15 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
   // The cloud (ui/cloud.ts) opens a session it brought in through the same path, unsaved-changes guard included
   host.addEventListener("fw-open-project", (e) => open((e as CustomEvent<string>).detail));
   savedSession = () => (known && !unsaved() ? known.name : null);
+  const docState = host.querySelector<HTMLElement>(".fw-doc-state");
+  let savedAt: Date | null = null;
+  const writeState = () => {
+    const doc = engine.get("document");
+    const time = savedAt ? savedAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
+    setText(docState, unsaved() ? (known ? "Unsaved changes" : "Not saved yet") : known ? (time ? `Saved at ${time}` : "No changes since opening") : doc.tracks.length ? "Not saved yet" : "Nothing to save yet");
+  };
+  engine.subscribe("document", writeState);
+  writeState();
 
   // Audacity's home screen of recent projects: the empty timeline lists the latest saved sessions.
   const emptyStage = host.querySelector<HTMLElement>(".fw-empty");
@@ -264,6 +277,8 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       engine.loadDocument(out.document);
       lastSaved = engine.get("document");
       known = { name: out.name, revision: out.revision };
+      savedAt = null;
+      writeState();
       if (nameField && nameField.value !== out.name) nameField.value = out.name;
       return `Opened ${out.name}`;
     });

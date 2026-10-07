@@ -25,7 +25,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
   ruler.className = "fw-ruler";
   // AU-13: the first canvas spans the timeline and takes the clicks (it holds no pixels); the second, only the visible
   // window wide, paints, so a timeline zoomed to single samples (millions of pixels) never needs a canvas that big
-  ruler.innerHTML = `<div class="fw-ruler-corner"></div><canvas class="fw-ruler-canvas" aria-label="Timeline: click to move the playhead"></canvas><canvas class="fw-ruler-canvas fw-ruler-paint" aria-hidden="true"></canvas>`;
+  ruler.innerHTML = `<div class="fw-ruler-corner"><span class="fw-ruler-title">Sections, time</span></div><canvas class="fw-ruler-canvas" aria-label="Timeline: click to move the playhead"></canvas><canvas class="fw-ruler-canvas fw-ruler-paint" aria-hidden="true"></canvas>`;
   stage.insertBefore(ruler, lanes);
   const corner = ruler.firstElementChild as HTMLElement;
   const canvas = ruler.children[1] as HTMLCanvasElement;

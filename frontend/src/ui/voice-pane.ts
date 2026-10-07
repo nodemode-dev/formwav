@@ -224,7 +224,7 @@ export function mountVoicePane(host: HTMLElement, engine: Engine): void {
       t.setAttribute("aria-selected", String(t === tab));
     }
     for (const panel of pane.querySelectorAll<HTMLElement>("[data-panel]")) panel.hidden = panel.dataset.panel !== name;
-    if (name === "voice") void refresh();
+    if (name === "sounds") void refresh();
   });
   host.addEventListener("fw-selection", (e) => {
     selected = (e as CustomEvent<string[]>).detail;

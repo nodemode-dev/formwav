@@ -11,7 +11,8 @@ const length = (m: MediaRef) => {
 
 function fill(row: HTMLElement, m: MediaRef): void {
   setText(row.querySelector(".fw-media-name"), m.name);
-  setText(row.querySelector(".fw-media-meta"), `${m.channels === 1 ? "mono" : m.channels === 2 ? "stereo" : `${m.channels} ch`} · ${(m.sampleRate / 1000).toFixed(1)} kHz · ${length(m)}`);
+  setText(row.querySelector(".fw-media-meta"), `${m.channels === 1 ? "Mono" : m.channels === 2 ? "Stereo" : `${m.channels} channels`}, ${(m.sampleRate / 1000).toFixed(1)} kHz`);
+  setText(row.querySelector(".fw-media-len"), length(m));
   if (row.title !== m.name) row.title = m.name;
 }
 
@@ -31,7 +32,7 @@ export function mountMediaPane(host: HTMLElement, engine: Engine, player?: { pla
   importButton.addEventListener("click", () => host.querySelector<HTMLInputElement>(".fw-file")?.click());
   end?.append(importButton);
 
-  const emptyText = "Imported and recorded audio appears here. Add any file to a new track with its + button.";
+  const emptyText = "Audio you import or record shows up here";
 
   const gen = document.createElement("section");
   gen.className = "fw-insp-section fw-generate";
@@ -53,40 +54,51 @@ export function mountMediaPane(host: HTMLElement, engine: Engine, player?: { pla
   const lib = document.createElement("section");
   lib.className = "fw-insp-section fw-library";
   lib.innerHTML = `<div class="fw-insp-head">Library</div>
-<label class="fw-field fw-field-stack"><span>Sound</span><select data-l="item" aria-label="Library sound"></select></label>
-<div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-l="preview" disabled>Preview</button><button type="button" class="fw-ibtn" data-l="add" disabled>Add on a new track</button></div>
+<ol class="fw-snd-list" aria-label="Library sounds"></ol>
 <audio data-l="audio" preload="none" hidden></audio>
-<p class="fw-empty-note fw-library-note">Synthesised by the engine, so free to use anywhere.</p>
+<p class="fw-empty-note fw-library-note" title="Synthesised by the engine, so free to use anywhere">Click a sound to add it on a new track</p>
 <div class="fw-insp-head fw-cat-head">Recorded sounds and music</div>
-<div class="fw-cat-search"><input type="search" data-c="q" placeholder="Search Wikimedia Commons, e.g. rain or piano" aria-label="Search recorded sounds and music"><button type="button" class="fw-ibtn" data-c="search">Search</button></div>
+<div class="fw-cat-search"><input type="search" data-c="q" placeholder="Search, e.g. rain" aria-label="Search recorded sounds and music on Wikimedia Commons"><button type="button" class="fw-ibtn" data-c="search">Search</button></div>
 <ol class="fw-cat-results" aria-label="Recorded sounds and music"></ol>
-<p class="fw-empty-note fw-cat-note" aria-live="polite">Public domain, CC0 and CC BY only, so free to use anywhere; each keeps its credit.</p>`;
+<p class="fw-empty-note fw-cat-note" aria-live="polite" title="From Wikimedia Commons: public domain, CC0 and CC BY only, so free to use anywhere; each keeps its credit">Free recordings from Wikimedia</p>`;
   gen.after(lib);
-  const libPick = lib.querySelector<HTMLSelectElement>('[data-l="item"]') as HTMLSelectElement;
+  const libList = lib.querySelector<HTMLOListElement>(".fw-snd-list") as HTMLOListElement;
   const libAudio = lib.querySelector<HTMLAudioElement>('[data-l="audio"]') as HTMLAudioElement;
+  const PLAY = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5l12 7-12 7z"></path></svg>`;
   void fetch("/api/library")
     .then((r) => r.json())
     .then((items: { id: string; name: string; category: string; seconds: number }[]) => {
-      const groups = new Map<string, HTMLOptGroupElement>();
+      let group = "";
       for (const it of items) {
-        let group = groups.get(it.category);
-        if (!group) {
-          group = document.createElement("optgroup");
-          group.label = it.category;
-          groups.set(it.category, group);
-          libPick.append(group);
+        if (it.category !== group) {
+          group = it.category;
+          const head = document.createElement("li");
+          head.className = "fw-snd-group";
+          head.textContent = group;
+          libList.append(head);
         }
-        const option = document.createElement("option");
-        option.value = it.id;
-        option.textContent = `${it.name} · ${it.seconds} s`;
-        group.append(option);
+        const [name, ...rest] = it.name.split(", ");
+        const sub = rest.join(", ");
+        const li = document.createElement("li");
+        li.className = "fw-snd-item";
+        li.innerHTML = `<button type="button" class="fw-snd-add" data-l="add"><span class="fw-snd-name"></span><span class="fw-snd-len"></span><span class="fw-snd-sub"></span></button><button type="button" class="fw-snd-play" data-l="preview">${PLAY}</button>`;
+        const add = li.querySelector<HTMLButtonElement>(".fw-snd-add") as HTMLButtonElement;
+        const play = li.querySelector<HTMLButtonElement>(".fw-snd-play") as HTMLButtonElement;
+        add.dataset.id = it.id;
+        play.dataset.id = it.id;
+        add.title = `Add ${it.name} on a new track at the playhead`;
+        play.title = `Preview ${it.name}`;
+        play.setAttribute("aria-label", `Preview ${it.name}`);
+        setText(li.querySelector(".fw-snd-name"), name);
+        setText(li.querySelector(".fw-snd-sub"), sub ? sub[0].toUpperCase() + sub.slice(1) : "");
+        setText(li.querySelector(".fw-snd-len"), `${Math.floor(it.seconds / 60)}:${String(Math.round(it.seconds % 60)).padStart(2, "0")}`);
+        libList.append(li);
       }
-      for (const b of lib.querySelectorAll<HTMLButtonElement>("button")) b.disabled = items.length === 0;
     })
     .catch(() => setText(lib.querySelector(".fw-library-note"), "The library could not be listed; is the engine running?"));
   lib.addEventListener("click", async (e) => {
     const button = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-l]");
-    const id = libPick.value;
+    const id = button?.dataset.id;
     if (!button || !id) return;
     const notice = host.querySelector<HTMLElement>(".fw-notice");
     if (button.dataset.l === "preview") {
@@ -116,7 +128,7 @@ export function mountMediaPane(host: HTMLElement, engine: Engine, player?: { pla
   const catSearch = async () => {
     const q = (lib.querySelector<HTMLInputElement>('[data-c="q"]')?.value ?? "").trim();
     if (!q) return;
-    setText(catNote, `Searching Wikimedia Commons for ${q}...`);
+    setText(catNote, `Searching for ${q}...`);
     try {
       const res = await fetch(`/api/library/catalogue/search?q=${encodeURIComponent(q)}&limit=20`);
       const body = (await res.json().catch(() => ({}))) as { detail?: unknown; results?: CatItem[] };
@@ -133,7 +145,7 @@ export function mountMediaPane(host: HTMLElement, engine: Engine, player?: { pla
           return li;
         }),
       );
-      setText(catNote, catItems.length ? `${catItems.length} royalty-free ${catItems.length === 1 ? "recording" : "recordings"} for ${q}; each keeps its credit.` : `Nothing royalty-free found for ${q}.`);
+      setText(catNote, catItems.length ? `${catItems.length} free ${catItems.length === 1 ? "recording" : "recordings"} for ${q}, credits kept` : `Nothing free to use found for ${q}`);
     } catch (err) {
       setText(catNote, `The catalogue could not be searched: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -225,7 +237,10 @@ export function mountMediaPane(host: HTMLElement, engine: Engine, player?: { pla
       create: (m) => {
         const row = document.createElement("div");
         row.className = "fw-media-item";
-        row.innerHTML = `<span class="fw-media-name"></span><span class="fw-media-meta"></span><button type="button" class="fw-icon-btn fw-media-place" aria-label="Place on the selected track" title="Place on the selected clip's track at the playhead">${fcIcon("plus")}</button><button type="button" class="fw-icon-btn fw-media-add" aria-label="Add to a new track" title="Add to a new track at the playhead">${fcIcon("addToTrack")}</button>`;
+        row.tabIndex = 0;
+        row.setAttribute("role", "button");
+        row.draggable = true;
+        row.innerHTML = `<span class="fw-media-name"></span><span class="fw-media-meta"></span><span class="fw-media-len"></span><button type="button" class="fw-icon-btn fw-media-place" aria-label="Place on the selected track" title="Place on the selected clip's track at the playhead">${fcIcon("plus")}</button><button type="button" class="fw-icon-btn fw-media-add" aria-label="Add to a new track" title="Add to a new track at the playhead">${fcIcon("addToTrack")}</button>`;
         fill(row, m);
         return row;
       },

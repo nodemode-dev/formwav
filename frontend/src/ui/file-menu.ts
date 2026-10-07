@@ -8,12 +8,12 @@ export function mountFileMenu(host: HTMLElement): void {
   for (const root of host.querySelectorAll<HTMLElement>(".fw-menu")) mountMenu(root);
 }
 
-/** One menu of the menu bar: File, Edit, View, Transport. */
-function mountMenu(root: HTMLElement): void {
+/** One menu of the menu bar (File, Edit, View, Transport, Settings) or of a panel (the editor's More). */
+export function mountMenu(root: HTMLElement): void {
   const button = root?.querySelector<HTMLButtonElement>(".fw-menu-btn");
   const pop = root?.querySelector<HTMLElement>(".fw-menu-pop");
   if (!root || !button || !pop) return;
-  const items = () => [...pop.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')];
+  const items = () => [...pop.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)')];
   const setOpen = (open: boolean, focusFirst = false) => {
     if (pop.hidden === !open) return;
     pop.hidden = !open;
@@ -28,7 +28,7 @@ function mountMenu(root: HTMLElement): void {
     }
   });
   pop.addEventListener("click", (e) => {
-    const item = (e.target as HTMLElement).closest<HTMLElement>('[role="menuitem"]');
+    const item = (e.target as HTMLElement).closest<HTMLElement>('[role^="menuitem"]');
     if (!item) return;
     if (item.dataset.proxy) document.querySelector<HTMLElement>(item.dataset.proxy)?.click();
     window.setTimeout(() => setOpen(false), 0);

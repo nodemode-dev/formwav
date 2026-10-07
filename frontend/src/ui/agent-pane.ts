@@ -1,8 +1,9 @@
 import { rangesOf, sessionWords, type MediaWord, type SessionWord } from "./transcript-pane";
-import type { Engine, MediaRef, Track } from "../engine";
+import type { Engine, HistoryEntry, MediaRef, Track } from "../engine";
 import type { TrackFx } from "../engine/document";
-import { setText } from "../vendor/nodemode/dom-stable";
+import { patchList, setText } from "../vendor/nodemode/dom-stable";
 import { KINDS } from "./editor-tabs";
+import { PANEL_ICONS } from "./shell";
 
 /** The realtime effects a track's chain can hold, with each parameter's range, for the agent's tool description. */
 const KIND_SUMMARY = Object.entries(KINDS)
@@ -42,21 +43,23 @@ const SYSTEM =
   "are done, say in one or two sentences what you changed.";
 
 export function mountAgent(host: HTMLElement, engine: Engine): void {
-  const before = host.querySelector<HTMLButtonElement>('[data-action="terminal"]') ?? host.querySelector<HTMLButtonElement>('[data-action="export"]');
+  const toggles = host.querySelector<HTMLElement>(".fw-panel-toggles");
   const button = document.createElement("button");
   button.type = "button";
   button.className = "fw-ibtn";
   button.dataset.action = "agent";
-  button.title = "Ask the assistant to edit the open session";
+  button.title = "Show or hide the agent";
+  button.setAttribute("aria-label", "Show or hide the agent");
   button.setAttribute("aria-pressed", "false");
-  button.textContent = "Agent";
-  before?.before(button);
+  button.innerHTML = PANEL_ICONS.agent;
+  if (toggles) toggles.append(button);
+  else host.querySelector('[data-action="export"]')?.before(button);
 
   const dock = document.createElement("section");
   dock.className = "fw-term fw-agent";
   dock.hidden = !host.querySelector(".fw-agent-anchor");
   dock.setAttribute("aria-label", "Agent");
-  dock.innerHTML = `<div class="fw-term-head"><span class="fw-term-title">Agent</span><span class="fw-term-state" aria-live="polite"></span><button type="button" class="fw-ibtn" data-agent="undo" disabled>Undo run</button><button type="button" class="fw-ibtn" data-agent="hide">Hide</button></div><div class="fw-agent-body"><ol class="fw-agent-log" aria-live="polite"></ol><div class="fw-agent-suggest" role="group" aria-label="Suggestions"><button type="button" class="fw-agent-chip" data-suggest="Clean up the dialogue on the selected track">Clean up the dialogue</button><button type="button" class="fw-agent-chip" data-suggest="Measure each track and set their gains so the voices sit evenly">Even out the voices</button><button type="button" class="fw-agent-chip" data-suggest="Make the session ready for a podcast at -16 LUFS">Podcast-ready loudness</button></div><div class="fw-agent-ask"><textarea rows="2" placeholder="Tell the assistant what to do with this session" aria-label="Instruction for the assistant"></textarea><button type="button" class="fw-ibtn fw-agent-run" data-agent="run">Run</button><button type="button" class="fw-ibtn" data-agent="stop" disabled>Stop</button></div></div>`;
+  dock.innerHTML = `<div class="fw-term-head"><span class="fw-agent-tabs" role="tablist" aria-label="Agent and history"><button type="button" role="tab" class="fw-agent-tab" data-agent-tab="agent" data-label="Agent" aria-selected="true">Agent</button><button type="button" role="tab" class="fw-agent-tab" data-agent-tab="history" data-label="History" aria-selected="false" title="Every edit in this session, yours and the agent's; click one to go back to it">History</button></span><span class="fw-term-state" aria-live="polite"></span><span class="fw-agent-who">Claude</span><button type="button" class="fw-ibtn fw-agent-quiet" data-agent="undo" disabled title="Undo every change the last run made">Undo run</button><button type="button" class="fw-ibtn fw-agent-quiet" data-agent="new" title="Clear the conversation and start again">New</button></div><div class="fw-agent-body"><ol class="fw-agent-log" aria-live="polite"></ol><div class="fw-agent-foot"><div class="fw-agent-suggest" role="group" aria-label="Suggestions"><button type="button" class="fw-agent-chip" data-suggest="Clean up the dialogue on the selected track">Clean up the dialogue</button><button type="button" class="fw-agent-chip" data-suggest="Measure each track and set their gains so the voices sit evenly">Even out the voices</button><button type="button" class="fw-agent-chip" data-suggest="Make the session ready for a podcast at -16 LUFS">Podcast-ready loudness</button></div><span class="fw-agent-context" hidden></span><label class="fw-agent-ask"><textarea rows="2" placeholder="Ask, or describe how it should sound" aria-label="Message the agent"></textarea><button type="button" class="fw-ibtn fw-agent-run" data-agent="run">Send</button><button type="button" class="fw-ibtn fw-agent-stop" data-agent="stop" disabled>Stop</button></label><span class="fw-agent-keys" title="Enter sends, Shift Enter adds a line, Cmd or Ctrl / asks from anywhere">Enter sends. Cmd / asks from anywhere.</span></div></div><div class="fw-agent-history" hidden><ol class="fw-history-list" aria-label="Edits in this session"></ol><p class="fw-history-empty">Each edit, yours or the agent's, is listed here. Click one to go back to it.</p></div>`;
   const transport = host.querySelector<HTMLElement>(".fw-agent-anchor") ?? host.querySelector<HTMLElement>(".fw-dock-anchor");
   if (transport) transport.before(dock);
   else host.append(dock);
@@ -105,7 +108,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   const postJson = (url: string, body: unknown) => engineJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const at = (seconds: unknown) => (seconds === undefined || seconds === null ? engine.get("transport").positionSamples : samples(num(seconds, "at_seconds", 0, 86400)));
   const place = (media: MediaRef, where: number) => {
-    engine.dispatch({ type: "import-media", media, at: where });
+    engine.dispatch({ type: "import-media", media, at: where, by: "agent" });
     const t = engine.get("document").tracks.find((x) => x.clips.some((c) => c.mediaId === media.id && c.start === where));
     const c = t?.clips.find((x) => x.mediaId === media.id && x.start === where);
     return { track_id: t?.id, clip_id: c?.id, name: media.name, seconds: Math.round((media.frames / media.sampleRate) * 1000) / 1000 };
@@ -518,6 +521,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
     control("stop").disabled = false;
     control("undo").disabled = true;
     const depth0 = engine.get("history").undoDepth;
+    engine.setAuthor("agent");
     entry("you", instruction);
     ask.value = "";
     const messages: { role: string; content: unknown }[] = [{ role: "user", content: instruction }];
@@ -552,6 +556,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
       entry("failed", message);
       setText(state, "");
     } finally {
+      engine.setAuthor("you");
       runUndo = engine.get("history").undoDepth - depth0;
       control("undo").disabled = runUndo <= 0;
       control("run").disabled = false;
@@ -573,7 +578,13 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   dock.addEventListener("click", (e) => {
     const act = (e.target as HTMLElement).closest<HTMLElement>("[data-agent]")?.dataset.agent;
     if (act === "hide") hide();
-    else if (act === "run") void run();
+    else if (act === "new" && !running) {
+      log.replaceChildren();
+      runUndo = 0;
+      control("undo").disabled = true;
+      setText(state, "");
+      ask.focus();
+    } else if (act === "run") void run();
     else if (act === "stop") stopAsked = true;
     else if (act === "undo" && runUndo > 0) {
       for (let k = 0; k < runUndo; k++) engine.undo();
@@ -583,9 +594,106 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
     }
   });
   ask.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       void run();
     }
   });
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "/" || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+    e.preventDefault();
+    if (dock.hidden) open();
+    else ask.focus();
+  });
+  host.addEventListener("fw-ask-agent", (e) => {
+    const text = (e as CustomEvent<string>).detail ?? "";
+    if (dock.hidden) open();
+    if (text && !ask.value.trim()) ask.value = text;
+    ask.focus();
+    ask.setSelectionRange(ask.value.length, ask.value.length);
+  });
+  const context = dock.querySelector<HTMLElement>(".fw-agent-context");
+  const describe = (ids: string[]) => {
+    const doc = engine.get("document");
+    for (const t of doc.tracks) {
+      const c = t.clips.find((x) => x.id === ids[0]);
+      if (c) return `Looking at ${t.name}, ${(doc.media[c.mediaId]?.name ?? "a clip").replace(/\.[^.]+$/, "")}`;
+    }
+    return "";
+  };
+  let looking: string[] = [];
+  const renderContext = () => {
+    const text = describe(looking);
+    setText(context, text);
+    if (context && context.hidden !== !text) context.hidden = !text;
+  };
+  host.addEventListener("fw-selection", (e) => {
+    looking = (e as CustomEvent<string[]>).detail ?? [];
+    renderContext();
+  });
+  engine.subscribe("document", renderContext);
+
+  // History: the session's edits oldest first, each with who made it; a click undoes or redoes to that point
+  const body = dock.querySelector<HTMLElement>(".fw-agent-body") as HTMLElement;
+  const historyView = dock.querySelector<HTMLElement>(".fw-agent-history") as HTMLElement;
+  const historyList = dock.querySelector<HTMLOListElement>(".fw-history-list") as HTMLOListElement;
+  const historyEmpty = dock.querySelector<HTMLElement>(".fw-history-empty");
+  interface Row {
+    key: string;
+    label: string;
+    by: HistoryEntry["by"] | null;
+    step: number;
+  }
+  const renderHistory = () => {
+    if (historyView.hidden) return;
+    const { done, undone } = engine.historyEntries();
+    const rows: Row[] = [
+      { key: "start", label: "Session start", by: null, step: 0 },
+      ...done.map((e, i) => ({ key: String(e.id), label: e.label, by: e.by, step: i + 1 })),
+      ...[...undone].reverse().map((e, j) => ({ key: String(e.id), label: e.label, by: e.by, step: done.length + 1 + j })),
+    ];
+    const now = done.length;
+    const fill = (li: HTMLElement, r: Row) => {
+      const btn = li.firstElementChild as HTMLElement;
+      if (btn.dataset.step !== String(r.step)) btn.dataset.step = String(r.step);
+      setText(li.querySelector(".fw-history-label"), r.label);
+      const by = li.querySelector<HTMLElement>(".fw-history-by");
+      setText(by, r.by === "agent" ? "Claude" : r.by === "you" ? "you" : "");
+      if (by && by.dataset.by !== (r.by ?? "")) by.dataset.by = r.by ?? "";
+      const state = r.step === now ? "now" : r.step > now ? "undone" : "done";
+      if (li.dataset.state !== state) li.dataset.state = state;
+      if (state === "now") btn.setAttribute("aria-current", "step");
+      else btn.removeAttribute("aria-current");
+    };
+    patchList(historyList, rows, {
+      key: (r) => r.key,
+      create: (r) => {
+        const li = document.createElement("li");
+        li.className = "fw-history-row";
+        li.innerHTML = `<button type="button" class="fw-history-btn"><span class="fw-history-label"></span><span class="fw-history-by"></span></button>`;
+        fill(li, r);
+        return li;
+      },
+      update: fill,
+    });
+    if (historyEmpty && historyEmpty.hidden !== rows.length > 1) historyEmpty.hidden = rows.length > 1;
+  };
+  historyList.addEventListener("click", (e) => {
+    const step = Number((e.target as HTMLElement).closest<HTMLElement>(".fw-history-btn")?.dataset.step);
+    if (!Number.isFinite(step)) return;
+    const now = engine.historyEntries().done.length;
+    for (let k = now; k > step; k--) engine.undo();
+    for (let k = now; k < step; k++) engine.redo();
+  });
+  dock.querySelector(".fw-agent-tabs")?.addEventListener("click", (e) => {
+    const tab = (e.target as HTMLElement).closest<HTMLElement>("[data-agent-tab]");
+    if (!tab) return;
+    const showHistory = tab.dataset.agentTab === "history";
+    for (const t of dock.querySelectorAll<HTMLElement>("[data-agent-tab]")) t.setAttribute("aria-selected", String(t === tab));
+    if (body.hidden !== showHistory) body.hidden = showHistory;
+    if (historyView.hidden !== !showHistory) historyView.hidden = !showHistory;
+    renderHistory();
+    if (showHistory) historyList.lastElementChild?.scrollIntoView({ block: "nearest" });
+  });
+  engine.subscribe("history", renderHistory);
 }

@@ -1,5 +1,5 @@
 import type { Engine } from "../engine";
-import type { MediaRef, MidiFx, NoteEvent } from "../engine/document";
+import { cleanSynth, DEFAULT_SYNTH, type MediaRef, type MidiFx, type NoteEvent, type SynthPatch } from "../engine/document";
 
 /**
  * A note clip's edited notes rendered again by the built-in instrument (POST /api/midi/render) and swapped in together
@@ -52,7 +52,9 @@ export function applyMidiFx(notes: readonly NoteEvent[], fx: readonly MidiFx[] |
   return out;
 }
 
-export async function renderNotes(engine: Engine, trackId: string, clipId: string, notes: readonly NoteEvent[]): Promise<void> {
+/** A note clip's notes rendered by its track's instrument (the built-in synth through `synth`, the session's patch
+ *  unless one is given), as new media; nothing in the session changes. */
+export async function renderNoteMedia(engine: Engine, trackId: string, clipId: string, notes: readonly NoteEvent[], synth?: SynthPatch): Promise<MediaRef> {
   const doc = engine.get("document");
   const track = doc.tracks.find((t) => t.id === trackId);
   const clip = track?.clips.find((c) => c.id === clipId);
@@ -63,9 +65,11 @@ export async function renderNotes(engine: Engine, trackId: string, clipId: strin
   const heard = applyMidiFx(notes, track?.midiFx, rate, doc.tempo?.bpm ?? 120);
   // PT-15: through the track's instrument: a sampler (its sample's own shape, so a near-flat envelope) or a plugin
   const inst = track?.instrument;
+  const own = cleanSynth(synth ?? doc.synth ?? DEFAULT_SYNTH);
   const body = {
     ...(inst?.kind === "sampler" ? { sampler: { media: inst.media, root: inst.root }, patch: { wave: "sine", attack: 0.002, decay: 0, sustain: 1, release: 0.1, gain: 1 } } : {}),
     ...(inst?.kind === "plugin" ? { plugin: inst.id } : {}),
+    ...(!inst ? { patch: { wave: own.wave, attack: own.attack, decay: own.decay, sustain: own.sustain, release: own.release, gain: 0.25, cutoff: own.cutoff, resonance: own.resonance } } : {}),
     notes: heard.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })),
     rate,
     name: (media?.name ?? "notes").replace(/\.wav$/i, ""),
@@ -73,5 +77,10 @@ export async function renderNotes(engine: Engine, trackId: string, clipId: strin
   const res = await fetch("/api/midi/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const out = (await res.json().catch(() => ({}))) as Partial<MediaRef> & { detail?: unknown };
   if (!res.ok || !out.id) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
-  engine.dispatch({ type: "set-clip-notes", trackId, clipId, notes, media: out as MediaRef });
+  return out as MediaRef;
+}
+
+export async function renderNotes(engine: Engine, trackId: string, clipId: string, notes: readonly NoteEvent[]): Promise<void> {
+  const media = await renderNoteMedia(engine, trackId, clipId, notes);
+  engine.dispatch({ type: "set-clip-notes", trackId, clipId, notes, media });
 }

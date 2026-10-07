@@ -35,6 +35,7 @@ interface CoreExports {
   fw_set_surround_format(player: number, format: number): void;
   fw_take_peaks_51(player: number, out: number): void;
   fw_live_note(player: number, pitch: number, velocity: number): void;
+  fw_live_patch(player: number, wave: number, attack: number, decay: number, sustain: number, release: number, gain: number, cutoff: number, resonance: number): void;
   fw_live_all_off(player: number): void;
   fw_live_sounding(player: number): number;
   fw_render_idle(player: number, left: number, right: number, frames: number): void;
@@ -94,6 +95,7 @@ export type WorkletMessage =
   | { type: "stop" }
   | { type: "seek"; position: number }
   | { type: "live-note"; pitch: number; velocity: number }
+  | { type: "live-patch"; wave: number; attack: number; decay: number; sustain: number; release: number; gain: number; cutoff: number; resonance: number }
   | { type: "live-all-off" }
   | { type: "loop"; start: number; end: number };
 
@@ -297,6 +299,9 @@ class PlayerProcessor extends AudioWorkletProcessor {
       case "live-note":
         // AU-37: a note on the live instrument (a MIDI input, the on-screen keys), heard playing or stopped
         core.fw_live_note(this.player, msg.pitch, msg.velocity);
+        break;
+      case "live-patch":
+        core.fw_live_patch(this.player, msg.wave, msg.attack, msg.decay, msg.sustain, msg.release, msg.gain, msg.cutoff, msg.resonance);
         break;
       case "live-all-off":
         core.fw_live_all_off(this.player);

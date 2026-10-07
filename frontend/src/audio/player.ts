@@ -1,5 +1,5 @@
 import type { Engine, SessionDoc } from "../engine";
-import { FADE_SHAPES, type TrackFx } from "../engine/document";
+import { cleanSynth, DEFAULT_SYNTH, FADE_SHAPES, type SynthPatch, type TrackFx } from "../engine/document";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
 import { NativeNode, nativeChoice } from "./native-node";
@@ -537,9 +537,28 @@ export class Player {
 
   constructor(private readonly engine: Engine) {
     engine.subscribe("document", (doc) => {
-      if (this.node) this.sendPlan(this.node, doc);
+      if (this.node) {
+        this.sendPlan(this.node, doc);
+        this.sendPatch(this.node, doc.synth ?? DEFAULT_SYNTH);
+      }
       this.prefetch(doc);
     });
+  }
+
+  private patchSent = "";
+
+  private sendPatch(node: AudioWorkletNode, patch: SynthPatch): void {
+    const p = cleanSynth(patch);
+    const key = JSON.stringify(p);
+    if (key === this.patchSent) return;
+    this.patchSent = key;
+    send(node, { type: "live-patch", wave: ["sine", "triangle", "saw", "square"].indexOf(p.wave), attack: p.attack, decay: p.decay, sustain: p.sustain, release: p.release, gain: 0.25, cutoff: p.cutoff, resonance: p.resonance });
+  }
+
+  /** The live instrument heard through a patch before it is committed (a knob being dragged); the session's own patch
+   *  returns with the next document change or a call with it. */
+  async setLivePatch(patch: SynthPatch): Promise<void> {
+    this.sendPatch(await this.ensure(), patch);
   }
 
   private lastIntegrated = Number.NEGATIVE_INFINITY;
@@ -764,6 +783,8 @@ export class Player {
     this.route();
     if (ctx.sampleRate !== rate) send(node, { type: "rate-ratio", value: rate / ctx.sampleRate });
     if (this.speed !== 1) send(node, { type: "speed", value: this.speed });
+    this.patchSent = "";
+    this.sendPatch(node, this.engine.get("document").synth ?? DEFAULT_SYNTH);
     return node;
   }
 

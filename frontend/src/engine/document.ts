@@ -107,6 +107,8 @@ export function computeRestore(before: SessionDoc, after: SessionDoc): RestorePa
 export interface Clip {
   id: string;
   mediaId: string;
+  /** Who made the clip: "agent" when the in-app agent placed it; absent, the person editing. */
+  by?: "agent";
   /** PT-09, warp markers: the original the clip is rendered from (its media and the span it covered, in samples) and
    *  each marker as a source position in that span (src) and where it now sits in the clip (dst). */
   warp?: { source: string; sourceIn: number; sourceLength: number; markers: { src: number; dst: number }[] };
@@ -284,6 +286,38 @@ export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | 
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
 /** PT-15: a note track's instrument beside the built-in synth. */
 export type Instrument = { kind: "sampler"; media: string; root: number } | { kind: "plugin"; id: string; name: string };
+
+/** The built-in synth's patch: the oscillator's wave, the envelope in seconds (sustain 0 to 1) and the low-pass's
+ *  cutoff in Hz (0 open) and resonance (a Q). */
+export interface SynthPatch {
+  name: string;
+  wave: "sine" | "triangle" | "saw" | "square";
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
+  cutoff: number;
+  resonance: number;
+}
+
+export const DEFAULT_SYNTH: SynthPatch = { name: "Soft triangle", wave: "triangle", attack: 0.005, decay: 0.15, sustain: 0.7, release: 0.2, cutoff: 0, resonance: 0.707 };
+
+/** A patch held to the core's ranges. */
+export function cleanSynth(p: Partial<SynthPatch>): SynthPatch {
+  const n = (v: unknown, lo: number, hi: number, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
+  const d = DEFAULT_SYNTH;
+  const cutoff = n(p.cutoff, 0, 20000, d.cutoff);
+  return {
+    name: typeof p.name === "string" && p.name.trim() ? p.name.trim().slice(0, 40) : d.name,
+    wave: p.wave === "sine" || p.wave === "saw" || p.wave === "square" ? p.wave : "triangle",
+    attack: n(p.attack, 0.001, 5, d.attack),
+    decay: n(p.decay, 0, 5, d.decay),
+    sustain: n(p.sustain, 0, 1, d.sustain),
+    release: n(p.release, 0.01, 10, d.release),
+    cutoff: cutoff > 0 && cutoff < 40 ? 40 : cutoff,
+    resonance: n(p.resonance, 0.5, 12, d.resonance),
+  };
+}
 
 export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocity"; scale: number; offset: number } | { kind: "quantize"; beats: number; strength: number };
 
@@ -496,6 +530,9 @@ export interface SessionDoc {
   snap?: { grid: boolean; bars: boolean };
   /** The session's musical key and Camelot code, as detected (services/key.py). */
   key?: { name: string; camelot: string };
+  /** The built-in synth's patch: what the live instrument plays and what renders every note track without an
+   *  instrument of its own; absent is the core's default (a soft triangle, unfiltered). */
+  synth?: SynthPatch;
   /** Audacity's time track: playback speed over session time, linear between points, held outside them (sample position, factor 0.25 to 4). */
   timeTrack?: readonly TimePoint[];
   /** AU-36: speed interpolated logarithmically between the time track's points (a steady ratio), not linearly. */
@@ -553,7 +590,9 @@ export interface SessionView {
 }
 
 export type Command =
-  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[]; stem?: { of: string; part: string } }
+  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[]; stem?: { of: string; part: string }; by?: "agent" }
+  | { type: "add-track"; name?: string; channels?: number }
+  | { type: "set-synth"; patch: Partial<SynthPatch> }
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
   | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
   | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
@@ -1180,6 +1219,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           ? { notes: cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))) })) }
           : {}),
         gainDb: 0,
+        ...(cmd.by === "agent" ? { by: "agent" as const } : {}),
       };
       const media = { ...doc.media, [cmd.media.id]: cmd.media };
       const target = cmd.trackId ? doc.tracks.find((t) => t.id === cmd.trackId) : undefined;
@@ -1201,6 +1241,17 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         ...(cmd.stem ? { stem: { of: cmd.stem.of, part: cmd.stem.part } } : {}),
       };
       return { ...doc, sampleRate, media, tracks: [...doc.tracks, track] };
+    }
+    case "set-synth": {
+      const next = cleanSynth({ ...(doc.synth ?? DEFAULT_SYNTH), ...cmd.patch });
+      const was = doc.synth ?? DEFAULT_SYNTH;
+      if ((Object.keys(next) as (keyof SynthPatch)[]).every((k) => next[k] === was[k])) return doc;
+      return { ...doc, synth: next };
+    }
+    case "add-track": {
+      const name = (cmd.name ?? "").trim().slice(0, 80) || `Track ${doc.tracks.length + 1}`;
+      const track: Track = { id: newId(), name, channels: cmd.channels === 1 ? 1 : 2, gainDb: 0, mute: false, solo: false, clips: [] };
+      return { ...doc, tracks: [...doc.tracks, track] };
     }
     case "remove-track": {
       const tracks = doc.tracks.filter((t) => t.id !== cmd.trackId);

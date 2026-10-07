@@ -1,14 +1,18 @@
 import { applyCommand, emptyDocument, followClips, type Command, type Selection, type SessionDoc, type SessionView } from "./document";
 import { History, type HistoryState } from "./history";
+import { describeCommand, type HistoryEntry } from "./describe";
 
 export type { Clip, Command, FrequencyBand, MediaRef, Marker, Selection, SessionDoc, Track } from "./document";
 export type { HistoryState } from "./history";
+export type { HistoryEntry } from "./describe";
 
 export type LinkStatus = "pending" | "ready" | "offline";
 
 export interface LinkState {
   status: LinkStatus;
   engineVersion: string | null;
+  /** The audio core's version as the engine loaded it; one older than the engine needs formwav_oc_install again. */
+  coreVersion?: string | null;
 }
 
 export interface TransportState {
@@ -55,6 +59,20 @@ export class Engine {
   };
 
   private readonly past = new History<SessionDoc>(HISTORY_LIMIT);
+  /** The History tab's words for the undo stack (done) and the redo stack (undone), moved with the documents. */
+  private done: HistoryEntry[] = [];
+  private undone: HistoryEntry[] = [];
+  private nextEntry = 1;
+  private author: HistoryEntry["by"] = "you";
+
+  /** Who the next edits belong to: the in-app agent sets itself while it runs. */
+  setAuthor(by: HistoryEntry["by"]): void {
+    this.author = by;
+  }
+
+  historyEntries(): { done: readonly HistoryEntry[]; undone: readonly HistoryEntry[] } {
+    return { done: this.done, undone: this.undone };
+  }
 
   get<E extends EngineEvent>(event: E): EngineState[E] {
     return this.state[event];
@@ -77,6 +95,9 @@ export class Engine {
 
   setShareHooks(hooks: { dispatch: (c: Command) => boolean; undo: () => boolean; redo: () => boolean } | null): void {
     this.shareHooks = hooks;
+    this.past.clear();
+    this.done = [];
+    this.undone = [];
   }
 
   /** While shared, the Edit menu follows the share's own undo (each editor's own edits), not the local history. */
@@ -104,6 +125,9 @@ export class Engine {
     const next = followClips(current, applyCommand(current, command, () => crypto.randomUUID()));
     if (next === current) return false;
     this.past.record(current);
+    this.done.push({ id: this.nextEntry++, label: describeCommand(command, current), by: this.author, at: Date.now() });
+    if (this.done.length > HISTORY_LIMIT) this.done.shift();
+    this.undone = [];
     this.commit(next);
     return true;
   }
@@ -112,6 +136,8 @@ export class Engine {
     if (this.shareHooks) return this.shareHooks.undo();
     const previous = this.past.undo(this.state.document);
     if (previous === null) return false;
+    const entry = this.done.pop();
+    if (entry) this.undone.push(entry);
     this.commit(previous);
     return true;
   }
@@ -120,6 +146,8 @@ export class Engine {
     if (this.shareHooks) return this.shareHooks.redo();
     const next = this.past.redo(this.state.document);
     if (next === null) return false;
+    const entry = this.undone.pop();
+    if (entry) this.done.push(entry);
     this.commit(next);
     return true;
   }
@@ -137,6 +165,8 @@ export class Engine {
 
   loadDocument(doc: SessionDoc): void {
     this.past.clear();
+    this.done = [];
+    this.undone = [];
     this.update("document", doc);
     this.update("history", this.past.state());
     this.setTransport({ playing: false, recording: false, positionSamples: 0, sampleRate: doc.sampleRate });
