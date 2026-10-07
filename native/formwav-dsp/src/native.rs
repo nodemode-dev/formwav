@@ -77,6 +77,8 @@ struct MixBus {
     pan: f32,
     #[serde(default)]
     stages: Option<Vec<f32>>,
+    #[serde(default, rename = "fxAuto")]
+    fx_auto: Option<Vec<FxAuto>>,
 }
 
 #[derive(Deserialize)]
@@ -90,6 +92,9 @@ struct Mix {
     /// The processor stages' specs, which a stage [20, k, ...] names by k.
     #[serde(default)]
     processors: Vec<String>,
+    /// The law for a mono source's pan (Player::set_pan_law).
+    #[serde(default)]
+    pan_law: u8,
     #[serde(default)]
     master_db: f64,
     #[serde(default)]
@@ -295,7 +300,14 @@ impl NativeOutput {
                         p.add_bus_stage(st[0] as u8, st[1], st[2], st[3], st[4], st[5]);
                     }
                 }
+                for a in b.fx_auto.as_deref().unwrap_or(&[]) {
+                    let env = envelope(p, &Some(a.points.clone()), false);
+                    if env > 0 {
+                        p.add_bus_fx_auto(a.stage, a.param, env);
+                    }
+                }
             }
+            p.set_pan_law(mix.pan_law);
             p.clear_master_fx();
             for st in mix.master_fx.as_deref().unwrap_or(&[]).chunks_exact(6) {
                 if st[0] as u8 == crate::fx::PROCESSOR {

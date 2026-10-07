@@ -82,6 +82,18 @@ pub fn pan_gains(pan: f32) -> (f32, f32) {
     (left, right)
 }
 
+/// A mono source's pan by law: 1 constant power (cosine and sine, -3 dB at the centre), 2 the geometric mean of
+/// constant power and linear (-4.5 dB), 3 linear (-6 dB).
+pub fn law_gains(pan: f32, law: u8) -> (f32, f32) {
+    let p = (pan.clamp(-1.0, 1.0) + 1.0) * 0.5;
+    let (c, s) = ((p * std::f32::consts::FRAC_PI_2).cos(), (p * std::f32::consts::FRAC_PI_2).sin());
+    match law {
+        1 => (c, s),
+        2 => ((c * (1.0 - p)).sqrt(), (s * p).sqrt()),
+        _ => (1.0 - p, p),
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Player {
     sources: HashMap<u32, AudioBuffer>,
@@ -120,6 +132,11 @@ pub struct Player {
     /// Each bus's chain, parallel to `buses`, run on the bus's sum before its gain and pan: a track holding a
     /// nonlinear stage (a compressor) plays through a bus of its own so its whole chain sees the track's sum.
     bus_fx: Vec<Vec<crate::fx::Stage>>,
+    /// Each bus stage's design and its filter automation, parallel to `bus_fx`, as `clip_fx_spec` and `clip_fx_auto`.
+    bus_fx_spec: Vec<Vec<(u8, f32, f32, f32)>>,
+    bus_fx_auto: Vec<Vec<(usize, [u32; 3])>>,
+    /// The law for a mono source's pan: 0 the balance every session had, 1 to 3 the -3, -4.5 and -6 dB laws.
+    pan_law: u8,
     /// RX-16: whether each bus's chain has heard the samples its latency reads ahead (cleared on a seek, a loop's wrap
     /// and a new stage), and the scratch it is primed through, kept between calls.
     bus_primed: Vec<bool>,
@@ -336,6 +353,9 @@ impl Player {
             return false;
         };
         chain.push(s);
+        if let Some(specs) = self.bus_fx_spec.last_mut() {
+            specs.push((kind, a, b, c));
+        }
         // RX-16: a chain that changed hears its read-ahead again before it next plays
         self.bus_primed.clear();
         true
@@ -358,8 +378,59 @@ impl Player {
             return false;
         };
         chain.push(s);
+        if let Some(specs) = self.bus_fx_spec.last_mut() {
+            specs.push((crate::fx::PROCESSOR, 0.0, 0.0, 0.0));
+        }
         self.bus_primed.clear();
         true
+    }
+
+    /// Automates one parameter (0 frequency, 1 gain dB, 2 Q) of filter stage `stage` of the most recently added bus,
+    /// as `add_clip_fx_auto` does for a clip; false with no such bus, filter stage, parameter or envelope.
+    pub fn add_bus_fx_auto(&mut self, stage: usize, param: u8, envelope: u32) -> bool {
+        let (Some(specs), Some(autos)) = (self.bus_fx_spec.last(), self.bus_fx_auto.last_mut()) else {
+            return false;
+        };
+        let filter = specs.get(stage).is_some_and(|s| (crate::fx::HIGHPASS..=crate::fx::HIGH_SHELF).contains(&s.0));
+        if !filter || param > 2 || envelope == 0 || envelope as usize > self.envelopes.len() {
+            return false;
+        }
+        match autos.iter_mut().find(|(s, _)| *s == stage) {
+            Some((_, envs)) => envs[param as usize] = envelope,
+            None => {
+                let mut envs = [0u32; 3];
+                envs[param as usize] = envelope;
+                autos.push((stage, envs));
+            }
+        }
+        true
+    }
+
+    pub fn set_pan_law(&mut self, law: u8) {
+        self.pan_law = if law <= 3 { law } else { 0 };
+    }
+
+    /// A clip's pan gains: a mono source by the session's law, a stereo one by the balance.
+    fn clip_pan(&self, pan: f32, mono: bool) -> (f32, f32) {
+        if mono && (1..=3).contains(&self.pan_law) {
+            law_gains(pan, self.pan_law)
+        } else {
+            pan_gains(pan)
+        }
+    }
+
+    /// The gain reduction of each processor stage, in dB, the buses' in order and then the master's; how many.
+    pub fn take_reductions(&self, out: &mut [f32]) -> usize {
+        let mut n = 0;
+        for s in self.bus_fx.iter().flatten().chain(self.master_fx.iter()) {
+            if let crate::fx::Stage::Processor(p) = s {
+                if let Some(slot) = out.get_mut(n) {
+                    *slot = p.gain_reduction_db();
+                }
+                n += 1;
+            }
+        }
+        n
     }
 
     fn reset_fx(&mut self) {
@@ -741,11 +812,47 @@ impl Player {
     pub fn clear_buses(&mut self) {
         self.buses.clear();
         self.bus_fx.clear();
+        self.bus_fx_spec.clear();
+        self.bus_fx_auto.clear();
     }
 
     pub fn add_bus(&mut self, bus: Bus) {
         self.buses.push(bus);
         self.bus_fx.push(Vec::new());
+        self.bus_fx_spec.push(Vec::new());
+        self.bus_fx_auto.push(Vec::new());
+    }
+
+    /// A bus chain over a block of its input starting at session time `at`: stage by stage, and where a filter is
+    /// automated, in pieces split every 32 samples of session time, each piece's filters redesigned from the
+    /// envelopes there first (as a clip's chain redesigns its filters every 32 samples).
+    fn run_bus_chain(&self, k: usize, chain: &mut [crate::fx::Stage], left: &mut [f32], right: &mut [f32], at: u64) {
+        let autos = self.bus_fx_auto.get(k).map_or(&[][..], |v| &v[..]);
+        if autos.is_empty() {
+            for s in chain.iter_mut() {
+                s.process_block(left, right);
+            }
+            return;
+        }
+        let specs = self.bus_fx_spec.get(k).map_or(&[][..], |v| &v[..]);
+        let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
+        let n = left.len().min(right.len());
+        let mut i = 0;
+        while i < n {
+            let t = at + i as u64;
+            let m = (32 - (t % 32) as usize).min(n - i);
+            for &(stage, envs) in autos {
+                let Some(&(kind, f0, g0, q0)) = specs.get(stage) else { continue };
+                let value = |id: u32, base: f32| self.envelope(id).map_or(base, |e| e.value_at(t));
+                if let (Some(crate::fx::Stage::Filter(f)), Some(next)) = (chain.get_mut(stage), crate::fx::Biquad::design(kind, value(envs[0], f0), value(envs[1], g0), value(envs[2], q0), rate)) {
+                    f.retune(&next);
+                }
+            }
+            for s in chain.iter_mut() {
+                s.process_block(&mut left[i..i + m], &mut right[i..i + m]);
+            }
+            i += m;
+        }
     }
 
     fn mix_buses(&mut self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64) {
@@ -782,9 +889,7 @@ impl Player {
                 let [prime_left, prime_right] = &mut prime;
                 self.mix(fx, &mut prime_left[..ahead], &mut prime_right[..ahead], from, |c| c.bus == id);
                 if let Some(chain) = bus_fx.get_mut(k) {
-                    for s in chain.iter_mut() {
-                        s.process_block(&mut prime_left[..ahead], &mut prime_right[..ahead]);
-                    }
+                    self.run_bus_chain(k, chain, &mut prime_left[..ahead], &mut prime_right[..ahead], from);
                 }
             }
             if ahead > 0 {
@@ -792,9 +897,7 @@ impl Player {
             }
             self.mix(fx, &mut scratch_left[..n], &mut scratch_right[..n], from + ahead as u64, |c| c.bus == id);
             if let Some(chain) = bus_fx.get_mut(k) {
-                for s in chain.iter_mut() {
-                    s.process_block(&mut scratch_left[..n], &mut scratch_right[..n]);
-                }
+                self.run_bus_chain(k, chain, &mut scratch_left[..n], &mut scratch_right[..n], from + ahead as u64);
             }
             let (pan_left, pan_right) = pan_gains(bus.pan);
             let gain_left = bus.gain * pan_left;
@@ -837,13 +940,14 @@ impl Player {
             let Some(src) = self.sources.get(&clip.source) else { return };
             let Some(l) = src.channels.first() else { return };
             let r = src.channels.get(1).unwrap_or(l);
+            let mono = src.channels.len() < 2;
             // AP-05: a windowed source's true length, and the range its ring holds
             let window = self.windows.get(&clip.source).copied();
             let total = window.map_or(l.len(), |w| w.total);
             let mut chain = fx.get_mut(index).filter(|c| !c.is_empty());
             let a = from.max(clip.start);
             let b = to.min(clip.start + clip.length);
-            let (pan_left, pan_right) = pan_gains(clip.pan);
+            let (pan_left, pan_right) = self.clip_pan(clip.pan, mono);
             let gain_left = clip.gain * pan_left;
             let gain_right = clip.gain * pan_right;
             let fade_in = clip.fade_in.min(clip.length);
@@ -892,7 +996,7 @@ impl Player {
                     right[i] += xr * gain_right * fade;
                 } else {
                     let gain = clip.gain * self.envelope(clip.gain_env).map_or(1.0, |e| e.value_at(t));
-                    let (pl, pr) = self.envelope(clip.pan_env).map_or((pan_left, pan_right), |e| pan_gains(e.value_at(t)));
+                    let (pl, pr) = self.envelope(clip.pan_env).map_or((pan_left, pan_right), |e| self.clip_pan(e.value_at(t), mono));
                     left[i] += xl * (gain * pl) * fade;
                     right[i] += xr * (gain * pr) * fade;
                 }

@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0, processors = Vec::new()))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0, processors = Vec::new(), bus_auto = Vec::new(), pan_law = 0))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -31,12 +31,15 @@ fn render<'py>(
     fold: bool,
     surround_format: u8,
     processors: Vec<String>,
+    bus_auto: Vec<(usize, usize, u8, u32)>,
+    pan_law: u8,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let spec = |a: f32| processors.get(a as usize).map(String::as_str).unwrap_or("");
     let n_clips = clips.len();
     let mut player = Player::new();
     player.set_master_db(master_db);
     player.set_rate(rate);
+    player.set_pan_law(pan_law);
     for &(kind, freq, gain_db, q) in &master_fx {
         player.add_master_fx(kind, freq, gain_db, q);
     }
@@ -78,6 +81,9 @@ fn render<'py>(
             } else {
                 player.add_bus_stage(kind, a, b, c, d, e);
             }
+        }
+        for &(_, stage, param, envelope) in bus_auto.iter().filter(|x| x.0 == index) {
+            player.add_bus_fx_auto(stage, param, envelope);
         }
     }
     for &(_, _, kind, a, b, c, d, e) in chains.iter().filter(|s| s.0 == 2) {

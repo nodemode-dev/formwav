@@ -215,6 +215,27 @@ pub unsafe extern "C" fn fw_add_bus_processor(player: *mut Player, ptr: *const u
     (*player).add_bus_processor(spec) as u32
 }
 
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_add_bus_fx_auto(player: *mut Player, stage: u32, param: u32, envelope: u32) -> u32 {
+    (*player).add_bus_fx_auto(stage as usize, param as u8, envelope) as u32
+}
+
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_pan_law(player: *mut Player, law: u32) {
+    (*player).set_pan_law(law.min(255) as u8);
+}
+
+/// # Safety
+/// `player` must come from `fw_player_new`; `out` must have room for `max` floats.
+#[no_mangle]
+pub unsafe extern "C" fn fw_take_reductions(player: *mut Player, out: *mut f32, max: usize) -> u32 {
+    (*player).take_reductions(std::slice::from_raw_parts_mut(out, max)) as u32
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn fw_take_peaks(player: *mut Player, out: *mut f32) {
     let (left, right) = (*player).take_peaks();
