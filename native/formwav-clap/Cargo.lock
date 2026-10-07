@@ -63,8 +63,13 @@ dependencies = [
 name = "formwav-dsp"
 version = "2.13.1"
 dependencies = [
+ "formwav-studio",
  "nnnoiseless",
 ]
+
+[[package]]
+name = "formwav-studio"
+version = "0.1.0"
 
 [[package]]
 name = "generic_singleton"
