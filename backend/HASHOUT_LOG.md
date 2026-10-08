@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
 Current build version: v2.14.2
-Last updated: 2026-10-08 · v2.14.2: bounce and files (app/services/export.py: AIFF, AIFF-C, 32-bit WAV, 16-bit FLAC, the dither switch, peak normalisation; app/routers/render.py: a range, the true peak, bext with the timecode, cues in a range; RF64 in app/services/render.py; a range in app/services/surround.py), formwav_render_session's new parameters (formwav_mcp/server.py, tests/mcp_probe.py), tests/test_bounce.py, the Export dialog in tests/e2e/test_interface.py. v2.14.1: the mixer basics in exports (app/services/render.py: every kind but the filters on a track's sum with its filter automation, a placed track's exception, trim, polarity, solo safe, automation Off and the pan law; app/services/surround.py; the thumbnail in app/services/projects.py), tests/test_mixer.py, two cases in tests/test_plan_parity.py, the mixer's controls and meters in tests/e2e/test_interface.py. v2.14.0: studio processors in exports (app/services/render.py: processor_spec, native_chains, ON_THE_SUM; app/services/surround.py), tests/test_processors.py, the processor kind in tests/test_plan_parity.py, tests/player_plan.mjs and tests/test_kinds.py, the processor count in tests/test_claims.py, the fit test with processor cards (tests/e2e/test_interface.py). v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
+Last updated: 2026-10-08 · v2.14.3: the editing commands tested (tests/test_editing.py with tests/editing.mjs, two interface tests in tests/e2e/test_interface.py, whose import helper now waits for the import's notice); no engine code changed. v2.14.2: bounce and files (app/services/export.py: AIFF, AIFF-C, 32-bit WAV, 16-bit FLAC, the dither switch, peak normalisation; app/routers/render.py: a range, the true peak, bext with the timecode, cues in a range; RF64 in app/services/render.py; a range in app/services/surround.py), formwav_render_session's new parameters (formwav_mcp/server.py, tests/mcp_probe.py), tests/test_bounce.py, the Export dialog in tests/e2e/test_interface.py. v2.14.1: the mixer basics in exports (app/services/render.py: every kind but the filters on a track's sum with its filter automation, a placed track's exception, trim, polarity, solo safe, automation Off and the pan law; app/services/surround.py; the thumbnail in app/services/projects.py), tests/test_mixer.py, two cases in tests/test_plan_parity.py, the mixer's controls and meters in tests/e2e/test_interface.py. v2.14.0: studio processors in exports (app/services/render.py: processor_spec, native_chains, ON_THE_SUM; app/services/surround.py), tests/test_processors.py, the processor kind in tests/test_plan_parity.py, tests/player_plan.mjs and tests/test_kinds.py, the processor count in tests/test_claims.py, the fit test with processor cards (tests/e2e/test_interface.py). v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
 
 ---
 
@@ -51,7 +51,7 @@ backend/
     ├── conftest.py              a fresh data folder, no paid keys, the shared speech, a real engine on a free port
     ├── fixtures/                JFK's public-domain speech, CC BY recorded music and ElevenLabs' contract extract (README: their sources)
     ├── stand_ins/               ElevenLabs, ACE-Step and Anthropic answering by their own documents
-    ├── test_*.py                one file per area; kinds_probe.mjs and player_plan.mjs load the interface's modules
+    ├── test_*.py                one file per area; kinds_probe.mjs, player_plan.mjs and editing.mjs load the interface's modules
     ├── mcp_probe.py             the MCP SDK's client against the server, run in the server's venv
     └── e2e/test_interface.py    the built interface in Chromium against a real engine
 
@@ -62,6 +62,7 @@ backend/
 
 ## Table of contents
 
+- [tests/test_editing.py · editing commands (PLAN_v13 S4)](#tests-editing-s4)
 - [app/services/export.py · bounce and files (PLAN_v13 S3)](#app-services-export-s3)
 - [app/services/render.py · the mixer basics (PLAN_v13 S2)](#app-services-render-s2)
 - [app/services/tiger_dnr.py](#app-services-tiger-dnr)
@@ -123,6 +124,15 @@ backend/
 - [.github/workflows](#workflows)
 
 ---
+
+## tests/test_editing.py · editing commands (PLAN_v13 S4) {#tests-editing-s4}
+
+### The interface's editing commands run in Node, and their sound in the export
+- refers-to: tests/test_editing.py (_edit, _mix, _lane_db, each test); tests/editing.mjs; tests/e2e/test_interface.py (_labels, _range, the two S4 tests, _import_speech's wait)
+- kind: rationale
+- logged: v2.14.3 · 2026-10-08
+
+The commands are the interface's (frontend/src/engine/editing.ts), so editing.mjs loads that module and the reducer through Vite's server-side loader, as player_plan.mjs loads the player, runs a case's function on its session and applies the command it returns as the engine dispatches one (followClips included); a null session calls a function that takes none (stripGaps, identifyBeat). Each test checks the session field by field, and where the point is the sound, renders the session before and after through app/services/render.py and compares samples: a duplicate's copy equals its source, an insert of silence and a cut of time leave what follows them as it played (to 1e-5, an automation ramp across the edit included), split then heal renders identically (a 44.1 kHz file in a 48 kHz session too, the case where rounding made pieces differ by a sample), and Strip silence goes through the engine's own /api/render/activity to digital silence between the pads. The interface tests drive the menus and keys and read History's labels, one per command; the second plays through Follow's page turns zoomed in with the clip starting inside the view, the first turn 0.6 s after the click on Play so past the half second an input excuses, and fails with the wave's left offset put back. The import helper now waits for the import's own notice, which comes after the engine has looked for a tempo and could overwrite a notice a test was waiting for (the Export dialog's test failed so once in a full run).
 
 ## app/services/export.py · bounce and files (PLAN_v13 S3) {#app-services-export-s3}
 
