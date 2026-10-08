@@ -63,8 +63,8 @@
 ## Deliver a session
 
 1. `formwav_list_sessions`; `formwav_get_session` for its tracks and length.
-2. `formwav_render_session` with the path, the format (wav, flac, mp3) and `what`: mix for stereo, surround51 for six channels, adm for objects and a bed (tracks must be placed on the surround pad in formwav first; paths make them move).
-3. Report the path and size; `formwav_cloud_save` if the person wants it in their cloud.
+2. `formwav_render_session` with the path, the format the delivery asks for (WAV, AIFF or FLAC at 16 or 24-bit, 32-bit WAV or float WAV and AIFF-C, MP3, OGG, M4A) and `what`: mix for stereo, surround51 for six channels, adm for objects and a bed (tracks must be placed on the surround pad in formwav first; paths make them move). For a part of the session give `start` and `end` in seconds; for a peak target give `normalize` (-1 dBFS or -0.1 are common); leave `dither` on for 16 and 24-bit unless the person asks otherwise.
+3. Report the path and size, and for a mix the sample peak, true peak and loudness the tool returns (a true peak above -1 dBTP may clip once encoded to MP3 or AAC); `formwav_cloud_save` if the person wants it in their cloud.
 
 ## The cloud
 

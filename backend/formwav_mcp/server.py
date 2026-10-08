@@ -19,7 +19,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import httpx
 from mcp.server import MCPServer
@@ -186,27 +186,54 @@ async def formwav_get_session(name: str) -> dict[str, Any]:
     return {"name": name, "sample_rate": rate, "seconds": round(end / rate, 3), "tracks": tracks}
 
 
+#: The engine's export formats (backend/app/services/export.py FORMATS), each a key the render route takes
+RENDER_FORMATS = ("wav", "wav32", "wav24", "wav16", "aiff", "aiff16", "aifc", "flac", "flac16", "mp3", "mp3-192", "ogg", "m4a")
+
+
 @mcp.tool(annotations=WRITES_FILE, structured_output=True)
-async def formwav_render_session(name: str, path: str, format: str = "wav", what: str = "mix") -> dict[str, Any]:
+async def formwav_render_session(name: str, path: str, format: str = "wav", what: str = "mix", start: float | None = None, end: float | None = None, normalize: float | None = None, dither: bool = True) -> dict[str, Any]:
     """Renders a saved session's mix (every track, its effects and automation, as the app plays it) to a file on this
-    machine: `format` wav, flac or mp3; `path` the file to write in an existing folder (replaced if present). `what`: mix
+    machine: `format` wav (32-bit float), wav32, wav24, wav16, aiff (24-bit), aiff16, aifc (32-bit float), flac (24-bit),
+    flac16, mp3, mp3-192, ogg or m4a; `path` the file to write in an existing folder (replaced if present). `what`: mix
     (stereo, the default), surround51 (six channels, L R C LFE Ls Rs) or adm (an ADM BWF: tracks placed on the surround pad
-    as objects, moving along their paths, and tracks marked Bed as a 5.1 bed; always WAV)."""
+    as objects, moving along their paths, and tracks marked Bed as a 5.1 bed; always WAV). `start` and `end`, in seconds,
+    render that range only (a mix or surround51; an end past the last clip keeps the effects' tails); `normalize`, in
+    dBFS, sets the mix's highest sample (-0.1 is usual); `dither` (on unless false) adds TPDF dither to the 16 and 24-bit
+    formats. A WAV carries the session's timecode start in its BWF bext chunk. Returns the file, and for a mix its sample
+    peak, true peak and loudness as written."""
     fmt = format.lower().strip()
     kind = what.lower().strip()
     if kind not in ("mix", "surround51", "adm"):
         raise ToolError("what must be mix, surround51 or adm.")
     if kind != "mix":
         fmt = "wav"
-    if fmt not in ("wav", "flac", "mp3"):
-        raise ToolError("format must be wav, flac or mp3.")
+    if fmt not in RENDER_FORMATS:
+        raise ToolError(f"format must be one of {', '.join(RENDER_FORMATS)}.")
+    if kind == "adm" and (start is not None or end is not None):
+        raise ToolError("An ADM file is always the whole session; leave start and end out.")
+    if normalize is not None and kind != "mix":
+        raise ToolError("normalize applies to a mix only.")
     target = Path(path).expanduser()
     if not target.parent.is_dir():
         raise ToolError(f"The folder {target.parent} does not exist. Choose a path in an existing folder.")
     doc = (await _call("GET", f"/api/projects/{quote(name)}")).json()
     doc = doc.get("document", doc)
-    target.write_bytes((await _call("POST", f"/api/render?format={fmt}&what={kind}", content=json.dumps(doc).encode(), headers={"Content-Type": "application/json"}, timeout=1800)).content)
-    return {"path": str(target), "bytes": target.stat().st_size, "format": fmt, "what": kind}
+    rate = int(doc.get("sampleRate") or 48000)
+    query = {"format": fmt, "what": kind, "dither": "true" if dither else "false"}
+    if start is not None:
+        query["start"] = str(round(start * rate))
+    if end is not None:
+        query["end"] = str(round(end * rate))
+    if normalize is not None:
+        query["normalize"] = str(normalize)
+    res = await _call("POST", f"/api/render?{urlencode(query)}", content=json.dumps(doc).encode(), headers={"Content-Type": "application/json"}, timeout=1800)
+    target.write_bytes(res.content)
+    out: dict[str, Any] = {"path": str(target), "bytes": target.stat().st_size, "format": fmt, "what": kind}
+    if kind == "mix":
+        peaks = [res.headers.get("X-Peak-Left-dBFS", "-inf"), res.headers.get("X-Peak-Right-dBFS", "-inf")]
+        out.update({"seconds": round(int(res.headers.get("X-Frames", 0)) / rate, 3), "peak_dbfs": max(peaks, key=float), "true_peak_dbtp": res.headers.get("X-True-Peak-dBTP"),
+                    "loudness_lufs": res.headers.get("X-Loudness-LUFS"), "normalized_by_db": res.headers.get("X-Normalize-dB")})
+    return out
 
 
 @mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
