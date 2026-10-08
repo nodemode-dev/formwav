@@ -76,6 +76,69 @@ pub fn integrated_loudness(channels: &[Vec<f32>], rate: u32) -> Option<f64> {
     gated_loudness(&power)
 }
 
+const PEAK_HALF: usize = 12;
+
+/// The three points between two samples (a quarter, a half and three quarters along) as weights on the 12 samples
+/// either side: a sinc under a Kaiser window (beta 8), each set summing to one.
+fn quarter_points() -> [[f64; 2 * PEAK_HALF]; 3] {
+    let bessel = |x: f64| {
+        let (mut sum, mut term, mut k) = (1.0f64, 1.0f64, 1.0f64);
+        while term > 1e-12 * sum {
+            term *= (x / (2.0 * k)).powi(2);
+            sum += term;
+            k += 1.0;
+        }
+        sum
+    };
+    let beta = 8.0;
+    let mut out = [[0.0; 2 * PEAK_HALF]; 3];
+    for (k, taps) in out.iter_mut().enumerate() {
+        let t = (k + 1) as f64 / 4.0;
+        for (j, h) in taps.iter_mut().enumerate() {
+            let u = t + (PEAK_HALF as f64 - 1.0) - j as f64;
+            let sinc = if u == 0.0 { 1.0 } else { (std::f64::consts::PI * u).sin() / (std::f64::consts::PI * u) };
+            let r = u / PEAK_HALF as f64;
+            *h = sinc * bessel(beta * (1.0 - r * r).max(0.0).sqrt()) / bessel(beta);
+        }
+        let sum: f64 = taps.iter().sum();
+        taps.iter_mut().for_each(|h| *h /= sum);
+    }
+    out
+}
+
+/// The highest true peak across channels in dBTP: each channel read at four times its rate (its samples and the
+/// three points between each pair, where a sample nearby is within 12 dB of the channel's sample peak); None for
+/// digital silence.
+pub fn true_peak(channels: &[Vec<f32>], _rate: u32) -> Option<f64> {
+    let frames = channels.iter().map(Vec::len).min()?;
+    let points = quarter_points();
+    let mut top = 0f64;
+    for channel in channels {
+        let x = &channel[..frames];
+        let sample_peak = x.iter().fold(0f32, |m, v| m.max(v.abs()));
+        top = top.max(f64::from(sample_peak));
+        let near = sample_peak * 0.25;
+        for i in 0..frames {
+            let lo = i.saturating_sub(1);
+            let hi = (i + 3).min(frames);
+            if !x[lo..hi].iter().any(|v| v.abs() >= near) {
+                continue;
+            }
+            for taps in &points {
+                let mut acc = 0f64;
+                for (j, h) in taps.iter().enumerate() {
+                    let at = i + j;
+                    if at >= PEAK_HALF - 1 && at - (PEAK_HALF - 1) < frames {
+                        acc += h * f64::from(x[at - (PEAK_HALF - 1)]);
+                    }
+                }
+                top = top.max(acc.abs());
+            }
+        }
+    }
+    (top > 0.0).then(|| 20.0 * top.log10())
+}
+
 /// BS.1770 gating over 400 ms block powers: absolute gate at -70 LUFS, then a relative gate 10 LU below
 /// the mean of the blocks that passed. Shared by the offline and the live meters.
 fn gated_loudness(power: &[f64]) -> Option<f64> {
