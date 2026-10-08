@@ -91,12 +91,12 @@ def wav_foa(channels: np.ndarray, rate: int) -> bytes:
     return wav_float(channels, rate, 0)
 
 
-def render_51(doc: dict) -> dict:
+def render_51(doc: dict, start: int = 0, stop: int | None = None) -> dict:
     """{"wav": six-channel WAV bytes, "frames", "sampleRate", "levels": per-channel peak dBFS}: the session through the
     core's six-channel master bus (render.rs render_surround), so the master chain and fader act on the 5.1 mix (the
     chain on each pair of channels) as they do on the stereo one. Planned with the fold-down off, a placed track's
     position shaping its own sound; each clip takes its track's speaker gains and LFE send."""
-    out, rate = _bus(doc, 0)
+    out, rate = _bus(doc, 0, start, stop)
     levels = {name: round(20 * math.log10(max(1e-12, float(np.abs(out[:, k]).max()))), 2) for k, name in enumerate(CHANNELS)}
     return {"wav": wav_51(out, rate), "frames": len(out), "sampleRate": rate, "levels": levels}
 
@@ -104,18 +104,18 @@ def render_51(doc: dict) -> dict:
 FOA_CHANNELS = ["W", "Y", "Z", "X"]
 
 
-def render_foa(doc: dict) -> dict:
+def render_foa(doc: dict, start: int = 0, stop: int | None = None) -> dict:
     """PT-42: {"wav": four-channel AmbiX WAV bytes, "frames", "sampleRate", "levels"}: the session as first-order
     ambisonics through the same bus, each placed track encoded by its direction and elevation, unplaced ones ahead."""
-    out, rate = _bus(doc, 1)
+    out, rate = _bus(doc, 1, start, stop)
     foa = out[:, :4]
     levels = {name: round(20 * math.log10(max(1e-12, float(np.abs(foa[:, k]).max()))), 2) for k, name in enumerate(FOA_CHANNELS)}
     return {"wav": wav_foa(foa, rate), "frames": len(foa), "sampleRate": rate, "levels": levels}
 
 
-def _bus(doc: dict, fmt: int) -> tuple[np.ndarray, int]:
+def _bus(doc: dict, fmt: int, start: int = 0, stop: int | None = None) -> tuple[np.ndarray, int]:
     """The session through the core's six-channel bus in the given format (0 for 5.1, 1 for first-order ambisonics):
-    its six channels (frames by six) and the rate."""
+    its six channels (frames by six), or the frames from `start` to `stop` of them, and the rate."""
     from . import media
     from ..core.paths import media_dir
 
@@ -137,5 +137,11 @@ def _bus(doc: dict, fmt: int) -> tuple[np.ndarray, int]:
     if not places:
         places = [(len(clips), [0.0] * 6)]  # nothing placed: still the bus (5.1: the stereo on L and R; ambisonics: ahead)
     chains, processors = render.native_chains(chains)
-    interleaved, _, _ = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, False, fmt, processors, bus_auto, render.PAN_LAWS.get(doc.get("panLaw"), 0))
-    return np.frombuffer(bytes(interleaved), dtype="<f4").reshape(-1, 6).astype(np.float64), rate
+    if start < 0 or (stop is not None and stop <= start):
+        raise render.RenderError("the range must start at 0 or later and end after it starts")
+    length = max(1, end) if stop is None else max(1, end, int(stop))
+    interleaved, _, _ = native.render(loaded, clips, length, buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, False, fmt, processors, bus_auto, render.PAN_LAWS.get(doc.get("panLaw"), 0))
+    out = np.frombuffer(bytes(interleaved), dtype="<f4").reshape(-1, 6).astype(np.float64)
+    if start >= len(out):
+        raise render.RenderError("the range starts after the session ends")
+    return out[start : len(out) if stop is None else int(stop)], rate

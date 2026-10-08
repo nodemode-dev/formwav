@@ -262,10 +262,19 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     return rate, sources, clips, end, skipped, list(buses.values()), envelopes, fx, chains, fx_auto, comps, owners, bus_auto
 
 
-def wav_float32_stereo(interleaved: bytes, rate: int) -> bytes:
+#: Sample data past this many bytes cannot be sized in a RIFF header's 32 bits, so the file is written as RF64.
+RF64_ABOVE = 0xFFFFFFFF - 36
+
+
+def wav_float32_stereo(interleaved: bytes, rate: int, channels: int = 2) -> bytes:
     data_bytes = len(interleaved)
+    fmt = b"fmt " + struct.pack("<IHHIIHH", 16, 3, channels, rate, rate * 4 * channels, 4 * channels, 32)
+    if data_bytes > RF64_ABOVE:
+        # EBU Tech 3306: both sizes read 0xFFFFFFFF and a ds64 chunk holds them, with the frame count, in 64 bits
+        ds64 = b"ds64" + struct.pack("<IQQQI", 28, 4 + 36 + len(fmt) + 8 + data_bytes, data_bytes, data_bytes // (4 * channels), 0)
+        return b"RF64" + struct.pack("<I", 0xFFFFFFFF) + b"WAVE" + ds64 + fmt + b"data" + struct.pack("<I", 0xFFFFFFFF) + interleaved
     header = b"RIFF" + struct.pack("<I", 36 + data_bytes) + b"WAVE"
-    header += b"fmt " + struct.pack("<IHHIIHH", 16, 3, 2, rate, rate * 8, 8, 32)
+    header += fmt
     header += b"data" + struct.pack("<I", data_bytes)
     return header + interleaved
 
@@ -274,9 +283,14 @@ def dbfs(peak: float) -> str:
     return f"{20 * math.log10(peak):.2f}" if peak > 0 else "-inf"
 
 
-def render(doc: object) -> dict:
+def render(doc: object, start: int = 0, stop: int | None = None) -> dict:
+    """The session's stereo mix, or the frames from `start` to `stop` of it: a stop past the last clip renders on into
+    the buses' tails, then silence."""
     native = media._require_core()
     rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = plan(doc)
+    if start < 0 or (stop is not None and stop <= start):
+        raise RenderError("the range must start at 0 or later and end after it starts")
+    length = max(1, end) if stop is None or len(doc.get("timeTrack") or []) >= 2 else max(1, end, int(stop))
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -293,8 +307,8 @@ def render(doc: object) -> dict:
     spatial = 1 if isinstance(doc, dict) and doc.get("spatialFormat") == "foa" else 0
     places = places_for(doc, owners, spatial) if isinstance(doc, dict) and doc.get("surroundFold") else []
     chains, processors = native_chains(chains)
-    interleaved, peak_left, peak_right = native.render(loaded, clips, max(1, end), buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0))
-    frames = max(1, end)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0))
+    frames = length
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:
         # AU-36: the time track in exports, as playback plays it: the session read at speed(position) samples per output
@@ -315,6 +329,19 @@ def render(doc: object) -> dict:
         interleaved = warped.reshape(-1).astype("<f4").tobytes()
         peak_left, peak_right = float(np.abs(warped[:, 0]).max()), float(np.abs(warped[:, 1]).max())
         frames = n_out
+    if start or stop is not None:
+        import numpy as np
+
+        mix = np.frombuffer(bytes(interleaved), dtype="<f4").reshape(-1, 2)
+        a = min(int(start), len(mix))
+        b = len(mix) if stop is None else int(stop)
+        if b <= a:
+            raise RenderError("the range starts after the session ends")
+        part = np.zeros((b - a, 2), dtype=np.float32)
+        part[: min(b, len(mix)) - a] = mix[a : min(b, len(mix))]
+        interleaved = part.reshape(-1).tobytes()
+        peak_left, peak_right = float(np.abs(part[:, 0]).max()), float(np.abs(part[:, 1]).max())
+        frames = b - a
     loudness = native.loudness(interleaved, 2, rate)
     return {
         "wav": wav_float32_stereo(interleaved, rate),
