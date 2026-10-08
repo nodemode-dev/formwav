@@ -195,7 +195,7 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     const law = bar.querySelector<HTMLSelectElement>(".fw-mix-panlaw");
     if (law && law.value !== (doc.panLaw ?? "0")) law.value = doc.panLaw ?? "0";
     const items: Strip[] = [
-      ...doc.tracks.map((item) => ({ kind: "track" as const, item })),
+      ...doc.tracks.filter((t) => !t.hidden).map((item) => ({ kind: "track" as const, item })),
       ...(doc.buses ?? []).map((item) => ({ kind: "bus" as const, item })),
       ...(doc.vcas ?? []).map((item) => ({ kind: "vca" as const, item })),
       { kind: "master" as const, item: { id: "master", name: "Master", gainDb: doc.masterGainDb ?? 0 } },

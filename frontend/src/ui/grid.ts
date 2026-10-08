@@ -1,5 +1,7 @@
 import { icon as fcIcon } from "../vendor/formcut/icons";
-import type { Engine } from "../engine";
+import type { Engine, SessionDoc } from "../engine";
+import { gridLines, parseGrid, snapToGrid, type GridValue } from "../engine/grid";
+import { clockMode } from "./shell";
 
 const LABEL_SPACING_PX = 80;
 // AU-13: down to 10 microseconds, so the ruler keeps its labels zoomed to single samples (at 800000 px a second,
@@ -58,8 +60,30 @@ export function gridStep(sampleRate: number, pxPerSecond: number): number {
 
 export function snapSamples(position: number, sampleRate: number, pxPerSecond: number): number {
   if (!enabled) return position;
+  const fixed = fixedGrid();
+  if (fixed && gridDoc) return snapToGrid(gridDoc, fixed, position, frameRate());
   const step = gridStep(sampleRate, pxPerSecond);
   return Math.max(0, Math.round(Math.round(position / step) * step));
+}
+
+// S5: the session's grid value (engine/grid.ts), when one is chosen over the grid that follows the zoom
+let gridDoc: SessionDoc | null = null;
+
+/** The frame rate a grid or nudge frame counts at: the clock's timecode rate, or 30 while it shows time. */
+export function frameRate(): number {
+  const mode = clockMode();
+  return mode === "tc24" ? 24 : mode === "tc25" ? 25 : mode === "tc2997df" ? 30000 / 1001 : 30;
+}
+
+export function fixedGrid(): GridValue | null {
+  return parseGrid(gridDoc?.snap?.value);
+}
+
+/** What Separate on the grid cuts at: the chosen value's lines between two positions, or the zoom's step. */
+export function gridCuts(sampleRate: number, pxPerSecond: number): number | ((from: number, to: number) => number[]) {
+  const fixed = fixedGrid();
+  const doc = gridDoc;
+  return fixed && doc ? (from: number, to: number) => gridLines(doc, fixed, from, to, frameRate()) : gridStep(sampleRate, pxPerSecond);
 }
 
 export function mountGrid(host: HTMLElement, engine?: Engine): void {
@@ -97,7 +121,8 @@ export function mountGrid(host: HTMLElement, engine?: Engine): void {
     else applySnap(grid, beats);
   };
   engine?.subscribe("document", () => {
-    const snap = engine.get("document").snap;
+    gridDoc = engine.get("document");
+    const snap = gridDoc.snap;
     applySnap(snap?.grid ?? false, snap?.bars ?? false);
   });
   barsButton.addEventListener("click", () => setSnap(enabled, !bars));

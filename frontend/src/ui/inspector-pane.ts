@@ -39,7 +39,7 @@ const BODY = `
   <label class="fw-field"><span>Fade in</span><input type="number" step="0.01" min="0" data-f="fadeIn"><output>s</output></label>
   <label class="fw-field"><span>Fade out</span><input type="number" step="0.01" min="0" data-f="fadeOut"><output>s</output></label>
   <label class="fw-field"><span>Colour</span><select data-clip-color aria-label="Clip colour"><option value="">The track's</option>${COLOURS}</select><span></span></label>
-  <label class="fw-field"><span>Fade curve</span><select data-f="shape"><option value="linear">Linear</option><option value="equal-power">Equal power</option><option value="s-curve">S-curve</option><option value="exponential">Exponential</option></select><span></span></label>
+  <label class="fw-field"><span>Fade curve</span><select data-f="shape"><option value="linear">Linear</option><option value="equal-power">Equal power</option><option value="s-curve">S-curve</option><option value="exponential">Exponential</option><option value="logarithmic">Logarithmic</option></select><span></span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-clip-act="crossfade" title="Fade this clip and the one it overlaps on its track across each other, equal power" disabled>Crossfade overlap</button></div>
   <div class="fw-insp-head">Gain envelope</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Point</span><input type="number" data-env="db" min="-60" max="12" step="0.5" value="-12" aria-label="Level of the envelope point in dB"> dB</label><button type="button" class="fw-ibtn" data-clip-act="env-add" title="Add a gain point at the playhead inside this clip; its level follows straight lines between points">Add point at playhead</button><button type="button" class="fw-ibtn" data-clip-act="env-clear">Clear envelope</button></div>
@@ -340,7 +340,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         break;
       }
       case "shape":
-        engine.dispatch({ type: "set-clip-fades", trackId, clipId, fadeIn: clip.fadeIn ?? 0, fadeOut: clip.fadeOut ?? 0, shape: el.value as FadeShape });
+        engine.dispatch({ type: "set-clip-fades", trackId, clipId, fadeIn: clip.fadeIn ?? 0, fadeOut: clip.fadeOut ?? 0, shape: el.value as FadeShape, outShape: null });
         break;
       case "volume":
         engine.dispatch({ type: "set-track-gain", trackId, gainDb: num });
@@ -3091,7 +3091,10 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
           media = out as unknown as MediaRef;
         }
         const command = fitToRange(engine.get("document"), hit.track.id, hit.clip.id, media, span.start, span.end - span.start);
-        if (command) engine.dispatch(command);
+        if (command && !engine.dispatch(command) && hit.clip.lock) {
+          setText(notice, "The clip is locked: Clip > Edit lock or Time lock unlocks it");
+          return;
+        }
         setText(notice, `Fitted the clip to ${((span.end - span.start) / doc.sampleRate).toFixed(3)} s at ${(span.start / doc.sampleRate).toFixed(3)} s`);
       } catch (err) {
         setText(notice, `Could not fit: ${err instanceof Error ? err.message : String(err)}`);

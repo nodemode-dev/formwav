@@ -322,7 +322,7 @@ export function mountDock(host: HTMLElement, engine: Engine): void {
       put(detail, doc.synth?.name ?? "Soft triangle");
     } else if (track && clip) {
       put(trackName, track.name);
-      put(detail, `${(doc.media[clip.mediaId]?.name ?? "clip").replace(/\.[^.]+$/, "")}, ${fx === 0 ? "no effects" : fx === 1 ? "one effect live" : `${fx} effects live`}`);
+      put(detail, `${clip.name ?? (doc.media[clip.mediaId]?.name ?? "clip").replace(/\.[^.]+$/, "")}, ${fx === 0 ? "no effects" : fx === 1 ? "one effect live" : `${fx} effects live`}`);
     } else {
       put(trackName, "");
       put(detail, "No clip selected");

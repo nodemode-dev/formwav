@@ -1,23 +1,68 @@
 import type { Player } from "../audio/player";
 import type { Engine, SessionDoc } from "../engine";
-import { setText } from "../vendor/nodemode/dom-stable";
+import { memoryNumbers, nextMemoryNumber, PALETTE } from "../engine/document";
+import { nextMemory } from "../engine/editing";
+import { patchList, setText } from "../vendor/nodemode/dom-stable";
 
-/** A marker (start equals end) or a region, in session samples. */
+/** A marker (start equals end) or a region, in session samples, with its memory location fields (S5). */
 export interface Label {
   kind: "marker" | "region";
   id: string;
   start: number;
   end: number;
   text: string;
+  number: number;
+  comment: string;
+  color: string;
 }
 type Cue = { start: number; end: number; text: string };
 type Dispatchable = Parameters<Engine["dispatch"]>[0];
 
 export function labelsOf(doc: SessionDoc): Label[] {
+  const n = memoryNumbers(doc);
   return [
-    ...doc.markers.map((m): Label => ({ kind: "marker", id: m.id, start: m.at, end: m.at, text: m.label })),
-    ...(doc.regions ?? []).map((r): Label => ({ kind: "region", id: r.id, start: r.start, end: r.end, text: r.label })),
+    ...doc.markers.map((m): Label => ({ kind: "marker", id: m.id, start: m.at, end: m.at, text: m.label, number: n.get(m.id) ?? 0, comment: m.comment ?? "", color: m.color ?? "" })),
+    ...(doc.regions ?? []).map((r): Label => ({ kind: "region", id: r.id, start: r.start, end: r.end, text: r.label, number: n.get(r.id) ?? 0, comment: r.comment ?? "", color: r.color ?? "" })),
   ].sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+const COLOR_OPTIONS = `<option value="">No colour</option>${PALETTE.map((c) => `<option value="${c}">${c[0].toUpperCase()}${c.slice(1)}</option>`).join("")}`;
+
+/** One memory location's row: its number (recalls it), its time (goes there), its name, colour, comment and Delete. */
+function labelRow(): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "fw-label-row";
+  row.setAttribute("role", "listitem");
+  row.innerHTML = `<button type="button" class="fw-label-num" title="Recall this memory location (the keypad's point, its number and the point)"></button><button type="button" class="fw-label-time" title="Go to this label"></button><input type="text" class="fw-label-text"><select class="fw-label-color" aria-label="Colour">${COLOR_OPTIONS}</select><input type="text" class="fw-label-comment" placeholder="Comment" maxlength="500"><button type="button" class="fw-ibtn fw-label-remove">Delete</button>`;
+  return row;
+}
+
+function updateLabelRow(row: HTMLElement, l: Label, rate: number): void {
+  if (row.dataset.kind !== l.kind) row.dataset.kind = l.kind;
+  const num = row.querySelector<HTMLElement>(".fw-label-num");
+  setText(num, String(l.number));
+  if (num && num.dataset.recall !== String(l.number)) num.dataset.recall = String(l.number);
+  const time = row.querySelector<HTMLElement>(".fw-label-time");
+  if (time && time.dataset.seek !== String(l.start)) time.dataset.seek = String(l.start);
+  setText(time, l.kind === "region" ? `${stamp(l.start / rate, ".").slice(3)} to ${stamp(l.end / rate, ".").slice(3)}` : stamp(l.start / rate, ".").slice(3));
+  for (const el of row.querySelectorAll<HTMLElement>("input, select, .fw-label-remove")) {
+    if (el.dataset.id !== l.id) el.dataset.id = l.id;
+    if (el.dataset.kind !== l.kind) el.dataset.kind = l.kind;
+  }
+  const text = row.querySelector<HTMLInputElement>(".fw-label-text");
+  if (text) {
+    text.setAttribute("aria-label", `${l.kind === "region" ? "Region" : "Marker"} ${l.number} name`);
+    if (document.activeElement !== text && text.value !== l.text) text.value = l.text;
+  }
+  const color = row.querySelector<HTMLSelectElement>(".fw-label-color");
+  if (color && document.activeElement !== color && color.value !== l.color) color.value = l.color;
+  const swatch = l.color ? `var(--fw-color-${l.color})` : "";
+  if (num && num.style.getPropertyValue("--fw-label-color") !== swatch) num.style.setProperty("--fw-label-color", swatch);
+  const comment = row.querySelector<HTMLInputElement>(".fw-label-comment");
+  if (comment) {
+    comment.setAttribute("aria-label", `Memory location ${l.number} comment`);
+    if (document.activeElement !== comment && comment.value !== l.comment) comment.value = l.comment;
+  }
 }
 
 const pad = (n: number, width = 2) => String(n).padStart(width, "0");
@@ -86,8 +131,10 @@ export function mountLabelsPane(host: HTMLElement, engine: Engine, player: Playe
   if (!body) return;
   body.innerHTML = `
 <div class="fw-transcript-actions">
-  <button type="button" class="fw-ibtn" data-l="marker">Add marker at playhead</button>
-  <button type="button" class="fw-ibtn" data-l="region">Add region from range</button>
+  <button type="button" class="fw-ibtn" data-l="marker" title="A numbered memory location at the playhead (Enter, while playing too)">Add marker at playhead</button>
+  <button type="button" class="fw-ibtn" data-l="region" title="A selection memory location: recalling it sets the range again">Add region from range</button>
+  <button type="button" class="fw-ibtn" data-l="previous" title="The playhead to the memory location before it">Previous</button>
+  <button type="button" class="fw-ibtn" data-l="next" title="The playhead to the memory location after it">Next</button>
 </div>
 <p class="fw-empty-note fw-labels-empty">No labels yet. Add a marker at the playhead, or drag a range with the Smart Tool and add a region.</p>
 <div class="fw-labels-list" role="list"></div>
@@ -101,60 +148,34 @@ export function mountLabelsPane(host: HTMLElement, engine: Engine, player: Playe
   const list = body.querySelector<HTMLElement>(".fw-labels-list");
   const empty = body.querySelector<HTMLElement>(".fw-labels-empty");
   let range: { start: number; end: number } | null = null;
-  let signature = "";
   host.addEventListener("fw-range", (e) => {
     const d = (e as CustomEvent<{ start: number; end: number } | null>).detail;
     range = d ? { start: d.start, end: d.end } : null;
   });
 
+  // rows patched in place by their label's id, so a name or comment being typed keeps its focus through any update
   const render = () => {
     const doc = engine.get("document");
     const labels = labelsOf(doc);
     if (empty && empty.hidden !== labels.length > 0) empty.hidden = labels.length > 0;
-    const next = labels.map((l) => `${l.kind}:${l.id}:${l.start}:${l.end}`).join("|");
-    if (next === signature || !list) {
-      for (const l of labels) {
-        const input = list?.querySelector<HTMLInputElement>(`input[data-id="${l.id}"]`);
-        if (input && document.activeElement !== input && input.value !== l.text) input.value = l.text;
-      }
-      return;
-    }
-    signature = next;
-    list.replaceChildren(
-      ...labels.map((l) => {
-        const row = document.createElement("div");
-        row.className = "fw-label-row";
-        row.setAttribute("role", "listitem");
-        row.dataset.kind = l.kind;
-        const time = document.createElement("button");
-        time.type = "button";
-        time.className = "fw-label-time";
-        time.dataset.seek = String(l.start);
-        time.title = "Go to this label";
-        time.textContent = l.kind === "region" ? `${stamp(l.start / doc.sampleRate, ".").slice(3)} to ${stamp(l.end / doc.sampleRate, ".").slice(3)}` : stamp(l.start / doc.sampleRate, ".").slice(3);
-        const input = document.createElement("input");
-        input.type = "text";
-        input.className = "fw-label-text";
-        input.value = l.text;
-        input.dataset.id = l.id;
-        input.dataset.kind = l.kind;
-        input.setAttribute("aria-label", `${l.kind === "region" ? "Region" : "Marker"} label`);
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "fw-ibtn fw-label-remove";
-        remove.dataset.remove = l.id;
-        remove.dataset.kind = l.kind;
-        remove.textContent = "Delete";
-        row.append(time, input, remove);
+    if (!list) return;
+    patchList(list, labels, {
+      key: (l) => `${l.kind}:${l.id}`,
+      create: (l) => {
+        const row = labelRow();
+        updateLabelRow(row, l, doc.sampleRate);
         return row;
-      }),
-    );
+      },
+      update: (row, l) => updateLabelRow(row, l, doc.sampleRate),
+    });
   };
 
   body.addEventListener("change", async (e) => {
     const el = e.target as HTMLInputElement;
-    if (el.classList.contains("fw-label-text") && el.dataset.id) {
-      engine.dispatch(el.dataset.kind === "region" ? { type: "set-region", regionId: el.dataset.id, label: el.value } : { type: "set-marker", markerId: el.dataset.id, label: el.value });
+    const id = el.dataset.id;
+    const field = el.classList.contains("fw-label-text") ? "label" : el.classList.contains("fw-label-comment") ? "comment" : el.classList.contains("fw-label-color") ? "color" : null;
+    if (field && id) {
+      engine.dispatch(el.dataset.kind === "region" ? { type: "set-region", regionId: id, [field]: el.value } : { type: "set-marker", markerId: id, [field]: el.value });
     } else if (el.dataset.l === "import" && el.files?.[0]) {
       const parsed = parseSubRip(await el.files[0].text());
       el.value = "";
@@ -171,23 +192,32 @@ export function mountLabelsPane(host: HTMLElement, engine: Engine, player: Playe
   body.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
     const doc = engine.get("document");
+    const recall = target.closest<HTMLElement>("[data-recall]")?.dataset.recall;
+    if (recall !== undefined) {
+      host.dispatchEvent(new CustomEvent("fw-recall-memory", { detail: Number(recall) }));
+      return;
+    }
     const seek = target.closest<HTMLElement>("[data-seek]")?.dataset.seek;
     if (seek !== undefined) {
       player.seek(Number(seek));
       return;
     }
-    const remove = target.closest<HTMLElement>("[data-remove]");
-    if (remove?.dataset.remove) {
-      engine.dispatch(remove.dataset.kind === "region" ? { type: "remove-region", regionId: remove.dataset.remove } : { type: "remove-marker", markerId: remove.dataset.remove });
+    const remove = target.closest<HTMLElement>(".fw-label-remove");
+    if (remove?.dataset.id) {
+      engine.dispatch(remove.dataset.kind === "region" ? { type: "remove-region", regionId: remove.dataset.id } : { type: "remove-marker", markerId: remove.dataset.id });
       return;
     }
     const action = target.closest<HTMLElement>("[data-l]")?.dataset.l;
     const labels = labelsOf(doc);
-    if (action === "marker") {
-      engine.dispatch({ type: "add-marker", at: engine.get("transport").positionSamples, label: `Marker ${doc.markers.length + 1}` });
+    if (action === "previous" || action === "next") {
+      const m = nextMemory(doc, engine.get("transport").positionSamples, action === "next" ? 1 : -1);
+      if (m) host.dispatchEvent(new CustomEvent("fw-recall-memory", { detail: m.number }));
+      else setText(notice, `No memory location ${action === "next" ? "after" : "before"} the playhead`);
+    } else if (action === "marker") {
+      engine.dispatch({ type: "add-marker", at: engine.get("transport").positionSamples, label: `Marker ${nextMemoryNumber(doc)}` });
     } else if (action === "region") {
       if (!range) setText(notice, "Drag a range with the Smart Tool first, then add it as a region");
-      else engine.dispatch({ type: "add-region", start: range.start, end: range.end, label: `Region ${(doc.regions ?? []).length + 1}` });
+      else engine.dispatch({ type: "add-region", start: range.start, end: range.end, label: `Region ${nextMemoryNumber(doc)}` });
     } else if (action === "vtt" || action === "srt" || action === "chapters") {
       if (!labels.length) {
         setText(notice, "There are no labels to export");

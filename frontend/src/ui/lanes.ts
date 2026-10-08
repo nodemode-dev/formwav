@@ -1,5 +1,6 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import { documentLength, fadeCurve, nextFadeShape, sessionLength, type AutoPoint, type SessionView } from "../engine/document";
+import { copyRange, pasteRange, type RangeClip } from "../engine/editing";
 import { icon as fcIcon } from "../vendor/formcut/icons";
 import { fetchPeaks, type PeakData } from "../io/media-client";
 import { gridEnabled, shuffleEnabled, snapSamples, spotEnabled } from "./grid";
@@ -287,7 +288,7 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
   const fadeIn = Math.min(clip.fadeIn ?? 0, clip.length);
   const fadeOut = Math.min(clip.fadeOut ?? 0, clip.length - fadeIn);
   if (fadeIn <= 0 && fadeOut <= 0) return;
-  const curve = (v: number) => fadeCurve(v, clip.fadeShape);
+  const curve = (v: number, rising: boolean) => fadeCurve(v, rising ? clip.fadeShape : (clip.fadeOutShape ?? clip.fadeShape));
   const style = getComputedStyle(canvas);
   const pxPerSample = full / clip.length;
   // AU-13: the curve traced only across the pixels in view (a fade at deep zoom can span millions of them)
@@ -301,7 +302,7 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
     for (let i = 0; i <= steps; i++) {
       const x = a + ((b - a) * i) / steps;
       const v = (x - from) / span;
-      ctx.lineTo(x, h * (1 - curve(rising ? v : 1 - v)));
+      ctx.lineTo(x, h * (1 - curve(rising ? v : 1 - v, rising)));
     }
     ctx.lineTo(b, 0);
     ctx.closePath();
@@ -370,7 +371,11 @@ function clipNode(): HTMLElement {
   const by = document.createElement("span");
   by.className = "fw-clip-by";
   by.setAttribute("aria-hidden", "true");
-  node.append(canvas, env, fadeIn, fadeOut, gain, takeBadge, name, by);
+  const lock = document.createElement("span");
+  lock.className = "fw-clip-lock";
+  lock.hidden = true;
+  lock.innerHTML = fcIcon("lock");
+  node.append(canvas, env, fadeIn, fadeOut, gain, takeBadge, name, by, lock);
   return node;
 }
 
@@ -398,7 +403,15 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
   syncWarpMarkers(node, clip, spp);
   const clipColor = clip.color ? `var(--fw-color-${clip.color})` : "";
   if (node.style.getPropertyValue("--fw-clip-color") !== clipColor) node.style.setProperty("--fw-clip-color", clipColor);
-  setText(node.querySelector(".fw-clip-name"), (doc.media[clip.mediaId]?.name ?? "").replace(/\.[a-z0-9]+$/i, ""));
+  setText(node.querySelector(".fw-clip-name"), clip.name ?? (doc.media[clip.mediaId]?.name ?? "").replace(/\.[a-z0-9]+$/i, ""));
+  const muted = String(!!clip.mute);
+  if (node.dataset.mute !== muted) node.dataset.mute = muted;
+  const lock = node.querySelector<HTMLElement>(".fw-clip-lock");
+  if (lock) {
+    if (lock.hidden === !!clip.lock) lock.hidden = !clip.lock;
+    const title = clip.lock === "edit" ? "Edit-locked: no edit until it is unlocked" : clip.lock === "time" ? "Time-locked: it stays where it is in time" : "";
+    if (lock.title !== title) lock.title = title;
+  }
   const by = node.querySelector<HTMLElement>(".fw-clip-by");
   setText(by, clip.by === "agent" ? "Claude" : "you");
   if (by && by.dataset.by !== (clip.by ?? "you")) by.dataset.by = clip.by ?? "you";
@@ -497,6 +510,19 @@ function laneNode(): HTMLElement {
 
 function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: number): void {
   setText(node.querySelector(".fw-lane-name"), track.name);
+  // S5: the track's height (its waves painted again at the new size) and its comments as the head's tooltip
+  const height = track.height ?? "medium";
+  if ((node.dataset.height ?? "medium") !== height) {
+    node.dataset.height = height;
+    requestAnimationFrame(() => {
+      for (const c of node.querySelectorAll<HTMLCanvasElement>(".fw-wave")) {
+        const info = paintInfo.get(c);
+        if (info) schedulePaint(c, info.media.id);
+      }
+    });
+  }
+  const head = node.querySelector<HTMLElement>(".fw-lane-head");
+  if (head && head.title !== (track.comments ?? "")) head.title = track.comments ?? "";
   setText(node.querySelector(".fw-lane-num"), String(doc.tracks.findIndex((t) => t.id === track.id) + 1).padStart(2, "0"));
   const laneColor = track.color ? `var(--fw-color-${track.color})` : "";
   if (node.style.getPropertyValue("--fw-lane-color") !== laneColor) node.style.setProperty("--fw-lane-color", laneColor);
@@ -813,7 +839,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       rows.push({ track: t });
     }
     const hideLane = (n: HTMLElement, t: Track) => {
-      const hide = !!t.busId && buses.has(t.busId) && folded.has(t.busId);
+      const hide = !!t.hidden || (!!t.busId && buses.has(t.busId) && folded.has(t.busId));
       if (n.hidden !== hide) n.hidden = hide;
     };
     patchList(lanes, rows, {
@@ -872,6 +898,18 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (!button || !trackId) return;
     const on = button.getAttribute("aria-pressed") !== "true";
     engine.dispatch(button.classList.contains("fw-lane-mute") ? { type: "set-track-mute", trackId, mute: on } : { type: "set-track-solo", trackId, solo: on });
+  });
+  // S5: a click on a track's head (not its buttons) or an empty stretch of it makes it the track the Track menu and a
+  // range paste act on, as a press on one of its clips does later
+  let pickedTrack: string | null = null;
+  lanes.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement;
+    const lane = target.closest(".fw-lane-head, .fw-lane-body") && !target.closest("button, input, select, .fw-clip") ? target.closest<HTMLElement>(".fw-lane") : null;
+    if (!lane?.dataset.key) return;
+    pickedTrack = lane.dataset.key;
+    for (const l of lanes.querySelectorAll<HTMLElement>(".fw-lane[data-current]")) if (l !== lane) delete l.dataset.current;
+    if (lane.dataset.current === undefined) lane.dataset.current = "";
+    lanes.dispatchEvent(new CustomEvent("fw-track", { bubbles: true, detail: lane.dataset.key }));
   });
   lanes.addEventListener("click", (e) => {
     const toggle = (e.target as HTMLElement).closest<HTMLElement>(".fw-takes-toggle");
@@ -1553,6 +1591,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
     const clip = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === node.dataset.key);
     if (!clip) return;
+    pickedTrack = trackId;
+    for (const l of lanes.querySelectorAll<HTMLElement>(".fw-lane[data-current]")) delete l.dataset.current;
     const rect = node.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const kind: GestureKind = target.classList.contains("fw-gain-line")
@@ -1592,6 +1632,12 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     markSelected();
     if (kind === "range") {
       startRange(e, trackId, node);
+      return;
+    }
+    // S5: a time-locked clip keeps its place, an edit-locked one any edit but its gain
+    if (clip.lock && (kind === "move" || (clip.lock === "edit" && kind !== "gain"))) {
+      setText(host.querySelector(".fw-notice"), clip.lock === "edit" ? "This clip is edit-locked: Clip > Edit lock unlocks it" : "This clip is time-locked: Clip > Time lock unlocks it");
+      e.preventDefault();
       return;
     }
     const doc = engine.get("document");
@@ -1874,7 +1920,9 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
     if (!d.moved) {
       if (apply && (d.kind === "fade-in" || d.kind === "fade-out")) {
-        const shape = nextFadeShape(d.clip.fadeShape);
+        // S5: a click on a fade changes that edge's curve alone
+        const out = (c: Clip) => c.fadeOutShape ?? c.fadeShape ?? "linear";
+        const shape = d.kind === "fade-in" ? nextFadeShape(d.clip.fadeShape) : nextFadeShape(out(d.clip));
         engine.dispatch({
           type: "batch",
           commands: d.group.map((m) => ({
@@ -1883,7 +1931,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
             clipId: m.clip.id,
             fadeIn: m.clip.fadeIn ?? 0,
             fadeOut: m.clip.fadeOut ?? 0,
-            shape,
+            ...(d.kind === "fade-in" ? { shape, outShape: out(m.clip) } : { outShape: shape }),
           })),
         });
       }
@@ -1903,6 +1951,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
 
   type Dispatchable = Parameters<Engine["dispatch"]>[0];
   let clipboard: { trackId: string; clip: Clip }[] = [];
+  let rangeClip: { clip: RangeClip; trackId: string } | null = null;
   const selectedClips = () =>
     engine
       .get("document")
@@ -1967,6 +2016,9 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
           fadeIn: clip.fadeIn,
           fadeOut: clip.fadeOut,
           fadeShape: clip.fadeShape,
+          ...(clip.fadeOutShape ? { fadeOutShape: clip.fadeOutShape } : {}),
+          ...(clip.name ? { name: clip.name } : {}),
+          ...(clip.mute ? { mute: true } : {}),
           ...(clip.takes ? { takes: [...clip.takes], take: clip.take } : {}),
         },
       });
@@ -2006,7 +2058,10 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       if (!track || !pieces.length) return;
       clearRange();
       const commands: Dispatchable[] = [{ type: "clear-range", trackId: track.id, start: r.start, end: r.end, ripple: false }];
-      if (key === "x") clipboard = pieces.map(({ clip, a, b }) => ({ trackId: track.id, clip: { ...clip, start: a, length: b - a, sourceIn: clip.sourceIn + (a - clip.start), fadeIn: 0, fadeOut: 0 } }));
+      if (key === "x") {
+        clipboard = pieces.map(({ clip, a, b }) => ({ trackId: track.id, clip: { ...clip, start: a, length: b - a, sourceIn: clip.sourceIn + (a - clip.start), fadeIn: 0, fadeOut: 0 } }));
+        rangeClip = null;
+      }
       if (key === "i") {
         for (const { clip, a, b } of pieces) {
           const media = doc.media[clip.mediaId];
@@ -2024,10 +2079,48 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         markSelected();
         return;
       }
+      // S5, range copy and paste (Pro Tools' Copy and Cut with an edit selection): the range's audio and its track's
+      // automation, pasted over what lies at the destination; the last copy, of clips or a range, is what pastes
+      if ((key === "c" || key === "x") && range) {
+        const r = range;
+        const copied = copyRange(engine.get("document"), r);
+        if (!copied) return;
+        e.preventDefault();
+        rangeClip = { clip: copied, trackId: r.trackId };
+        clipboard = [];
+        if (key === "x") {
+          clearRange();
+          const cut = engine.dispatch({ type: "batch", label: "Cut a range", commands: [{ type: "clear-range", trackId: r.trackId, start: r.start, end: r.end, ripple: shuffleEnabled(), follow: "tracks" }] });
+          if (!cut && engine.get("document").tracks.some((t) => t.clips.some((c) => c.lock))) {
+            setText(host.querySelector(".fw-notice"), "A locked clip is in the way, so the range is copied, not cut: Clip > Edit lock or Time lock unlocks it");
+            return;
+          }
+        }
+        setText(host.querySelector(".fw-notice"), `${key === "x" ? "Cut" : "Copied"} ${(copied.length / engine.get("document").sampleRate).toFixed(3)} s; Cmd or Ctrl V pastes it at the playhead or over a range`);
+        return;
+      }
+      if (key === "v" && rangeClip) {
+        e.preventDefault();
+        const doc = engine.get("document");
+        const trackId = [range?.trackId, pickedTrack, rangeClip.trackId].find((id) => id && doc.tracks.some((t) => t.id === id));
+        const at = range ? range.start : engine.get("transport").positionSamples;
+        const command = trackId ? pasteRange(doc, rangeClip.clip, trackId, at, shuffleEnabled()) : null;
+        if (!command || !trackId) return;
+        if (!engine.dispatch(command)) {
+          if (doc.tracks.some((t) => t.clips.some((c) => c.lock))) setText(host.querySelector(".fw-notice"), "A locked clip is in the way of the paste: Clip > Edit lock or Time lock unlocks it");
+          return;
+        }
+        range = { trackId, start: Math.round(at), end: Math.round(at) + rangeClip.clip.length };
+        rangeBand = null;
+        lanes.dispatchEvent(new CustomEvent("fw-range", { bubbles: true, detail: range }));
+        drawRange();
+        return;
+      }
       if (key === "c" || key === "x") {
         const chosen = selectedClips();
         if (!chosen.length) return;
         e.preventDefault();
+        rangeClip = null;
         clipboard = chosen.map(({ trackId, clip }) => ({ trackId, clip: { ...clip } }));
         if (key === "x") {
           selectedClipIds.clear();
@@ -2043,8 +2136,9 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const selection = selectedClips;
-    if (e.key === "=" || e.key === "+") setZoom(zoom * 2);
-    else if (e.key === "-") setZoom(zoom / 2);
+    // the keypad's plus and minus nudge (ui/editing.ts), as Pro Tools' do
+    if ((e.key === "=" || e.key === "+") && e.code !== "NumpadAdd") setZoom(zoom * 2);
+    else if (e.key === "-" && e.code !== "NumpadSubtract") setZoom(zoom / 2);
     else if (e.key === "0") setZoom(1);
     else if (range && (e.key === "Delete" || e.key === "Backspace")) {
       const r = range;

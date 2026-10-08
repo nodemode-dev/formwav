@@ -349,6 +349,16 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-clip-by { position: absolute; top: 4px; right: 6px; z-index: var(--z-raised); padding: 1px 6px; border-radius: 4px; background: var(--cv-chip-bg); color: var(--text-secondary); font-size: var(--fs-11); pointer-events: none; }
 .fw-clip-by[data-by="agent"] { color: var(--cv-claude-ink); }
 .fw-clip-by:empty { display: none; }
+.fw-lanes .fw-lane .fw-clip[data-mute="true"] { background: color-mix(in srgb, var(--text-muted) 10%, transparent); border-style: dashed; }
+.fw-lanes .fw-lane .fw-clip[data-mute="true"] .fw-wave { opacity: 0.35; }
+.fw-lanes .fw-lane .fw-clip[data-mute="true"] .fw-clip-name { color: var(--text-secondary); text-decoration: line-through; }
+.fw-clip-lock { position: absolute; bottom: 4px; right: 6px; z-index: var(--z-raised); display: flex; padding: 2px; border-radius: 4px; background: var(--cv-chip-bg); color: var(--text-primary); }
+.fw-clip-lock[hidden] { display: none; }
+.fw-lane[data-height="small"] { --cv-lane-h: 56px; }
+.fw-lane[data-height="small"] .fw-lane-head .fw-lane-meta { display: none; }
+.fw-lane[data-height="large"] { --cv-lane-h: 120px; }
+.fw-lane[data-height="jumbo"] { --cv-lane-h: 180px; }
+.fw-lane[data-current] .fw-lane-head { background: var(--bg-tertiary); }
 
 /* Footer: transport, position, tempo, meters and status */
 .fw-status {
@@ -423,6 +433,8 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 }
 .fw-mus-pop { grid-auto-flow: column; align-items: center; }
 .fw-mus-pop [hidden] { display: none !important; }
+.fw-mus-pop select.fw-spot-input { inline-size: auto; font-family: inherit; }
+.fw-musical .fw-mus-value[data-mus-value="snap"] { min-inline-size: 5ch; }
 .fw-fade-preview { position: absolute; inset-block: 0; z-index: var(--z-raised); inline-size: 0; pointer-events: none; }
 .fw-fade-preview-in { inset-inline-start: 0; background: linear-gradient(to bottom right, color-mix(in srgb, var(--accent-color) 45%, transparent) 50%, transparent 50%); border-inline-end: 1px solid var(--accent-color); }
 .fw-fade-preview-out { inset-inline-end: 0; background: linear-gradient(to bottom left, color-mix(in srgb, var(--accent-color) 45%, transparent) 50%, transparent 50%); border-inline-start: 1px solid var(--accent-color); }

@@ -1,19 +1,20 @@
 /**
  * The editor's Clip tab, after the approved target (research/ui_reference): the selected clip's settings as one grid
  * of fields, each editing through the engine's own command, as the Inspector's fields do: the track's name
- * (rename-track), the clip's start (move-clip), gain (set-clip-gain), fades and their shape (set-clip-fades), sound
- * type (set-clip-type) and colour (set-clip-color); its source and length are shown. PT-24: an ARA plug-in analyses the
+ * (rename-track), the clip's name (rename-clip), start (move-clip), gain (set-clip-gain), fades and each one's shape
+ * (set-clip-fades), sound type (set-clip-type), mute (set-clips-mute), lock (set-clips-lock) and colour
+ * (set-clip-color); its source and length are shown. PT-24: an ARA plug-in analyses the
  * clip, its state kept on the clip (set-clip-ara) so it is saved with the session, and renders it with that state
  * restored (set-clip-media). A field being typed in is never overwritten by an update. A dock panel like the others:
  * its toggle flips its hidden flag.
  */
 import type { Engine } from "../engine";
-import type { Clip, Command, SessionDoc, Track } from "../engine/document";
+import type { Clip, Command, FadeShape, SessionDoc, Track } from "../engine/document";
 import type { MediaRef } from "../engine";
 import { setText } from "../vendor/nodemode/dom-stable";
 
 const COLORS = ["cyan", "violet", "amber", "pink", "slate", "green", "blue", "red"];
-const SHAPES: Array<[string, string]> = [["linear", "Linear"], ["equal-power", "Equal power"], ["s-curve", "S-curve"], ["exponential", "Exponential"]];
+const SHAPES: Array<[string, string]> = [["linear", "Linear"], ["equal-power", "Equal power"], ["s-curve", "S-curve"], ["exponential", "Exponential"], ["logarithmic", "Logarithmic"]];
 const TYPES: Array<[string, string]> = [["", "Not set"], ["dialogue", "Dialogue"], ["music", "Music"], ["effects", "Effects"], ["ambience", "Ambience"]];
 
 export function mountClipTab(host: HTMLElement, engine: Engine): void {
@@ -32,9 +33,13 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     field("Gain (dB)", `<input type="number" data-f="gain" min="-60" max="24" step="0.1">`),
     field("Fade in (s)", `<input type="number" data-f="fadeIn" min="0" step="0.01">`),
     field("Fade out (s)", `<input type="number" data-f="fadeOut" min="0" step="0.01">`),
-    field("Fade shape", `<select data-f="shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
+    field("Fade shape", `<select data-f="shape" title="Both fades' shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
     field("Sound type", `<select data-f="type">${TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
     `<div class="fw-cf-actions" role="group" aria-label="Clip actions"><button type="button" class="fw-ibtn" data-clip-act="split" title="Split this clip where the playhead is">Split at the playhead</button><button type="button" class="fw-ibtn" data-clip-act="normalize" title="Normalize the selected clips to a loudness target">Normalize</button><button type="button" class="fw-ibtn" data-clip-act="check" title="Measure the recording and list what it needs, in the Inspector">Check the recording</button><button type="button" class="fw-ibtn" data-clip-act="repair" title="Find the clip's problems and propose a repair chain, in the Inspector">Repair assistant</button></div>`,
+    field("Clip name", `<input type="text" data-f="clipName" maxlength="80">`),
+    field("Fade-out shape", `<select data-f="outShape" title="The fade-out's own shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
+    field("Mute", `<select data-f="mute"><option value="">Plays</option><option value="on">Muted</option></select>`),
+    field("Lock", `<select data-f="lock"><option value="">None</option><option value="time">Time lock</option><option value="edit">Edit lock</option></select>`),
     field("Source", `<output data-f="source"></output>`, true),
     `<div class="fw-cf fw-cf-wide"><span class="fw-cf-label">Colour</span><div class="fw-cf-colors" role="group" aria-label="Clip colour"><button type="button" class="fw-cf-color" data-color="" aria-label="The track's colour" title="The track's colour"></button>${COLORS.map((c) => `<button type="button" class="fw-cf-color" data-color="${c}" aria-label="${c}" title="${c}" style="color: var(--fw-color-${c})"></button>`).join("")}</div></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-three"><span class="fw-cf-label">Separate</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-three>Speech, music and effects to three tracks</button></div><output class="fw-cf-ara-state" data-three-state>Three tracks that add up to this clip exactly</output></div>`,
@@ -86,6 +91,13 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     put(f<HTMLInputElement>("fadeIn"), sec(clip.fadeIn ?? 0, doc).toFixed(2));
     put(f<HTMLInputElement>("fadeOut"), sec(clip.fadeOut ?? 0, doc).toFixed(2));
     put(f<HTMLSelectElement>("shape"), clip.fadeShape ?? "linear");
+    put(f<HTMLSelectElement>("outShape"), clip.fadeOutShape ?? clip.fadeShape ?? "linear");
+    const clipName = f<HTMLInputElement>("clipName");
+    put(clipName, clip.name ?? "");
+    const fileName = (media?.name ?? "").replace(/\.[a-z0-9]+$/i, "");
+    if (clipName.placeholder !== fileName) clipName.placeholder = fileName;
+    put(f<HTMLSelectElement>("mute"), clip.mute ? "on" : "");
+    put(f<HTMLSelectElement>("lock"), clip.lock ?? "");
     for (const b of panel.querySelectorAll<HTMLElement>(".fw-cf-color")) b.setAttribute("aria-pressed", String((b.dataset.color ?? "") === (clip.color ?? "")));
     const ara = clip.ara;
     if (!araBusy) {
@@ -120,13 +132,25 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
         break;
       case "fadeIn":
       case "fadeOut":
-      case "shape": {
+      case "shape":
+      case "outShape": {
         const fadeIn = el.dataset.f === "fadeIn" ? samples(value) : (clip.fadeIn ?? 0);
         const fadeOut = el.dataset.f === "fadeOut" ? samples(value) : (clip.fadeOut ?? 0);
-        const shape = (el.dataset.f === "shape" ? value : (clip.fadeShape ?? "linear")) as Clip["fadeShape"];
-        engine.dispatch({ type: "set-clip-fades", ...ids, fadeIn: Math.min(fadeIn, clip.length), fadeOut: Math.min(fadeOut, clip.length), shape });
+        const shape = (el.dataset.f === "shape" ? value : (clip.fadeShape ?? "linear")) as FadeShape;
+        // Fade shape sets both fades, Fade-out shape the fade-out's own; a fade's length leaves both shapes as they are
+        const outShape = el.dataset.f === "shape" ? null : el.dataset.f === "outShape" ? (value as FadeShape) : undefined;
+        engine.dispatch({ type: "set-clip-fades", ...ids, fadeIn: Math.min(fadeIn, clip.length), fadeOut: Math.min(fadeOut, clip.length), shape, ...(outShape !== undefined ? { outShape } : {}) });
         break;
       }
+      case "clipName":
+        engine.dispatch({ type: "rename-clip", ...ids, name: value });
+        break;
+      case "mute":
+        engine.dispatch({ type: "set-clips-mute", clipIds: [clip.id], mute: value === "on" });
+        break;
+      case "lock":
+        engine.dispatch({ type: "set-clips-lock", clipIds: [clip.id], lock: value === "time" || value === "edit" ? value : null });
+        break;
     }
     render();
   });

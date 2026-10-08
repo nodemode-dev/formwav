@@ -58,6 +58,14 @@ function shellHtml(): string {
           </div>
         </div>
         <div class="fw-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Track</button>
+          <div class="cv-menu fw-menu-pop fw-track-pop" role="menu" aria-label="Track" hidden></div>
+        </div>
+        <div class="fw-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Clip</button>
+          <div class="cv-menu fw-menu-pop fw-clip-pop" role="menu" aria-label="Clip" hidden></div>
+        </div>
+        <div class="fw-menu">
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Transport</button>
           <div class="cv-menu fw-menu-pop fw-transport-pop" role="menu" aria-label="Transport" hidden>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-status [data-action="play"]'><span>Play or pause</span><kbd>Space</kbd></button>
@@ -146,7 +154,7 @@ function shellHtml(): string {
       <div class="fw-musical" role="group" aria-label="Tempo, meter and snap">
         <button type="button" class="fw-mus" data-mus="tempo" aria-haspopup="dialog" title="The session's tempo, for bars and beats and the grid"><span class="fw-mus-label">Tempo</span><span class="fw-mus-value" data-mus-value="tempo">120</span></button>
         <button type="button" class="fw-mus" data-mus="meter" aria-haspopup="dialog" title="Beats in a bar"><span class="fw-mus-label">Meter</span><span class="fw-mus-value" data-mus-value="meter">4/4</span></button>
-        <button type="button" class="fw-mus" data-mus="snap" title="What moves and trims snap to: off, the ruler's ticks, or beats (G)"><span class="fw-mus-label">Snap</span><span class="fw-mus-value" data-mus-value="snap">Off</span></button>
+        <button type="button" class="fw-mus" data-mus="snap" aria-haspopup="dialog" title="What moves and trims snap to (G turns it on and off), the grid's value and the nudge's"><span class="fw-mus-label">Snap</span><span class="fw-mus-value" data-mus-value="snap">Off</span></button>
       </div>
       <button type="button" class="fw-ibtn fw-speed-btn" popovertarget="fw-speed-pop" title="Playback speed (0.25 to 4 times, pitch following, playback only)" aria-label="Playback speed"><output data-speed-out>1.00×</output></button>
       <div id="fw-speed-pop" class="fw-rec-pop" popover><label class="fw-speed" title="Play at speed: 0.25 to 4 times, pitch following (playback only); double-click for 1×">Speed <input type="range" data-speed min="-2" max="2" step="0.01" value="0" data-default="0" aria-label="Playback speed, as a power of two"></label></div>

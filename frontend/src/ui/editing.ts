@@ -7,14 +7,18 @@
  */
 import type { Command, Engine } from "../engine";
 import type { Player } from "../audio/player";
-import { clipTransients, editSpan, healSeparations, insertSilence, nextStop, repeatSpan, separateOnGrid, shiftClips, stripGaps, timeOperation, trimToFile, trimToFill, trimToPlayhead, trimToRange, type EditRange, type EditTarget } from "../engine/editing";
+import { FADE_SHAPES, nextMemoryNumber, type FadeShape, type Track } from "../engine/document";
+import { clipTransients, createFades, deleteFades, editSpan, fadeToPlayhead, findMemory, healSeparations, insertSilence, lockClips, muteClips, nextMemory, nextStop, nudgeClips, repeatSpan, separateOnGrid, shiftClips, snapClips, spaceClips, stripGaps, timeOperation, trimToFile, trimToFill, trimToPlayhead, trimToRange, type EditRange, type EditTarget, type MemoryLocation } from "../engine/editing";
+import { gridStepOf, NUDGE_DEFAULT, parseGrid } from "../engine/grid";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { mountBigCounter } from "./big-counter";
-import { gridStep, shuffleEnabled } from "./grid";
+import { frameRate, gridCuts, shuffleEnabled } from "./grid";
 import { getZoom, samplesPerPixel, setZoom, zoomToSpan } from "./lanes";
 
-type Field = { key: string; label: string; value: number | null; min?: number; max?: number; step?: number; unit?: string; placeholder?: string };
-type Values = Record<string, number | null>;
+type Field = { key: string; label: string; value: number | string | null; min?: number; max?: number; step?: number; unit?: string; placeholder?: string; options?: [string, string][]; text?: boolean };
+type Values = Record<string, number | string | null>;
+const num = (v: Values | null, key: string): number | null => (v && typeof v[key] === "number" ? (v[key] as number) : null);
+const str = (v: Values | null, key: string): string => (v && typeof v[key] === "string" ? (v[key] as string) : "");
 
 const PRESETS_KEY = "formwav.zoomPresets";
 const DEFAULT_PRESETS = [0.25, 1, 8, 64, 1024];
@@ -43,7 +47,10 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       say(none);
       return false;
     }
-    engine.dispatch(command);
+    if (!engine.dispatch(command) && engine.get("document").tracks.some((t) => t.clips.some((c) => c.lock))) {
+      say("A locked clip is in the way: Clip > Edit lock or Time lock unlocks it");
+      return false;
+    }
     say(done);
     return true;
   };
@@ -70,15 +77,15 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       return;
     }
     const values: Values = {};
-    for (const input of dialog.querySelectorAll<HTMLInputElement>("input[data-k]")) {
+    for (const input of dialog.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-k]")) {
       const n = Number(input.value);
-      values[input.dataset.k ?? ""] = input.value.trim() === "" || !Number.isFinite(n) ? null : n;
+      values[input.dataset.k ?? ""] = input instanceof HTMLSelectElement || input.type === "text" ? input.value : input.value.trim() === "" || !Number.isFinite(n) ? null : n;
     }
     remembered.set(dialog.dataset.ask ?? "", values);
     done(values);
   });
   dialog.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
+    if (e.key === "Enter" && /^(INPUT|SELECT)$/.test((e.target as HTMLElement).tagName)) {
       e.preventDefault();
       // the field gives up focus now: left in the closed dialog until the browser moves it, it took the next key,
       // which then reached no shortcut
@@ -98,11 +105,13 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
         ...fields.map((f) => {
           const label = document.createElement("label");
           label.className = "fw-ask-field";
-          const input = Object.assign(document.createElement("input"), { type: "number", step: String(f.step ?? "any"), placeholder: f.placeholder ?? "" });
+          const input = f.options
+            ? Object.assign(document.createElement("select"), { innerHTML: f.options.map(([v, l]) => `<option value="${v}">${l}</option>`).join("") })
+            : Object.assign(document.createElement("input"), f.text ? { type: "text", maxLength: 500, placeholder: f.placeholder ?? "" } : { type: "number", step: String(f.step ?? "any"), placeholder: f.placeholder ?? "" });
           input.dataset.k = f.key;
-          if (f.min !== undefined) input.min = String(f.min);
-          if (f.max !== undefined) input.max = String(f.max);
-          const value = f.key in last ? last[f.key] : f.value;
+          if (input instanceof HTMLInputElement && f.min !== undefined) input.min = String(f.min);
+          if (input instanceof HTMLInputElement && f.max !== undefined) input.max = String(f.max);
+          const value = f.key in last && !f.text ? last[f.key] : f.value;
           input.value = value === null ? "" : String(value);
           label.append(Object.assign(document.createElement("span"), { textContent: f.label }), input, Object.assign(document.createElement("span"), { textContent: f.unit ?? "" }));
           return label;
@@ -111,7 +120,9 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       settle = resolve;
       dialog.returnValue = "";
       dialog.showModal();
-      dialog.querySelector<HTMLInputElement>("input[data-k]")?.select();
+      const first = dialog.querySelector<HTMLInputElement | HTMLSelectElement>("[data-k]");
+      if (first instanceof HTMLInputElement) first.select();
+      else first?.focus();
     });
 
   const duplicate = () => {
@@ -129,8 +140,8 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       return;
     }
     const v = await ask("Repeat", "Copies placed end to end after the selection.", [{ key: "count", label: "Copies", value: 2, min: 1, max: 999, step: 1 }], "Repeat");
-    const n = v?.count;
-    if (!v || n === null || n === undefined) return;
+    const n = num(v, "count");
+    if (n === null) return;
     run(repeatSpan(engine.get("document"), target(), Math.round(n), shuffleEnabled()), `Repeated the selection ${Math.round(n)} times`, "Type from 1 to 999 copies");
   };
   const shift = async () => {
@@ -139,8 +150,8 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       return;
     }
     const v = await ask("Shift", "The selected clips move later, or earlier for a negative amount.", [{ key: "by", label: "By", value: 1, step: 0.001, unit: "s" }], "Shift");
-    const by = v?.by;
-    if (!v || by === null || by === undefined) return;
+    const by = num(v, "by");
+    if (by === null) return;
     run(shiftClips(engine.get("document"), target().clipIds, by * rate()), `Shifted the clips ${by >= 0 ? "later" : "earlier"} by ${Math.abs(by).toFixed(3)} s`, "The clips are already at the start");
   };
   const spanOrLoop = () => {
@@ -187,14 +198,15 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       "Strip",
     );
     if (!v) return;
-    const q = new URLSearchParams({ trackId: scope.trackId, gap: String(Math.max(0.001, (v.minimum ?? 300) / 1000)) });
-    if (v.threshold !== null && v.threshold !== undefined) q.set("threshold", String(Math.min(0, Math.max(-96, v.threshold))));
+    const threshold = num(v, "threshold");
+    const q = new URLSearchParams({ trackId: scope.trackId, gap: String(Math.max(0.001, (num(v, "minimum") ?? 300) / 1000)) });
+    if (threshold !== null) q.set("threshold", String(Math.min(0, Math.max(-96, threshold))));
     say("Finding the silences...");
     try {
       const res = await fetch(`/api/render/activity?${q}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(engine.get("document")) });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown; regions?: [number, number][] };
       if (!res.ok || !out.regions) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
-      const gaps = stripGaps(out.regions, rate(), scope.start, scope.end, Math.max(0, v.before ?? 0) / 1000, Math.max(0, v.after ?? 0) / 1000);
+      const gaps = stripGaps(out.regions, rate(), scope.start, scope.end, Math.max(0, num(v, "before") ?? 0) / 1000, Math.max(0, num(v, "after") ?? 0) / 1000);
       const command: Command | null = gaps.length ? { type: "batch", label: "Stripped silence", commands: [{ type: "clear-ranges", trackIds: [scope.trackId], ranges: gaps, ripple: false }] } : null;
       const stripped = run(command, `Stripped ${gaps.length} silent stretch${gaps.length === 1 ? "" : "es"}`, "No silence to strip at that threshold and length");
       // what was selected stays selected as the pieces that remain of it, as Pro Tools leaves them
@@ -271,8 +283,8 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
   };
   const separateGrid = () => {
     const doc = engine.get("document");
-    const step = gridStep(doc.sampleRate, doc.sampleRate / samplesPerPixel(doc));
-    run(separateOnGrid(doc, target(), step), `Separated on the grid every ${seconds(step)}`, target().range || target().clipIds.length ? "No grid line inside the selection (or the grid is too fine): zoom out" : "Select clips or a range to separate");
+    const step = gridCuts(doc.sampleRate, doc.sampleRate / samplesPerPixel(doc));
+    run(separateOnGrid(doc, target(), step), typeof step === "number" ? `Separated on the grid every ${seconds(step)}` : "Separated on the grid", target().range || target().clipIds.length ? "No grid line inside the selection (or the grid is too fine): zoom out" : "Select clips or a range to separate");
   };
   const counter = mountBigCounter(host, engine);
 
@@ -377,6 +389,256 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     } else if (!mod && !e.altKey && /^Digit[1-5]$/.test(e.code)) {
       e.preventDefault();
       preset(Number(e.code.slice(5)) - 1, e.shiftKey);
+    }
+  });
+
+  // PLAN_v13 S5, editing depth: the Track and Clip menus, nudge, fades from a selection and memory locations. The track a
+  // Track command acts on is the one picked last: a click on its head or an empty stretch of it, a clip on it, a range
+  let current: string | null = null;
+  let latest: "track" | "clips" | "range" = "clips";
+  host.addEventListener("fw-track", (e) => {
+    current = (e as CustomEvent<string>).detail;
+    latest = "track";
+  });
+  host.addEventListener("fw-range", (e) => {
+    if ((e as CustomEvent<unknown>).detail) latest = "range";
+  });
+  host.addEventListener("fw-selection", (e) => {
+    if (((e as CustomEvent<string[]>).detail ?? []).length) latest = "clips";
+  });
+  const trackNow = (): Track | null => {
+    const doc = engine.get("document");
+    const t = target();
+    const ofClips = doc.tracks.find((tr) => tr.clips.some((c) => t.clipIds.includes(c.id)))?.id;
+    const order = latest === "track" ? [current, t.range?.trackId, ofClips] : latest === "range" ? [t.range?.trackId, ofClips, current] : [ofClips, t.range?.trackId, current];
+    const id = order.find((x) => x && doc.tracks.some((tr) => tr.id === x));
+    return doc.tracks.find((tr) => tr.id === id) ?? null;
+  };
+  const onTrack = (fn: (track: Track) => void) => () => {
+    const track = trackNow();
+    if (track) fn(track);
+    else say("Click a track's name, or select a clip or a range on it, first");
+  };
+  const moveTrack = (by: 1 | -1) =>
+    onTrack((track) => {
+      const doc = engine.get("document");
+      const at = doc.tracks.indexOf(track);
+      if (at + by < 0 || at + by >= doc.tracks.length) return say(`${track.name} is already the ${by < 0 ? "first" : "last"} track`);
+      engine.dispatch({ type: "move-track", trackId: track.id, to: at + by });
+      say(`Moved ${track.name} ${by < 0 ? "up" : "down"}`);
+    });
+  const heights = ["small", "medium", "large", "jumbo"] as const;
+  const trackListeners = new Set<() => void>();
+  const syncTracks = () => {
+    for (const fn of trackListeners) fn();
+  };
+  engine.subscribe("document", syncTracks);
+  host.addEventListener("fw-track", syncTracks);
+  host.addEventListener("fw-selection", () => queueMicrotask(syncTracks));
+  host.addEventListener("fw-range", () => queueMicrotask(syncTracks));
+  const comments = onTrack(async (track) => {
+    const v = await ask("Track comments", `Notes kept with ${track.name}, shown when the pointer rests on its name.`, [{ key: "text", label: "Comments", value: track.comments ?? "", text: true, placeholder: "Mic, take notes, anything" }], "Keep");
+    if (!v) return;
+    engine.dispatch({ type: "set-track-comments", trackId: track.id, comments: str(v, "text") });
+    say(str(v, "text").trim() ? `Comments kept with ${track.name}` : `Cleared the comments of ${track.name}`);
+  });
+  const trackPop = host.querySelector(".fw-track-pop");
+  trackPop?.append(
+    item("New track", "", "Add an empty stereo track at the bottom", () => engine.dispatch({ type: "add-track" })),
+    item("Duplicate", "⌥⇧D", "A copy of the track right below it: its clips, playlists, effects, automation, sends and routing", onTrack((track) => {
+      engine.dispatch({ type: "duplicate-track", trackId: track.id });
+      say(`Duplicated ${track.name}`);
+    })),
+    item("Move up", "", "Move the track one place up, in the lanes and the mixer", moveTrack(-1)),
+    item("Move down", "", "Move the track one place down, in the lanes and the mixer", moveTrack(1)),
+    sep(),
+    item("Hide", "", "Hide the track from the lanes and the mixer; it still plays", onTrack((track) => {
+      engine.dispatch({ type: "set-tracks-hidden", trackIds: [track.id], hidden: true });
+      if (current === track.id) current = null;
+      say(`Hid ${track.name}; Track > Show hidden tracks brings it back`);
+    })),
+    item("Show hidden tracks", "", "Show every hidden track again", () => {
+      const ids = engine.get("document").tracks.filter((t) => t.hidden).map((t) => t.id);
+      if (!ids.length) return say("No track is hidden");
+      engine.dispatch({ type: "set-tracks-hidden", trackIds: ids, hidden: false });
+      say(`Showed ${ids.length} hidden track${ids.length === 1 ? "" : "s"}`);
+    }),
+    sep(),
+    Object.assign(document.createElement("span"), { className: "fw-menu-label", textContent: "Height" }),
+    ...heights.map((h) =>
+      item(
+        h[0].toUpperCase() + h.slice(1),
+        "",
+        `Make the track ${h}`,
+        onTrack((track) => engine.dispatch({ type: "set-track-height", trackId: track.id, height: h })),
+        () => (trackNow()?.height ?? "medium") === h && !!trackNow(),
+        (sync) => trackListeners.add(sync),
+      ),
+    ),
+    sep(),
+    item("Comments...", "", "Notes kept with the track", () => void comments()),
+  );
+
+  const clipsNow = () => target().clipIds;
+  const firstClip = () => {
+    const doc = engine.get("document");
+    const id = clipsNow()[0];
+    for (const t of doc.tracks) for (const c of t.clips) if (c.id === id) return { track: t, clip: c };
+    return null;
+  };
+  const rename = async () => {
+    const hit = firstClip();
+    if (!hit) return say("Select the clip to rename");
+    const doc = engine.get("document");
+    const shown = hit.clip.name ?? (doc.media[hit.clip.mediaId]?.name ?? "").replace(/\.[a-z0-9]+$/i, "");
+    const v = await ask("Rename clip", "A name for this clip alone; leave it empty to show its file's name again.", [{ key: "name", label: "Name", value: shown, text: true }], "Rename");
+    if (!v) return;
+    engine.dispatch({ type: "rename-clip", trackId: hit.track.id, clipId: hit.clip.id, name: str(v, "name") });
+    say(str(v, "name").trim() ? `Renamed the clip ${str(v, "name").trim()}` : "The clip shows its file's name again");
+  };
+  const space = async () => {
+    if (clipsNow().length < 2) return say("Select two or more clips on a track to space");
+    const v = await ask(
+      "Space clips",
+      "The selected clips one after another from the first, this far apart.",
+      [
+        { key: "gap", label: "Gap", value: 0, step: 0.001, unit: "s" },
+        { key: "mode", label: "From", value: "end", options: [["end", "each end to the next start"], ["start", "each start to the next start"]] },
+      ],
+      "Space",
+    );
+    const gap = num(v, "gap");
+    if (gap === null) return;
+    run(spaceClips(engine.get("document"), clipsNow(), Math.round(gap * rate()), str(v, "mode") === "start"), `Spaced the clips ${gap.toFixed(3)} s apart`, "The clips are already spaced so (or locked)");
+  };
+  const nudgeBy = () => {
+    const doc = engine.get("document");
+    const g = parseGrid(doc.snap?.nudge ?? NUDGE_DEFAULT) ?? parseGrid(NUDGE_DEFAULT);
+    return g ? gridStepOf(doc, g, frameRate()) : rate() / 10;
+  };
+  const nudge = (direction: 1 | -1) => {
+    const by = nudgeBy() * direction;
+    if (clipsNow().length) {
+      run(nudgeClips(engine.get("document"), clipsNow(), by), `Nudged the clips ${direction > 0 ? "later" : "earlier"} by ${seconds(Math.abs(by))}`, "The clips are at the start already, or locked");
+      return;
+    }
+    if (range) {
+      const start = Math.max(0, Math.round(range.start + by));
+      setRange({ trackId: range.trackId, start, end: start + range.end - range.start });
+      say(`Nudged the range ${direction > 0 ? "later" : "earlier"}`);
+      return;
+    }
+    say("Select clips or a range to nudge");
+  };
+  const fadeShapes = Object.keys(FADE_SHAPES).map((s): [string, string] => [s, s[0].toUpperCase() + s.slice(1).replace("-", " ")]);
+  const makeFades = async () => {
+    if (!range) return say("Draw a range across a clip's edge or a join between two clips first");
+    const v = await ask("Create fades", "A fade-in or fade-out where the range crosses a clip's edge, a crossfade where it crosses a join between two clips.", [{ key: "shape", label: "Shape", value: "equal-power", options: fadeShapes }], "Create");
+    if (!v || !range) return;
+    run(createFades(engine.get("document"), range, (str(v, "shape") || "equal-power") as FadeShape), "Created fades", "The range crosses no clip's edge or join");
+  };
+  const clipPop = host.querySelector(".fw-clip-pop");
+  clipPop?.append(
+    item("Mute or unmute", "", "Silence the selected clips in playback and export, keeping them in place (again to unmute)", () => run(muteClips(engine.get("document"), clipsNow()), "Muted or unmuted the clips", "Select the clips to mute")),
+    item("Edit lock", "", "Keep the selected clips from any edit but their gain (again to unlock)", () => run(lockClips(engine.get("document"), clipsNow(), "edit"), "Changed the clips' edit lock", "Select the clips to lock")),
+    item("Time lock", "", "Keep the selected clips where they are in time; they can still be trimmed (again to unlock)", () => run(lockClips(engine.get("document"), clipsNow(), "time"), "Changed the clips' time lock", "Select the clips to lock")),
+    item("Rename...", "", "A name for the selected clip alone", () => void rename()),
+    sep(),
+    item("Space clips...", "", "Set the selected clips one after another, a gap apart", () => void space()),
+    item("Snap to previous", "", "Move each selected clip so its start meets the end of the clip before it", () => run(snapClips(engine.get("document"), clipsNow(), "previous"), "Snapped to the previous clip", "No clip before to snap to (or the clips are locked)")),
+    item("Snap to next", "", "Move each selected clip so its end meets the start of the clip after it", () => run(snapClips(engine.get("document"), clipsNow(), "next"), "Snapped to the next clip", "No clip after to snap to (or the clips are locked)")),
+    item("Nudge earlier", ",", "Move the selected clips, or the range, earlier by the nudge value (the keypad's minus too)", () => nudge(-1)),
+    item("Nudge later", ".", "Move the selected clips, or the range, later by the nudge value (the keypad's plus too)", () => nudge(1)),
+    sep(),
+    item("Create fades...", "⌘F", "Fade in, fade out or crossfade where the range crosses a clip's edge or a join", () => void makeFades()),
+    item("Delete fades", "", "Remove the fades of the clips in the range, or of the selected clips", () => run(deleteFades(engine.get("document"), target()), "Deleted the fades", "No fades on the selected clips or in the range")),
+    item("Fade in to playhead", "", "Fade the clips under the playhead in from their start to it", () => run(fadeToPlayhead(engine.get("document"), target(), playhead(), "start"), "Faded in to the playhead", "Put the playhead inside a selected clip")),
+    item("Fade out from playhead", "", "Fade the clips under the playhead out from it to their end", () => run(fadeToPlayhead(engine.get("document"), target(), playhead(), "end"), "Faded out from the playhead", "Put the playhead inside a selected clip")),
+  );
+
+  // Memory locations (Pro Tools' Memory Locations): Enter adds one at the playhead, playing or not; a number on the keypad
+  // between two points recalls it; previous and next step through them; a selection location sets the range again
+  const recall = (m: MemoryLocation | null, missing: string) => {
+    if (!m) return say(missing);
+    player.seek(m.start);
+    if (m.kind === "region") {
+      const doc = engine.get("document");
+      const trackId = trackNow()?.id ?? doc.tracks[0]?.id;
+      if (trackId) setRange({ trackId, start: m.start, end: m.end });
+    }
+    say(`Memory location ${m.number} at ${seconds(m.start)}`);
+  };
+  const addMemory = () => {
+    const doc = engine.get("document");
+    const n = nextMemoryNumber(doc);
+    const at = playhead();
+    engine.dispatch({ type: "add-marker", at, label: `Marker ${n}` });
+    say(`Memory location ${n} at ${seconds(at)}`);
+  };
+  host.querySelector(".fw-transport-pop")?.append(
+    sep(),
+    item("Add memory location", "Enter", "A numbered marker at the playhead, while playing too", addMemory),
+    item("Previous memory location", "", "The playhead to the memory location before it", () => recall(nextMemory(engine.get("document"), playhead(), -1), "No memory location before the playhead")),
+    item("Next memory location", "", "The playhead to the memory location after it", () => recall(nextMemory(engine.get("document"), playhead(), 1), "No memory location after the playhead")),
+    item("Memory locations", "", "The numbered markers and regions, with their comments and colours (the editor's Labels)", () => {
+      const panel = host.querySelector<HTMLElement>(".fw-labels-panel");
+      if (panel?.hidden) host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-labels]")?.click();
+    }),
+  );
+  host.addEventListener("fw-recall-memory", (e) => recall(findMemory(engine.get("document"), (e as CustomEvent<number>).detail), "No memory location with that number"));
+
+  let typed: string | null = null;
+  let typedAt = 0;
+  window.addEventListener("keydown", (e) => {
+    const t = e.target as HTMLElement | null;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (dialog.open || !engine.get("document").tracks.length) return;
+    const mod = e.metaKey || e.ctrlKey;
+    // the keypad's point, a number and the point (or Enter) recall that memory location
+    if (typed !== null && performance.now() - typedAt > 3000) typed = null;
+    if (!mod && !e.altKey && e.code === "NumpadDecimal") {
+      e.preventDefault();
+      if (typed) {
+        const n = Number(typed);
+        typed = null;
+        recall(findMemory(engine.get("document"), n), `No memory location ${n}`);
+      } else {
+        typed = "";
+        typedAt = performance.now();
+      }
+      return;
+    }
+    if (typed !== null && /^Numpad[0-9]$/.test(e.code)) {
+      e.preventDefault();
+      typed += e.code.slice(6);
+      typedAt = performance.now();
+      return;
+    }
+    if (typed && e.code === "NumpadEnter") {
+      e.preventDefault();
+      const n = Number(typed);
+      typed = null;
+      recall(findMemory(engine.get("document"), n), `No memory location ${n}`);
+      return;
+    }
+    if (mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && range) {
+      e.preventDefault();
+      void makeFades();
+    } else if (e.altKey && e.shiftKey && !mod && e.code === "KeyD") {
+      e.preventDefault();
+      onTrack((track) => {
+        engine.dispatch({ type: "duplicate-track", trackId: track.id });
+        say(`Duplicated ${track.name}`);
+      })();
+    } else if (!mod && !e.altKey && ((e.key === "," && e.code !== "NumpadDecimal") || e.code === "NumpadSubtract")) {
+      e.preventDefault();
+      nudge(-1);
+    } else if (!mod && !e.altKey && ((e.key === "." && e.code !== "NumpadDecimal") || e.code === "NumpadAdd")) {
+      e.preventDefault();
+      nudge(1);
+    } else if (e.key === "Enter" && !mod && !e.altKey && !e.shiftKey && (document.activeElement === document.body || document.activeElement === stage || !document.activeElement)) {
+      e.preventDefault();
+      addMemory();
     }
   });
 }

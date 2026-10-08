@@ -104,14 +104,18 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
       }
     }
 
-    ctx.fillStyle = style.outlineColor;
+    // S5: a memory location with a colour of its own is drawn in it
+    const palette = getComputedStyle(document.documentElement);
+    const tint = (color: string | undefined) => (color && palette.getPropertyValue(`--fw-color-${color}`).trim()) || style.outlineColor;
     for (const region of doc.regions ?? []) {
       const x0 = region.start / spp;
+      ctx.fillStyle = tint(region.color);
       ctx.fillRect(x0, height - 4, Math.max(1, (region.end - region.start) / spp), 4);
       ctx.fillText(region.label, x0 + 4, height - 16);
     }
     for (const marker of doc.markers) {
       const x = Math.round(marker.at / spp);
+      ctx.fillStyle = tint(marker.color);
       ctx.fillRect(x, 0, 1, height);
       ctx.fillRect(x, height - 8, 6, 8);
       ctx.fillText(marker.label, x + 8, height - 16);
