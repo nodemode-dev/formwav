@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the backend. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here, indexed. Read this first, then edit code surgically.
 
 Current build version: v2.14.1
-Last updated: 2026-10-07 · v2.14.1: the mixer basics in exports (app/services/render.py: every kind but the filters on a track's sum with its filter automation, a placed track's exception, trim, polarity, solo safe, automation Off and the pan law; app/services/surround.py; the thumbnail in app/services/projects.py), tests/test_mixer.py, two cases in tests/test_plan_parity.py, the mixer's controls and meters in tests/e2e/test_interface.py. v2.14.0: studio processors in exports (app/services/render.py: processor_spec, native_chains, ON_THE_SUM; app/services/surround.py), tests/test_processors.py, the processor kind in tests/test_plan_parity.py, tests/player_plan.mjs and tests/test_kinds.py, the processor count in tests/test_claims.py, the fit test with processor cards (tests/e2e/test_interface.py). v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
+Last updated: 2026-10-08 · v2.14.2: bounce and files (app/services/export.py: AIFF, AIFF-C, 32-bit WAV, 16-bit FLAC, the dither switch, peak normalisation; app/routers/render.py: a range, the true peak, bext with the timecode, cues in a range; RF64 in app/services/render.py; a range in app/services/surround.py), formwav_render_session's new parameters (formwav_mcp/server.py, tests/mcp_probe.py), tests/test_bounce.py, the Export dialog in tests/e2e/test_interface.py. v2.14.1: the mixer basics in exports (app/services/render.py: every kind but the filters on a track's sum with its filter automation, a placed track's exception, trim, polarity, solo safe, automation Off and the pan law; app/services/surround.py; the thumbnail in app/services/projects.py), tests/test_mixer.py, two cases in tests/test_plan_parity.py, the mixer's controls and meters in tests/e2e/test_interface.py. v2.14.0: studio processors in exports (app/services/render.py: processor_spec, native_chains, ON_THE_SUM; app/services/surround.py), tests/test_processors.py, the processor kind in tests/test_plan_parity.py, tests/player_plan.mjs and tests/test_kinds.py, the processor count in tests/test_claims.py, the fit test with processor cards (tests/e2e/test_interface.py). v2.13.1: the trained speech, music and effects split (app/services/tiger_dnr.py, three_way.py), the README's counts and the interface's fit as tests (tests/test_claims.py, tests/e2e/test_interface.py), the three-way split tested on both paths with recorded music (tests/test_three_way.py, fixtures/music_elevator.flac). v2.13.0: the engine's errors on the owner's Mac (app/core/trust.py, app/services/vamp.py, nyquist.py, effects.py), the synth patch's filter (app/routers/midi.py), the top-level mcp/ folder, and the interface tests for the canvas; 222 older entries still sit under app/services/render.py
 
 ---
 
@@ -62,6 +62,7 @@ backend/
 
 ## Table of contents
 
+- [app/services/export.py · bounce and files (PLAN_v13 S3)](#app-services-export-s3)
 - [app/services/render.py · the mixer basics (PLAN_v13 S2)](#app-services-render-s2)
 - [app/services/tiger_dnr.py](#app-services-tiger-dnr)
 - [tests/test_claims.py](#tests-claims)
@@ -122,6 +123,30 @@ backend/
 - [.github/workflows](#workflows)
 
 ---
+
+## app/services/export.py · bounce and files (PLAN_v13 S3) {#app-services-export-s3}
+
+### A range, five more formats, the dither switch, peak normalisation, the true peak, bext and RF64
+- refers-to: app/services/export.py :: `FORMATS`, `DITHER_BITS`, `MULTICHANNEL`, `frames_of`, `_float_wav`, `dithered`, `normalized`, `encode`, `multichannel`; app/routers/render.py :: `render_session` (start, end, normalize, dither; the X-Range-Start, X-True-Peak-dBTP and X-Normalize-dB headers), `_with_cues`, `_bext`, `_measure`; app/services/render.py :: `RF64_ABOVE`, `wav_float32_stereo` (channels, RF64), `render` (start, stop); app/services/surround.py :: `render_51`, `render_foa`, `_bus` (start, stop); tests/test_bounce.py; tests/e2e/test_interface.py (the Export dialog)
+- kind: rationale
+- logged: v2.14.2 · 2026-10-08
+
+A bounce is a time range written as WAV, AIFF or FLAC at 16, 24 or 32 bits, with a TPDF dither switch, peak normalisation and the true peak in its report, as a mixing engineer's bounce dialog offers them. The render takes `start` and `stop` in output frames and cuts them from the mix; a stop past the last clip renders on, so the buses' tails (an echo, a reverb, since S2 every time-based effect on a track) ring into the range, then silence. The core renders from the session's start, so a range's first frame is the full mix's frame, exactly (the test compares them sample for sample). The formats are ffmpeg's encoders, as before: AIFF 24 and 16 (pcm_s24be, pcm_s16be), AIFF-C with fl32 (pcm_f32be; ffmpeg writes AIFC for a float codec), 32-bit WAV (pcm_s32le) and 16-bit FLAC (s16). Dither moved out of ffmpeg's 16-bit chain into numpy: each sample plus two uniform draws of one step each (a triangle two steps wide), rounded onto the format's grid, so the encoder converts it exactly and 24-bit can dither too; a sample at exact zero stays zero, so digital silence stays silent rather than turning into a hiss; the seed is fixed (a stem's is its number), so an export is the same file each time. Off, the encoder rounds. Peak normalisation scales the float mix to the target sample peak before the dither, for the mix only (stems keep their balance). The report measures the mix as written (after normalising): each side's sample peak, the true peak through the core (4x oversampled, as ITU-R BS.1770 measures it) and the integrated loudness. Every WAV goes through ffmpeg's wav muxer with `-write_bext 1` (description, originator formwav, the version as its reference, the date and time, and the time reference: the session's timecode start in samples plus the range's start, so a DAW spots it where it came from) and `-rf64 auto` (RF64 with a ds64 chunk once the file would pass 4 GiB); the engine's own float render becomes RF64 past `RF64_ABOVE` (a test lowers it to write a small one), and the cue points appended after ffmpeg move an RF64's ds64 size rather than its 32-bit one. Markers inside a range land counted from its start; those outside are left out. A range does not apply to the ADM objects or a streaming preview, and normalising only to the mix (the route says so with a 422). Multichannel now folds and pads its stems in numpy and dithers after the fold, since a fold after dithering would leave the grid; its WAV is written by ffmpeg like the rest (a channel mask for the channel count, as amerge gave).
+
+```python
+# removed: ffmpeg's dither in the 16-bit chain, the -af juggling it forced in encode, and multichannel's amerge graph
+"wav16": ("wav", "audio/wav", ["-af", "aresample=osf=s16:dither_method=triangular", "-c:a", "pcm_s16le"], "WAV, 16-bit (dithered)"),
+chain = [f"apad=whole_len={int(frames)}"] + ([args[args.index("-af") + 1]] if "-af" in args else [])
+fold = f"pan=mono|c0=0.5*c0+0.5*c1,apad=whole_len={int(frames)}"
+graph = ["-filter_complex", f"{folds};{''.join(f'[m{i}]' for i in range(len(stems)))}amerge=inputs={len(stems)}[out]", "-map", "[out]"]
+```
+
+### formwav_render_session takes the formats, a range, a peak and the dither switch
+- refers-to: formwav_mcp/server.py :: `RENDER_FORMATS`, `formwav_render_session`; tests/mcp_probe.py (a range as AIFF, normalised; a range refused for ADM); tests/test_mcp.py `CHECKS`; ../.claude/skills/formwav-harness (tools.md's entry, the Deliver a session workflow)
+- kind: rationale
+- logged: v2.14.2 · 2026-10-08
+
+The tool accepted wav, flac and mp3 only. It now takes every export format by its key, `start` and `end` in seconds (turned into frames at the session's rate), `normalize` in dBFS for a mix and `dither`, and returns, for a mix, the length, the sample peak, the true peak, the loudness and the gain normalising applied, so an agent can report the delivery's numbers (the harness's measure before and after). The tool count stays 28; the skill's tools reference was brought to the server's listing (its generator's text for this tool, written in by hand) and the skill validated and repackaged.
 
 ## app/services/render.py · the mixer basics (PLAN_v13 S2) {#app-services-render-s2}
 

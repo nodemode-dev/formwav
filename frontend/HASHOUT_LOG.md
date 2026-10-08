@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
 Current build version: v2.14.1
-Last updated: 2026-10-07 · v2.14.1: the mixer basics (src/ui/mixer.ts: solo safe and solo alone, Clear solos and mutes, trim, polarity, Off, bypass by kind, the pan law, the peak hold and the clip light; the commands in src/engine/document.ts and describe.ts; every kind but the filters on a track's bus with its filter automation, and gain reduction by insert, in src/audio/player.ts and player-worklet.ts; a dynamics card's reduction in src/ui/editor-tabs.ts; src/styles/canvas.css). v2.14.0: the studio processors, formwav's own library (src/engine/processors.ts; the processor entry in src/engine/document.ts; src/audio/player.ts and player-worklet.ts; the browser's list in src/ui/browser-effects.ts, the cards in src/ui/editor-tabs.ts, the rows in src/ui/inspector-pane.ts, the agent's tool in src/ui/agent-pane.ts; the chain wrapping in src/styles/canvas.css). v2.13.1: the Clip tab's Separate row names speech, music and effects and says which method split them (src/ui/clip-tab.ts), the agent's separate_clip reports its method (src/ui/agent-pane.ts), Sounds > Models installs any model on this machine (src/ui/models-pane.ts). v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
+Last updated: 2026-10-08 · v2.14.2: the Export dialog's range, twelve formats, dither switch and peak normalisation, and the true peak in its notice (src/ui/export.ts, src/io/render-client.ts, src/styles/workspace.css). v2.14.1: the mixer basics (src/ui/mixer.ts: solo safe and solo alone, Clear solos and mutes, trim, polarity, Off, bypass by kind, the pan law, the peak hold and the clip light; the commands in src/engine/document.ts and describe.ts; every kind but the filters on a track's bus with its filter automation, and gain reduction by insert, in src/audio/player.ts and player-worklet.ts; a dynamics card's reduction in src/ui/editor-tabs.ts; src/styles/canvas.css). v2.14.0: the studio processors, formwav's own library (src/engine/processors.ts; the processor entry in src/engine/document.ts; src/audio/player.ts and player-worklet.ts; the browser's list in src/ui/browser-effects.ts, the cards in src/ui/editor-tabs.ts, the rows in src/ui/inspector-pane.ts, the agent's tool in src/ui/agent-pane.ts; the chain wrapping in src/styles/canvas.css). v2.13.1: the Clip tab's Separate row names speech, music and effects and says which method split them (src/ui/clip-tab.ts), the agent's separate_clip reports its method (src/ui/agent-pane.ts), Sounds > Models installs any model on this machine (src/ui/models-pane.ts). v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
 
 ---
 
@@ -91,6 +91,7 @@ frontend/
 
 ## Table of contents
 
+- [src/ui/export.ts · bounce and files (PLAN_v13 S3)](#src-ui-export-s3)
 - [src/ui/mixer.ts · the mixer basics (PLAN_v13 S2)](#src-ui-mixer-s2)
 - [src/audio/player.ts · the mixer basics (PLAN_v13 S2)](#src-audio-player-s2)
 - [src/ui/editor-tabs.ts · gain reduction (PLAN_v13 S2)](#src-ui-editor-tabs-s2)
@@ -155,6 +156,17 @@ frontend/
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
+
+## src/ui/export.ts · bounce and files (PLAN_v13 S3) {#src-ui-export-s3}
+
+### The Export dialog's range, formats, dither and normalise, in rows that never move
+- refers-to: src/ui/export.ts (the format list; the range-row, span-row, dither-row and normalize-row; DITHERED, enable, showPlatform, resolveRange, smartRange from fw-range; the notice); src/io/render-client.ts (ExportOptions start, end, normalize, dither; Mix truePeak, normalizeDb); src/styles/workspace.css (.fw-export-span, .fw-export-opt, .fw-export-dialog [data-off])
+- kind: rationale
+- logged: v2.14.2 · 2026-10-08
+
+The dialog offers the engine's twelve formats as thirteen entries (WAV at 32-bit float, 32, 24 and 16-bit; AIFF at 24 and 16; AIFF-C float; FLAC at 24 and 16; MP3 twice, OGG, M4A), a range (the whole session, the Smart Tool's selected range from the lanes' fw-range events, the loop, or From and To in seconds, To prefilled with the session's length), the dither switch (TPDF, on by default, for the 16 and 24-bit formats of a mix, stems or multichannel) and a peak to normalise a mix to (-0.1 dBFS by default), each kept for the next export as the format is. The range, dither and normalise rows are always there and switched off (disabled, at 0.45 opacity) where they do not apply, rather than hidden: hiding them made every format or range choice move the rows below, which the throttled check counted as shifts without input when a choice came from the keyboard or a script (Playwright's selection); shown and switched off, the dialog's whole path, from opening it through an export and its notice, measured no layout shift at all under 4x CPU and a slow network. The two older rows (the multichannel channel order, the preview's platform) still appear only for their kind of export. The notice adds the true peak, the gain normalising applied, and for MP3, OGG and M4A a warning when the true peak passes -1 dBTP, where the encoder can push it over full scale; the clipping warning now spares both float formats.
+
+Found and left for a later phase: every modal dialog (Export, Agents, Cloud, the latency probe, Devices) sits at the window's top left, because tokens.css's universal reset (`* { margin: 0 }`) removes the browser's own `margin: auto` for a modal dialog. Centring them is one rule, but a centred dialog whose height changes moves its top edge, so each dialog's height is to be held first; the owner sees it before it changes.
 
 ## src/ui/mixer.ts · the mixer basics (PLAN_v13 S2) {#src-ui-mixer-s2}
 

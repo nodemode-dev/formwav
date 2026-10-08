@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
 Current build version: v2.14.1
-Last updated: 2026-10-07 · v2.14.1: a filter's automation on a bus (src/render.rs `add_bus_fx_auto`, `run_bus_chain`), the -3, -4.5 and -6 dB pan laws for a mono source (`law_gains`, `set_pan_law`, `clip_pan`), each processor's gain reduction (`take_reductions`), their entries in src/wasm.rs, src/python.rs and src/native.rs; tests/mixer.rs. v2.14.0: formwav's own studio processors (the formwav-studio crate) run as a processor stage (src/fx.rs `Processor`, kind 20), entries in src/render.rs, src/wasm.rs, src/python.rs and src/native.rs; bus and master chains run stage by stage over a block; tests/processors.rs. v2.13.1: no change to the core (the version only). v2.13.0: the synth's low-pass, in render() and the live instrument alike (src/synth.rs), and its two new parameters through src/python.rs and src/wasm.rs; most stages added since v1.11.0 have no entry in this log
+Last updated: 2026-10-08 · v2.14.2: the true peak, 4x oversampled (src/loudness.rs `true_peak`, `quarter_points`, its entry in src/python.rs; tests/bounce.rs). v2.14.1: a filter's automation on a bus (src/render.rs `add_bus_fx_auto`, `run_bus_chain`), the -3, -4.5 and -6 dB pan laws for a mono source (`law_gains`, `set_pan_law`, `clip_pan`), each processor's gain reduction (`take_reductions`), their entries in src/wasm.rs, src/python.rs and src/native.rs; tests/mixer.rs. v2.14.0: formwav's own studio processors (the formwav-studio crate) run as a processor stage (src/fx.rs `Processor`, kind 20), entries in src/render.rs, src/wasm.rs, src/python.rs and src/native.rs; bus and master chains run stage by stage over a block; tests/processors.rs. v2.13.1: no change to the core (the version only). v2.13.0: the synth's low-pass, in render() and the live instrument alike (src/synth.rs), and its two new parameters through src/python.rs and src/wasm.rs; most stages added since v1.11.0 have no entry in this log
 
 ---
 
@@ -65,8 +65,18 @@ native/
 - [formwav-dsp/tests/stages.rs](#tests-stages)
 - [formwav-studio and the processor stage](#formwav-studio)
 - [The mixer basics in the core (PLAN_v13 S2)](#mixer-s2)
+- [The true peak, 4x oversampled (PLAN_v13 S3)](#true-peak-s3)
 
 ---
+
+## The true peak, 4x oversampled (PLAN_v13 S3) {#true-peak-s3}
+
+### src/loudness.rs · true_peak, quarter_points
+- refers-to: loudness.rs :: `PEAK_HALF`, `quarter_points`, `true_peak`; python.rs :: `true_peak`; tests/bounce.rs
+- kind: rationale
+- logged: v2.14.2 · 2026-10-08
+
+The export's report gains the true peak (ITU-R BS.1770's 4x oversampled peak, which catches the overs between samples that an encoder or a converter turns into clipping). Each channel is read at four times its rate: its own samples, and the three points a quarter, a half and three quarters of the way to the next, each interpolated from the 12 samples either side (PEAK_HALF) by a sinc under a Kaiser window (beta 8, the Bessel function summed until its terms fall below 1e-12 of the total), each set of 24 weights scaled to sum to one so a constant reads as itself. The weights are worked out once per call, in f64, and the sums run in f64. The points are worked out only near loud samples, where a sample within two either side reaches a quarter (-12 dB) of the channel's sample peak, so a long quiet stretch costs one comparison a sample. true_peak returns the highest reading in dBTP, sample peaks included, or None for digital silence; formwav's own integrated loudness stays the report's, unchanged. tests/bounce.rs: a sine at a quarter of the rate, phased 45 degrees, has every sample at 0.707 of its height (-3.01 dB) and a true peak of 0 dB; the reading is +0.107 dBTP, the overshoot of a sine switched on and off at full height, while the same weights away from the ends read +0.0004 dB; a slow sine's true peak is its sample peak; silence has none.
 
 ## The mixer basics in the core (PLAN_v13 S2) {#mixer-s2}
 
