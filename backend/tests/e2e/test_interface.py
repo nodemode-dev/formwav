@@ -566,6 +566,137 @@ def test_the_in_app_agent_carries_out_a_chain_of_tools(page, app_url):
     assert _clean(page)["errors"] == []
 
 
+ROWS = "[...document.querySelectorAll('.fw-piano-list tbody tr')].map((r) => [...r.querySelectorAll('input')].map((i) => i.value))"
+NOTES_STATE = "document.querySelector('.fw-piano .fw-piano-state').textContent"
+
+
+def _at(page, frame: int, pitch: int) -> tuple:
+    """The page point of a session frame and a pitch on the note editor's grid, from the geometry its canvas carries."""
+    box = page.locator(".fw-piano-canvas").bounding_box()
+    d = page.evaluate("({ ...document.querySelector('.fw-piano-canvas').dataset })")
+    x = box["x"] + float(d["keyW"]) + (frame - float(d["origin"])) * float(d["pxPerFrame"]) + 1
+    y = box["y"] + (int(d["low"]) + int(d["rows"]) - 1 - pitch + 0.5) * float(d["rowH"])
+    return x, y
+
+
+def _add_notes(page, notes: list) -> None:
+    for k, (frame, pitch) in enumerate(notes, start=1):
+        page.mouse.click(*_at(page, frame, pitch))
+        page.wait_for_function(f"{NOTES_STATE} === 'Notes · {k} notes'")
+
+
+def _new_note_clip(page) -> None:
+    # History open beside the work, so each step's words can be waited for as they land
+    page.click('[data-agent-tab="history"]')
+    _menu(page, "Event", "New note clip")
+    page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1 && !document.querySelector('.fw-piano').hidden")
+    page.wait_for_function(f"{NOTES_STATE} === 'Notes · 0 notes'")
+
+
+def _step(page, label: str) -> None:
+    page.wait_for_function("(label) => [...document.querySelectorAll('.fw-history-label')].some((l) => l.textContent === label)", arg=label)
+
+
+def test_a_new_note_clip_takes_clicked_notes_a_band_selection_and_arrow_runs_as_single_steps(page, app_url):
+    _open(page, app_url)
+    _new_note_clip(page)
+    # a quarter note is 24000 samples at 120 BPM and 48 kHz
+    _add_notes(page, [(0, 60), (24000, 64), (48000, 67)])
+    # a drag across empty grid selects the notes it covers, and adds none
+    x0, y0 = _at(page, 18000, 70)
+    x1, y1 = _at(page, 60000, 63)
+    page.mouse.move(x0, y0)
+    page.mouse.down()
+    page.mouse.move(x1, y1, steps=6)
+    page.mouse.up()
+    for key in ("ArrowUp", "ArrowUp", "ArrowUp"):
+        page.keyboard.press(key)
+    _step(page, "Transposed notes")
+    page.keyboard.press("ArrowRight")
+    page.keyboard.press("ArrowRight")
+    _step(page, "Moved notes")
+    page.click(".fw-piano-head [data-list]")
+    page.wait_for_function(f"{ROWS}.length === 3")
+    # each new note is a 1/16 (240 ticks); the two selected went up three semitones and right two 1/16s
+    assert page.evaluate(ROWS) == [["1| 1| 000", "C4", "240", "100"], ["1| 2| 480", "G4", "240", "100"], ["1| 3| 480", "A#4", "240", "100"]]
+    page.click(".fw-piano-head [data-list]")
+    page.focus(".fw-piano-canvas")
+    page.keyboard.press("ControlOrMeta+a")
+    page.keyboard.press("Delete")
+    page.wait_for_function(f"{NOTES_STATE} === 'Notes · 0 notes'")
+    assert page.locator(".fw-lane .fw-clip").count() == 1
+    assert _labels(page) == ["Session start", "New note clip", "Edited notes on Notes", "Edited notes on Notes", "Edited notes on Notes", "Transposed notes", "Moved notes", "Deleted notes"]
+    assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
+
+
+def test_the_event_menu_and_list_quantize_edit_name_chords_and_split_each_in_one_step(page, app_url):
+    _open(page, app_url)
+    _new_note_clip(page)
+    page.select_option(".fw-piano-head [data-snap]", "")
+    _add_notes(page, [(1500, 60), (1500, 64), (1500, 67)])
+    # a note just added is the one selected, and an operation takes the selection
+    _menu(page, "Event", "Select all notes")
+    _menu(page, "Event", "Quantize")
+    page.wait_for_selector("dialog.fw-ask-dialog[open] select[data-k=grid]")
+    page.keyboard.press("Enter")
+    _step(page, "Quantized 3 notes")
+    _menu(page, "Event", "Event list")
+    page.wait_for_function(f"{ROWS}.length === 3")
+    # snap off, a new note is an eighth (480 ticks)
+    assert page.evaluate(ROWS) == [["1| 1| 000", "C4", "480", "100"], ["1| 1| 000", "E4", "480", "100"], ["1| 1| 000", "G4", "480", "100"]]
+    rows = page.locator(".fw-piano-list tbody tr")
+    rows.nth(1).locator("[data-f=velocity]").fill("80")
+    rows.nth(1).locator("[data-f=velocity]").press("Tab")
+    _step(page, "Changed a note's velocity")
+    rows.nth(2).locator("[data-f=pitch]").fill("A4")
+    rows.nth(2).locator("[data-f=pitch]").press("Tab")
+    _step(page, "Changed a note's pitch")
+    rows.nth(0).locator("[data-f=start]").fill("1| 2| 000")
+    rows.nth(0).locator("[data-f=start]").press("Tab")
+    _step(page, "Moved a note")
+    page.wait_for_function(f"{ROWS}[2][1] === 'C4'")
+    assert page.evaluate(ROWS) == [["1| 1| 000", "E4", "480", "80"], ["1| 1| 000", "A4", "480", "100"], ["1| 2| 000", "C4", "480", "100"]]
+    _menu(page, "Event", "Select all notes")
+    _menu(page, "Event", "Change velocity")
+    page.fill("dialog.fw-ask-dialog[open] input[data-k=a]", "90")
+    page.keyboard.press("Enter")
+    _step(page, "Changed the velocity of 3 notes")
+    _menu(page, "Event", "Change duration")
+    page.fill("dialog.fw-ask-dialog[open] input[data-k=a]", "1920")
+    page.keyboard.press("Enter")
+    _step(page, "Changed the duration of 3 notes")
+    assert page.evaluate(ROWS) == [["1| 1| 000", "E4", "1920", "90"], ["1| 1| 000", "A4", "1920", "90"], ["1| 2| 000", "C4", "1920", "90"]]
+    # A, C and E over a C in the bass
+    _menu(page, "Event", "Name chords")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Named 1 chord: Am/C'")
+    _menu(page, "Event", "Split notes")
+    page.fill("dialog.fw-ask-dialog[open] input[data-k=low]", "A4")
+    page.fill("dialog.fw-ask-dialog[open] input[data-k=high]", "B4")
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.querySelectorAll('.fw-lane').length === 2")
+    _step(page, "Split 1 note to a new track")
+    assert [r[1] for r in page.evaluate(ROWS)] == ["E4", "C4"]
+    assert page.evaluate("[...document.querySelectorAll('.fw-lane .fw-lane-name')].map((n) => n.textContent)") == ["Notes", "Notes split"]
+    assert _labels(page) == [
+        "Session start", "New note clip", "Edited notes on Notes", "Edited notes on Notes", "Edited notes on Notes", "Quantized 3 notes", "Changed a note's velocity",
+        "Changed a note's pitch", "Moved a note", "Changed the velocity of 3 notes", "Changed the duration of 3 notes", "Named 1 chord as markers", "Split 1 note to a new track",
+    ]
+    # the Inspector's MIDI effects offer the real-time duration and delay
+    clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    page.mouse.click(clip["x"] + 20, clip["y"] + clip["height"] * 0.75)
+    page.click(".fw-dock-more > .fw-menu-btn")
+    page.click('.fw-dock-more [data-panel="inspector"]')
+    for kind in ("duration", "delay"):
+        page.select_option('[data-midifx="kind"]', kind)
+        page.click('[data-midifx="add"]')
+    page.wait_for_function("[...document.querySelectorAll('[data-midifx-list] .fw-sam-opt span')].map((s) => s.textContent).join() === 'Percent,Milliseconds'")
+    page.fill('[data-midifx-list] [data-mfx-p="ms"]', "250")
+    page.press('[data-midifx-list] [data-mfx-p="ms"]', "Tab")
+    page.wait_for_function("document.querySelector('[data-midifx-list] [data-mfx-p=\"ms\"]')?.value === '250' && document.querySelector('.fw-notice').textContent.startsWith('MIDI effects applied')")
+    assert _labels(page).count("Changed the MIDI effects on Notes") == 3
+    assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
+
+
 CUT = """(() => {
   const out = [];
   const controls = 'button, [role=tab], [role=menuitem], [role=menuitemradio], label, select, input, .fw-cf-label, .fw-knob-label, .fw-knob-value, .fw-dock-track, .fw-dock-detail';
@@ -627,7 +758,7 @@ ACTIONS_IN_VIEW = """(() => {
 })()"""
 STATES = [
     ["clip"], ["effects"], ["studio", "effects"], ["mixer"], ["mixer", "route"], ["synth"], ["pads"], ["spectrum"], ["transcript"],
-    ["more", "inspector"], ["more", "notes"], ["more", "labels"],
+    ["more", "inspector"], ["more", "notes"], ["list"], ["more", "labels"],
 ]
 
 
@@ -649,6 +780,8 @@ def test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes(bro
                     page.click(".fw-dock-more > .fw-menu-btn")
                 elif step == "route":
                     page.click("details.fw-strip-route > summary")
+                elif step == "list":
+                    page.click(".fw-piano-head [data-list]")
                 elif step == "studio":
                     # two processors from the library on the clip's track: the largest card (22 controls) and a small one
                     page.click('.fw-pane-media .fw-pane-tab[data-tab="effects"]')
@@ -669,6 +802,10 @@ def test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes(bro
         page.click('[data-agent-tab="history"]')
         page.wait_for_timeout(250)
         found["history"] = page.evaluate(CUT)
+        page.locator(".fw-menu-btn", has_text="Event").click()
+        page.wait_for_timeout(250)
+        found["event menu"] = page.evaluate(CUT)
+        page.keyboard.press("Escape")
         assert {k: v for k, v in found.items() if v} == {}
     finally:
         context.close()
