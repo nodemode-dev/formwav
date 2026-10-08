@@ -35,6 +35,14 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
   phase.innerHTML = `<span class="fw-meter-label" aria-hidden="true">Phase</span><div class="fw-phase-track"><span class="fw-phase-dot"></span></div>`;
   transport?.append(phase);
   const dot = phase.querySelector<HTMLElement>(".fw-phase-dot");
+  // the dot moves by a transform from the track's centre, which no layout shift counts (its left offset was one)
+  const track = phase.querySelector<HTMLElement>(".fw-phase-track");
+  let trackWidth = 0;
+  if (track) new ResizeObserver(() => (trackWidth = track.clientWidth)).observe(track);
+  const place = (v: number) => {
+    const t = `translateX(${((v * trackWidth) / 2).toFixed(1)}px)`;
+    if (dot && dot.style.transform !== t) dot.style.transform = t;
+  };
   let smooth: number | null = null;
   player.onOutputLevel((_left, _right, _tracks, _loudness, _buses, correlation) => {
     if (correlation === null || !Number.isFinite(correlation)) {
@@ -43,7 +51,7 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
         phase.dataset.state = "idle";
         phase.removeAttribute("aria-valuenow");
         delete phase.dataset.correlation;
-        if (dot) dot.style.insetInlineStart = "50%";
+        place(0);
       }
       return;
     }
@@ -54,7 +62,7 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
     phase.setAttribute("aria-valuenow", text);
     const state = smooth < 0 ? "negative" : "positive";
     if (phase.dataset.state !== state) phase.dataset.state = state;
-    if (dot) dot.style.insetInlineStart = `${(((smooth + 1) / 2) * 100).toFixed(1)}%`;
+    place(smooth);
   });
 
   const lufs = document.createElement("output");

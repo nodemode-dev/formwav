@@ -48,6 +48,7 @@ import { mountBrowserEffects } from "./ui/browser-effects";
 import { mountBrowser } from "./ui/browser";
 import { mountMusical } from "./ui/musical";
 import { mountToolbar } from "./ui/toolbar";
+import { mountEditing } from "./ui/editing";
 import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
@@ -160,6 +161,7 @@ if (host) {
   mountAgents(host);
   mountMusical(host, engine);
   mountToolbar(host, engine);
+  mountEditing(host, engine, player);
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
 activateAll(engine);

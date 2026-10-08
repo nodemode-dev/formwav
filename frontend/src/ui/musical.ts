@@ -1,9 +1,10 @@
 /**
  * The footer's Tempo, Meter and Snap on the agreed canvas: tempo and meter set the session's tempo (set-tempo), each in
- * a small dialog above its readout (tempo with Tap), and Snap steps Off, Grid, Beats (set-snap, which Grid and Bars
+ * a small dialog above its readout (tempo with Tap and Identify Beat), and Snap steps Off, Grid, Beats (set-snap, which Grid and Bars
  * follow). The input meter shows only while a track is armed, so the footer holds what the canvas holds otherwise.
  */
 import type { Engine } from "../engine";
+import { editSpan, identifyBeat, type EditRange } from "../engine/editing";
 import { setText } from "../vendor/nodemode/dom-stable";
 
 export function mountMusical(host: HTMLElement, engine: Engine): void {
@@ -17,7 +18,7 @@ export function mountMusical(host: HTMLElement, engine: Engine): void {
   pop.className = "fw-norm fw-mus-pop";
   pop.hidden = true;
   pop.setAttribute("role", "dialog");
-  pop.innerHTML = `<label class="fw-spot-label" data-for="tempo">Tempo<input type="number" class="fw-spot-input" data-m="bpm" min="20" max="300" step="0.1" aria-label="Tempo in beats a minute"> BPM</label><button type="button" class="fw-mode" data-for="tempo" data-m="tap" title="Tap four times or more in time">Tap</button><label class="fw-spot-label" data-for="meter">Beats in a bar<input type="number" class="fw-spot-input" data-m="beats" min="1" max="16" step="1" aria-label="Beats in a bar"> / 4</label>`;
+  pop.innerHTML = `<label class="fw-spot-label" data-for="tempo">Tempo<input type="number" class="fw-spot-input" data-m="bpm" min="20" max="300" step="0.1" aria-label="Tempo in beats a minute"> BPM</label><button type="button" class="fw-mode" data-for="tempo" data-m="tap" title="Tap four times or more in time">Tap</button><label class="fw-spot-label" data-for="tempo" title="Identify Beat: how many bars the selection lasts">Selection<input type="number" class="fw-spot-input" data-m="bars" min="0.25" max="64" step="0.25" value="1" aria-label="Bars the selection lasts"> bars</label><button type="button" class="fw-mode" data-for="tempo" data-m="identify" title="Set the tempo so the selected range, the selected clips or the loop lasts that many bars">Identify</button><label class="fw-spot-label" data-for="meter">Beats in a bar<input type="number" class="fw-spot-input" data-m="beats" min="1" max="16" step="1" aria-label="Beats in a bar"> / 4</label>`;
   document.body.append(pop);
   const bpm = pop.querySelector<HTMLInputElement>('[data-m="bpm"]') as HTMLInputElement;
   const beats = pop.querySelector<HTMLInputElement>('[data-m="beats"]') as HTMLInputElement;
@@ -55,6 +56,32 @@ export function mountMusical(host: HTMLElement, engine: Engine): void {
     const gap = (taps[taps.length - 1] - taps[0]) / (taps.length - 1);
     bpm.value = (60000 / gap).toFixed(1);
     commit();
+  });
+  // S4, Identify Beat: the tempo at which the selection (a range, the selected clips, else the loop) lasts the bars typed
+  let range: EditRange | null = null;
+  let picked: readonly string[] = [];
+  host.addEventListener("fw-range", (e) => {
+    const d = (e as CustomEvent<EditRange | null>).detail;
+    range = d ? { trackId: d.trackId, start: d.start, end: d.end } : null;
+  });
+  host.addEventListener("fw-selection", (e) => {
+    picked = (e as CustomEvent<string[]>).detail ?? [];
+  });
+  const bars = pop.querySelector<HTMLInputElement>('[data-m="bars"]') as HTMLInputElement;
+  pop.querySelector('[data-m="identify"]')?.addEventListener("click", () => {
+    const doc = engine.get("document");
+    const loop = doc.loop && doc.loop.end > doc.loop.start ? doc.loop : null;
+    const span = editSpan(doc, { range, clipIds: picked }) ?? loop;
+    const n = Number(bars.value);
+    const found = span ? identifyBeat(span.end - span.start, doc.sampleRate, n, tempo().beatsPerBar) : null;
+    const notice = host.querySelector<HTMLElement>(".fw-notice");
+    if (found === null || found < 30 || found > 300) {
+      setText(notice, !span ? "Select a range, clips or the loop to identify the beat from" : found === null ? "Type how many bars the selection lasts" : `${found.toFixed(1)} BPM is outside 30 to 300`);
+      return;
+    }
+    bpm.value = found.toFixed(1);
+    commit();
+    setText(notice, `Tempo ${found.toFixed(1)} BPM: the selection lasts ${n} bar${n === 1 ? "" : "s"} of ${tempo().beatsPerBar}`);
   });
   pop.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {

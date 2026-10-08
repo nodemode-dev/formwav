@@ -131,6 +131,17 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-menu-pop .fw-menu-label { padding: 8px 10px 4px; }
 .fw-menu-pop [role="menuitemcheckbox"][aria-checked="true"] .fw-check::before,
 .fw-menu-pop [role="menuitemradio"][aria-checked="true"] .fw-check::before { content: ""; inline-size: 8px; block-size: 4px; border-inline-start: 2px solid var(--accent-color); border-block-end: 2px solid var(--accent-color); transform: rotate(-45deg) translateY(-1px); }
+.fw-menu-zoom { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 0 10px 4px; }
+.fw-topbar .fw-menu-pop .fw-menu-zoom > .fw-ibtn { display: block; min-block-size: 26px; padding: 2px 0; border: 1px solid var(--border-color); font-family: var(--font-mono); font-size: var(--fs-12); text-align: center; }
+
+/* S4: Pro Tools' Big Counter, floating over the window from the View menu */
+.fw-big-counter { position: fixed; inset-block-start: 96px; inset-inline-end: 24px; z-index: var(--z-companion); display: grid; gap: 4px; padding: 6px 14px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--shadow-lg); }
+.fw-big-counter[hidden] { display: none; }
+.fw-big-counter-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-11); color: var(--text-muted); cursor: grab; user-select: none; touch-action: none; }
+.fw-big-counter-close { inline-size: 22px; block-size: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); }
+.fw-big-counter-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-big-counter-time { min-inline-size: 13ch; font-family: var(--font-mono); font-size: 44px; font-weight: 700; line-height: 1.1; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; text-align: center; color: var(--text-primary); }
+.fw-stage:focus { outline: none; }
 
 /* Workspace columns */
 .fw-workspace { grid-template-columns: var(--fw-media-w, var(--cv-browser-w)) var(--fw-media-gap, 0px) minmax(0, 1fr) var(--fw-inspector-gap, 0px) var(--fw-inspector-w, var(--cv-agent-w)); gap: 0; padding: 0; }
@@ -417,6 +428,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-fade-preview-out { inset-inline-end: 0; background: linear-gradient(to bottom left, color-mix(in srgb, var(--accent-color) 45%, transparent) 50%, transparent 50%); border-inline-start: 1px solid var(--accent-color); }
 .fw-tool-tray[data-tool="split"] ~ .fw-stage .fw-clip, .fw-pane-timeline:has(.fw-tool-tray[data-tool="split"]) .fw-clip { cursor: col-resize; }
 .fw-pane-timeline:has(.fw-tool-tray[data-tool="fade"]) .fw-clip { cursor: ew-resize; }
+.fw-pane-timeline:has(.fw-tool-tray[data-tool="zoom"]) .fw-lane-body, .fw-pane-timeline:has(.fw-tool-tray[data-tool="zoom"]) .fw-clip { cursor: zoom-in; }
 .fw-vh { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Editor */
@@ -424,6 +436,8 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 @container (max-width: 880px) {
   .fw-dock .fw-dock-tab { padding: 0 9px; }
   .fw-dock-detail { display: none; }
+}
+@container (max-width: 940px) {
   .fw-tool-tray > .fw-st-hint { display: none; }
 }
 .fw-dock .fw-dock-head { display: flex; align-items: center; gap: 4px; min-block-size: 40px; padding: 0 12px; background: transparent; border-block-end: 1px solid var(--border-color); }

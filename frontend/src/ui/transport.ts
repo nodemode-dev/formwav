@@ -78,7 +78,11 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
         const view = followStage.clientWidth - headWidth;
         const left = followStage.scrollLeft;
         const ahead = engine.get("transport").playing ? left + view * 0.92 : left + view;
-        if (view > 0 && (px > ahead || px < left)) followStage.scrollLeft = Math.max(0, px - view * 0.08);
+        if (view > 0 && (px > ahead || px < left)) {
+          followStage.scrollLeft = Math.max(0, px - view * 0.08);
+          // AU-13: the ruler and the waves paint only what is in view; told now, they move with the page in one frame
+          followStage.dispatchEvent(new Event("fw-scrolled"));
+        }
       }
     }
   };
@@ -129,7 +133,7 @@ export function mountTransport(host: HTMLElement, engine: Engine, player: Player
     if (e.code === "Space") {
       // Space is the transport everywhere but text entry: a focused button must not swallow it or be clicked by it.
       e.preventDefault();
-      if (target && target !== document.body && target.tagName !== "INPUT") target.blur();
+      if (target && target !== document.body && target.tagName !== "INPUT" && !target.classList.contains("fw-stage")) target.blur();
       if (!e.repeat) togglePlay();
     } else if (e.key === "Home" && target?.tagName !== "INPUT") {
       e.preventDefault();

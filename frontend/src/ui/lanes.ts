@@ -91,12 +91,15 @@ interface PaintInfo {
 const peakCache = new Map<string, Promise<PeakData>>();
 const paintInfo = new WeakMap<HTMLCanvasElement, PaintInfo>();
 
+/** Each media's peaks once they have arrived, so a page turn can repaint in the same frame (AU-13). */
+const peakReady = new Map<string, PeakData>();
+
 function peaksFor(id: string): Promise<PeakData> {
   let pending = peakCache.get(id);
   if (!pending) {
     pending = fetchPeaks(id, PEAK_SPP);
     peakCache.set(id, pending);
-    pending.catch(() => peakCache.delete(id));
+    pending.then((peaks) => peakReady.set(id, peaks)).catch(() => peakCache.delete(id));
   }
   return pending;
 }
@@ -139,6 +142,17 @@ export function samplesPerPixel(doc: SessionDoc): number {
   return Math.max(doc.sampleRate / (BASE_PX_PER_SECOND * zoom), documentLength(doc) / MAX_TIMELINE_PX);
 }
 
+/** The lanes zoomed so start to end (samples) fills the part of the stage in view, scrolled to it, 12 px either side. */
+export function zoomToSpan(doc: SessionDoc, start: number, end: number): void {
+  const stage = viewStage;
+  if (!stage || !(end > start)) return;
+  const head = stage.querySelector<HTMLElement>(".fw-ruler-corner")?.offsetWidth ?? 0;
+  const view = stage.clientWidth - head - 24;
+  if (view <= 0) return;
+  setZoom((doc.sampleRate * view) / (BASE_PX_PER_SECOND * (end - start)));
+  stage.scrollLeft = Math.max(0, start / samplesPerPixel(doc) - 12);
+}
+
 function channelLabel(n: number): string {
   return n === 1 ? "mono" : n === 2 ? "stereo" : `${n} channels`;
 }
@@ -158,9 +172,11 @@ function paint(canvas: HTMLCanvasElement, peaks: PeakData): void {
   const to = Math.min(box.right, stageBox.left + viewStage.clientWidth);
   const cssW = Math.max(0, to - from);
   const offCss = Math.max(0, from - box.left);
-  const leftStyle = `${offCss}px`;
+  // placed by a transform, so its place moving inside the clip as the view pages is never a layout shift (a left
+  // offset was one, at a page turn that brought a clip's start out of view)
+  const shiftStyle = `translateX(${offCss}px)`;
   const widthStyle = `${Math.max(1, cssW)}px`;
-  if (canvas.style.left !== leftStyle) canvas.style.left = leftStyle;
+  if (canvas.style.transform !== shiftStyle) canvas.style.transform = shiftStyle;
   if (canvas.style.width !== widthStyle) canvas.style.width = widthStyle;
   const w = Math.max(1, Math.round(cssW * dpr));
   const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
@@ -739,6 +755,15 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   };
   stage?.addEventListener("scroll", repaintWaves, { passive: true });
   if (stage) new ResizeObserver(repaintWaves).observe(stage);
+  // a page turn while playing (the transport's Follow) repaints the waves in view before that frame is drawn: the
+  // scroll event and its frame came a frame late, the waves showing for one frame where the page had been
+  stage?.addEventListener("fw-scrolled", () => {
+    for (const c of stage.querySelectorAll<HTMLCanvasElement>(".fw-clip .fw-wave")) {
+      const info = paintInfo.get(c);
+      const peaks = info ? peakReady.get(info.media.id) : undefined;
+      if (peaks) paint(c, peaks);
+    }
+  });
   // AU-34: a session opened with a saved view comes back to its zoom and left edge (the engine restores the selection)
   engine.subscribe("view", (view) => {
     if (!view) return;
@@ -1451,6 +1476,23 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
     lanes.dispatchEvent(new CustomEvent("fw-selection", { bubbles: true, detail: [...selectedClipIds] }));
   };
+  // S4: the editing commands (ui/editing.ts) select what they made, the clips by id or the range moved onto the copy
+  host.addEventListener("fw-select-clips", (e) => {
+    selectedClipIds.clear();
+    for (const id of (e as CustomEvent<string[]>).detail ?? []) selectedClipIds.add(id);
+    markSelected();
+  });
+  host.addEventListener("fw-set-range", (e) => {
+    const next = (e as CustomEvent<{ trackId: string; start: number; end: number } | null>).detail;
+    if (!next || next.end <= next.start) {
+      clearRange();
+      return;
+    }
+    range = { trackId: next.trackId, start: Math.round(next.start), end: Math.round(next.end) };
+    rangeBand = null;
+    lanes.dispatchEvent(new CustomEvent("fw-range", { bubbles: true, detail: range }));
+    drawRange();
+  });
 
   type GestureKind = "move" | "trim-left" | "trim-right" | "fade-in" | "fade-out" | "gain" | "range";
   type Member = { trackId: string; clip: Clip; node: HTMLElement };
@@ -2007,7 +2049,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     else if (range && (e.key === "Delete" || e.key === "Backspace")) {
       const r = range;
       clearRange();
-      engine.dispatch({ type: "clear-range", trackId: r.trackId, start: r.start, end: r.end, ripple: shuffleEnabled() });
+      engine.dispatch({ type: "clear-range", trackId: r.trackId, start: r.start, end: r.end, ripple: shuffleEnabled(), follow: "tracks" });
     } else if (range && e.key.toLowerCase() === "s") {
       const r = range;
       const clips = engine.get("document").tracks.find((t) => t.id === r.trackId)?.clips ?? [];

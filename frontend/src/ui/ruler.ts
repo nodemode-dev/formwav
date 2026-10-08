@@ -258,6 +258,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     },
     { passive: true },
   );
+  stage.addEventListener("fw-scrolled", draw);
   document.addEventListener("nm:ui-settings-changed", draw);
   document.addEventListener("fw-bars-changed", draw);
   window.addEventListener("resize", draw);

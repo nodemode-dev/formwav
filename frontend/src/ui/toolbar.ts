@@ -8,7 +8,7 @@
 import type { Engine } from "../engine";
 import { documentLength } from "../engine/document";
 import { setText } from "../vendor/nodemode/dom-stable";
-import { getZoom, samplesPerPixel, setZoom } from "./lanes";
+import { getZoom, samplesPerPixel, setZoom, zoomToSpan } from "./lanes";
 import { snapSamples } from "./grid";
 import { setFollow } from "./transport";
 
@@ -16,6 +16,7 @@ const HINTS: Record<string, string> = {
   split: "Click a clip where it should split.",
   fade: "Drag in from a clip's start or end to fade it in or out.",
   draw: "Zoom in until single samples show, then drag on a clip to draw them.",
+  zoom: "Click zooms in, Alt-click out; a drag fits a span.",
 };
 
 type Item = { label: string; key?: string; target: () => HTMLElement | null; check?: boolean; run?: () => void; spectral?: boolean };
@@ -34,6 +35,8 @@ export function mountToolbar(host: HTMLElement, engine: Engine): void {
     const label = draw.querySelector<HTMLElement>("span");
     if (label) label.dataset.label = label.textContent ?? "";
   }
+  const zoomTool = seg?.querySelector<HTMLElement>('[data-tool="zoom"]');
+  if (seg && zoomTool) seg.append(zoomTool);
 
   tray.querySelector("[data-add-track]")?.addEventListener("click", () => {
     engine.dispatch({ type: "add-track" });
@@ -73,9 +76,63 @@ export function mountToolbar(host: HTMLElement, engine: Engine): void {
     const clip = track?.clips.find((c) => c.id === node?.dataset.key);
     return node && track && clip ? { node, track, clip, doc } : null;
   };
+  // S4, the Zoom tool: a click zooms in twice (Alt, out) keeping the time under the pointer where it is; a drag across a
+  // span zooms so the span fills the view, its box drawn as the marquee is
+  const zoomBox = Object.assign(document.createElement("div"), { className: "fw-marquee fw-zoom-box", hidden: true });
+  host.querySelector(".fw-lanes")?.append(zoomBox);
+  const zoomGesture = (e: PointerEvent, body: HTMLElement) => {
+    const doc = engine.get("document");
+    const spp = samplesPerPixel(doc);
+    const lanes = body.closest<HTMLElement>(".fw-lanes");
+    const x0 = e.clientX;
+    const at = (x: number) => Math.max(0, Math.round((x - body.getBoundingClientRect().left) * spp));
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      if (!lanes || (!moved && Math.abs(ev.clientX - x0) < 4)) return;
+      moved = true;
+      const lr = lanes.getBoundingClientRect();
+      const br = body.getBoundingClientRect();
+      zoomBox.style.transform = `translate(${(Math.min(x0, ev.clientX) - lr.left).toFixed(1)}px, ${(br.top - lr.top).toFixed(1)}px)`;
+      zoomBox.style.width = `${Math.abs(ev.clientX - x0).toFixed(1)}px`;
+      zoomBox.style.height = `${br.height.toFixed(1)}px`;
+      if (zoomBox.hidden) zoomBox.hidden = false;
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      if (!zoomBox.hidden) zoomBox.hidden = true;
+      if (ev.type === "pointercancel") return;
+      // the click that follows would seek the playhead or select; a zoom does neither
+      const swallow = (c: MouseEvent) => c.stopPropagation();
+      stage.addEventListener("click", swallow, true);
+      window.setTimeout(() => stage.removeEventListener("click", swallow, true), 0);
+      if (moved) {
+        const a = at(Math.min(x0, ev.clientX));
+        const b = at(Math.max(x0, ev.clientX));
+        if (b > a) zoomToSpan(doc, a, b);
+        return;
+      }
+      const t = at(x0);
+      const before = stage.scrollLeft;
+      setZoom(getZoom() * (e.altKey ? 0.5 : 2));
+      stage.scrollLeft = Math.max(0, before + t / samplesPerPixel(engine.get("document")) - t / spp);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
   stage.addEventListener(
     "pointerdown",
     (e) => {
+      if (e.button === 0 && tool === "zoom") {
+        const body = (e.target as HTMLElement).closest<HTMLElement>(".fw-lane-body");
+        if (!body) return;
+        e.preventDefault();
+        e.stopPropagation();
+        zoomGesture(e, body);
+        return;
+      }
       if (e.button !== 0 || (tool !== "split" && tool !== "fade")) return;
       const h = hit(e);
       if (!h) return;

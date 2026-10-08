@@ -44,17 +44,21 @@ export function setBeatGrid(seconds: number | null): void {
   beatSeconds = seconds && seconds > 0 ? seconds : null;
 }
 
-export function snapSamples(position: number, sampleRate: number, pxPerSecond: number): number {
-  if (!enabled) return position;
+/** The grid's step in samples at this zoom, whether or not snapping is on (Separate on Grid cuts on it). */
+export function gridStep(sampleRate: number, pxPerSecond: number): number {
   if (bars && beatSeconds) {
     // Beats halved or doubled by powers of two until a step is at least 12 px wide, down to a sixteenth of a beat.
     let step = beatSeconds;
     while (step * pxPerSecond < 12) step *= 2;
     while (step / 2 >= beatSeconds / 16 && (step / 2) * pxPerSecond >= 12) step /= 2;
-    const samples = step * sampleRate;
-    return Math.max(0, Math.round(Math.round(position / samples) * samples));
+    return step * sampleRate;
   }
-  const step = (labelStep(pxPerSecond) / 5) * sampleRate;
+  return (labelStep(pxPerSecond) / 5) * sampleRate;
+}
+
+export function snapSamples(position: number, sampleRate: number, pxPerSecond: number): number {
+  if (!enabled) return position;
+  const step = gridStep(sampleRate, pxPerSecond);
   return Math.max(0, Math.round(Math.round(position / step) * step));
 }
 
