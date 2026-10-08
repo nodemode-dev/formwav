@@ -33,17 +33,28 @@ pub const FADE_LINEAR: u8 = 0;
 pub const FADE_EQUAL_POWER: u8 = 1;
 pub const FADE_S_CURVE: u8 = 2;
 pub const FADE_EXPONENTIAL: u8 = 3;
+pub const FADE_LOGARITHMIC: u8 = 4;
 
 /// Gain of a fade at position `x` (0 at the silent end, 1 at full level).
-/// Shape codes: 0 linear, 1 equal-power (sine), 2 S-curve (raised cosine), 3 exponential (square); unknown codes are linear.
+/// Shape codes: 0 linear, 1 equal-power (sine), 2 S-curve (raised cosine), 3 exponential (square), 4 logarithmic
+/// (log10 of 1 + 9x, rising fast and levelling off); unknown codes are linear.
 pub fn fade_curve(x: f32, shape: u8) -> f32 {
     let x = x.clamp(0.0, 1.0);
     match shape {
         FADE_EQUAL_POWER => (x * std::f32::consts::FRAC_PI_2).sin(),
         FADE_S_CURVE => 0.5 - 0.5 * (x * std::f32::consts::PI).cos(),
         FADE_EXPONENTIAL => x * x,
+        FADE_LOGARITHMIC => (1.0 + 9.0 * x).log10(),
         _ => x,
     }
+}
+
+/// A clip's fade code as the shapes of its fade-in and fade-out: below 16 one shape for both edges; above, the fade-in's
+/// in the low four bits and the fade-out's plus one in the high four.
+pub fn fade_shapes(code: u8) -> (u8, u8) {
+    let fade_in = code & 15;
+    let fade_out = code >> 4;
+    (fade_in, if fade_out == 0 { fade_in } else { fade_out - 1 })
 }
 
 /// Automation: points (time in samples, value) in time order, linearly interpolated, the first and last
@@ -952,6 +963,7 @@ impl Player {
             let gain_right = clip.gain * pan_right;
             let fade_in = clip.fade_in.min(clip.length);
             let fade_out = clip.fade_out.min(clip.length - fade_in);
+            let (in_shape, out_shape) = fade_shapes(clip.fade_shape);
             let autos = self.clip_fx_auto.get(index).map_or(&[][..], |v| &v[..]);
             let specs = self.clip_fx_spec.get(index).map_or(&[][..], |v| &v[..]);
             let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
@@ -963,10 +975,10 @@ impl Player {
                 }
                 let mut fade = 1.0f32;
                 if k < fade_in {
-                    fade *= fade_curve(k as f32 / fade_in as f32, clip.fade_shape);
+                    fade *= fade_curve(k as f32 / fade_in as f32, in_shape);
                 }
                 if k >= clip.length - fade_out {
-                    fade *= fade_curve((clip.length - k) as f32 / fade_out as f32, clip.fade_shape);
+                    fade *= fade_curve((clip.length - k) as f32 / fade_out as f32, out_shape);
                 }
                 let i = (t - from) as usize;
                 if !autos.is_empty() && (t - a) % 32 == 0 {
