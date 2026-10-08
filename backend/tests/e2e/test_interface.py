@@ -113,6 +113,9 @@ def _open(page, url: str) -> None:
 def _import_speech(page) -> None:
     page.set_input_files(".fw-file", str(FIXTURES / "jfk.wav"))
     page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1")
+    # the import ends with its notice, after the engine has looked for a tempo; a notice a test waits for after that
+    # is not overwritten by it
+    page.wait_for_function("document.querySelector('.fw-notice').textContent.startsWith('Imported')")
 
 
 def _clean(page) -> dict:
@@ -269,6 +272,102 @@ def test_the_export_dialog_writes_a_range_as_24_bit_aiff_normalised_and_reports_
     notice = page.evaluate("document.querySelector('.fw-notice').textContent")
     assert "peak -1.0 dBFS" in notice and "dBTP" in notice and "normalized +" in notice
     assert _clean(page)["errors"] == []
+
+
+def _labels(page) -> list:
+    page.click('[data-agent-tab="history"]')
+    return page.evaluate("[...document.querySelectorAll('.fw-history-label')].map((l) => l.textContent)")
+
+
+def _range(page, a: float, b: float) -> None:
+    """A Smart Tool range on the first clip from a to b seconds (100 px a second at the first zoom)."""
+    body = page.locator(".fw-lane-body").first.bounding_box()
+    clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    y = clip["y"] + clip["height"] * 0.42
+    page.mouse.move(body["x"] + a * 100, y)
+    page.mouse.down()
+    page.mouse.move(body["x"] + (a + b) * 50, y)
+    page.mouse.move(body["x"] + b * 100, y)
+    page.mouse.up()
+
+
+def test_the_edit_menu_and_its_keys_duplicate_repeat_shift_trim_and_cut_time_each_in_one_step(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    page.mouse.click(clip["x"] + 60, clip["y"] + clip["height"] * 0.75)
+    page.keyboard.press("ControlOrMeta+d")
+    page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
+    page.locator(".fw-menu-btn", has_text="Edit").click()
+    page.locator(".fw-edit-pop [role=menuitem]", has_text="Repeat").click()
+    dialog = "dialog.fw-ask-dialog[open]"
+    page.fill(f"{dialog} input[data-k=count]", "2")
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 4")
+    page.keyboard.press("Alt+h")
+    page.wait_for_selector(dialog)
+    page.fill(f"{dialog} input[data-k=by]", "0.5")
+    page.click(f"{dialog} button[value=ok]")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent.startsWith('Shifted')")
+    _range(page, 1, 2)
+    page.locator(".fw-menu-btn", has_text="Edit").click()
+    page.locator(".fw-edit-pop [role=menuitem]", has_text="Trim to selection").click()
+    page.locator(".fw-menu-btn", has_text="Edit").click()
+    page.locator(".fw-edit-pop [role=menuitem]", has_text="Cut time from every track").click()
+    page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 3")
+    assert _labels(page) == ["Session start", "Added jfk.wav", "Duplicated clips", "Repeated clips 2 times", "Shifted clips later", "Trimmed to the selection", "Cut time across the session"]
+    assert _clean(page)["errors"] == []
+
+
+def test_the_zoom_tool_a_preset_tab_the_big_counter_identify_beat_and_a_page_turn_hold_still(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    timeline = "parseFloat(document.querySelector('.fw-lanes').style.getPropertyValue('--fw-timeline-w'))"
+    page.click('.fw-seg-btn[data-tool="zoom"]')
+    body = page.locator(".fw-lane-body").first.bounding_box()
+    clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    y = clip["y"] + clip["height"] / 2
+    page.mouse.move(body["x"] + 200, y)
+    page.mouse.down()
+    page.mouse.move(body["x"] + 300, y)
+    page.mouse.move(body["x"] + 400, y)
+    page.mouse.up()
+    # the 2 s dragged across fill the lanes in view, so the 11 s clip spans 5.5 views
+    view = page.evaluate("document.querySelector('.fw-stage').clientWidth - document.querySelector('.fw-ruler-corner').offsetWidth - 24")
+    assert abs(page.evaluate(timeline) - 5.5 * view) < 6
+    page.keyboard.press("2")
+    assert page.evaluate(timeline) == 1100
+    page.click('.fw-seg-btn[data-tool="select"]')
+    page.evaluate("document.querySelector('.fw-stage').scrollLeft = 0")
+    _range(page, 0.1, 1.1)
+    page.click('[data-mus="tempo"]')
+    page.fill('.fw-mus-pop [data-m="bars"]', "1")
+    page.click('.fw-mus-pop [data-m="identify"]')
+    page.wait_for_function("document.querySelector('[data-mus-value=\"tempo\"]').textContent === '240'")
+    page.keyboard.press("Escape")
+    page.locator(".fw-menu-btn", has_text="View").click()
+    page.locator(".fw-view-pop [role=menuitemcheckbox]", has_text="Big counter").click()
+    stage = page.locator(".fw-stage").bounding_box()
+    page.mouse.click(stage["x"] + 300, stage["y"] + stage["height"] - 30)
+    page.keyboard.press("Tab")
+    page.wait_for_function("document.querySelector('.fw-clock').textContent === '00:00:11.000'")
+    assert page.evaluate("document.querySelector('.fw-big-counter-time').textContent") == "00:00:11.000"
+    # AU-13: zoomed in (800 px a second) with the clip starting inside the view, Follow's page turns while playing move
+    # nothing; the first comes 0.6 s after the click on Play, past the half second an input excuses
+    page.evaluate("document.querySelector('.fw-stage').scrollLeft = 0")
+    clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    page.mouse.click(clip["x"] + 60, clip["y"] + clip["height"] * 0.75)
+    page.keyboard.press("Alt+h")
+    page.wait_for_selector("dialog.fw-ask-dialog[open]")
+    page.fill("dialog.fw-ask-dialog[open] input[data-k=by]", "0.05")
+    page.keyboard.press("Enter")
+    page.keyboard.press("3")
+    page.evaluate("document.activeElement && document.activeElement.blur()")
+    page.keyboard.press("Home")
+    page.click('.fw-tbtn[data-action="play"]')
+    page.wait_for_function("document.querySelector('.fw-stage').scrollLeft > 900")
+    page.click('.fw-tbtn[data-action="stop"]')
+    assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
 
 
 def test_settings_agents_lists_six_clients_and_does_not_move_as_they_load(page, app_url):
