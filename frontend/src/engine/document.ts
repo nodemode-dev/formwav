@@ -1,4 +1,5 @@
 import { PROCESSOR_BY_ID, processorValues } from "./processors";
+import { FRAME_RATES, type FrameRateId } from "./timebase";
 
 export interface MediaRef {
   id: string;
@@ -479,6 +480,8 @@ export interface Track {
   hidden?: boolean;
   height?: "small" | "large" | "jumbo";
   comments?: string;
+  /** Neither played nor exported, kept as it is (Pro Tools' Make Inactive); a commit leaves its original so. */
+  inactive?: boolean;
   /** PT-38, AA-11: where the track sits in a 5.1 mix, x from -1 (left) to 1 (right) and y from -1 (behind) to 1 (in
    *  front), with a send to the LFE channel in dB; absent, its stereo image goes to L and R. */
   surround?: {
@@ -593,6 +596,8 @@ export interface SessionDoc {
   tempo?: { bpm: number; beatsPerBar: number };
   /** PT-26: the timecode the session starts at, in seconds (Pro Tools' session start); timecode reads add it. */
   timecodeStart?: number;
+  /** The session's timecode rate (engine/timebase.ts), for timecode, Feet+Frames and a grid of frames; absent is 30. */
+  frameRate?: FrameRateId;
   /** AU-07: this project's snap settings, saved with it: snapping to the grid, and the grid in bars and beats; the grid
    *  and nudge values (engine/grid.ts ids; absent, the grid follows the zoom and the nudge is 0.1 s). */
   snap?: { grid: boolean; bars: boolean; value?: string; nudge?: string };
@@ -680,6 +685,7 @@ export type Command =
   | { type: "set-spatial-format"; format: "5.1" | "foa" }
   | { type: "set-track-midi-fx"; trackId: string; midiFx: MidiFx[] }
   | { type: "set-timecode-start"; seconds: number }
+  | { type: "set-frame-rate"; rate: FrameRateId | null }
   | { type: "set-track-instrument"; trackId: string; instrument: Instrument | null }
   | { type: "switch-playlist"; trackId: string; name: string }
   | { type: "set-key"; name: string; camelot: string }
@@ -735,6 +741,8 @@ export type Command =
   | { type: "set-tracks-hidden"; trackIds: string[]; hidden: boolean }
   | { type: "set-track-height"; trackId: string; height: "small" | "medium" | "large" | "jumbo" }
   | { type: "set-track-comments"; trackId: string; comments: string }
+  | { type: "set-tracks-inactive"; trackIds: string[]; inactive: boolean }
+  | { type: "commit-track"; trackId: string; media: MediaRef; length: number }
   | { type: "crossfade"; trackId: string; leftClipId: string; rightClipId: string; shape?: FadeShape }
   | { type: "set-loop"; start: number; end: number; enabled: boolean }
   | { type: "add-region"; start: number; end: number; label: string }
@@ -1319,6 +1327,12 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       if ((doc.timecodeStart ?? 0) === seconds) return doc;
       const { timecodeStart: _old, ...rest } = doc;
       return seconds > 0 ? { ...rest, timecodeStart: seconds } : rest;
+    }
+    case "set-frame-rate": {
+      const rate = cmd.rate && FRAME_RATES.some((r) => r.id === cmd.rate) ? cmd.rate : null;
+      if ((doc.frameRate ?? null) === rate) return doc;
+      const { frameRate: _old, ...rest } = doc;
+      return rate ? { ...rest, frameRate: rate } : rest;
     }
     case "set-track-midi-fx": {
       // PT-16: transpose -48 to 48 semitones, velocity scale 0 to 4 and offset -127 to 127, quantize 1/16 to 4 beats at
@@ -2254,6 +2268,44 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         const { comments: _old, ...rest } = t;
         return comments.trim() ? { ...rest, comments } : rest;
       });
+    }
+    case "set-tracks-inactive": {
+      const ids = new Set(cmd.trackIds);
+      let changed = false;
+      const tracks = doc.tracks.map((t) => {
+        if (!ids.has(t.id) || !!t.inactive === cmd.inactive) return t;
+        changed = true;
+        const { inactive: _was, ...rest } = t;
+        return cmd.inactive ? { ...rest, inactive: true } : rest;
+      });
+      return changed ? { ...doc, tracks } : doc;
+    }
+    case "commit-track": {
+      // Pro Tools' Commit: what the track plays, rendered by the engine through its fader and effects (the core runs
+      // both before the track meets a bus), on a new track right below it routed as it was; the original made inactive
+      // and hidden
+      const index = doc.tracks.findIndex((t) => t.id === cmd.trackId);
+      const length = Math.round(cmd.length);
+      if (index < 0 || length < 1) return doc;
+      const t = doc.tracks[index];
+      const names = new Set(doc.tracks.map((x) => x.name));
+      let name = `${t.name}.cm`;
+      for (let k = 2; names.has(name); k++) name = `${t.name}.cm ${k}`;
+      const track: Track = {
+        id: newId(),
+        name,
+        channels: cmd.media.channels === 1 ? 1 : 2,
+        gainDb: 0,
+        mute: t.mute,
+        solo: t.solo,
+        clips: [{ id: newId(), mediaId: cmd.media.id, start: 0, length, sourceIn: 0, gainDb: 0 }],
+        ...(t.color ? { color: t.color } : {}),
+        ...(t.soloSafe ? { soloSafe: true } : {}),
+        ...(t.busId ? { busId: t.busId } : {}),
+        ...(t.sends?.length ? { sends: t.sends.map((s) => ({ ...s })) } : {}),
+      };
+      const tracks = [...doc.tracks.slice(0, index), { ...t, inactive: true, hidden: true }, track, ...doc.tracks.slice(index + 1)];
+      return { ...doc, media: { ...doc.media, [cmd.media.id]: cmd.media }, tracks };
     }
   }
 }

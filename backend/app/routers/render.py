@@ -9,6 +9,24 @@ def _safe(name: str) -> str:
     return "".join("-" if ch in '\\/:*?"<>|' else ch for ch in name).strip() or "track"
 
 
+@router.post("/render/bounce", status_code=201)
+def bounce_track(document: dict = Body(...), trackId: str = "", mode: str = "clips", start: int | None = None, end: int | None = None) -> dict:
+    """PLAN_v13 S6: a track rendered into media of its own: Consolidate's clips in a range (mode clips) or Commit's
+    whole track (mode track); services/bounce.py."""
+    from ..services import bounce
+
+    try:
+        return bounce.bounce(document, trackId, mode, start, end)
+    except KeyError as err:
+        raise HTTPException(404, "the session uses media the engine does not have") from err
+    except media.CoreMissing as err:
+        raise HTTPException(503, str(err)) from err
+    except bounce.BounceError as err:
+        raise HTTPException(422, str(err)) from err
+    except (render.RenderError, media.MediaError) as err:
+        raise HTTPException(400, str(err)) from err
+
+
 @router.post("/render/activity")
 def track_activity(document: dict = Body(...), trackId: str = "", threshold: float | None = None, gap: float = 0.3, sensitivity: float = 20.0) -> dict:
     """Where a track is active: rendered alone (others muted, solos cleared), silences over `gap` seconds below the

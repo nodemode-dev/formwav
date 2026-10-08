@@ -230,7 +230,7 @@ export function clipChain(
 }
 
 export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPlan {
-  const soloed = doc.tracks.some((t) => t.solo);
+  const soloed = doc.tracks.some((t) => t.solo && !t.inactive);
   const busIndex = new Map<string, number>();
   const mutedBuses = new Set<string>();
   const buses: WorkletBus[] = [];
@@ -255,7 +255,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
   let skipped = 0;
   for (const track of doc.tracks) {
     const vca = track.vcaId !== undefined ? (doc.vcas ?? []).find((v) => v.id === track.vcaId) : undefined;
-    if (track.mute || vca?.mute || (soloed && !track.solo && !track.soloSafe) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
+    if (track.inactive || track.mute || vca?.mute || (soloed && !track.solo && !track.soloSafe) || (track.busId !== undefined && mutedBuses.has(track.busId))) continue;
     let bus = track.busId !== undefined ? busIndex.get(track.busId) ?? 0 : 0;
     const off = track.autoOff === true;
     let fxFlat = flatFx(track.fx);

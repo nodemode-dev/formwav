@@ -33,6 +33,7 @@ const WORDS: Record<Command["type"], Words> = {
   "set-spatial-format": ["Changed the spatial format", "Changed the spatial format"],
   "set-track-midi-fx": ["Changed the MIDI effects on {t}", "Changed the MIDI effects"],
   "set-timecode-start": ["Changed the start timecode", "Changed the start timecode"],
+  "set-frame-rate": ["Changed the frame rate", "Changed the frame rate"],
   "set-track-instrument": ["Changed the instrument on {t}", "Changed the instrument"],
   "switch-playlist": ["Switched playlists on {t}", "Switched playlists"],
   "set-key": ["Changed the key", "Changed the key"],
@@ -84,6 +85,8 @@ const WORDS: Record<Command["type"], Words> = {
   "set-tracks-hidden": ["Hid tracks", "Hid tracks"],
   "set-track-height": ["Changed the height of {t}", "Changed a track's height"],
   "set-track-comments": ["Changed the comments of {t}", "Changed a track's comments"],
+  "set-tracks-inactive": ["Made tracks inactive", "Made tracks inactive"],
+  "commit-track": ["Committed {t}", "Committed a track"],
   crossfade: ["Crossfaded clips on {t}", "Crossfaded clips"],
   "set-loop": ["Changed the loop", "Changed the loop"],
   "add-region": ["Added a region", "Added a region"],
@@ -132,5 +135,6 @@ export function describeCommand(command: Command, before: SessionDoc): string {
   if (command.type === "set-clips-mute" && !command.mute) words = "Unmuted clips";
   if (command.type === "set-clips-lock") words = command.lock === "time" ? "Time-locked clips" : command.lock ? "Edit-locked clips" : "Unlocked clips";
   if (command.type === "set-tracks-hidden" && !command.hidden) words = "Showed hidden tracks";
+  if (command.type === "set-tracks-inactive" && !command.inactive) words = "Made tracks active";
   return words;
 }

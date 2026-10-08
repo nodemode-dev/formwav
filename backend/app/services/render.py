@@ -139,7 +139,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     if not isinstance(rate, int) or rate <= 0:
         raise RenderError("the session has no valid sample rate")
     tracks = [t for t in doc["tracks"] if isinstance(t, dict)]
-    soloed = any(t.get("solo") for t in tracks)
+    soloed = any(t.get("solo") and not t.get("inactive") for t in tracks)
     buses: dict[str, tuple[int, float, float]] = {}
     muted_buses: set[str] = set()
     bus_chains: list[tuple] = []
@@ -167,7 +167,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     for track in tracks:
         # A VCA (Pro Tools' VCA masters) scales and mutes its members without carrying their audio.
         vca = vcas.get(track.get("vcaId"))
-        if track.get("mute") or (vca and vca.get("mute")) or (soloed and not track.get("solo") and not track.get("soloSafe")) or track.get("busId") in muted_buses:
+        if track.get("inactive") or track.get("mute") or (vca and vca.get("mute")) or (soloed and not track.get("solo") and not track.get("soloSafe")) or track.get("busId") in muted_buses:
             continue
         bus_index = buses[track["busId"]][0] if track.get("busId") in buses else 0
         # automation Off plays the static fader and pan and the filters as set, the lanes kept

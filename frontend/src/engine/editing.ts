@@ -463,6 +463,22 @@ export function pasteRange(doc: SessionDoc, copied: RangeClip, trackId: string, 
   return batch("Pasted a range", commands, true);
 }
 
+/** S6, Consolidate (Pro Tools' Consolidate Clip): what plays from `start` to `end` on a track, rendered by the engine
+ *  into one file (`media`), set over that span as one clip; a whole batch, its clearing and its placing one edit. */
+export function consolidate(doc: SessionDoc, trackId: string, start: number, end: number, media: MediaRef): Command | null {
+  const a = Math.max(0, Math.round(start));
+  const b = Math.round(end);
+  if (b <= a || !doc.tracks.some((t) => t.id === trackId)) return null;
+  return batch(
+    "Consolidated clips",
+    [
+      { type: "clear-range", trackId, start: a, end: b, ripple: false },
+      { type: "import-media", media, at: a, trackId, clip: { sourceIn: 0, length: Math.min(b - a, sessionLength(media, doc.sampleRate)) } },
+    ],
+    true,
+  );
+}
+
 const picked = (doc: SessionDoc, clipIds: readonly string[]) => {
   const ids = new Set(clipIds);
   return doc.tracks.flatMap((t) => t.clips.filter((c) => ids.has(c.id)));

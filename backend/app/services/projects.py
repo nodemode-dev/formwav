@@ -100,9 +100,9 @@ def _overview_png(doc: dict, rate: int, end: int) -> bytes | None:
     span = end / width
     step = max(1, int(span // 64))
     tracks = doc.get("tracks", [])
-    soloed = any(t.get("solo") for t in tracks)
+    soloed = any(t.get("solo") and not t.get("inactive") for t in tracks)
     for t in tracks:
-        if t.get("mute") or (soloed and not t.get("solo") and not t.get("soloSafe")):
+        if t.get("inactive") or t.get("mute") or (soloed and not t.get("solo") and not t.get("soloSafe")):
             continue
         for c in t.get("clips", []):
             if c.get("mediaId") not in (doc.get("media") or {}):

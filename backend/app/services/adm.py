@@ -117,7 +117,7 @@ def export_session(document: dict, render_alone) -> bytes:
     bed_tracks = []
     for i, track in enumerate(document.get("tracks") or []):
         place = track.get("surround") if isinstance(track, dict) else None
-        if not isinstance(place, dict):
+        if not isinstance(place, dict) or track.get("inactive"):
             continue
         if place.get("bed"):
             bed_tracks.append(track)
