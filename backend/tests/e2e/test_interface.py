@@ -370,6 +370,109 @@ def test_the_zoom_tool_a_preset_tab_the_big_counter_identify_beat_and_a_page_tur
     assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
 
 
+def _menu(page, menu: str, item: str) -> None:
+    page.locator(".fw-menu-btn", has_text=menu).click()
+    page.locator(f".fw-menu-pop[aria-label='{menu}'] [role^=menuitem]", has_text=item).first.click()
+    # the menu closes after its item has run; a pointer pressed before then would land on the menu
+    page.wait_for_selector(f".fw-menu-pop[aria-label='{menu}']", state="hidden")
+
+
+def test_the_clip_and_track_menus_mute_lock_rename_nudge_fade_and_the_track_commands_each_in_one_step(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    page.mouse.click(clip["x"] + 60, clip["y"] + clip["height"] * 0.75)
+    _menu(page, "Clip", "Mute or unmute")
+    page.wait_for_selector(".fw-clip[data-mute='true']")
+    _menu(page, "Clip", "Rename")
+    page.fill("dialog.fw-ask-dialog[open] input[data-k=name]", "Speech take")
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.querySelector('.fw-clip .fw-clip-name').textContent === 'Speech take'")
+    left = "document.querySelector('.fw-lane .fw-clip').style.left"
+    page.keyboard.press(".")
+    page.wait_for_function(f"{left} === '10px'")
+    page.keyboard.press(",")
+    page.wait_for_function(f"{left} === '0px'")
+    # a time-locked clip ignores a drag and says why
+    _menu(page, "Clip", "Time lock")
+    page.wait_for_selector(".fw-clip .fw-clip-lock:not([hidden])")
+    page.mouse.move(clip["x"] + 80, clip["y"] + clip["height"] * 0.75)
+    page.mouse.down()
+    page.mouse.move(clip["x"] + 160, clip["y"] + clip["height"] * 0.75, steps=4)
+    page.mouse.up()
+    assert page.evaluate(left) == "0px"
+    assert page.evaluate("document.querySelector('.fw-notice').textContent").startswith("This clip is time-locked")
+    _menu(page, "Clip", "Time lock")
+    # a range from inside the clip back past its start, then Cmd F: a one-second fade-in
+    body = page.locator(".fw-lane-body").first.bounding_box()
+    y = clip["y"] + clip["height"] * 0.42
+    page.mouse.move(body["x"] + 100, y)
+    page.mouse.down()
+    page.mouse.move(body["x"] + 40, y)
+    page.mouse.move(body["x"] - 30, y)
+    page.mouse.up()
+    page.keyboard.press("ControlOrMeta+f")
+    page.wait_for_selector("dialog.fw-ask-dialog[open] select[data-k=shape]")
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Created fades'")
+    page.click(".fw-lane .fw-lane-name")
+    _menu(page, "Track", "Duplicate")
+    page.wait_for_function("document.querySelectorAll('.fw-lane').length === 2")
+    _menu(page, "Track", "Move down")
+    page.wait_for_function("document.querySelector('.fw-lane .fw-lane-name').textContent === 'jfk copy'")
+    _menu(page, "Track", "Large")
+    page.wait_for_selector(".fw-lane[data-height='large']")
+    _menu(page, "Track", "Hide")
+    page.wait_for_function("[...document.querySelectorAll('.fw-lane')].filter((l) => l.hidden).length === 1")
+    _menu(page, "Track", "Show hidden tracks")
+    page.wait_for_function("[...document.querySelectorAll('.fw-lane')].filter((l) => l.hidden).length === 0")
+    assert _labels(page) == [
+        "Session start", "Added jfk.wav", "Muted clips", "Renamed a clip on jfk", "Nudged clips later", "Nudged clips earlier", "Time-locked clips", "Unlocked clips",
+        "Created fades", "Duplicated jfk", "Moved jfk", "Changed the height of jfk", "Hid tracks", "Showed hidden tracks",
+    ]
+    assert _clean(page)["errors"] == []
+
+
+def test_memory_locations_the_snap_dialog_and_a_range_pasted_on_another_track_hold_still(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    page.click("[data-add-track]")
+    page.wait_for_function("document.querySelectorAll('.fw-lane').length === 2")
+    clock = "document.querySelector('.fw-clock').textContent"
+    body = page.locator(".fw-lane-body").nth(1).bounding_box()
+    page.evaluate("document.activeElement && document.activeElement.blur()")
+    page.keyboard.press("Enter")
+    page.mouse.click(body["x"] + 300, body["y"] + body["height"] / 2)
+    page.wait_for_function(f"{clock} === '00:00:03.000'")
+    page.keyboard.press("Enter")
+    _menu(page, "Transport", "Memory locations")
+    page.wait_for_function("document.querySelectorAll('.fw-labels-panel:not([hidden]) .fw-label-row').length === 2")
+    row = page.locator(".fw-label-row").first
+    row.locator(".fw-label-color").select_option("amber")
+    row.locator(".fw-label-comment").fill("Opening")
+    row.locator(".fw-label-comment").press("Enter")
+    page.evaluate("document.activeElement && document.activeElement.blur()")
+    page.keyboard.press("Home")
+    page.wait_for_function(f"{clock} === '00:00:00.000'")
+    for key in ("NumpadDecimal", "Numpad2", "NumpadDecimal"):
+        page.keyboard.press(key)
+    page.wait_for_function(f"{clock} === '00:00:03.000'")
+    page.click('[data-mus="snap"]')
+    page.select_option('.fw-mus-pop select[data-m="grid"]', "1/16")
+    page.keyboard.press("Escape")
+    page.wait_for_function("document.querySelector('[data-mus-value=\"snap\"]').textContent === '1/16'")
+    _range(page, 1, 2)
+    page.keyboard.press("ControlOrMeta+c")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent.startsWith('Copied 1.000 s')")
+    page.keyboard.press("Escape")
+    page.mouse.click(body["x"] + 400, body["y"] + body["height"] / 2)
+    page.keyboard.press("ControlOrMeta+v")
+    page.wait_for_function("document.querySelectorAll('.fw-lane')[1].querySelectorAll('.fw-clip').length === 1")
+    assert page.evaluate("document.querySelectorAll('.fw-lane')[1].querySelector('.fw-clip').style.left") == "400px"
+    assert _labels(page) == ["Session start", "Added jfk.wav", "Added a track", "Added a marker", "Added a marker", "Changed a marker", "Changed a marker", "Changed snapping", "Pasted a range"]
+    assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
+
+
 def test_settings_agents_lists_six_clients_and_does_not_move_as_they_load(page, app_url):
     _open(page, app_url)
     page.locator(".fw-settings-menu .fw-menu-btn").click()

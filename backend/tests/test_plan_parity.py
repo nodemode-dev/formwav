@@ -95,6 +95,16 @@ def _cases() -> dict:
         ],
         surroundFold=True,
     )
+    # PLAN_v13 S5: a muted clip left out of both plans, a fade-out with a shape of its own, the logarithmic shape
+    cases["clip mute and a shape for each fade"] = _doc(
+        [
+            _track("t1", [
+                _clip("c1", "a", fadeIn=4800, fadeOut=9600, fadeShape="exponential", fadeOutShape="logarithmic"),
+                _clip("c2", "a", 50000, mute=True),
+                _clip("c3", "a", 100000, fadeIn=2400, fadeOut=2400, fadeShape="logarithmic"),
+            ]),
+        ],
+    )
     return cases
 
 

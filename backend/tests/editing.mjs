@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-// node editing.mjs <frontend>: reads [{ doc, fn, args }] on stdin, runs engine/editing.ts's fn(doc, ...args) (fn(...args)
+// node editing.mjs <frontend>: reads [{ doc, fn, args }] on stdin, runs engine/editing.ts's (or engine/grid.ts's) fn(doc, ...args) (fn(...args)
 // for a null doc; for fn "apply", the command args[0]) and applies the command it returns as the engine dispatches one,
 // then writes [{ value, after }]: the function's result and the session after it.
 const frontend = process.argv[2];
@@ -17,7 +17,7 @@ const server = await createServer({
 
 try {
   const { applyCommand, followClips } = await server.ssrLoadModule("/src/engine/document.ts");
-  const editing = await server.ssrLoadModule("/src/engine/editing.ts");
+  const editing = { ...(await server.ssrLoadModule("/src/engine/editing.ts")), ...(await server.ssrLoadModule("/src/engine/grid.ts")) };
   const chunks = [];
   for await (const chunk of process.stdin) chunks.push(chunk);
   const out = JSON.parse(Buffer.concat(chunks).toString("utf8")).map(({ doc, fn, args }) => {
