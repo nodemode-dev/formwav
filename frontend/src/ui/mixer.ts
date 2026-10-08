@@ -82,6 +82,10 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
   }
   setAttr(node.querySelector(".fw-strip-mute"), "aria-pressed", String(!!strip.item.mute));
   if (strip.kind === "track") {
+    if ((node.dataset.inactive !== undefined) !== !!strip.item.inactive) {
+      if (strip.item.inactive) node.dataset.inactive = "";
+      else delete node.dataset.inactive;
+    }
     setAttr(node.querySelector(".fw-strip-solo"), "aria-pressed", String(strip.item.solo));
     const solo = node.querySelector<HTMLElement>(".fw-strip-solo");
     if (solo && (solo.dataset.safe === "true") !== !!strip.item.soloSafe) solo.dataset.safe = String(!!strip.item.soloSafe);

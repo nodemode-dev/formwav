@@ -523,6 +523,10 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
   }
   const head = node.querySelector<HTMLElement>(".fw-lane-head");
   if (head && head.title !== (track.comments ?? "")) head.title = track.comments ?? "";
+  if ((node.dataset.inactive !== undefined) !== !!track.inactive) {
+    if (track.inactive) node.dataset.inactive = "";
+    else delete node.dataset.inactive;
+  }
   setText(node.querySelector(".fw-lane-num"), String(doc.tracks.findIndex((t) => t.id === track.id) + 1).padStart(2, "0"));
   const laneColor = track.color ? `var(--fw-color-${track.color})` : "";
   if (node.style.getPropertyValue("--fw-lane-color") !== laneColor) node.style.setProperty("--fw-lane-color", laneColor);
@@ -533,7 +537,7 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
   const media = first ? doc.media[first.mediaId] : undefined;
   const channels = channelLabel(track.channels);
   const fxCount = (track.fx ?? []).length;
-  setText(node.querySelector(".fw-lane-meta"), `${channels[0]?.toUpperCase() ?? ""}${channels.slice(1)}, ${fxCount === 0 ? "no effects" : fxCount === 1 ? "1 effect" : `${fxCount} effects`}`);
+  setText(node.querySelector(".fw-lane-meta"), `${track.inactive ? "Inactive, " : ""}${channels[0]?.toUpperCase() ?? ""}${channels.slice(1)}, ${fxCount === 0 ? "no effects" : fxCount === 1 ? "1 effect" : `${fxCount} effects`}`);
   node.querySelector(".fw-lane-meta")?.setAttribute("title", media ? `${media.format}, ${(media.sampleRate / 1000).toFixed(1)} kHz` : channels);
   const body = node.querySelector<HTMLElement>(".fw-lane-body");
   if (!body) return;

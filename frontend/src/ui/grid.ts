@@ -1,7 +1,7 @@
 import { icon as fcIcon } from "../vendor/formcut/icons";
 import type { Engine, SessionDoc } from "../engine";
 import { gridLines, parseGrid, snapToGrid, type GridValue } from "../engine/grid";
-import { clockMode } from "./shell";
+import { timecodeRate } from "./shell";
 
 const LABEL_SPACING_PX = 80;
 // AU-13: down to 10 microseconds, so the ruler keeps its labels zoomed to single samples (at 800000 px a second,
@@ -69,10 +69,10 @@ export function snapSamples(position: number, sampleRate: number, pxPerSecond: n
 // S5: the session's grid value (engine/grid.ts), when one is chosen over the grid that follows the zoom
 let gridDoc: SessionDoc | null = null;
 
-/** The frame rate a grid or nudge frame counts at: the clock's timecode rate, or 30 while it shows time. */
+/** The frame rate a grid or nudge frame counts at: the session's timecode rate (S6). */
 export function frameRate(): number {
-  const mode = clockMode();
-  return mode === "tc24" ? 24 : mode === "tc25" ? 25 : mode === "tc2997df" ? 30000 / 1001 : 30;
+  const r = gridDoc ? timecodeRate(gridDoc) : null;
+  return r ? r.num / r.den : 30;
 }
 
 export function fixedGrid(): GridValue | null {

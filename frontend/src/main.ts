@@ -15,6 +15,7 @@ import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
 import "./extensions/engine-link";
 import { mountShell } from "./ui/shell";
+import { mountCounters } from "./ui/counters";
 import { mountSession } from "./ui/session";
 import { mountTransport } from "./ui/transport";
 import { mountLoop } from "./ui/loop";
@@ -85,6 +86,7 @@ document.addEventListener("fw-output", (e) => void player.setOutput((e as Custom
 const host = document.getElementById("app");
 if (host) {
   mountShell(host, engine);
+  mountCounters(host, engine);
   mountSession(host, engine);
   mountTransport(host, engine, player);
   // Double-click a slider to reset it to its default (Audacity's controls, as a reference): the same input and change

@@ -1,11 +1,14 @@
-import type { Engine } from "../engine";
+import type { Engine, SessionDoc } from "../engine";
 import type { Player } from "../audio/player";
 import { documentLength } from "../engine/document";
+import { formatPosition, frameRate, nominal, samplesAtFrame, type FrameRate, type TimeFormat } from "../engine/timebase";
+import { RULERS, rulers } from "./counters";
 import { barsEnabled, labelStep, setBeatGrid, snapSamples } from "./grid";
 import { onZoom, samplesPerPixel } from "./lanes";
-import { clockMode, formatClock } from "./shell";
+import { CLOCK_MODES, clockMode, timecodeRate, timeOf } from "./shell";
 
 const MIN_MINOR_PX = 6;
+const ROW_H = 20;
 
 function label(seconds: number, step: number): string {
   const minutes = Math.floor(seconds / 60 + 1e-9);
@@ -17,6 +20,56 @@ function label(seconds: number, step: number): string {
   return `${minutes}:${rest < 10 ? "0" : ""}${text}`;
 }
 
+/** S6: one timebase's ticks and labels in a row `h` high at `y0`, across the visible pixels: Min:Secs at the main
+ *  ruler's steps, samples at 1, 2 and 5 times a power of ten, bars at the session's tempo, and timecode and Feet+Frames
+ *  on whole frames at `rate` (whole seconds and minutes once frames crowd), labels at least 60 to 90 px apart. */
+function drawRow(g: CanvasRenderingContext2D, doc: SessionDoc, fmt: TimeFormat, rate: FrameRate, y0: number, h: number, left: number, view: number, spp: number): void {
+  const time = timeOf(doc);
+  const sr = doc.sampleRate;
+  const tick = (x: number, major: boolean) => g.fillRect(Math.round(x), y0 + h * (major ? 0.5 : 0.75), 1, h * (major ? 0.5 : 0.25));
+  const text = (x: number, s: string) => g.fillText(s, Math.round(x) + 4, y0 + 3);
+  const each = (stepPx: number, fn: (k: number) => void) => {
+    for (let k = Math.max(0, Math.floor(left / stepPx) - 1); k * stepPx <= left + view + stepPx; k++) fn(k);
+  };
+  if (fmt === "min_secs") {
+    const step = labelStep(sr / spp);
+    const minorPx = ((step / 5) * sr) / spp;
+    each(minorPx, (i) => {
+      if (i % 5 !== 0 && minorPx < MIN_MINOR_PX) return;
+      tick(i * minorPx, i % 5 === 0);
+      if (i % 5 === 0) text(i * minorPx, label((i * step) / 5, step));
+    });
+  } else if (fmt === "samples") {
+    let step = 1;
+    while (step / spp < 90) step *= String(step).startsWith("2") ? 2.5 : 2;
+    each(step / spp, (k) => {
+      tick((k * step) / spp, true);
+      text((k * step) / spp, String(k * step));
+    });
+  } else if (fmt === "bars_beats") {
+    const beat = (sr * 60) / time.bpm;
+    const barPx = (beat * time.beatsPerBar) / spp;
+    let every = 1;
+    while (every * barPx < 60 && every < 65536) every *= 2;
+    each(barPx * every, (k) => {
+      tick(k * every * barPx, true);
+      text(k * every * barPx, String(k * every + 1));
+      if (barPx >= 240) for (let b = 1; b < time.beatsPerBar; b++) tick(((k * time.beatsPerBar + b) * beat) / spp, false);
+    });
+  } else {
+    const perFrame = (sr * rate.den) / rate.num;
+    const base = nominal(rate);
+    const seconds = [1, 2, 5, 10, 20, 30, 60, 120, 300, 600, 1200, 1800, 3600].map((s) => s * base);
+    const steps = fmt === "feet_frames" ? [1, 2, 4, 8, 16, 32, 64, 160, 320, 640, 1600, 3200, 6400, 16000, 32000] : [1, 2, 5, 10, ...seconds];
+    const step = steps.find((s) => (s * perFrame) / spp >= 72) ?? steps[steps.length - 1];
+    each((step * perFrame) / spp, (k) => {
+      const at = samplesAtFrame(k * step, rate, sr);
+      tick(at / spp, true);
+      text(at / spp, formatPosition(at, fmt, time, rate));
+    });
+  }
+}
+
 export function mountRuler(host: HTMLElement, engine: Engine, player: Player): void {
   const stage = host.querySelector<HTMLElement>(".fw-stage");
   const lanes = host.querySelector<HTMLElement>(".fw-lanes");
@@ -25,12 +78,22 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
   ruler.className = "fw-ruler";
   // AU-13: the first canvas spans the timeline and takes the clicks (it holds no pixels); the second, only the visible
   // window wide, paints, so a timeline zoomed to single samples (millions of pixels) never needs a canvas that big
-  ruler.innerHTML = `<div class="fw-ruler-corner"><span class="fw-ruler-title">Sections, time</span></div><canvas class="fw-ruler-canvas" aria-label="Timeline: click to move the playhead"></canvas><canvas class="fw-ruler-canvas fw-ruler-paint" aria-hidden="true"></canvas>`;
+  ruler.innerHTML = `<div class="fw-ruler-corner"><span class="fw-ruler-title">Sections, time</span></div><canvas class="fw-ruler-canvas" aria-label="Timeline: click to move the playhead"></canvas><canvas class="fw-ruler-canvas fw-ruler-paint" aria-hidden="true"></canvas><div class="fw-ruler-names" aria-hidden="true"></div>`;
   stage.insertBefore(ruler, lanes);
   const corner = ruler.firstElementChild as HTMLElement;
   const canvas = ruler.children[1] as HTMLCanvasElement;
   const paint = ruler.children[2] as HTMLCanvasElement;
+  const names = ruler.children[3] as HTMLElement;
   let lastWidth = "";
+  // S6: the rulers chosen (ui/counters.ts) as rows under the main one, each named in the corner column
+  const placeRows = () => {
+    const shown = rulers();
+    const rows = String(shown.length);
+    if (ruler.style.getPropertyValue("--fw-ruler-rows") !== rows) ruler.style.setProperty("--fw-ruler-rows", rows);
+    const text = shown.map((id) => RULERS.find((r) => r.id === id)?.label ?? id);
+    if ([...names.children].map((n) => n.textContent).join("|") !== text.join("|")) names.replaceChildren(...text.map((t) => Object.assign(document.createElement("span"), { textContent: t })));
+  };
+  placeRows();
 
   const draw = () => {
     const doc = engine.get("document");
@@ -58,9 +121,10 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     const ctx = paint.getContext("2d");
     if (!ctx) return;
     const style = getComputedStyle(canvas);
-    const height = h / dpr;
+    const total = h / dpr;
+    const height = Math.min(total, corner.offsetHeight || total);
     ctx.setTransform(dpr, 0, 0, dpr, -left * dpr, 0);
-    ctx.clearRect(left, 0, view, height);
+    ctx.clearRect(left, 0, view, total);
     ctx.font = `${style.fontSize} ${style.fontFamily}`;
     ctx.textBaseline = "top";
 
@@ -68,7 +132,19 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     const tempo = barsEnabled() && doc.tempo ? doc.tempo : null;
     setBeatGrid(tempo ? 60 / tempo.bpm : null);
     ctx.fillStyle = style.color;
-    if (tempo) {
+    const rate = timecodeRate(doc);
+    rulers().forEach((id, i) => {
+      const y0 = height + i * ROW_H;
+      ctx.globalAlpha = 0.35;
+      ctx.fillRect(left, y0, view, 1);
+      ctx.globalAlpha = 1;
+      drawRow(ctx, doc, id === "timecode2" ? "timecode" : (id as TimeFormat), id === "timecode2" ? frameRate(rate.id === "25" ? "30" : "25") : rate, y0, ROW_H, left, view, spp);
+    });
+    const mainFormat = CLOCK_MODES.find((m) => m.id === clockMode())?.format ?? "min_secs";
+    if (!tempo && mainFormat !== "min_secs") {
+      // S6: the main ruler in the main counter's timebase, the markers over it as before
+      drawRow(ctx, doc, mainFormat, rate, 0, height, left, view, spp);
+    } else if (tempo) {
       // Bars and beats (Audacity's beats and measures ruler): a line at each bar, numbered every 1, 2, 4... bars as
       // zoom allows; beat ticks from 6 px apart, labelled bar.beat from 48 px.
       const beatPx = (60 / tempo.bpm) * pxPerSecond;
@@ -80,27 +156,24 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
         const inBar = b % tempo.beatsPerBar;
         const barIndex = Math.floor(b / tempo.beatsPerBar);
         if (inBar === 0) {
-          ctx.fillRect(x, height * 0.5, 1, height);
+          ctx.fillRect(x, height * 0.5, 1, height * 0.5);
           if (barIndex % every === 0) ctx.fillText(String(barIndex + 1), x + 4, 3);
         } else if (beatPx >= 6) {
-          ctx.fillRect(x, height * 0.75, 1, height);
+          ctx.fillRect(x, height * 0.75, 1, height * 0.25);
           if (beatPx >= 48) ctx.fillText(`${barIndex + 1}.${inBar + 1}`, x + 4, 3);
         }
       }
     } else {
       const step = labelStep(pxPerSecond);
       const minor = step / 5;
-      // PT-26: with the clock in timecode, the ruler labels in the same timecode, from the session's timecode start
-      const mode = clockMode();
-      const tcLabel = mode !== "time" ? (s: number) => formatClock(Math.round(s * doc.sampleRate), doc.sampleRate, mode, doc.timecodeStart ?? 0) : null;
       const drawMinor = minor * pxPerSecond >= MIN_MINOR_PX;
       const tickPx = minor * pxPerSecond;
       for (let i = Math.max(0, Math.floor((left - 5 * tickPx) / tickPx)); i * tickPx <= Math.min(width, left + view + tickPx); i++) {
         const major = i % 5 === 0;
         if (!major && !drawMinor) continue;
         const x = Math.round(i * minor * pxPerSecond);
-        ctx.fillRect(x, major ? height * 0.5 : height * 0.75, 1, height);
-        if (major) ctx.fillText(tcLabel ? tcLabel(i * minor) : label(i * minor, step), x + 4, 3);
+        ctx.fillRect(x, major ? height * 0.5 : height * 0.75, 1, height * (major ? 0.5 : 0.25));
+        if (major) ctx.fillText(label(i * minor, step), x + 4, 3);
       }
     }
 
@@ -249,6 +322,10 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
   engine.subscribe("document", draw);
   onZoom(draw);
   document.addEventListener("fw:clock-mode", draw); // PT-26: labels follow the clock's timecode
+  document.addEventListener("fw:rulers", () => {
+    placeRows();
+    draw();
+  });
   // AU-13: the paint canvas covers only what is in view, so scrolling repaints it (once a frame)
   let scrollRaf = 0;
   stage.addEventListener(

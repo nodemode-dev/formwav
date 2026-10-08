@@ -8,7 +8,7 @@ import { setText } from "../vendor/nodemode/dom-stable";
 export function mountStatusBar(host: HTMLElement, engine: Engine): void {
   const bar = host.querySelector<HTMLElement>(".fw-status");
   if (!bar) return;
-  const [rate, length, hint] = [bar.querySelector<HTMLElement>(".fw-st-rate"), bar.querySelector<HTMLElement>(".fw-st-length"), host.querySelector<HTMLElement>(".fw-st-hint")];
+  const [rate, length, hint] = [bar.querySelector<HTMLElement>(".fw-st-rate"), bar.querySelector<HTMLElement>(".fw-st-length"), host.querySelector<HTMLElement>(".fw-st-hint-text")];
   const clock = (seconds: number) => {
     const whole = Math.ceil(seconds);
     const two = (n: number) => String(n).padStart(2, "0");

@@ -1,4 +1,5 @@
-import type { Engine, LinkState, TransportState } from "../engine";
+import type { Engine, LinkState, SessionDoc, TransportState } from "../engine";
+import { formatPosition, frameRate, parseTimecode, timeContext, timecodeToFrames, type FrameRate, type FrameRateId, type TimeContext, type TimeFormat } from "../engine/timebase";
 import { delayedIndicator, mountOnce, setText } from "../vendor/nodemode/dom-stable";
 import { ICON_SIZE, icon, type IconName } from "./icons";
 
@@ -122,7 +123,7 @@ function shellHtml(): string {
     </aside>
     <div class="fw-pane-divider" data-side="media" role="separator" aria-orientation="vertical" aria-label="Resize the Media pane" tabindex="0"></div>
     <section class="fw-pane fw-pane-timeline" aria-label="Timeline">
-      <div class="fw-tool-tray" role="toolbar" aria-label="Arrangement" data-tool="select"><button type="button" class="fw-tb-btn" data-add-track title="A new empty track, to record into or to fill from the browser">Add a track</button><div class="fw-seg fw-tools-seg" role="group" aria-label="Tool"><button type="button" class="fw-seg-btn" data-label="Select" data-tool="select" aria-pressed="true" title="Select, move and trim clips; drag in a clip's upper half to select a range">Select</button><button type="button" class="fw-seg-btn" data-label="Split" data-tool="split" aria-pressed="false" title="Click a clip where it should split">Split</button><button type="button" class="fw-seg-btn" data-label="Fade" data-tool="fade" aria-pressed="false" title="Drag in from a clip's start or end to fade it in or out">Fade</button><button type="button" class="fw-seg-btn" data-label="Zoom" data-tool="zoom" aria-pressed="false" title="Click to zoom in there, Alt-click to zoom out, drag across a span to fill the view with it">Zoom</button></div><div class="fw-zoom" role="group" aria-label="Zoom"><button type="button" class="fw-tb-icon" data-zoom="out" aria-label="Zoom out" title="Zoom out (-)">−</button><button type="button" class="fw-tb-icon" data-zoom="in" aria-label="Zoom in" title="Zoom in (=)">+</button><button type="button" class="fw-tb-btn fw-tb-quiet" data-zoom="fit" title="Fit the whole session in view">Fit</button><button type="button" class="fw-tb-btn fw-tb-quiet fw-follow" data-follow aria-pressed="true" title="Keep the playhead in view while playing">Follow</button></div><span class="fw-tool-hint" aria-live="polite"></span><span class="fw-st-hint"></span><div class="fw-tray-store" aria-hidden="true"><div class="fw-opt-group" data-group="edit" data-label="Edit" role="group" aria-label="Edit"></div><div class="fw-opt-group fw-opt-view" data-group="view" data-label="View" role="group" aria-label="View"><button type="button" class="fw-mode" data-inspector aria-pressed="false" title="Show the Inspector: the selected clip's and the session's settings">Inspector</button><button type="button" class="fw-mode" data-transcript aria-pressed="false">Transcript</button><button type="button" class="fw-mode" data-labels aria-pressed="false">Labels</button></div></div></div>
+      <div class="fw-tool-tray" role="toolbar" aria-label="Arrangement" data-tool="select"><button type="button" class="fw-tb-btn" data-add-track title="A new empty track, to record into or to fill from the browser">Add a track</button><div class="fw-seg fw-tools-seg" role="group" aria-label="Tool"><button type="button" class="fw-seg-btn" data-label="Select" data-tool="select" aria-pressed="true" title="Select, move and trim clips; drag in a clip's upper half to select a range">Select</button><button type="button" class="fw-seg-btn" data-label="Split" data-tool="split" aria-pressed="false" title="Click a clip where it should split">Split</button><button type="button" class="fw-seg-btn" data-label="Fade" data-tool="fade" aria-pressed="false" title="Drag in from a clip's start or end to fade it in or out">Fade</button><button type="button" class="fw-seg-btn" data-label="Zoom" data-tool="zoom" aria-pressed="false" title="Click to zoom in there, Alt-click to zoom out, drag across a span to fill the view with it">Zoom</button></div><div class="fw-zoom" role="group" aria-label="Zoom"><button type="button" class="fw-tb-icon" data-zoom="out" aria-label="Zoom out" title="Zoom out (-)">−</button><button type="button" class="fw-tb-icon" data-zoom="in" aria-label="Zoom in" title="Zoom in (=)">+</button><button type="button" class="fw-tb-btn fw-tb-quiet" data-zoom="fit" title="Fit the whole session in view">Fit</button><button type="button" class="fw-tb-btn fw-tb-quiet fw-follow" data-follow aria-pressed="true" title="Keep the playhead in view while playing">Follow</button></div><span class="fw-tool-hint" aria-live="polite"></span><span class="fw-st-hint"><span class="fw-st-hint-text"></span></span><div class="fw-sel-box"><div class="fw-sel" role="group" aria-label="Selection" title="The selection's start, end and length in the main counter's timebase; the playhead when nothing is selected"><span class="fw-sel-cell" data-sel="start"><span class="fw-sel-label">Start</span><output class="fw-sel-value"></output></span><span class="fw-sel-cell" data-sel="end"><span class="fw-sel-label">End</span><output class="fw-sel-value"></output></span><span class="fw-sel-cell" data-sel="length"><span class="fw-sel-label">Length</span><output class="fw-sel-value"></output></span></div></div><div class="fw-tray-store" aria-hidden="true"><div class="fw-opt-group" data-group="edit" data-label="Edit" role="group" aria-label="Edit"></div><div class="fw-opt-group fw-opt-view" data-group="view" data-label="View" role="group" aria-label="View"><button type="button" class="fw-mode" data-inspector aria-pressed="false" title="Show the Inspector: the selected clip's and the session's settings">Inspector</button><button type="button" class="fw-mode" data-transcript aria-pressed="false">Transcript</button><button type="button" class="fw-mode" data-labels aria-pressed="false">Labels</button></div></div></div>
       <main class="fw-stage" data-view="empty" tabindex="-1">
         <section class="fw-empty">
           <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>
@@ -148,8 +149,8 @@ function shellHtml(): string {
     <div class="fw-transport" role="group" aria-label="Transport and meters">
       <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>
       <div class="fw-position">
-        <output class="fw-clock" role="button" tabindex="0" data-mode="time" title="Click to switch the clock between time and timecode at 24, 25 or 30 frames per second">00:00:00.000</output>
-        <span class="fw-position-sub"><span class="fw-st-length" title="The session's length"></span></span>
+        <output class="fw-clock" role="button" tabindex="0" data-mode="time" aria-haspopup="dialog" title="The main counter: click to choose its timebase, the sub counter, the timecode rate and the rulers">00:00:00.000</output>
+        <span class="fw-position-sub"><span class="fw-st-length" title="The session's length"></span><span class="fw-subcounter" hidden></span></span>
       </div>
       <div class="fw-musical" role="group" aria-label="Tempo, meter and snap">
         <button type="button" class="fw-mus" data-mus="tempo" aria-haspopup="dialog" title="The session's tempo, for bars and beats and the grid"><span class="fw-mus-label">Tempo</span><span class="fw-mus-value" data-mus-value="tempo">120</span></button>
@@ -174,49 +175,50 @@ function shellHtml(): string {
 </div>`;
 }
 
-export type ClockMode = "time" | "tc24" | "tc25" | "tc2997df" | "tc30";
-export const CLOCK_MODES: ClockMode[] = ["time", "tc24", "tc25", "tc2997df", "tc30"];
+/** PT-26, S6: the main counter's timebases (engine/timebase.ts); Min:Secs keeps the clock's hours-first form. */
+export type ClockMode = "time" | "timecode" | "feet" | "samples" | "bars";
+export const CLOCK_MODES: readonly { id: ClockMode; format: TimeFormat; label: string }[] = [
+  { id: "time", format: "min_secs", label: "Min:Secs" },
+  { id: "timecode", format: "timecode", label: "Timecode" },
+  { id: "feet", format: "feet_frames", label: "Feet+Frames" },
+  { id: "samples", format: "samples", label: "Samples" },
+  { id: "bars", format: "bars_beats", label: "Bars|Beats" },
+];
 
-// PT-26: the clock's mode, for the ruler to label in the same timecode (an event tells it when the mode changes)
+// The main counter's timebase, for the ruler, the Big Counter and the readouts to follow (an event tells them when it
+// changes); and the rate timecode reads at in a session with none of its own: this browser's clock's rate before S6
 let currentMode: ClockMode = "time";
+let viewerRate: FrameRateId | undefined;
+let applyMode = (mode: ClockMode) => {
+  currentMode = mode;
+};
 export function clockMode(): ClockMode {
   return currentMode;
 }
-
-/** PT-26: timecode text (hh:mm:ss:ff, or hh:mm:ss;ff for drop-frame) as seconds, in `mode`'s rate; null if unreadable. */
-export function parseTimecode(text: string, mode: ClockMode): number | null {
-  const m = /^(\d{1,2}):(\d{2}):(\d{2})[:;.](\d{2})$/.exec(text.trim());
-  if (!m) return null;
-  const [h, mi, s, f] = m.slice(1).map(Number);
-  if (mode === "tc2997df") {
-    // SMPTE drop-frame: frame numbers 00 and 01 skipped at each minute but every tenth
-    const minutes = h * 60 + mi;
-    return (((h * 3600 + mi * 60 + s) * 30 + f - 2 * (minutes - Math.floor(minutes / 10))) * 1001) / 30000;
-  }
-  const fps = mode === "tc24" ? 24 : mode === "tc25" ? 25 : 30;
-  return h * 3600 + mi * 60 + s + f / fps;
+export function setClockMode(mode: ClockMode): void {
+  applyMode(mode);
 }
 
-export function formatClock(positionSamples: number, sampleRate: number, mode: ClockMode = "time", startSeconds = 0): string {
+/** The frame rate timecode, Feet+Frames and a grid of frames count at: the session's, else this browser's old one. */
+export function timecodeRate(doc: SessionDoc): FrameRate {
+  return frameRate(doc.frameRate ?? viewerRate);
+}
+
+export function timeOf(doc: SessionDoc): TimeContext {
+  return timeContext(doc, doc.frameRate ?? viewerRate);
+}
+
+/** PT-26: timecode text (hh:mm:ss:ff, ';' before the frames for drop-frame, fewer fields read from the right) as
+ *  seconds at `rate`; null if unreadable. */
+export function parseTimecodeSeconds(text: string, rate: FrameRate): number | null {
+  const tc = parseTimecode(text);
+  return tc && !tc.negative ? (timecodeToFrames(tc, rate) * rate.den) / rate.num : null;
+}
+
+export function formatClock(positionSamples: number, doc: SessionDoc, mode: ClockMode = "time"): string {
   const two = (n: number) => String(n).padStart(2, "0");
-  if (mode === "tc2997df") {
-    // PT-26: 29.97 drop-frame (SMPTE): real frames counted at 30000/1001 a second, numbered skipping 00 and 01 at each
-    // minute but every tenth, written with ';' before the frames
-    const frame = Math.floor((positionSamples / sampleRate + startSeconds) * (30000 / 1001) + 1e-6);
-    const tens = Math.floor(frame / 17982);
-    const rest = frame % 17982;
-    const n = frame + 18 * tens + (rest > 1 ? 2 * Math.floor((rest - 2) / 1798) : 0);
-    return `${two(Math.floor(n / 108000))}:${two(Math.floor(n / 1800) % 60)}:${two(Math.floor(n / 30) % 60)};${two(n % 30)}`;
-  }
-  if (mode !== "time") {
-    const fps = mode === "tc24" ? 24 : mode === "tc25" ? 25 : 30;
-    const totalFrames = Math.floor((positionSamples / sampleRate + startSeconds) * fps + 1e-6);
-    const f = totalFrames % fps;
-    const s = Math.floor(totalFrames / fps) % 60;
-    const m = Math.floor(totalFrames / (fps * 60)) % 60;
-    const h = Math.floor(totalFrames / (fps * 3600));
-    return `${two(h)}:${two(m)}:${two(s)}:${two(f)}`;
-  }
+  if (mode !== "time") return formatPosition(positionSamples, CLOCK_MODES.find((m) => m.id === mode)?.format ?? "min_secs", timeOf(doc));
+  const sampleRate = doc.sampleRate;
   const totalMs = Math.floor((positionSamples * 1000) / sampleRate);
   const ms = totalMs % 1000;
   const s = Math.floor(totalMs / 1000) % 60;
@@ -265,38 +267,39 @@ export function mountShell(host: HTMLElement, engine: Engine): void {
     if (!connectingShown) writeFinal();
   };
 
+  // S6: the main counter's timebase is this browser's choice (ui/counters.ts sets it); the timecode rate the clock held
+  // before S6 is kept as the rate for sessions that have none of their own
   const CLOCK_KEY = "formwav.clockMode";
-  let clockMode: ClockMode = "time";
+  const RATE_KEY = "formwav.timecodeRate";
+  const LEGACY: Record<string, FrameRateId> = { tc24: "24", tc25: "25", tc2997df: "29.97df", tc30: "30" };
   try {
-    const saved = localStorage.getItem(CLOCK_KEY);
-    if (saved && CLOCK_MODES.includes(saved as ClockMode)) clockMode = saved as ClockMode;
+    const saved = localStorage.getItem(CLOCK_KEY) ?? "";
+    const legacy = LEGACY[saved];
+    if (legacy) {
+      localStorage.setItem(RATE_KEY, legacy);
+      localStorage.setItem(CLOCK_KEY, "timecode");
+    }
+    if (legacy || CLOCK_MODES.some((m) => m.id === saved)) currentMode = legacy ? "timecode" : (saved as ClockMode);
+    viewerRate = (localStorage.getItem(RATE_KEY) as FrameRateId | null) ?? undefined;
   } catch {
     clock?.setAttribute("data-storage", "none");
   }
-  currentMode = clockMode;
   // PT-26: timecode reads from the session's timecode start (Pro Tools' session start, 01:00:00:00 by habit)
-  const renderClock = (t: TransportState) => setText(clock, formatClock(t.positionSamples, t.sampleRate, clockMode, engine.get("document").timecodeStart ?? 0));
+  const renderClock = (t: TransportState) => setText(clock, formatClock(t.positionSamples, engine.get("document"), currentMode));
   engine.subscribe("document", () => renderClock(engine.get("transport")));
-  const cycleClock = () => {
-    clockMode = CLOCK_MODES[(CLOCK_MODES.indexOf(clockMode) + 1) % CLOCK_MODES.length];
-    currentMode = clockMode;
-    document.dispatchEvent(new CustomEvent("fw:clock-mode"));
-    if (clock && clock.dataset.mode !== clockMode) clock.dataset.mode = clockMode;
+  applyMode = (mode) => {
+    if (mode === currentMode) return;
+    currentMode = mode;
+    if (clock && clock.dataset.mode !== mode) clock.dataset.mode = mode;
     try {
-      localStorage.setItem(CLOCK_KEY, clockMode);
+      localStorage.setItem(CLOCK_KEY, mode);
     } catch {
       clock?.setAttribute("data-storage", "none");
     }
     renderClock(engine.get("transport"));
+    document.dispatchEvent(new CustomEvent("fw:clock-mode"));
   };
-  if (clock && clock.dataset.mode !== clockMode) clock.dataset.mode = clockMode;
-  clock?.addEventListener("click", cycleClock);
-  clock?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      cycleClock();
-    }
-  });
+  if (clock && clock.dataset.mode !== currentMode) clock.dataset.mode = currentMode;
 
   host.querySelector(".fw-empty-actions")?.addEventListener("click", (e) => {
     const act = (e.target as HTMLElement).closest<HTMLElement>("[data-empty]")?.dataset.empty;

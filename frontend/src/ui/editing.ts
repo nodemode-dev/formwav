@@ -7,8 +7,8 @@
  */
 import type { Command, Engine } from "../engine";
 import type { Player } from "../audio/player";
-import { FADE_SHAPES, nextMemoryNumber, type FadeShape, type Track } from "../engine/document";
-import { clipTransients, createFades, deleteFades, editSpan, fadeToPlayhead, findMemory, healSeparations, insertSilence, lockClips, muteClips, nextMemory, nextStop, nudgeClips, repeatSpan, separateOnGrid, shiftClips, snapClips, spaceClips, stripGaps, timeOperation, trimToFile, trimToFill, trimToPlayhead, trimToRange, type EditRange, type EditTarget, type MemoryLocation } from "../engine/editing";
+import { FADE_SHAPES, nextMemoryNumber, type FadeShape, type MediaRef, type Track } from "../engine/document";
+import { clipTransients, consolidate, createFades, deleteFades, editSpan, fadeToPlayhead, findMemory, healSeparations, insertSilence, lockClips, muteClips, nextMemory, nextStop, nudgeClips, repeatSpan, separateOnGrid, shiftClips, snapClips, spaceClips, stripGaps, timeOperation, trimToFile, trimToFill, trimToPlayhead, trimToRange, type EditRange, type EditTarget, type MemoryLocation } from "../engine/editing";
 import { gridStepOf, NUDGE_DEFAULT, parseGrid } from "../engine/grid";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { mountBigCounter } from "./big-counter";
@@ -215,6 +215,28 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       say(`Could not strip: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
+  // PLAN_v13 S6: Consolidate and Commit have the engine render the track (services/bounce.py) and place what comes back
+  const bounceTrack = async (params: Record<string, string>): Promise<MediaRef> => {
+    const res = await fetch(`/api/render/bounce?${new URLSearchParams(params)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(engine.get("document")) });
+    const out = (await res.json().catch(() => ({}))) as { detail?: unknown; id?: string };
+    if (!res.ok || !out.id) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+    return out as unknown as MediaRef;
+  };
+  const consolidateSelection = async () => {
+    const t = target();
+    const span = editSpan(engine.get("document"), t);
+    if (!span) return say("Select a range, or clips on one track, to consolidate");
+    if (span.trackIds.length !== 1) return say("Consolidate works on one track at a time: select clips on one track");
+    const trackId = span.trackIds[0];
+    say("Consolidating...");
+    try {
+      const media = await bounceTrack({ trackId, mode: "clips", start: String(span.start), end: String(span.end) });
+      if (!run(consolidate(engine.get("document"), trackId, span.start, span.end, media), `Consolidated ${seconds(span.end - span.start)} into one clip`, "Nothing to consolidate there")) return;
+      if (!t.range) selectClips((engine.get("document").tracks.find((tr) => tr.id === trackId)?.clips ?? []).filter((c) => c.mediaId === media.id && c.start === span.start).map((c) => c.id));
+    } catch (err) {
+      say(`Could not consolidate: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   // Tab and Shift Tab, while the lanes have focus (a click in them gives it): the playhead to the next or last clip edge
   // on the selected clips' tracks (the range's, else every track), and with Tab to transients on, to each transient too
@@ -325,6 +347,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     sep(),
     item("Separate on the grid", "", "Split the selected clips, or those in the range, at every grid line", separateGrid),
     item("Heal separation", "", "Join clips split from one another back into one (in the range, the selected clips, or at the playhead)", () => run(healSeparations(engine.get("document"), target(), playhead()), "Healed the separation", "No split clips to heal there")),
+    item("Consolidate", "⌥⇧3", "Render what plays in the range, or across the selected clips, into one clip in their place", () => void consolidateSelection()),
     item("Strip silence...", "", "Remove the silent stretches from the selected clips or the range, with a threshold, minimum length and pads", () => void stripSilence()),
     sep(),
     item("Insert time on every track", "", "Open the selection's length of time at its start on every track, moving markers, regions, the loop and automation after it", () => timeOp("insert")),
@@ -353,6 +376,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     Object.assign(document.createElement("span"), { className: "fw-menu-label", textContent: "Zoom presets" }),
     presetRow,
     item("Big counter", "", "The playhead's position in large figures on a panel of its own", counter.toggle, counter.isOpen, (sync) => counter.onChange(sync)),
+    item("Counters and rulers...", "", "The main and sub counters' timebases, the session's timecode rate and the rulers shown", () => host.dispatchEvent(new CustomEvent("fw-counters"))),
   );
   const tabListeners = new Set<() => void>();
   host.querySelector(".fw-transport-pop")?.append(
@@ -442,6 +466,16 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     engine.dispatch({ type: "set-track-comments", trackId: track.id, comments: str(v, "text") });
     say(str(v, "text").trim() ? `Comments kept with ${track.name}` : `Cleared the comments of ${track.name}`);
   });
+  const commitTrack = onTrack(async (track) => {
+    if (track.surround) return say(`Take ${track.name} off the surround pad to commit it`);
+    say(`Committing ${track.name}...`);
+    try {
+      const media = await bounceTrack({ trackId: track.id, mode: "track" });
+      run({ type: "commit-track", trackId: track.id, media, length: media.frames }, `Committed ${track.name}: ${track.name}.cm plays it as it was; the original is inactive and hidden`, "");
+    } catch (err) {
+      say(`Could not commit: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
   const trackPop = host.querySelector(".fw-track-pop");
   trackPop?.append(
     item("New track", "", "Add an empty stereo track at the bottom", () => engine.dispatch({ type: "add-track" })),
@@ -463,6 +497,18 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       engine.dispatch({ type: "set-tracks-hidden", trackIds: ids, hidden: false });
       say(`Showed ${ids.length} hidden track${ids.length === 1 ? "" : "s"}`);
     }),
+    item(
+      "Inactive",
+      "",
+      "Stop the track playing and exporting, keeping it as it is (again to make it active)",
+      onTrack((track) => {
+        engine.dispatch({ type: "set-tracks-inactive", trackIds: [track.id], inactive: !track.inactive });
+        say(track.inactive ? `Made ${track.name} active` : `Made ${track.name} inactive: it neither plays nor exports`);
+      }),
+      () => !!trackNow()?.inactive,
+      (sync) => trackListeners.add(sync),
+    ),
+    item("Commit", "⌥⇧C", "Render the track through its fader and effects onto a new track below it, and make the original inactive and hidden", () => void commitTrack()),
     sep(),
     Object.assign(document.createElement("span"), { className: "fw-menu-label", textContent: "Height" }),
     ...heights.map((h) =>
@@ -630,6 +676,9 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
         engine.dispatch({ type: "duplicate-track", trackId: track.id });
         say(`Duplicated ${track.name}`);
       })();
+    } else if (e.altKey && e.shiftKey && !mod && (e.code === "KeyC" || e.code === "Digit3")) {
+      e.preventDefault();
+      void (e.code === "KeyC" ? commitTrack() : consolidateSelection());
     } else if (!mod && !e.altKey && ((e.key === "," && e.code !== "NumpadDecimal") || e.code === "NumpadSubtract")) {
       e.preventDefault();
       nudge(-1);

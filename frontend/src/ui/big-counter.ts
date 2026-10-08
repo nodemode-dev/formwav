@@ -25,7 +25,7 @@ export function mountBigCounter(host: HTMLElement, engine: Engine): BigCounter {
   const render = () => {
     if (panel.hidden) return;
     const t = engine.get("transport");
-    setText(time, formatClock(t.positionSamples, t.sampleRate, clockMode(), engine.get("document").timecodeStart ?? 0));
+    setText(time, formatClock(t.positionSamples, engine.get("document"), clockMode()));
   };
   engine.subscribe("transport", render);
   engine.subscribe("document", render);

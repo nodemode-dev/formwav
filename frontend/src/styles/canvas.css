@@ -301,10 +301,15 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 /* Arrangement: ruler, track headers and clips */
 .fw-lanes, .fw-ruler { --fw-head-w: var(--cv-track-head-w); }
 .fw-pane-timeline .fw-stage { background: var(--bg-node); }
-.fw-ruler { z-index: var(--z-chrome); block-size: 36px; background: var(--bg-secondary); border-block-end: 1px solid var(--border-color); }
-.fw-ruler-corner { z-index: var(--z-rail); }
+.fw-ruler { z-index: var(--z-chrome); block-size: calc(36px + var(--fw-ruler-rows, 0) * 20px); grid-template-rows: 35px minmax(0, 1fr); background: var(--bg-secondary); border-block-end: 1px solid var(--border-color); }
+.fw-ruler-corner, .fw-ruler-names { z-index: var(--z-rail); }
 .fw-ruler-corner { display: flex; align-items: center; padding: 0 12px; background: var(--bg-secondary); border-inline-end: 1px solid var(--border-color); }
 .fw-ruler-title { font-size: var(--fs-11); color: var(--text-muted); white-space: nowrap; }
+/* S6: the rulers chosen, 20px rows under the main one, named in the corner column; the clicks cover every row */
+.fw-ruler > .fw-ruler-corner { grid-row: 1; grid-column: 1; }
+.fw-ruler > .fw-ruler-canvas:not(.fw-ruler-paint) { grid-row: 1 / -1; grid-column: 2; }
+.fw-ruler-names { grid-row: 2; grid-column: 1; position: sticky; left: 0; display: grid; grid-auto-rows: 20px; align-content: start; padding: 0 12px; background: var(--bg-secondary); border-inline-end: 1px solid var(--border-color); font-size: var(--fs-10); color: var(--text-muted); }
+.fw-ruler-names > span { display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
 .fw-lane { grid-template-rows: calc(var(--cv-lane-h) - 1px); border-block-end: 1px solid var(--border-color); }
 .fw-lane:nth-child(odd of .fw-lane) .fw-lane-body, .fw-lane:nth-child(even of .fw-lane) .fw-lane-body { background: var(--bg-node); }
 .fw-lane .fw-lane-head {
@@ -359,6 +364,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-lane[data-height="large"] { --cv-lane-h: 120px; }
 .fw-lane[data-height="jumbo"] { --cv-lane-h: 180px; }
 .fw-lane[data-current] .fw-lane-head { background: var(--bg-tertiary); }
+.fw-lane[data-inactive] .fw-lane-body, .fw-lane[data-inactive] .fw-lane-name, .fw-strip[data-inactive] { opacity: 0.45; }
 
 /* Footer: transport, position, tempo, meters and status */
 .fw-status {
@@ -435,6 +441,34 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-mus-pop [hidden] { display: none !important; }
 .fw-mus-pop select.fw-spot-input { inline-size: auto; font-family: inherit; }
 .fw-musical .fw-mus-value[data-mus-value="snap"] { min-inline-size: 5ch; }
+/* S6: the counters' dialog over the clock, the sub counter under it, and the selection at the tool tray's end, whose
+   columns drop as the tray narrows */
+.fw-counter-pop .fw-spot-label { justify-content: space-between; }
+.fw-counter-pop select.fw-spot-input { inline-size: auto; font-family: inherit; }
+.fw-counter-rulers { display: grid; grid-template-columns: repeat(2, auto); gap: var(--space-1) var(--space-3); font-size: var(--fs-12); color: var(--text-secondary); }
+.fw-counter-head, .fw-counter-sets { grid-column: 1 / -1; }
+.fw-counter-ruler, .fw-counter-sets { display: flex; align-items: center; gap: var(--space-2); }
+.fw-counter-ruler input { margin: 0; accent-color: var(--accent-color); }
+.fw-subcounter { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fw-tool-tray > .fw-sel-box { flex: 0 1 252px; min-inline-size: 0; container-type: inline-size; }
+.fw-tool-tray > .fw-sel-box:has(> .fw-sel[data-w="9"]) { flex-basis: 212px; }
+.fw-tool-tray > .fw-sel-box:has(> .fw-sel[data-w="10"]) { flex-basis: 232px; }
+/* the select tool's hint shows only whole: hidden where the readouts leave it less than its 344 px */
+.fw-tool-tray > .fw-st-hint { container-type: inline-size; }
+@container (max-width: 350px) { .fw-st-hint-text { visibility: hidden; } }
+.fw-sel { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.fw-sel-cell { display: grid; justify-items: end; line-height: 1.2; }
+.fw-sel-label { font-size: var(--fs-10); color: var(--text-muted); }
+.fw-sel-value { min-inline-size: 11ch; font-family: var(--font-mono); font-size: var(--fs-11); font-variant-numeric: tabular-nums; color: var(--text-primary); text-align: end; white-space: nowrap; }
+.fw-sel[data-w="9"] .fw-sel-value { min-inline-size: 9ch; }
+.fw-sel[data-w="10"] .fw-sel-value { min-inline-size: 10ch; }
+@container (max-width: 250px) { .fw-sel:not([data-w]) .fw-sel-cell[data-sel="end"] { display: none; } }
+@container (max-width: 229px) { .fw-sel[data-w="10"] .fw-sel-cell[data-sel="end"] { display: none; } }
+@container (max-width: 208px) { .fw-sel[data-w="9"] .fw-sel-cell[data-sel="end"] { display: none; } }
+@container (max-width: 165px) { .fw-sel:not([data-w]) .fw-sel-cell[data-sel="start"] { display: none; } }
+@container (max-width: 151px) { .fw-sel[data-w="10"] .fw-sel-cell[data-sel="start"] { display: none; } }
+@container (max-width: 137px) { .fw-sel[data-w="9"] .fw-sel-cell[data-sel="start"] { display: none; } }
+@container (max-width: 79px) { .fw-sel { display: none; } }
 .fw-fade-preview { position: absolute; inset-block: 0; z-index: var(--z-raised); inline-size: 0; pointer-events: none; }
 .fw-fade-preview-in { inset-inline-start: 0; background: linear-gradient(to bottom right, color-mix(in srgb, var(--accent-color) 45%, transparent) 50%, transparent 50%); border-inline-end: 1px solid var(--accent-color); }
 .fw-fade-preview-out { inset-inline-end: 0; background: linear-gradient(to bottom left, color-mix(in srgb, var(--accent-color) 45%, transparent) 50%, transparent 50%); border-inline-start: 1px solid var(--accent-color); }
