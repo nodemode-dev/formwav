@@ -652,12 +652,12 @@ export type Command =
   | { type: "set-track-instrument"; trackId: string; instrument: Instrument | null }
   | { type: "switch-playlist"; trackId: string; name: string }
   | { type: "set-key"; name: string; camelot: string }
-  | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean }
+  | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean; follow?: "tracks" }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
   /** A note clip's edited notes and the instrument's new rendering of them, replaced together (one undo step). */
   | { type: "set-clip-notes"; trackId: string; clipId: string; notes: readonly NoteEvent[]; media: MediaRef }
-  | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean; smooth?: number }
+  | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean; smooth?: number; follow?: "tracks" | "session" }
   | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef; feather?: number }
   | { type: "remove-marker"; markerId: string }
   | { type: "set-marker"; markerId: string; at?: number; label?: string }
@@ -709,11 +709,11 @@ export type Command =
   | { type: "set-bus-gain"; busId: string; gainDb: number }
   | { type: "set-bus-pan"; busId: string; pan: number }
   | { type: "split-clip"; trackId: string; clipId: string; at: number }
-  | { type: "insert-time"; trackIds: string[]; at: number; length: number }
+  | { type: "insert-time"; trackIds: string[]; at: number; length: number; follow?: "tracks" | "session" }
   | { type: "move-range"; trackIds: string[]; start: number; end: number; to: number }
   | { type: "set-clip-bounds"; trackId: string; clipId: string; start: number; sourceIn: number; length: number }
   | { type: "set-clip-gain"; trackId: string; clipId: string; gainDb: number }
-  | { type: "batch"; commands: Command[] }
+  | { type: "batch"; commands: Command[]; label?: string }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "move-clip-to-track"; trackId: string; clipId: string; toTrackId: string; start: number }
   | { type: "set-clip-pitch"; trackId: string; clipId: string; semitones: number; media: MediaRef | null }
@@ -758,6 +758,122 @@ function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): Se
   return changed ? { ...doc, tracks } : doc;
 }
 
+/** An automation lane's value at t as the core reads it: linear between points (in gain for volume, whose points are
+ *  dB), the first and last values held outside them. */
+export function laneValue(points: readonly AutoPoint[], t: number, gain: boolean): number {
+  const first = points[0];
+  if (!first) return 0;
+  if (t <= first.time) return first.value;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (t > b.time) continue;
+    if (b.time === a.time) return b.value;
+    const x = (t - a.time) / (b.time - a.time);
+    if (!gain) return a.value + (b.value - a.value) * x;
+    const g = 10 ** (a.value / 20) + (10 ** (b.value / 20) - 10 ** (a.value / 20)) * x;
+    return 20 * Math.log10(Math.max(g, 1e-6));
+  }
+  return points[points.length - 1].value;
+}
+
+const laneByTime = (points: AutoPoint[]): AutoPoint[] => {
+  const at = new Map<number, number>();
+  for (const p of points) at.set(p.time, p.value);
+  return [...at].map(([time, value]) => ({ time, value })).sort((a, b) => a.time - b.time);
+};
+
+/** A lane with `length` samples of time opened at `at`: points from `at` on move later, and where a ramp crossed `at`
+ *  its value there is kept on both sides of the opening, so everything after plays as it did, `length` later. */
+export function insertLane(points: readonly AutoPoint[], at: number, length: number, gain: boolean): AutoPoint[] {
+  const before = points.filter((p) => p.time < at);
+  const moved = points.filter((p) => p.time >= at).map((p) => ({ time: p.time + length, value: p.value }));
+  if (!moved.length || length <= 0) return [...points];
+  if (!before.length || before[before.length - 1].value === points[before.length].value) return [...before, ...moved];
+  const v = laneValue(points, at, gain);
+  return laneByTime([...before, { time: at, value: v }, { time: at + length, value: v }, ...moved]);
+}
+
+/** A lane with the time from a to b taken out: points inside go, later ones move earlier, and the values either side
+ *  of the cut are kept (a step where they differ), so both sides play as they did. */
+export function cutLane(points: readonly AutoPoint[], a: number, b: number, gain: boolean): AutoPoint[] {
+  const span = b - a;
+  const before = points.filter((p) => p.time < a);
+  const inside = points.filter((p) => p.time >= a && p.time < b);
+  const after = points.filter((p) => p.time >= b).map((p) => ({ time: p.time - span, value: p.value }));
+  if (span <= 0 || (!inside.length && !after.length)) return [...points];
+  if (!inside.length && (!before.length || before[before.length - 1].value === after[0].value)) return [...before, ...after];
+  const anchors = [...(a > 0 ? [{ time: a - 1, value: laneValue(points, a - 1, gain) }] : []), { time: a, value: laneValue(points, b, gain) }];
+  return laneByTime([...before, ...anchors, ...after]);
+}
+
+/** A lane with the time after `end` replaced by `count` copies of start to end, end to end; outside them it plays as
+ *  it did. A lane that holds one value across the whole span comes back unchanged. */
+export function copyLane(points: readonly AutoPoint[], start: number, end: number, count: number, gain: boolean): AutoPoint[] {
+  const len = end - start;
+  const stop = end + count * len;
+  if (len <= 0 || count < 1) return [...points];
+  if (!points.some((p) => p.time > start && p.time < stop) && laneValue(points, start, gain) === laneValue(points, stop, gain)) return [...points];
+  const source = points.filter((p) => p.time >= start && p.time < end);
+  const first = laneValue(points, start, gain);
+  const last = laneValue(points, end - 1, gain);
+  const out: AutoPoint[] = [...points.filter((p) => p.time < end || p.time >= stop), { time: end - 1, value: last }, { time: stop, value: laneValue(points, stop, gain) }];
+  for (let k = 1; k <= count; k++) {
+    const off = k * len;
+    out.push({ time: start + off, value: first }, ...source.map((p) => ({ time: p.time + off, value: p.value })), { time: end - 1 + off, value: last });
+  }
+  return laneByTime(out);
+}
+
+/** A track with each automation lane (volume in gain, pan and the filters' parameters as they are) passed through
+ *  `fn`; the same track comes back when no lane changed. */
+export function mapLanes(track: Track, fn: (points: readonly AutoPoint[], gain: boolean) => AutoPoint[]): Track {
+  let changed = false;
+  const lane = <T extends readonly AutoPoint[] | undefined>(points: T, gain: boolean): T => {
+    if (!points?.length) return points;
+    const next = fn(points, gain);
+    if (next.length === points.length && next.every((p, i) => p.time === points[i].time && p.value === points[i].value)) return points;
+    changed = true;
+    return next as unknown as T;
+  };
+  const automation = track.automation ? { ...track.automation, volume: lane(track.automation.volume, true), pan: lane(track.automation.pan, false) } : undefined;
+  const fx = track.fx?.map((f) => {
+    if (!("automation" in f) || !f.automation) return f;
+    const auto = { ...f.automation, freq: lane(f.automation.freq, false), gain: lane(f.automation.gain, false), q: lane(f.automation.q, false) };
+    return auto.freq === f.automation.freq && auto.gain === f.automation.gain && auto.q === f.automation.q ? f : { ...f, automation: auto };
+  });
+  return changed ? { ...track, ...(automation ? { automation } : {}), ...(fx ? { fx } : {}) } : track;
+}
+
+/** Markers (but those on a clip, which follow it), regions and the loop with `length` samples opened at `at`. */
+function insertMarks(doc: SessionDoc, at: number, length: number): SessionDoc {
+  const shift = (x: number) => (x >= at ? x + length : x);
+  const span = <R extends { start: number; end: number }>(r: R): R => (r.start >= at ? { ...r, start: r.start + length, end: r.end + length } : r.end > at ? { ...r, end: r.end + length } : r);
+  return {
+    ...doc,
+    markers: doc.markers.map((m) => (m.clipId || m.at < at ? m : { ...m, at: shift(m.at) })),
+    ...(doc.regions ? { regions: doc.regions.map(span) } : {}),
+    ...(doc.loop ? { loop: span(doc.loop) } : {}),
+  };
+}
+
+/** Markers, regions and the loop with the time from a to b taken out: what lay inside goes (a region or the loop
+ *  keeps what lay outside), what came after moves earlier; markers on a clip follow their clip instead. */
+function cutMarks(doc: SessionDoc, a: number, b: number): SessionDoc {
+  const span = b - a;
+  const at = (x: number) => (x >= b ? x - span : Math.min(x, a));
+  const keep = <R extends { start: number; end: number }>(r: R): R => ({ ...r, start: at(r.start), end: at(r.end) });
+  const regions = doc.regions?.map(keep).filter((r) => r.end > r.start);
+  const loop = doc.loop ? keep(doc.loop) : undefined;
+  const { loop: _old, ...rest } = doc;
+  return {
+    ...rest,
+    markers: doc.markers.filter((m) => m.clipId || m.at < a || m.at >= b).map((m) => (m.clipId || m.at < b ? m : { ...m, at: m.at - span })),
+    ...(regions ? { regions } : {}),
+    ...(loop && loop.end > loop.start ? { loop } : {}),
+  };
+}
+
 export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string): SessionDoc {
   switch (cmd.type) {
     case "clear-ranges": {
@@ -766,8 +882,10 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         .filter((r) => r.end > r.start)
         .sort((a, b) => b.start - a.start);
       let next = doc;
-      for (const r of ranges)
-        for (const trackId of cmd.trackIds) next = applyCommand(next, { type: "clear-range", trackId, start: r.start, end: r.end, ripple: cmd.ripple }, newId);
+      for (const r of ranges) {
+        for (const trackId of cmd.trackIds) next = applyCommand(next, { type: "clear-range", trackId, start: r.start, end: r.end, ripple: cmd.ripple, ...(cmd.follow ? { follow: "tracks" as const } : {}) }, newId);
+        if (cmd.ripple && cmd.follow === "session") next = cutMarks(next, Math.max(0, Math.round(r.start)), Math.round(r.end));
+      }
       const smooth = Math.round(cmd.smooth ?? 0);
       if (smooth <= 0 || next === doc) return next;
       // DS-04, harsh-cut avoidance: where audio now meets a cut (or, without ripple, the edges of a cleared gap), the clip
@@ -995,7 +1113,8 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
             });
           }
         }
-        return changed ? { ...t, clips } : t;
+        const cleared = changed ? { ...t, clips } : t;
+        return cmd.ripple && cmd.follow ? mapLanes(cleared, (points, gain) => cutLane(points, from, to, gain)) : cleared;
       });
     }
     case "set-fx-automation":
@@ -1535,11 +1654,23 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           if (c.start < at && c.start + c.length > at) next = applyCommand(next, { type: "split-clip", trackId, clipId: c.id, at }, newId);
         }
       }
-      if (!next.tracks.some((t) => cmd.trackIds.includes(t.id) && t.clips.some((c) => c.start >= at))) return next;
-      return {
-        ...next,
-        tracks: next.tracks.map((t) => (!cmd.trackIds.includes(t.id) ? t : { ...t, clips: t.clips.map((c) => (c.start >= at ? { ...c, start: c.start + length } : c)) })),
-      };
+      if (next.tracks.some((t) => cmd.trackIds.includes(t.id) && t.clips.some((c) => c.start >= at)))
+        next = {
+          ...next,
+          tracks: next.tracks.map((t) => (!cmd.trackIds.includes(t.id) ? t : { ...t, clips: t.clips.map((c) => (c.start >= at ? { ...c, start: c.start + length } : c)) })),
+        };
+      if (!cmd.follow) return next;
+      // time operations (Pro Tools' Insert Time): the listed tracks' automation moves with their clips, and across the
+      // session the markers, regions and the loop as well
+      let changed = false;
+      const tracks = next.tracks.map((t) => {
+        if (!cmd.trackIds.includes(t.id)) return t;
+        const moved = mapLanes(t, (points, gain) => insertLane(points, at, length, gain));
+        if (moved !== t) changed = true;
+        return moved;
+      });
+      if (changed) next = { ...next, tracks };
+      return cmd.follow === "session" ? insertMarks(next, at, length) : next;
     }
     case "split-clip":
       return mapTrack(doc, cmd.trackId, (t) => {

@@ -109,7 +109,7 @@ const WORDS: Record<Command["type"], Words> = {
 
 /** A command in a few plain words for the History tab, with its track's name read from the session before it ran. */
 export function describeCommand(command: Command, before: SessionDoc): string {
-  if (command.type === "batch") return command.commands.length ? describeCommand(command.commands[0], before) : WORDS.batch[1];
+  if (command.type === "batch") return command.label ?? (command.commands.length ? describeCommand(command.commands[0], before) : WORDS.batch[1]);
   const [withTrack, without] = WORDS[command.type];
   const trackId = "trackId" in command ? command.trackId : undefined;
   const track = trackId ? before.tracks.find((t) => t.id === trackId) : undefined;
