@@ -473,6 +473,67 @@ def test_memory_locations_the_snap_dialog_and_a_range_pasted_on_another_track_ho
     assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
 
 
+def test_the_counters_read_every_timebase_and_the_rulers_stack_with_nothing_moving_unasked(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    clock = "document.querySelector('.fw-clock').textContent"
+    page.locator(".fw-ruler-canvas").first.click(position={"x": 300, "y": 10})
+    page.wait_for_function(f"{clock} === '00:00:03.000'")
+    page.click(".fw-clock")
+    page.wait_for_selector(".fw-counter-pop:not([hidden])")
+    readings = []
+    for mode, rate in (("timecode", None), ("timecode", "25"), ("feet", None), ("samples", None), ("bars", None)):
+        if rate:
+            page.select_option('.fw-counter-pop [data-c="rate"]', rate)
+        page.select_option('.fw-counter-pop [data-c="main"]', mode)
+        readings.append(page.evaluate(clock))
+    assert readings == ["00:00:03:00", "00:00:03:00", "4+11", "144000", "2| 3| 000"]
+    page.select_option('.fw-counter-pop [data-c="main"]', "time")
+    page.select_option('.fw-counter-pop [data-c="sub"]', "timecode")
+    assert page.evaluate("[document.querySelector('.fw-subcounter').textContent, document.querySelector('.fw-st-length').hidden]") == ["Timecode 00:00:03:00", True]
+    page.click('.fw-counter-pop [data-c="all"]')
+    ruler = "Math.round(document.querySelector('.fw-ruler').getBoundingClientRect().height)"
+    page.wait_for_function(f"{ruler} === 156")
+    assert page.evaluate("[...document.querySelectorAll('.fw-ruler-names span')].map((s) => s.textContent)") == ["Bars|Beats", "Min:Secs", "Timecode", "Timecode 2", "Feet+Frames", "Samples"]
+    page.click('.fw-counter-pop [data-c="minimal"]')
+    page.wait_for_function(f"{ruler} === 36")
+    page.keyboard.press("Escape")
+    page.wait_for_selector(".fw-counter-pop", state="hidden")
+    _range(page, 1, 2)
+    cells = "[...document.querySelectorAll('.fw-sel-cell')].map((c) => getComputedStyle(c).display === 'none' ? null : c.querySelector('.fw-sel-value').textContent)"
+    page.wait_for_function(f"{cells}[2] === '0:01.000'")
+    # at the smallest window the tray holds Start and Length; End is dropped first
+    assert page.evaluate(cells) == ["0:01.000", None, "0:01.000"]
+    assert _labels(page) == ["Session start", "Added jfk.wav", "Changed the frame rate"]
+    assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
+
+
+def test_consolidate_commit_and_make_inactive_each_in_one_step(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    page.locator(".fw-ruler-canvas").first.click(position={"x": 300, "y": 10})
+    clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    page.mouse.click(clip["x"] + 40, clip["y"] + clip["height"] * 0.75)
+    page.keyboard.press("s")
+    page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
+    first, second = [page.locator(".fw-lane .fw-clip").nth(i).bounding_box() for i in range(2)]
+    page.mouse.click(first["x"] + 40, first["y"] + first["height"] * 0.75)
+    page.keyboard.down("Shift")
+    page.mouse.click(second["x"] + 40, second["y"] + second["height"] * 0.75)
+    page.keyboard.up("Shift")
+    _menu(page, "Edit", "Consolidate")
+    page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1 && document.querySelector('.fw-notice').textContent.startsWith('Consolidated')")
+    _menu(page, "Track", "Commit")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent.startsWith('Committed')")
+    shown = "[...document.querySelectorAll('.fw-lane')].filter((l) => !l.hidden).map((l) => l.querySelector('.fw-lane-name').textContent)"
+    assert page.evaluate(shown) == ["jfk.cm"]
+    page.locator(".fw-lane:not([hidden]) .fw-lane-name").first.click()
+    _menu(page, "Track", "Inactive")
+    page.wait_for_function("document.querySelector('.fw-lane:not([hidden])').dataset.inactive !== undefined")
+    assert _labels(page) == ["Session start", "Added jfk.wav", "Split a clip on jfk", "Consolidated clips", "Committed jfk", "Made tracks inactive"]
+    assert _clean(page)["errors"] == []
+
+
 def test_settings_agents_lists_six_clients_and_does_not_move_as_they_load(page, app_url):
     _open(page, app_url)
     page.locator(".fw-settings-menu .fw-menu-btn").click()

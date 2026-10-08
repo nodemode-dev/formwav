@@ -105,6 +105,8 @@ def _cases() -> dict:
             ]),
         ],
     )
+    # PLAN_v13 S6: an inactive track left out of both plans, and its solo silencing nothing
+    cases["inactive tracks"] = _doc([_track("t1", [_clip("c1", "a")]), _track("t2", [_clip("c2", "b")], inactive=True), _track("t3", [_clip("c3", "b")], inactive=True, solo=True)])
     return cases
 
 
