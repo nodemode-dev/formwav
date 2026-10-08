@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
 Current build version: v2.14.4
-Last updated: 2026-10-08 · v2.14.4: editing depth (src/engine/grid.ts; clip mute, locks, names, a fade-out's own shape, memory location fields and the track commands in src/engine/document.ts and describe.ts; the builders in src/engine/editing.ts; the Track and Clip menus, nudge, Create fades and memory locations in src/ui/editing.ts and src/ui/shell.ts; the lanes' drawing, range copy and paste and the picked track in src/ui/lanes.ts; src/ui/labels-pane.ts; Snap's dialog in src/ui/musical.ts; src/ui/grid.ts; the Clip tab's new fields; the fade code in src/audio/player.ts; the ruler's colours; the mixer's hidden strips). v2.14.3: the editing commands (src/engine/editing.ts; insert-time, clear-range and clear-ranges with follow in src/engine/document.ts; src/ui/editing.ts and src/ui/big-counter.ts; the Zoom tool in src/ui/toolbar.ts; Identify Beat in src/ui/musical.ts; Fit to selection in src/ui/inspector-pane.ts) and AU-13's page turn (src/ui/lanes.ts, src/ui/ruler.ts, src/ui/transport.ts, src/ui/meter.ts). v2.14.2: the Export dialog's range, twelve formats, dither switch and peak normalisation, and the true peak in its notice (src/ui/export.ts, src/io/render-client.ts, src/styles/workspace.css). v2.14.1: the mixer basics (src/ui/mixer.ts: solo safe and solo alone, Clear solos and mutes, trim, polarity, Off, bypass by kind, the pan law, the peak hold and the clip light; the commands in src/engine/document.ts and describe.ts; every kind but the filters on a track's bus with its filter automation, and gain reduction by insert, in src/audio/player.ts and player-worklet.ts; a dynamics card's reduction in src/ui/editor-tabs.ts; src/styles/canvas.css). v2.14.0: the studio processors, formwav's own library (src/engine/processors.ts; the processor entry in src/engine/document.ts; src/audio/player.ts and player-worklet.ts; the browser's list in src/ui/browser-effects.ts, the cards in src/ui/editor-tabs.ts, the rows in src/ui/inspector-pane.ts, the agent's tool in src/ui/agent-pane.ts; the chain wrapping in src/styles/canvas.css). v2.13.1: the Clip tab's Separate row names speech, music and effects and says which method split them (src/ui/clip-tab.ts), the agent's separate_clip reports its method (src/ui/agent-pane.ts), Sounds > Models installs any model on this machine (src/ui/models-pane.ts). v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
+Last updated: 2026-10-08 · v2.14.5: time formats and counters (src/engine/timebase.ts; the frame rate, inactive tracks and commit-track in src/engine/document.ts and describe.ts; consolidate in src/engine/editing.ts; src/ui/counters.ts; the clock, the tray's readouts and the rate in src/ui/shell.ts; rulers stacked in src/ui/ruler.ts; Consolidate, Commit and Inactive in src/ui/editing.ts; the lanes' and mixer's inactive tracks; the player leaving inactive tracks out). v2.14.4: editing depth (src/engine/grid.ts; clip mute, locks, names, a fade-out's own shape, memory location fields and the track commands in src/engine/document.ts and describe.ts; the builders in src/engine/editing.ts; the Track and Clip menus, nudge, Create fades and memory locations in src/ui/editing.ts and src/ui/shell.ts; the lanes' drawing, range copy and paste and the picked track in src/ui/lanes.ts; src/ui/labels-pane.ts; Snap's dialog in src/ui/musical.ts; src/ui/grid.ts; the Clip tab's new fields; the fade code in src/audio/player.ts; the ruler's colours; the mixer's hidden strips). v2.14.3: the editing commands (src/engine/editing.ts; insert-time, clear-range and clear-ranges with follow in src/engine/document.ts; src/ui/editing.ts and src/ui/big-counter.ts; the Zoom tool in src/ui/toolbar.ts; Identify Beat in src/ui/musical.ts; Fit to selection in src/ui/inspector-pane.ts) and AU-13's page turn (src/ui/lanes.ts, src/ui/ruler.ts, src/ui/transport.ts, src/ui/meter.ts). v2.14.2: the Export dialog's range, twelve formats, dither switch and peak normalisation, and the true peak in its notice (src/ui/export.ts, src/io/render-client.ts, src/styles/workspace.css). v2.14.1: the mixer basics (src/ui/mixer.ts: solo safe and solo alone, Clear solos and mutes, trim, polarity, Off, bypass by kind, the pan law, the peak hold and the clip light; the commands in src/engine/document.ts and describe.ts; every kind but the filters on a track's bus with its filter automation, and gain reduction by insert, in src/audio/player.ts and player-worklet.ts; a dynamics card's reduction in src/ui/editor-tabs.ts; src/styles/canvas.css). v2.14.0: the studio processors, formwav's own library (src/engine/processors.ts; the processor entry in src/engine/document.ts; src/audio/player.ts and player-worklet.ts; the browser's list in src/ui/browser-effects.ts, the cards in src/ui/editor-tabs.ts, the rows in src/ui/inspector-pane.ts, the agent's tool in src/ui/agent-pane.ts; the chain wrapping in src/styles/canvas.css). v2.13.1: the Clip tab's Separate row names speech, music and effects and says which method split them (src/ui/clip-tab.ts), the agent's separate_clip reports its method (src/ui/agent-pane.ts), Sounds > Models installs any model on this machine (src/ui/models-pane.ts). v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
 
 ---
 
@@ -26,6 +26,7 @@ frontend/
     │   ├── document.ts          session model and the pure command reducer
     │   ├── editing.ts           the editing commands (Duplicate to Strip silence, fades from a range to memory locations) as pure functions of the session
     │   ├── grid.ts              grid and nudge values: notes, dotted and triplet, seconds, frames, samples; steps, lines, snapping
+    │   ├── timebase.ts          the five timebases and the fifteen frame rates: timecode, Feet+Frames, Bars|Beats, Min:Secs, samples
     │   ├── describe.ts          each command in a few plain words for the History tab
     │   └── history.ts           snapshot undo and redo, 200 steps
     ├── extensions/
@@ -45,6 +46,7 @@ frontend/
     │   ├── toolbar.ts           the arrangement's toolbar: Add a track, Select, Split, Fade, Draw, Zoom, zoom, Fit, Follow; the hidden store
     │   ├── editing.ts           the Edit, Track and Clip menus' commands, their keys and dialog, Tab, zoom presets, nudge, memory locations
     │   ├── big-counter.ts       the Big Counter, a floating panel with the clock in large figures
+    │   ├── counters.ts          the main counter's dialog, the sub counter, the selection's readouts, the timecode rate, the rulers chosen
     │   ├── musical.ts           the footer's Tempo, Meter and Snap with their popovers
     │   ├── dock.ts              the bottom editor: tabs, More, what the open tab works on, Ask the agent, floating panels
     │   ├── editor-tabs.ts       the editor's Effects cards, Synth and Pads
@@ -95,6 +97,11 @@ frontend/
 
 ## Table of contents
 
+- [src/engine/timebase.ts · the five timebases and fifteen frame rates (PLAN_v13 S6)](#src-engine-timebase-s6)
+- [src/engine/document.ts and src/engine/editing.ts · the frame rate, Make Inactive, Commit and Consolidate (PLAN_v13 S6)](#src-engine-document-s6)
+- [src/ui/counters.ts and src/ui/shell.ts · the counters, the selection and the timecode rate (PLAN_v13 S6)](#src-ui-counters-s6)
+- [src/ui/ruler.ts · rulers stacked under the main one (PLAN_v13 S6)](#src-ui-ruler-s6)
+- [src/ui/editing.ts · Consolidate, Commit and Inactive in the menus (PLAN_v13 S6)](#src-ui-editing-s6)
 - [src/engine/grid.ts · grid and nudge values (PLAN_v13 S5)](#src-engine-grid-s5)
 - [src/engine/document.ts · editing depth in the session (PLAN_v13 S5)](#src-engine-document-s5)
 - [src/engine/editing.ts · editing depth's commands (PLAN_v13 S5)](#src-engine-editing-s5)
@@ -172,6 +179,51 @@ frontend/
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
+
+## src/engine/timebase.ts · the five timebases and fifteen frame rates (PLAN_v13 S6) {#src-engine-timebase-s6}
+
+### The timebases for formwav's one tempo and its timecode start in seconds
+- refers-to: src/engine/timebase.ts (FRAME_RATES, frameRate, nominal, framesAt, samplesAtFrame, timecodeFromFrames, timecodeToFrames, formatTimecode, parseTimecode, feetFrames, TIME_FORMATS, timeContext, barBeatAt, samplesAtBarBeat, formatPosition, formatLength, parsePosition)
+- kind: rationale
+- logged: v2.14.5 · 2026-10-08
+
+Frames count real frames (24000/1001 a second at 23.976) in exact integer arithmetic (BigInt for the products, so a floor never slips at a boundary however long the session); drop-frame leaves out the first two labels of each minute (four at 59.94) except every tenth, and the backend test holds it frame for frame against labels walked one at a time from that rule. The session keeps its timecode start in seconds, so it is turned into a whole frame count at the rate in use (a session start is one frame's label) and added to the frames, rather than into samples, which would round a 29.97 start a sample short and read 00:59:59;29 at the session's first sample. Bars|Beats counts quarters at the session's one tempo and meter, 960 ticks a quarter, a position rounded to its tick half away from zero (so positions either side of zero round alike), until S11's maps. Min:Secs is Pro Tools' form (minutes first, 0:03.000) for the readouts, the sub counter and the rulers; the main counter keeps the clock's hours-first form. Min:Secs also reads hours typed in, so a clock's own text reads back.
+
+## src/engine/document.ts and src/engine/editing.ts · the frame rate, Make Inactive, Commit and Consolidate (PLAN_v13 S6) {#src-engine-document-s6}
+
+### The rate in the session, an inactive track, a commit as one command, a consolidate as a whole batch
+- refers-to: src/engine/document.ts (SessionDoc.frameRate, Track.inactive, set-frame-rate, set-tracks-inactive, commit-track); src/engine/describe.ts; src/engine/editing.ts (consolidate); src/audio/player.ts (planClips skips an inactive track, its solo silencing nothing)
+- kind: rationale
+- logged: v2.14.5 · 2026-10-08
+
+The rate lives in the session, as Pro Tools' session setup keeps it, because a timecode means nothing without it; absent, a session counts 30, what the clock and grid counted before (ui/shell.ts lets this browser's old clock rate stand in). An inactive track is left out of the player's plan and the export's (and of the solo test: an inactive soloed track silences nothing), kept whole, so making it active again restores it exactly. commit-track is one command because the new track's id is made inside the reducer and the original must turn inactive and hidden in the same step: the committed track takes the media the engine rendered, sits right below at 0 dB and centred (the render holds the fader, pan and automation, which the core runs ahead of the inserts), with the original's colour, routing and sends, and no VCA, whose level the render printed; one undo brings the original back as it was. consolidate is a whole batch of clear-range and import-media onto the track, so a lock that refuses the clearing refuses the placing too.
+
+## src/ui/counters.ts and src/ui/shell.ts · the counters, the selection and the timecode rate (PLAN_v13 S6) {#src-ui-counters-s6}
+
+### A dialog over the clock, a sub counter in the length's place, readouts at the toolbar's end
+- refers-to: src/ui/counters.ts (RULERS, rulers, mountCounters: the readouts, the sub counter, the dialog); src/ui/shell.ts (ClockMode, CLOCK_MODES, setClockMode, timecodeRate, timeOf, parseTimecodeSeconds, formatClock, the legacy clock modes, the tray's readouts and hint markup); src/ui/status-bar.ts (the hint's inner text); src/ui/big-counter.ts, src/ui/grid.ts (frameRate from the session), src/ui/inspector-pane.ts (TC start at the session's rate); src/main.ts; src/styles/canvas.css
+- kind: rationale
+- logged: v2.14.5 · 2026-10-08
+
+The clock opens a dialog rather than cycling, as Snap's did in S5: five timebases, a sub counter, fifteen rates and six rulers are too many for a cycle. The timebases and rulers are this browser's choice, kept in localStorage like the old clock mode, since they change how a session is seen, not the session; the rate changes what a timecode means, so it is a command and a History step. A clock saved as tc24, tc25, tc2997df or tc30 becomes the Timecode main counter, its rate kept as this browser's rate for sessions without one. The sub counter takes the session length's place under the clock, a line of fixed height in a column the clock's 12ch holds. The readouts follow the lanes' range or selected clips (their own events), else the playhead, in the main counter's timebase; each column's least width is its timebase's widest usual reading (9ch for Min:Secs and Feet+Frames, 10ch for samples and bars, 11ch for timecode), so figures change without moving anything, and the box is a container whose queries drop End, then Start, as the toolbar narrows (1280 keeps Start and Length in Min:Secs, Length alone in timecode). Its basis is the width it needs, and the select tool's hint, which shared the space at 1710, now sits in a container of its own and hides whole below its 344 px rather than show an ellipsis, which the fit test counts; at 1710 it shows beside Min:Secs and hides beside timecode.
+
+## src/ui/ruler.ts · rulers stacked under the main one (PLAN_v13 S6) {#src-ui-ruler-s6}
+
+### 20 px rows on the one paint canvas, named in the corner column
+- refers-to: src/ui/ruler.ts (drawRow, placeRows, the main row's height from the corner, the main counter's timebase on the main row); src/styles/canvas.css (.fw-ruler's rows, .fw-ruler-names)
+- kind: rationale
+- logged: v2.14.5 · 2026-10-08
+
+The rulers chosen are rows under the main one, painted on the same window-wide canvas (AU-13's design) and taking the same clicks (seek, or drag a loop); the ruler grows by 20 px a row, set before its first paint from the saved list, so a session opens at its full height, and changes only when a ruler is turned on or off. The main row keeps its 35 px, its markers, regions and loop, and now ticks only its own height. Each timebase spaces its labels for itself: Min:Secs at the main ruler's steps, samples at 1, 2 and 5 times a power of ten at least 90 px apart, bars doubling until 60 px with beat ticks from 240 px a bar, timecode on 1, 2, 5 or 10 frames and then whole seconds and minutes, Feet+Frames on half feet, feet and tens of feet, at least 72 px apart. With the main counter in timecode, Feet+Frames or samples, the main row labels in it; Bars on the ruler still wins, as before.
+
+## src/ui/editing.ts · Consolidate, Commit and Inactive in the menus (PLAN_v13 S6) {#src-ui-editing-s6}
+
+### The engine renders, the interface places; the lanes and mixer dim an inactive track
+- refers-to: src/ui/editing.ts (bounceTrack, consolidateSelection, commitTrack, Edit > Consolidate, Track > Inactive and Commit, Alt Shift 3 and Alt Shift C, View > Counters and rulers); src/ui/lanes.ts (data-inactive, "Inactive" in the head's line); src/ui/mixer.ts (data-inactive on the strip); src/styles/canvas.css
+- kind: rationale
+- logged: v2.14.5 · 2026-10-08
+
+Consolidate and Commit post the session to the engine's /api/render/bounce (backend services/bounce.py), which renders through the core as the export does and stores the result as media, then dispatch one step; run() reports a lock in the way. Consolidate takes the range, or the selected clips on one track, and leaves the new clip selected when clips were; Commit acts on the picked track and refuses one placed on the surround pad, whose place a stereo render would lose. Inactive is a checked item on the picked track. An inactive lane and strip are drawn at 45 % with "Inactive" in the head's line, attributes on the nodes the lanes and mixer already keep, so nothing is rebuilt.
 
 ## src/engine/grid.ts · grid and nudge values (PLAN_v13 S5) {#src-engine-grid-s5}
 
