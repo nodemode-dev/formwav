@@ -258,6 +258,13 @@
 .fw-export-dialog::backdrop { background: var(--bg-scrim); }
 .fw-export-dialog form { display: grid; gap: 10px; }
 .fw-export-dialog select { inline-size: 100%; padding: 4px 6px; font: inherit; font-size: 13px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
+.fw-export-dialog input[type="number"] { inline-size: 100%; min-inline-size: 0; padding: 3px 6px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
+.fw-export-span { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.fw-export-span label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.fw-export-opt { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.fw-export-opt input[type="checkbox"] { margin: 0; accent-color: var(--accent-color); }
+.fw-export-opt input[type="number"] { inline-size: 64px; flex: none; }
+.fw-export-dialog [data-off="true"] { opacity: 0.45; }
 .fw-dialog-title { margin: 0; font-size: 15px; font-weight: 600; }
 .fw-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .fw-speaker { flex-basis: 100%; margin-block-start: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-color); }
