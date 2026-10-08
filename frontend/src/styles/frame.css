@@ -453,6 +453,17 @@
 .fw-piano-opt select { block-size: 22px; font-size: var(--fs-11); }
 .fw-piano-state { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .fw-piano-canvas { display: block; inline-size: 100%; block-size: 100%; min-block-size: 0; cursor: crosshair; outline: none; }
+.fw-piano-canvas[hidden] { display: none; }
+.fw-piano-list { min-block-size: 0; overflow: auto; scrollbar-gutter: stable; }
+.fw-piano-list table { inline-size: 100%; border-collapse: collapse; font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
+.fw-piano-list th { position: sticky; inset-block-start: 0; padding: var(--space-1) var(--space-2); background: var(--bg-secondary); color: var(--text-muted); font-weight: 600; text-align: start; white-space: nowrap; }
+.fw-piano-list td { padding: 2px var(--space-2); border-block-end: 1px solid var(--border-soft); }
+.fw-piano-list td:last-child, .fw-piano-list th:last-child { inline-size: var(--ctl-md); text-align: end; }
+.fw-piano-list input { inline-size: 100%; min-inline-size: 8ch; block-size: var(--ctl-sm); padding: 0 var(--space-1); border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-primary); font: inherit; }
+.fw-piano-list input:is(:hover, :focus) { border-color: var(--border-light); background: var(--bg-input); outline: none; }
+.fw-piano-list tr[aria-selected="true"] td { background: var(--accent-tint-strong); }
+.fw-piano-list .fw-icon-btn { display: inline-grid; place-items: center; inline-size: var(--ctl-sm); block-size: var(--ctl-sm); padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); }
+.fw-piano-list .fw-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* The title bar's notice never pushes the actions: it keeps one line and truncates. */
 .fw-status .fw-notice { flex: none; min-block-size: 1.3em; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); font-size: var(--fs-12); }

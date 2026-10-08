@@ -58,7 +58,7 @@ export function mountDrawTool(host: HTMLElement, engine: Engine): void {
       const track = doc.tracks.find((t) => t.id === lane?.dataset.key);
       const clip = track?.clips.find((c) => c.id === node?.dataset.key);
       const media = clip ? doc.media[clip.mediaId] : undefined;
-      if (!node || !track || !clip || !media || clip.notes?.length) return;
+      if (!node || !track || !clip || !media || clip.notes) return;
       const rect = node.getBoundingClientRect();
       const fpp = (clip.length * media.sampleRate) / doc.sampleRate / rect.width; // the media's frames a CSS pixel
       if (fpp > 1) {

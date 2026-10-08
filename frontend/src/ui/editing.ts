@@ -124,6 +124,11 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       if (first instanceof HTMLInputElement) first.select();
       else first?.focus();
     });
+  // S7: other modules (the note editor's Event menu) ask through the same dialog with an fw-ask event
+  host.addEventListener("fw-ask", (e) => {
+    const d = (e as CustomEvent<{ title: string; note: string; fields: Field[]; ok: string; done: (values: Values | null) => void }>).detail;
+    void ask(d.title, d.note, d.fields, d.ok).then(d.done);
+  });
 
   const duplicate = () => {
     const doc = engine.get("document");

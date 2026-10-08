@@ -67,6 +67,10 @@ function shellHtml(): string {
           <div class="cv-menu fw-menu-pop fw-clip-pop" role="menu" aria-label="Clip" hidden></div>
         </div>
         <div class="fw-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Event</button>
+          <div class="cv-menu fw-menu-pop fw-event-pop" role="menu" aria-label="Event" hidden></div>
+        </div>
+        <div class="fw-menu">
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Transport</button>
           <div class="cv-menu fw-menu-pop fw-transport-pop" role="menu" aria-label="Transport" hidden>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-status [data-action="play"]'><span>Play or pause</span><kbd>Space</kbd></button>

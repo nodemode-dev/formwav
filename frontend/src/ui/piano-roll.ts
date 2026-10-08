@@ -1,31 +1,51 @@
 import type { Engine } from "../engine";
-import type { NoteEvent } from "../engine/document";
-import { midiFile, renderNotes } from "../audio/notes";
+import type { Command, NoteEvent } from "../engine/document";
+import { gridStepOf, parseGrid, snapToGrid } from "../engine/grid";
+import { noteName } from "../engine/midi";
+import { midiFile, renderNoteMedia } from "../audio/notes";
 import { setText } from "../vendor/nodemode/dom-stable";
+import { fpsOf } from "./midi-input";
 
 /**
  * The note editor (PT-17): the selected note clip's notes on a canvas, a keyboard column at the left, a pitch-by-time
  * grid with beat lines, the notes (opacity by velocity, the selected in the accent), and a velocity lane beneath.
- * Click empty grid to add a note; drag a note to move it, its right edge to resize it; drag a velocity bar; Delete
- * removes the selection. A drag only redraws; letting go commits the gesture through renderNotes (set-clip-notes), so
- * each gesture is one re-render and one undo step. Beats are at 120 BPM until formwav has a tempo map. The canvas
- * carries its geometry as data attributes (keyW, low, rows, rowH, pxPerFrame, velH) for tests to aim at notes.
+ * Click empty grid to add a note, drag across it to select the notes in a band (Shift adds to the selection); drag a
+ * note to move it, its right edge to resize it; drag a velocity bar; Delete removes the selection, Cmd or Ctrl A
+ * selects every note, the arrow keys move it (a semitone up or down, an octave with Shift; a grid step either way).
+ * A drag only redraws; letting go commits the gesture through the core's rendering (set-clip-notes), so each gesture
+ * is one re-render and one undo step, and a run of arrow keys commits once they stop. S7: the grid, its lines and new
+ * notes follow the session's tempo and meter. The canvas carries its geometry as data attributes (keyW, low, rows,
+ * rowH, pxPerFrame, velH) for tests to aim at notes.
  */
-const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const KEY_W = 44;
 const VEL_H = 52;
 const MIN_ROWS = 24;
-const BEAT_SECONDS = 0.5;
 const EDGE_PX = 6;
+const BAND_PX = 4;
+const ARROW_COMMIT_MS = 600;
 
-const noteName = (p: number) => `${NAMES[p % 12]}${Math.floor(p / 12) - 1}`;
 const black = (p: number) => [1, 3, 6, 8, 10].includes(p % 12);
 
-export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
+/** One note clip the editor holds: where it sits and how its media frames map onto the session's. */
+export type NoteTarget = { trackId: string; clipId: string; start: number; sourceIn: number; ratio: number; length: number };
+
+/** What the note editor offers the Event menu and the event list (S7): its notes in session frames, the clip each
+ *  belongs to (an index into targets), the selection, and a way to replace them as one undo step. */
+export interface NoteEditor {
+  view(): { notes: readonly NoteEvent[]; owner: readonly number[]; selected: ReadonlySet<number>; targets: readonly NoteTarget[]; origin: number };
+  apply(notes: NoteEvent[], owner: number[], label: string, selected?: ReadonlySet<number>, extra?: readonly Command[]): Promise<boolean>;
+  select(indexes: ReadonlySet<number>): void;
+  onChange(fn: () => void): void;
+  panel: HTMLElement;
+  setList(open: boolean): void;
+  listOpen(): boolean;
+}
+
+export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | null {
   const pane = host.querySelector<HTMLElement>(".fw-pane-timeline");
   const transport = pane?.querySelector<HTMLElement>(".fw-dock-anchor");
   const view = host.querySelector<HTMLElement>('.fw-tool-tray [data-group="view"]') ?? host.querySelector<HTMLElement>(".fw-tool-tray");
-  if (!pane || !transport || !view) return;
+  if (!pane || !transport || !view) return null;
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "fw-mode";
@@ -39,7 +59,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   panel.className = "fw-piano";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Note editor");
-  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="0">Off</option><option value="1">1/4</option><option value="0.5">1/8</option><option value="0.25" selected>1/16</option></select></label><button type="button" class="fw-ibtn" data-zoom="out" title="Shorter rows (Ctrl or Cmd and the wheel)">Zoom −</button><button type="button" class="fw-ibtn" data-zoom="in" title="Taller rows (Ctrl or Cmd and the wheel)">Zoom +</button><button type="button" class="fw-ibtn" data-zoom="fit" title="Fit the notes; the wheel scrolls pitch">Fit</button><button type="button" class="fw-ibtn" data-quantize title="Move the selected notes' starts (all notes when none is selected) to the snap grid (Q)">Quantize</button><button type="button" class="fw-ibtn" data-export-midi title="Save this note clip as a Standard MIDI File (120 BPM)">Export MIDI</button><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag to move, drag an edge to resize, Delete to remove"></canvas>`;
+  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="">Off</option><option value="1/4">1/4</option><option value="1/8">1/8</option><option value="1/16" selected>1/16</option><option value="1/32">1/32</option><option value="1/8t">1/8 T</option><option value="1/16t">1/16 T</option></select></label><button type="button" class="fw-ibtn" data-zoom="out" title="Shorter rows (Ctrl or Cmd and the wheel)">Zoom −</button><button type="button" class="fw-ibtn" data-zoom="in" title="Taller rows (Ctrl or Cmd and the wheel)">Zoom +</button><button type="button" class="fw-ibtn" data-zoom="fit" title="Fit the notes; the wheel scrolls pitch">Fit</button><button type="button" class="fw-ibtn" data-quantize aria-haspopup="dialog" title="Quantize the selected notes (all notes when none is selected) with a strength, swing and their ends; Q quantizes again as last set">Quantize…</button><button type="button" class="fw-ibtn" data-list aria-pressed="false" title="The notes as a list, each edited by its values (Event list)">List</button><button type="button" class="fw-ibtn" data-export-midi title="Save this note clip as a Standard MIDI File at the session's tempo and meter">Export MIDI</button><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag across to select, drag a note to move, drag an edge to resize, Delete to remove"></canvas><div class="fw-piano-list" role="region" aria-label="Event list" hidden><table><thead><tr><th scope="col">Start</th><th scope="col">Note</th><th scope="col">Length (ticks)</th><th scope="col">Velocity</th><th scope="col" aria-label="Remove"></th></tr></thead><tbody></tbody></table></div>`;
   transport.before(panel);
   const canvas = panel.querySelector("canvas") as HTMLCanvasElement;
   const state = panel.querySelector<HTMLElement>(".fw-piano-state");
@@ -47,10 +67,9 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
 
   // Several note clips edit together on one grid in session time (PT-17): each note keeps its owning clip (owner),
   // converted back into that clip's media frames when a gesture commits; `target` is the first, for the guards.
-  type Target = { trackId: string; clipId: string; start: number; sourceIn: number; ratio: number; length: number };
   let target: { trackId: string; clipId: string } | null = null;
   let wanted: { trackId: string; clipId: string }[] = [];
-  let targets: Target[] = [];
+  let targets: NoteTarget[] = [];
   let owner: number[] = [];
   let origin = 0;
   let notes: NoteEvent[] = [];
@@ -63,11 +82,15 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
   let dragging = false;
   let userRowH = 0;
   let topPitch: number | null = null;
+  let band: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  let arrowTimer = 0;
+  const listeners = new Set<() => void>();
+  const notify = () => listeners.forEach((fn) => fn());
 
   const findClips = (ids: readonly string[]) => {
     const doc = engine.get("document");
     const found: { trackId: string; clipId: string }[] = [];
-    for (const t of doc.tracks) for (const c of t.clips) if (ids.includes(c.id) && c.notes && c.notes.length) found.push({ trackId: t.id, clipId: c.id });
+    for (const t of doc.tracks) for (const c of t.clips) if (ids.includes(c.id) && c.notes) found.push({ trackId: t.id, clipId: c.id });
     return found;
   };
   const load = () => {
@@ -91,15 +114,25 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     target = targets.length ? { trackId: targets[0].trackId, clipId: targets[0].clipId } : null;
     origin = targets.length ? Math.min(...targets.map((t) => t.start)) : 0;
     if (!target) {
-      setText(state, "Select a note clip to edit its notes");
+      setText(state, "Select a note clip to edit its notes, or Event > New note clip");
       return;
     }
     setText(state, targets.length === 1 ? `${firstName} · ${notes.length} notes` : `${targets.length} clips · ${notes.length} notes`);
   };
-  const snapFrames = () => Math.round(Number(snapSelect.value) * BEAT_SECONDS * rate);
+  // S7: the grid is the session's, at its tempo and meter (engine/grid.ts); a step in samples, and a position snapped
+  const grid = () => parseGrid(snapSelect.value);
+  const snapFrames = () => {
+    const g = grid();
+    return g ? gridStepOf(engine.get("document"), g, fpsOf(engine.get("document"))) : 0;
+  };
   const snap = (frame: number) => {
-    const s = snapFrames();
-    return s > 0 ? Math.round(frame / s) * s : Math.round(frame);
+    const g = grid();
+    const doc = engine.get("document");
+    return g ? snapToGrid(doc, g, frame, fpsOf(doc)) : Math.round(frame);
+  };
+  const beatFrames = () => {
+    const doc = engine.get("document");
+    return (rate * 60) / (doc.tempo?.bpm ?? 120);
   };
 
   const layout = () => {
@@ -118,7 +151,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     rows = Math.max(1, Math.min(128, Math.floor(avail / rowH)));
     const top = Math.min(127, Math.max(rows - 1, topPitch ?? Math.min(127, Math.max(hi, lo + rows - 1))));
     low = Math.max(0, top - rows + 1);
-    const end = Math.max(rate, ...notes.map((n) => n.at + n.length - origin)) + rate / 2;
+    const end = Math.max(rate, ...notes.map((n) => n.at + n.length - origin), ...targets.map((t) => t.start + t.length - origin)) + rate / 2;
     pxPerFrame = Math.max(1e-6, (w - KEY_W) / end);
     Object.assign(canvas.dataset, { keyW: String(KEY_W), low: String(low), rows: String(rows), rowH: String(rowH), pxPerFrame: String(pxPerFrame), velH: String(VEL_H), origin: String(origin) });
     return { w, h };
@@ -151,9 +184,10 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
         ctx.fillText(noteName(pitch), 4, i * rowH + rowH - 2);
       }
     }
-    const beat = BEAT_SECONDS * rate;
-    for (let b = 0; xOf(b * beat) < w; b++) {
-      ctx.fillStyle = b % 4 === 0 ? v("--line-2") : v("--line-0");
+    const beat = beatFrames();
+    const perBar = Math.max(1, engine.get("document").tempo?.beatsPerBar ?? 4);
+    for (let b = Math.max(0, Math.floor(origin / beat)); xOf(b * beat) < w; b++) {
+      ctx.fillStyle = b % perBar === 0 ? v("--line-2") : v("--line-0");
       ctx.fillRect(Math.round(xOf(b * beat)), 0, 1, h - VEL_H);
     }
     ctx.fillStyle = v("--surface-1");
@@ -169,28 +203,46 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
       const barH = ((VEL_H - 8) * n.velocity) / 127;
       ctx.fillRect(xOf(n.at), h - 4 - barH, 3, barH);
     });
+    if (band) {
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = v("--accent-color");
+      ctx.fillRect(Math.min(band.x0, band.x1), Math.min(band.y0, band.y1), Math.abs(band.x1 - band.x0), Math.abs(band.y1 - band.y0));
+      ctx.globalAlpha = 1;
+    }
   };
 
-  const commit = async () => {
-    if (!target) return;
+  /** The editor's notes back in each clip's media frames, every clip rendered again, then one batch: one undo step
+   *  however many clips changed, labelled as the gesture was (S7). */
+  const commit = async (label = "Edited notes", extra: readonly Command[] = []) => {
+    if (!target) return false;
     setText(state, "Rendering…");
-    // a snapshot first: each render updates the document, which reloads this editor while the loop is still running
+    // a snapshot first: the document can change while the renders run
     const edited = notes.map((n) => ({ ...n }));
     const owners = [...owner];
     const clips = [...targets];
     try {
+      const commands: Command[] = [];
       for (let t = 0; t < clips.length; t++) {
         const tg = clips[t];
         const mine = edited.filter((_, i) => owners[i] === t).map((n) => ({ ...n, at: Math.max(0, Math.round((n.at - tg.start) / tg.ratio + tg.sourceIn)), length: Math.max(1, Math.round(n.length / tg.ratio)) }));
         const doc = engine.get("document");
         const clip = doc.tracks.find((x) => x.id === tg.trackId)?.clips.find((c) => c.id === tg.clipId);
-        if (!clip || !mine.length || JSON.stringify(clip.notes) === JSON.stringify(mine)) continue;
-        await renderNotes(engine, tg.trackId, tg.clipId, mine);
+        if (!clip || JSON.stringify(clip.notes) === JSON.stringify(mine)) continue;
+        const media = await renderNoteMedia(engine, tg.trackId, tg.clipId, mine);
+        commands.push({ type: "set-clip-notes", trackId: tg.trackId, clipId: tg.clipId, notes: mine, media });
       }
+      commands.push(...extra);
+      if (commands.length) engine.dispatch(commands.length === 1 && label === "Edited notes" ? commands[0] : { type: "batch", commands, label });
+      else {
+        load();
+        draw();
+      }
+      return commands.length > 0;
     } catch (err) {
       setText(state, `Not rendered: ${err instanceof Error ? err.message : String(err)}`);
       load();
       draw();
+      return false;
     }
   };
 
@@ -216,6 +268,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     canvas.setPointerCapture(e.pointerId);
     dragging = true;
     let changed = false;
+    let added: (() => void) | null = null;
     let move: (ev: PointerEvent) => void;
     if (y > h - VEL_H) {
       const index = notes.findIndex((n) => x >= xOf(n.at) && x <= xOf(n.at) + Math.max(3, n.length * pxPerFrame));
@@ -233,14 +286,38 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     } else {
       const found = hit(x, y);
       if (!found) {
-        const length = snapFrames() || Math.round(BEAT_SECONDS * rate * 0.5);
-        const at = Math.max(0, snap(origin + (x - KEY_W) / pxPerFrame));
-        notes.push({ at, length, pitch: Math.min(127, Math.max(0, low + rows - 1 - Math.floor(y / rowH))), velocity: 100 });
-        owner.push(Math.max(0, targets.findIndex((t) => at >= t.start && at < t.start + t.length)));
-        selected = new Set([notes.length - 1]);
-        changed = true;
-        draw();
-        move = () => {};
+        // S7: a press on empty grid adds a note where it lets go unmoved; dragged, it selects the notes in a band
+        band = null;
+        const before = e.shiftKey ? new Set(selected) : new Set<number>();
+        move = (ev) => {
+          const bx = ev.clientX - r.left;
+          const by = Math.min(h - VEL_H, ev.clientY - r.top);
+          if (!band && Math.hypot(bx - x, by - y) < BAND_PX) return;
+          band = { x0: x, y0: y, x1: bx, y1: by };
+          const [left, right, top, bottom] = [Math.min(x, bx), Math.max(x, bx), Math.min(y, by), Math.max(y, by)];
+          selected = new Set(before);
+          notes.forEach((n, i) => {
+            const nx = xOf(n.at);
+            const ny = yOf(n.pitch);
+            if (nx <= right && nx + Math.max(3, n.length * pxPerFrame) >= left && ny <= bottom && ny + rowH >= top) selected.add(i);
+          });
+          draw();
+        };
+        added = () => {
+          if (band) {
+            band = null;
+            draw();
+            notify();
+            return;
+          }
+          const length = snapFrames() || Math.round(beatFrames() / 2);
+          const at = Math.max(0, snap(origin + (x - KEY_W) / pxPerFrame));
+          notes.push({ at, length, pitch: Math.min(127, Math.max(0, low + rows - 1 - Math.floor(y / rowH))), velocity: 100 });
+          owner.push(Math.max(0, targets.findIndex((t) => at >= t.start && at < t.start + t.length)));
+          selected = new Set([notes.length - 1]);
+          changed = true;
+          draw();
+        };
       } else {
         if (!e.shiftKey && !selected.has(found.index)) selected = new Set();
         selected.add(found.index);
@@ -265,6 +342,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
       canvas.removeEventListener("pointermove", move);
       canvas.removeEventListener("pointerup", up);
       dragging = false;
+      added?.();
       if (changed) void commit();
     };
     canvas.addEventListener("pointermove", move);
@@ -275,21 +353,8 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     userRowH = Math.min(28, Math.max(4, (userRowH || rowH) * factor));
     draw();
   };
-  // the selected notes' starts (all notes' when none is selected) moved to the snap grid, one gesture
-  const quantize = () => {
-    const s = snapFrames();
-    if (!target || s <= 0 || !notes.length) return;
-    const which = selected.size ? selected : new Set(notes.map((_, i) => i));
-    let changed = false;
-    notes = notes.map((n, i) => {
-      if (!which.has(i)) return n;
-      const at = Math.round(n.at / s) * s;
-      if (at !== n.at) changed = true;
-      return { ...n, at };
-    });
-    draw();
-    if (changed) void commit();
-  };
+  // S7: Quantize asks for its grid, strength, swing and ends (the Event menu's dialog); Q quantizes again as last set
+  const quantize = (ask: boolean) => host.dispatchEvent(new CustomEvent("fw-note-quantize", { detail: { ask } }));
   panel.querySelector('[data-zoom="out"]')?.addEventListener("click", () => zoom(1 / 1.25));
   panel.querySelector('[data-zoom="in"]')?.addEventListener("click", () => zoom(1.25));
   panel.querySelector('[data-zoom="fit"]')?.addEventListener("click", () => {
@@ -297,13 +362,26 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     topPitch = null;
     draw();
   });
-  panel.querySelector("[data-quantize]")?.addEventListener("click", quantize);
+  panel.querySelector("[data-quantize]")?.addEventListener("click", () => quantize(true));
+  const listButton = panel.querySelector<HTMLButtonElement>("[data-list]");
+  const list = panel.querySelector<HTMLElement>(".fw-piano-list") as HTMLElement;
+  // S7: the event list takes the canvas's place in the panel, the same row, so nothing around it moves
+  const setList = (open: boolean) => {
+    if (list.hidden === !open) return;
+    list.hidden = !open;
+    canvas.hidden = open;
+    listButton?.setAttribute("aria-pressed", String(open));
+    if (!open) draw();
+    notify();
+  };
+  listButton?.addEventListener("click", () => setList(Boolean(list.hidden)));
   panel.querySelector("[data-export-midi]")?.addEventListener("click", () => {
     if (!target || !notes.length) return;
     const doc = engine.get("document");
     const clip = doc.tracks.find((t) => t.id === target?.trackId)?.clips.find((c) => c.id === target?.clipId);
     const name = `${(clip ? doc.media[clip.mediaId]?.name : undefined)?.replace(/\.wav$/i, "") ?? "notes"}.mid`;
-    const url = URL.createObjectURL(new Blob([midiFile(notes.map((n) => ({ ...n, at: n.at - origin })), rate)], { type: "audio/midi" }));
+    const tempo = doc.tempo ?? { bpm: 120, beatsPerBar: 4 };
+    const url = URL.createObjectURL(new Blob([midiFile(notes.map((n) => ({ ...n, at: n.at - origin })), rate, tempo.bpm, 480, tempo.beatsPerBar)], { type: "audio/midi" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = name;
@@ -324,11 +402,43 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     { passive: false },
   );
 
+  // S7: a run of arrow keys moves the selection at once and commits once the keys stop, as one undo step
+  const arrows = (e: KeyboardEvent) => {
+    const doc = engine.get("document");
+    const step = snapFrames() || gridStepOf(doc, { kind: "note", quarters: 0.25, dotted: false, triplet: false }, fpsOf(doc));
+    const semis = e.key === "ArrowUp" ? (e.shiftKey ? 12 : 1) : e.key === "ArrowDown" ? (e.shiftKey ? -12 : -1) : 0;
+    const frames = e.key === "ArrowRight" ? step : e.key === "ArrowLeft" ? -step : 0;
+    const moved = [...selected].map((i) => ({ i, at: Math.round(notes[i].at + frames), pitch: notes[i].pitch + semis }));
+    if (!moved.length || moved.some((m) => m.at < 0 || m.pitch < 0 || m.pitch > 127)) return;
+    for (const m of moved) notes[m.i] = { ...notes[m.i], at: m.at, pitch: m.pitch };
+    dragging = true;
+    draw();
+    notify();
+    window.clearTimeout(arrowTimer);
+    arrowTimer = window.setTimeout(() => {
+      dragging = false;
+      void commit(semis ? "Transposed notes" : "Moved notes");
+    }, ARROW_COMMIT_MS);
+  };
   canvas.addEventListener("keydown", (e) => {
-    if (e.key === "q" || e.key === "Q") {
+    if ((e.key === "a" || e.key === "A") && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       e.stopPropagation();
-      quantize();
+      selected = new Set(notes.map((_, i) => i));
+      draw();
+      notify();
+      return;
+    }
+    if (e.key.startsWith("Arrow")) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (target && selected.size) arrows(e);
+      return;
+    }
+    if ((e.key === "q" || e.key === "Q") && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      quantize(false);
       return;
     }
     if (e.key !== "Delete" && e.key !== "Backspace") return;
@@ -340,8 +450,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
       notes = notes.filter((_, i) => !selected.has(i));
       selected = new Set();
       draw();
-      if (notes.length) void commit();
-      else setText(state, "A note clip keeps at least one note: delete the clip to remove them all");
+      void commit("Deleted notes");
     }
   });
 
@@ -358,12 +467,36 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): void {
     selected = new Set();
     load();
     draw();
+    notify();
   });
   engine.subscribe("document", () => {
     if (dragging) return;
     load();
+    selected = new Set([...selected].filter((i) => i < notes.length));
     draw();
+    notify();
   });
   new ResizeObserver(() => draw()).observe(canvas);
   load();
+  return {
+    view: () => ({ notes, owner, selected, targets, origin }),
+    apply: async (next, owners, label, chosen, extra) => {
+      if (!target) return false;
+      notes = next.map((n) => ({ ...n }));
+      owner = [...owners];
+      selected = new Set(chosen ?? []);
+      draw();
+      notify();
+      return commit(label, extra);
+    },
+    select: (indexes) => {
+      selected = new Set(indexes);
+      draw();
+      notify();
+    },
+    onChange: (fn) => listeners.add(fn),
+    panel,
+    setList,
+    listOpen: () => !list.hidden,
+  };
 }

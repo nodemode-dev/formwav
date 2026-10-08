@@ -1,8 +1,30 @@
 import { applyMidiFx } from "../audio/notes";
 import type { Player } from "../audio/player";
 import type { Engine } from "../engine";
-import { cleanSynth, DEFAULT_SYNTH, type MediaRef, type NoteEvent } from "../engine/document";
+import { cleanSynth, DEFAULT_SYNTH, type MediaRef, type NoteEvent, type SessionDoc } from "../engine/document";
+import { parseGrid } from "../engine/grid";
+import { quantizeNotes, type QuantizeOptions } from "../engine/midi";
+import { frameRate } from "../engine/timebase";
 import { armedTrack } from "./arm";
+
+/** S7: the input quantize this browser keeps (the note editor's Quantize dialog sets it), or null when takes are kept
+ *  as played. */
+export const INPUT_QUANTIZE_KEY = "formwav.inputQuantize";
+export function inputQuantize(): QuantizeOptions | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(INPUT_QUANTIZE_KEY) ?? "null") as { grid?: string; strength?: number; swing?: number; ends?: boolean } | null;
+    const grid = parseGrid(saved?.grid);
+    return saved && grid ? { grid, strength: Number(saved.strength ?? 1), swing: Number(saved.swing ?? 0), ends: Boolean(saved.ends) } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The frames a second the session's timecode counts, for a grid of frames. */
+export function fpsOf(doc: SessionDoc): number {
+  const r = frameRate(doc.frameRate);
+  return r.num / r.den;
+}
 
 /**
  * AU-37: live MIDI input. Every MIDI input the browser offers (Web MIDI; one plugged in later too) plays the live
@@ -34,10 +56,13 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
 
   const sounding = new Map<number, number>(); // PT-16: a held key to the pitch its MIDI effects sound
   const commit = async (done: Take) => {
-    const notes = done.notes.filter((n) => n.at >= 0).sort((a, b) => a.at - b.at || a.pitch - b.pitch);
-    if (!notes.length) return;
     const doc = engine.get("document");
     const rate = doc.sampleRate;
+    const played = done.notes.filter((n) => n.at >= 0).sort((a, b) => a.at - b.at || a.pitch - b.pitch);
+    // S7: input quantize, when it is on, places the take's notes on the grid as they are kept
+    const quantize = inputQuantize();
+    const notes = quantize ? quantizeNotes(doc, played.map((n) => ({ ...n, at: n.at + done.start })), null, quantize, fpsOf(doc)).map((n) => ({ ...n, at: Math.max(0, n.at - done.start) })) : played;
+    if (!notes.length) return;
     // PT-16: the take keeps the notes as played and sounds them through its track's MIDI effects, as any note clip
     const heard = applyMidiFx(notes, doc.tracks.find((t) => t.id === done.trackId)?.midiFx, rate, doc.tempo?.bpm ?? 120);
     const p = cleanSynth(doc.synth ?? DEFAULT_SYNTH);
@@ -59,10 +84,11 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
     const pitch = data[1] & 0x7f;
     const velocity = (data[2] ?? 0) & 0x7f;
     if (status === 0x90 && velocity > 0) {
-      // PT-16: heard through the armed track's MIDI effects (quantize does not apply to notes as they are played)
+      // PT-16: heard through the armed track's MIDI effects (quantize, duration and delay do not apply to notes as they
+      // are played)
       const doc = engine.get("document");
       const track = doc.tracks.find((t) => t.id === armedTrack());
-      const heard = applyMidiFx([{ at: 0, length: 1, pitch, velocity }], track?.midiFx?.filter((f) => f.kind !== "quantize"), doc.sampleRate)[0];
+      const heard = applyMidiFx([{ at: 0, length: 1, pitch, velocity }], track?.midiFx?.filter((f) => f.kind === "transpose" || f.kind === "velocity"), doc.sampleRate)[0];
       if (heard) {
         sounding.set(pitch, heard.pitch);
         void player.liveNote(heard.pitch, heard.velocity);

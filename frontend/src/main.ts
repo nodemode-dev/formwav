@@ -54,6 +54,7 @@ import { mountDock } from "./ui/dock";
 import { mountOutputSelect } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
 import { mountPianoRoll } from "./ui/piano-roll";
+import { mountNoteEvents } from "./ui/note-events";
 import { mountSpectrum } from "./ui/spectrum";
 import { mountEnvelopeEdit } from "./ui/envelope-edit";
 import { mountProjects } from "./ui/projects";
@@ -132,7 +133,8 @@ if (host) {
   });
   mountDrawTool(host, engine); // AU-13: the Draw tool, drawing samples in the lanes at sample zoom
   mountPicture(host, engine); // PT-26: a video in step with the transport, for sound to picture
-  mountPianoRoll(host, engine);
+  const notesEditor = mountPianoRoll(host, engine);
+  if (notesEditor) mountNoteEvents(host, engine, notesEditor);
   mountSpectrum(host, engine, player);
   mountEnvelopeEdit(host, engine);
   mountMediaPane(host, engine, player);

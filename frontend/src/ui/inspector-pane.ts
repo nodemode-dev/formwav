@@ -124,7 +124,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
   <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
   <div class="fw-rtfx-list" data-scope="track"></div>
-  <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument (Pro Tools' MIDI effect plugins): its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
+  <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument (Pro Tools' MIDI effect plugins): its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option><option value="duration">Duration</option><option value="delay">Delay</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
   <div data-midifx-list></div>
   <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fill-gaps title="Fill every gap between this track's clips with room tone (RX's Ambience Match under every edit): learned from half a second at each side, moving from the one background to the other across the gap">Fill gaps with room tone</button></div>
@@ -1286,8 +1286,18 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       `<label class="fw-sam-opt"><span>${label}</span><input type="number" min="${min}" max="${max}" step="${step}" value="${v}" data-mfx-i="${i}" data-mfx-p="${p}"></label>`;
     midiList.innerHTML = fx
       .map((f, i) => {
-        const fields = f.kind === "transpose" ? n(i, "semitones", "Semitones", f.semitones, -48, 48, 1) : f.kind === "velocity" ? n(i, "scale", "Scale", f.scale, 0, 4, 0.05) + n(i, "offset", "Offset", f.offset, -127, 127, 1) : n(i, "beats", "Grid beats", f.beats, 0.0625, 4, 0.0625) + n(i, "strength", "Strength", f.strength, 0, 1, 0.05);
-        return `<div class="fw-analyze-buttons"><span>${f.kind === "transpose" ? "Transpose" : f.kind === "velocity" ? "Velocity" : "Quantize"}</span>${fields}<button type="button" class="fw-ibtn" data-mfx-remove="${i}">Remove</button></div>`;
+        const fields =
+          f.kind === "transpose"
+            ? n(i, "semitones", "Semitones", f.semitones, -48, 48, 1)
+            : f.kind === "velocity"
+              ? n(i, "scale", "Scale", f.scale, 0, 4, 0.05) + n(i, "offset", "Offset", f.offset, -127, 127, 1)
+              : f.kind === "duration"
+                ? n(i, "percent", "Percent", f.percent, 10, 400, 5)
+                : f.kind === "delay"
+                  ? n(i, "ms", "Milliseconds", f.ms, -1000, 1000, 1)
+                  : n(i, "beats", "Grid beats", f.beats, 0.0625, 4, 0.0625) + n(i, "strength", "Strength", f.strength, 0, 1, 0.05);
+        const name = { transpose: "Transpose", velocity: "Velocity", quantize: "Quantize", duration: "Duration", delay: "Delay" }[f.kind];
+        return `<div class="fw-analyze-buttons"><span>${name}</span>${fields}<button type="button" class="fw-ibtn" data-mfx-remove="${i}">Remove</button></div>`;
       })
       .join("");
   };
@@ -1306,7 +1316,16 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const hit = find(engine.get("document"));
     if (!hit) return;
     const kind = body.querySelector<HTMLSelectElement>('[data-midifx="kind"]')?.value;
-    const fresh: MidiFx = kind === "velocity" ? { kind: "velocity", scale: 1, offset: 0 } : kind === "quantize" ? { kind: "quantize", beats: 0.5, strength: 1 } : { kind: "transpose", semitones: 0 };
+    const fresh: MidiFx =
+      kind === "velocity"
+        ? { kind: "velocity", scale: 1, offset: 0 }
+        : kind === "quantize"
+          ? { kind: "quantize", beats: 0.5, strength: 1 }
+          : kind === "duration"
+            ? { kind: "duration", percent: 100 }
+            : kind === "delay"
+              ? { kind: "delay", ms: 0 }
+              : { kind: "transpose", semitones: 0 };
     setMidiFx([...(hit.track.midiFx ?? []), fresh]);
   });
   midiList?.addEventListener("change", (e) => {
