@@ -50,6 +50,8 @@ class RenderRequest(BaseModel):
     sampler: Sampler | None = None
     # PT-15: a CLAP instrument from the plugin folder (plugin:clap:<path>, as /api/midi/instruments lists them)
     plugin: str | None = None
+    # S7: the rendering lasts at least this long (seconds), silent after its notes; with no notes, an empty note clip
+    length: float = Field(0.0, ge=0, le=3600)
 
 
 @router.get("/devices")
@@ -101,11 +103,20 @@ def list_instruments() -> list[dict]:
     return plugins.instruments()
 
 
-def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Sampler | None = None, plugin: str | None = None) -> dict:
+def _padded(mono: np.ndarray, rate: int, length: float) -> np.ndarray:
+    """S7: a rendering made at least `length` seconds long with silence after it."""
+    want = int(round(length * rate))
+    return np.concatenate([mono, np.zeros(want - len(mono), dtype=mono.dtype)]) if want > len(mono) else mono
+
+
+def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Sampler | None = None, plugin: str | None = None, length: float = 0.0) -> dict:
     if patch.wave not in WAVES:
         raise HTTPException(status_code=422, detail=f"no waveform named {patch.wave} (one of {', '.join(WAVES)})")
     if not notes:
-        raise HTTPException(status_code=422, detail="no notes to render")
+        if length <= 0:
+            raise HTTPException(status_code=422, detail="no notes to render")
+        silence = np.zeros(max(1, int(round(length * rate))), dtype="<f4")
+        return media.import_wav(f"{name}.wav", _wav_bytes([silence, silence], rate))
     frames = [(int(round(n["start"] * rate)), max(1, int(round(n["length"] * rate))), int(n["pitch"]), int(n["velocity"])) for n in notes]
     if plugin is not None:
         # PT-15: the notes played on a CLAP instrument by the plugin host
@@ -128,13 +139,13 @@ def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Samp
             raise HTTPException(status_code=422, detail=f"the sampler's media cannot be read: {err}") from err
         mono = np.asarray(view, dtype=np.float32).mean(axis=1).astype("<f4")
         raw = core.render_sampled(frames, rate, mono.tobytes(), int(sample_rate), sampler.root, patch.attack, patch.decay, patch.sustain, patch.release, patch.gain)
-        out = np.frombuffer(raw, dtype="<f4").copy()
+        out = _padded(np.frombuffer(raw, dtype="<f4").copy(), rate, length)
         return media.import_wav(f"{name}.wav", _wav_bytes([out, out], rate))
     try:
         raw = core.render_notes(frames, rate, patch.wave, patch.attack, patch.decay, patch.sustain, patch.release, patch.gain, patch.cutoff, patch.resonance)
     except TypeError:
         raw = core.render_notes(frames, rate, patch.wave, patch.attack, patch.decay, patch.sustain, patch.release, patch.gain)
-    mono = np.frombuffer(raw, dtype="<f4").copy()
+    mono = _padded(np.frombuffer(raw, dtype="<f4").copy(), rate, length)
     return media.import_wav(f"{name}.wav", _wav_bytes([mono, mono], rate))
 
 
@@ -172,5 +183,6 @@ def midi_from_audio(media_id: str, mode: str = "melodic", start: float = 0.0, le
 
 @router.post("/render", status_code=201)
 def render_notes(body: RenderRequest) -> dict:
-    """Edited notes rendered again by the built-in instrument, as new media."""
-    return _render([n.model_dump() for n in body.notes], body.rate, body.patch, body.name, body.sampler, body.plugin)
+    """Edited notes rendered again by the built-in instrument, as new media (S7: at least `length` seconds long, and
+    silence of that length for no notes)."""
+    return _render([n.model_dump() for n in body.notes], body.rate, body.patch, body.name, body.sampler, body.plugin, body.length)

@@ -348,7 +348,12 @@ export function cleanSynth(p: Partial<SynthPatch>): SynthPatch {
   };
 }
 
-export type MidiFx = { kind: "transpose"; semitones: number } | { kind: "velocity"; scale: number; offset: number } | { kind: "quantize"; beats: number; strength: number };
+export type MidiFx =
+  | { kind: "transpose"; semitones: number }
+  | { kind: "velocity"; scale: number; offset: number }
+  | { kind: "quantize"; beats: number; strength: number }
+  | { kind: "duration"; percent: number }
+  | { kind: "delay"; ms: number };
 
 const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice", "dehum", "declick", "dereverb", "processor"]);
 
@@ -1336,13 +1341,15 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "set-track-midi-fx": {
       // PT-16: transpose -48 to 48 semitones, velocity scale 0 to 4 and offset -127 to 127, quantize 1/16 to 4 beats at
-      // a strength 0 to 1; anything else dropped
+      // a strength 0 to 1; S7: duration 10 to 400 percent, delay -1000 to 1000 ms; anything else dropped
       const num = (v: unknown, lo: number, hi: number, d: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
       const clean: MidiFx[] = [];
       for (const f of cmd.midiFx) {
         if (f.kind === "transpose") clean.push({ kind: "transpose", semitones: Math.round(num(f.semitones, -48, 48, 0)) });
         else if (f.kind === "velocity") clean.push({ kind: "velocity", scale: num(f.scale, 0, 4, 1), offset: Math.round(num(f.offset, -127, 127, 0)) });
         else if (f.kind === "quantize") clean.push({ kind: "quantize", beats: num(f.beats, 0.0625, 4, 0.5), strength: num(f.strength, 0, 1, 1) });
+        else if (f.kind === "duration") clean.push({ kind: "duration", percent: num(f.percent, 10, 400, 100) });
+        else if (f.kind === "delay") clean.push({ kind: "delay", ms: Math.round(num(f.ms, -1000, 1000, 0)) });
       }
       return mapTrack(doc, cmd.trackId, (t) => {
         if (JSON.stringify(t.midiFx ?? []) === JSON.stringify(clean)) return t;
@@ -1557,7 +1564,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         length: shaped ? Math.max(1, Math.round(shaped.length)) : sessionLength(cmd.media, sampleRate),
         sourceIn: shaped ? Math.max(0, Math.round(shaped.sourceIn)) : 0,
         ...(shaped?.takes && shaped.takes.length > 1 ? { takes: shaped.takes.map((s) => Math.max(0, Math.round(s))), take: shaped.take ?? shaped.takes.length - 1 } : {}),
-        ...(cmd.notes && cmd.notes.length
+        ...(cmd.notes
           ? { notes: cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))) })) }
           : {}),
         gainDb: 0,

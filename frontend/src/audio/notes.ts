@@ -7,11 +7,12 @@ import { cleanSynth, DEFAULT_SYNTH, type MediaRef, type MidiFx, type NoteEvent, 
  * media's own rate.
  */
 /**
- * A note clip's notes as a Standard MIDI File (AU-37's export): format 0, one track, 480 ticks per quarter note at
- * 120 BPM (formwav has no tempo map yet), the notes' frames converted to ticks at the media's rate; note-offs come
- * before note-ons at the same tick so a repeated pitch retriggers. Read back by the engine's own reader in tests.
+ * A note clip's notes as a Standard MIDI File (AU-37's export): format 0, one track, 480 ticks per quarter note at the
+ * session's tempo and meter (S7: its FF 51 tempo and FF 58 time signature, quarters as the beat), the notes' frames
+ * converted to ticks at the media's rate; note-offs come before note-ons at the same tick so a repeated pitch
+ * retriggers. Read back by the engine's own reader in tests.
  */
-export function midiFile(notes: readonly NoteEvent[], rate: number, bpm = 120, ppq = 480): Uint8Array<ArrayBuffer> {
+export function midiFile(notes: readonly NoteEvent[], rate: number, bpm = 120, ppq = 480, beatsPerBar = 4): Uint8Array<ArrayBuffer> {
   const ticks = (frames: number) => Math.max(0, Math.round((frames / rate) * (bpm / 60) * ppq));
   const events: [number, number, number, number][] = [];
   for (const n of notes) {
@@ -25,7 +26,8 @@ export function midiFile(notes: readonly NoteEvent[], rate: number, bpm = 120, p
     return out;
   };
   const tempo = Math.round(60_000_000 / bpm);
-  const body: number[] = [0x00, 0xff, 0x51, 0x03, (tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff];
+  const meter = Math.min(255, Math.max(1, Math.round(beatsPerBar)));
+  const body: number[] = [0x00, 0xff, 0x51, 0x03, (tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff, 0x00, 0xff, 0x58, 0x04, meter, 2, 24, 8];
   let last = 0;
   for (const [tick, status, pitch, velocity] of events) {
     body.push(...vlq(tick - last), status, pitch & 0x7f, velocity & 0x7f);
@@ -38,7 +40,8 @@ export function midiFile(notes: readonly NoteEvent[], rate: number, bpm = 120, p
 }
 
 /** PT-16: notes through a track's MIDI effects in order: transpose (notes leaving 0 to 127 dropped), velocity scaled and
- *  offset (held to 1 to 127), starts quantized to a grid of beats at `bpm` by the strength (lengths kept). */
+ *  offset (held to 1 to 127), starts quantized to a grid of beats at `bpm` by the strength (lengths kept); S7's
+ *  real-time duration (each length times a percentage) and delay (every note later, or earlier down to 0, by ms). */
 export function applyMidiFx(notes: readonly NoteEvent[], fx: readonly MidiFx[] | undefined, rate: number, bpm = 120): NoteEvent[] {
   let out = notes.map((n) => ({ ...n }));
   for (const f of fx ?? []) {
@@ -47,7 +50,8 @@ export function applyMidiFx(notes: readonly NoteEvent[], fx: readonly MidiFx[] |
     else if (f.kind === "quantize") {
       const grid = (60 / Math.max(1, bpm)) * f.beats * rate;
       out = out.map((n) => ({ ...n, at: Math.max(0, Math.round(n.at + (Math.round(n.at / grid) * grid - n.at) * f.strength)) }));
-    }
+    } else if (f.kind === "duration") out = out.map((n) => ({ ...n, length: Math.max(1, Math.round((n.length * f.percent) / 100)) }));
+    else if (f.kind === "delay") out = out.map((n) => ({ ...n, at: Math.max(0, Math.round(n.at + (f.ms / 1000) * rate)) }));
   }
   return out;
 }
@@ -73,11 +77,30 @@ export async function renderNoteMedia(engine: Engine, trackId: string, clipId: s
     notes: heard.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })),
     rate,
     name: (media?.name ?? "notes").replace(/\.wav$/i, ""),
+    // S7: a clip keeps its length when its notes change (it grows when they pass its end), as a DAW's MIDI clip does
+    length: clip.sourceIn / rate + clip.length / doc.sampleRate,
   };
+  return renderBody(body);
+}
+
+async function renderBody(body: object): Promise<MediaRef> {
   const res = await fetch("/api/midi/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const out = (await res.json().catch(() => ({}))) as Partial<MediaRef> & { detail?: unknown };
   if (!res.ok || !out.id) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
   return out as MediaRef;
+}
+
+/** S7: notes (none, for an empty clip) rendered by the session's synth with no track around them and lasting at least
+ *  `seconds`: the media of a new note clip, or of notes split onto a new track. */
+export async function renderPlainNotes(engine: Engine, notes: readonly NoteEvent[], rate: number, seconds: number, name: string): Promise<MediaRef> {
+  const own = cleanSynth(engine.get("document").synth ?? DEFAULT_SYNTH);
+  return renderBody({
+    patch: { wave: own.wave, attack: own.attack, decay: own.decay, sustain: own.sustain, release: own.release, gain: 0.25, cutoff: own.cutoff, resonance: own.resonance },
+    notes: notes.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })),
+    rate,
+    name,
+    length: seconds,
+  });
 }
 
 export async function renderNotes(engine: Engine, trackId: string, clipId: string, notes: readonly NoteEvent[]): Promise<void> {
