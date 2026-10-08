@@ -2,7 +2,7 @@
 
 Living log of all comment content, explainers, rationale, TODOs and removed code for the Rust side. Source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Read this first, then edit code surgically.
 
-Current build version: v2.14.3
+Current build version: v2.14.4
 Last updated: 2026-10-08 · v2.14.4: the logarithmic fade and a shape for each fade (src/render.rs `fade_curve`, `fade_shapes`; tests/fades.rs). v2.14.3: no change to the core (the version only). v2.14.2: the true peak, 4x oversampled (src/loudness.rs `true_peak`, `quarter_points`, its entry in src/python.rs; tests/bounce.rs). v2.14.1: a filter's automation on a bus (src/render.rs `add_bus_fx_auto`, `run_bus_chain`), the -3, -4.5 and -6 dB pan laws for a mono source (`law_gains`, `set_pan_law`, `clip_pan`), each processor's gain reduction (`take_reductions`), their entries in src/wasm.rs, src/python.rs and src/native.rs; tests/mixer.rs. v2.14.0: formwav's own studio processors (the formwav-studio crate) run as a processor stage (src/fx.rs `Processor`, kind 20), entries in src/render.rs, src/wasm.rs, src/python.rs and src/native.rs; bus and master chains run stage by stage over a block; tests/processors.rs. v2.13.1: no change to the core (the version only). v2.13.0: the synth's low-pass, in render() and the live instrument alike (src/synth.rs), and its two new parameters through src/python.rs and src/wasm.rs; most stages added since v1.11.0 have no entry in this log
 
 ---
