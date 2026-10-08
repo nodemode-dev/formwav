@@ -1,5 +1,5 @@
 import type { Engine, SessionDoc } from "../engine";
-import { cleanSynth, DEFAULT_SYNTH, FADE_SHAPES, type SynthPatch, type TrackFx } from "../engine/document";
+import { cleanSynth, DEFAULT_SYNTH, fadeCode, type SynthPatch, type TrackFx } from "../engine/document";
 import { processorSpec } from "../engine/processors";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
@@ -284,6 +284,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     // PT-42: an ambisonic session encodes each placed track by direction and elevation (W Y Z X, the last two slots empty)
     const record = !doc.surroundFold || !s ? null : g ? [g.L, g.R, g.C, lfeGain, g.Ls, g.Rs] : [...foaGains(s.x, s.y, s.el ?? 0), 0, 0];
     for (const clip of track.clips) {
+      if (clip.mute) continue;
       // A pitched clip plays its derived render (non-destructive pitch; same length as the original).
       const playId = clip.pitchMediaId && doc.media[clip.pitchMediaId] ? clip.pitchMediaId : clip.mediaId;
       const media = doc.media[playId];
@@ -306,7 +307,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         ...clipChain(clip, fxFlat, fxAuto),
         fadeIn: clip.fadeIn ?? 0,
         fadeOut: clip.fadeOut ?? 0,
-        fadeShape: FADE_SHAPES[clip.fadeShape ?? "linear"] ?? 0,
+        fadeShape: fadeCode(clip),
         bus,
         track: doc.tracks.indexOf(track) + 1,
       });

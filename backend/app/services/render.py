@@ -121,6 +121,17 @@ def _clip_envelope(own: list[tuple[int, float]], track: list[tuple[int, float]])
     return [(t, 20 * math.log10(max(_clip_env_gain(own, t) * (_env_gain(track, t) if track else 1.0), 1e-6))) for t in at]
 
 
+FADE_SHAPES = {"linear": 0, "equal-power": 1, "s-curve": 2, "exponential": 3, "logarithmic": 4}
+
+
+def _fade_code(clip: dict) -> int:
+    """The core's fade code for a clip's two edges, as the browser's fadeCode: the fade-in's shape, and the fade-out's
+    (plus one) in the high four bits when it has one of its own that differs (render.rs fade_shapes)."""
+    a = FADE_SHAPES.get(clip.get("fadeShape") or "linear", 0)
+    b = FADE_SHAPES.get(clip.get("fadeOutShape") or "", a)
+    return a if b == a else a + 16 * (b + 1)
+
+
 def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     if not isinstance(doc, dict) or not isinstance(doc.get("tracks"), list) or not isinstance(doc.get("media"), dict):
         raise RenderError("not a session document")
@@ -211,6 +222,8 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
                         envelopes.append(([(int(p["time"]), float(p["value"])) for p in pts], False))
                         auto_envs.append((si, param, len(envelopes)))
         for clip in track.get("clips", []):
+            if clip.get("mute"):
+                continue
             # A pitched clip plays its derived render (non-destructive pitch; same length as the original).
             play_id = clip.get("pitchMediaId") if clip.get("pitchMediaId") in doc["media"] else clip.get("mediaId")
             info = doc["media"].get(play_id)
@@ -222,7 +235,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             source = sources.setdefault(play_id, len(sources) + 1)
             gain = polarity * math.pow(10, (track_db + trim_db + float(clip.get("gainDb", 0))) / 20)
             start, length = int(clip["start"]), int(clip["length"])
-            fade_shape = {"linear": 0, "equal-power": 1, "s-curve": 2, "exponential": 3}.get(clip.get("fadeShape") or "linear", 0)
+            fade_shape = _fade_code(clip)
             clip_env = gain_env
             if clip.get("envelope"):
                 own = [(start + int(p["at"]) - int(clip.get("sourceIn", 0)), float(p["db"])) for p in clip["envelope"]]

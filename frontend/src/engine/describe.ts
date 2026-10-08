@@ -76,6 +76,14 @@ const WORDS: Record<Command["type"], Words> = {
   "launch-clip": ["Launched a clip on {t}", "Launched a clip"],
   "stop-launched": ["Stopped the launcher on {t}", "Stopped the launcher"],
   "set-clip-fades": ["Changed fades on {t}", "Changed fades"],
+  "set-clips-mute": ["Muted clips", "Muted clips"],
+  "set-clips-lock": ["Locked clips", "Locked clips"],
+  "rename-clip": ["Renamed a clip on {t}", "Renamed a clip"],
+  "duplicate-track": ["Duplicated {t}", "Duplicated a track"],
+  "move-track": ["Moved {t}", "Moved a track"],
+  "set-tracks-hidden": ["Hid tracks", "Hid tracks"],
+  "set-track-height": ["Changed the height of {t}", "Changed a track's height"],
+  "set-track-comments": ["Changed the comments of {t}", "Changed a track's comments"],
   crossfade: ["Crossfaded clips on {t}", "Crossfaded clips"],
   "set-loop": ["Changed the loop", "Changed the loop"],
   "add-region": ["Added a region", "Added a region"],
@@ -121,5 +129,8 @@ export function describeCommand(command: Command, before: SessionDoc): string {
   if (command.type === "set-track-invert" && !command.invert) words = words.replace("Inverted", "Restored");
   if (command.type === "set-track-automation-off" && !command.off) words = words.replace("Turned off", "Turned on");
   if (command.type === "bypass-fx-category" && !command.bypass) words = words.replace("Bypassed", "Switched on");
+  if (command.type === "set-clips-mute" && !command.mute) words = "Unmuted clips";
+  if (command.type === "set-clips-lock") words = command.lock === "time" ? "Time-locked clips" : command.lock ? "Edit-locked clips" : "Unlocked clips";
+  if (command.type === "set-tracks-hidden" && !command.hidden) words = "Showed hidden tracks";
   return words;
 }

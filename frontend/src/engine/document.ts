@@ -14,7 +14,7 @@ export interface MediaRef {
 }
 
 /** Fade shape names and the core's codes for them (native/formwav-dsp/src/render.rs `fade_curve`). */
-export const FADE_SHAPES = { linear: 0, "equal-power": 1, "s-curve": 2, exponential: 3 } as const;
+export const FADE_SHAPES = { linear: 0, "equal-power": 1, "s-curve": 2, exponential: 3, logarithmic: 4 } as const;
 export type FadeShape = keyof typeof FADE_SHAPES;
 
 export function nextFadeShape(shape: FadeShape | undefined): FadeShape {
@@ -32,9 +32,19 @@ export function fadeCurve(x: number, shape: FadeShape | undefined): number {
       return 0.5 - 0.5 * Math.cos(v * Math.PI);
     case "exponential":
       return v * v;
+    case "logarithmic":
+      return Math.log10(1 + 9 * v);
     default:
       return v;
   }
+}
+
+/** The core's one fade code for a clip's two edges: the fade-in's shape, and the fade-out's above it when it differs
+ *  (native/formwav-dsp/src/render.rs `fade_shapes`), so a code below 16 is one shape for both edges, as before. */
+export function fadeCode(clip: { fadeShape?: FadeShape; fadeOutShape?: FadeShape }): number {
+  const a = FADE_SHAPES[clip.fadeShape ?? "linear"] ?? 0;
+  const b = clip.fadeOutShape === undefined ? a : FADE_SHAPES[clip.fadeOutShape] ?? a;
+  return b === a ? a : a + 16 * (b + 1);
 }
 
 /** Track and clip colours (AU-10): keys stored in the session, their shades the token sheet's --fw-color-<key>. */
@@ -139,6 +149,14 @@ export interface Clip {
   fadeIn?: number;
   fadeOut?: number;
   fadeShape?: FadeShape;
+  /** The fade-out's own shape; absent, the fade-out takes `fadeShape` too. */
+  fadeOutShape?: FadeShape;
+  /** A name for this clip alone; absent, the clip shows its media's name. */
+  name?: string;
+  /** Silent in playback and export, kept in place (Pro Tools' clip mute). */
+  mute?: boolean;
+  /** Pro Tools' Time Lock ("time": the clip stays where it is in time) and Edit Lock ("edit": no edit of it at all). */
+  lock?: "time" | "edit";
   /** Alternate takes from loop recording: source offsets into the same media, all `length` long. */
   takes?: number[];
   /** Index into `takes` of the take that plays. */
@@ -456,6 +474,11 @@ export interface Track {
    *  other playlists, stashed with their clips until switched in. */
   playlist?: string;
   playlists?: readonly { name: string; clips: readonly Clip[] }[];
+  /** Hidden from the lanes and the mixer, still playing (Pro Tools' Hide track); its height in the lanes (absent is
+   *  medium) and its comments. */
+  hidden?: boolean;
+  height?: "small" | "large" | "jumbo";
+  comments?: string;
   /** PT-38, AA-11: where the track sits in a 5.1 mix, x from -1 (left) to 1 (right) and y from -1 (behind) to 1 (in
    *  front), with a send to the LFE channel in dB; absent, its stereo image goes to L and R. */
   surround?: {
@@ -483,6 +506,10 @@ export interface Marker {
   label: string;
   /** A clip marker (AA-13): it moves with this clip, and is left in place, unattached, if the clip goes. */
   clipId?: string;
+  /** Memory location fields (Pro Tools' Memory Locations): its number, a comment and a palette colour. */
+  number?: number;
+  comment?: string;
+  color?: string;
 }
 
 /** AA-13: after any change, a marker attached to a clip moves by however far its clip did (a move, a move to another
@@ -516,6 +543,9 @@ export interface Region {
   start: number;
   end: number;
   label: string;
+  number?: number;
+  comment?: string;
+  color?: string;
 }
 
 export interface LoopRange {
@@ -563,8 +593,9 @@ export interface SessionDoc {
   tempo?: { bpm: number; beatsPerBar: number };
   /** PT-26: the timecode the session starts at, in seconds (Pro Tools' session start); timecode reads add it. */
   timecodeStart?: number;
-  /** AU-07: this project's snap settings, saved with it: snapping to the grid, and the grid in bars and beats. */
-  snap?: { grid: boolean; bars: boolean };
+  /** AU-07: this project's snap settings, saved with it: snapping to the grid, and the grid in bars and beats; the grid
+   *  and nudge values (engine/grid.ts ids; absent, the grid follows the zoom and the nudge is 0.1 s). */
+  snap?: { grid: boolean; bars: boolean; value?: string; nudge?: string };
   /** The session's musical key and Camelot code, as detected (services/key.py). */
   key?: { name: string; camelot: string };
   /** The built-in synth's patch: what the live instrument plays and what renders every note track without an
@@ -660,8 +691,8 @@ export type Command =
   | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean; smooth?: number; follow?: "tracks" | "session" }
   | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef; feather?: number }
   | { type: "remove-marker"; markerId: string }
-  | { type: "set-marker"; markerId: string; at?: number; label?: string }
-  | { type: "set-region"; regionId: string; start?: number; end?: number; label?: string }
+  | { type: "set-marker"; markerId: string; at?: number; label?: string; number?: number; comment?: string; color?: string }
+  | { type: "set-region"; regionId: string; start?: number; end?: number; label?: string; number?: number; comment?: string; color?: string }
   | { type: "remove-track"; trackId: string }
   | { type: "rename-track"; trackId: string; name: string }
   /** A palette key, or "" for the default (green for a track; the track's colour for a clip). */
@@ -693,7 +724,17 @@ export type Command =
   | { type: "remove-clip"; trackId: string; clipId: string }
   | { type: "launch-clip"; trackId: string; mediaId: string; at: number; repeats: number }
   | { type: "stop-launched"; trackId: string; at: number }
-  | { type: "set-clip-fades"; trackId: string; clipId: string; fadeIn: number; fadeOut: number; shape?: FadeShape }
+  /** `shape` is the fade-in's (and the fade-out's while it has none of its own), `outShape` the fade-out's own (null
+   *  to follow `shape` again); either left out stays as it is. */
+  | { type: "set-clip-fades"; trackId: string; clipId: string; fadeIn: number; fadeOut: number; shape?: FadeShape; outShape?: FadeShape | null }
+  | { type: "set-clips-mute"; clipIds: string[]; mute: boolean }
+  | { type: "set-clips-lock"; clipIds: string[]; lock: "time" | "edit" | null }
+  | { type: "rename-clip"; trackId: string; clipId: string; name: string }
+  | { type: "duplicate-track"; trackId: string }
+  | { type: "move-track"; trackId: string; to: number }
+  | { type: "set-tracks-hidden"; trackIds: string[]; hidden: boolean }
+  | { type: "set-track-height"; trackId: string; height: "small" | "medium" | "large" | "jumbo" }
+  | { type: "set-track-comments"; trackId: string; comments: string }
   | { type: "crossfade"; trackId: string; leftClipId: string; rightClipId: string; shape?: FadeShape }
   | { type: "set-loop"; start: number; end: number; enabled: boolean }
   | { type: "add-region"; start: number; end: number; label: string }
@@ -713,12 +754,12 @@ export type Command =
   | { type: "move-range"; trackIds: string[]; start: number; end: number; to: number }
   | { type: "set-clip-bounds"; trackId: string; clipId: string; start: number; sourceIn: number; length: number }
   | { type: "set-clip-gain"; trackId: string; clipId: string; gainDb: number }
-  | { type: "batch"; commands: Command[]; label?: string }
+  | { type: "batch"; commands: Command[]; label?: string; whole?: boolean }
   | { type: "move-clip"; trackId: string; clipId: string; start: number }
   | { type: "move-clip-to-track"; trackId: string; clipId: string; toTrackId: string; start: number }
   | { type: "set-clip-pitch"; trackId: string; clipId: string; semitones: number; media: MediaRef | null }
   | { type: "add-marker"; at: number; label: string; clipId?: string }
-  | { type: "set-snap"; grid: boolean; bars: boolean }
+  | { type: "set-snap"; grid: boolean; bars: boolean; value?: string; nudge?: string }
   | { type: "set-track-view"; trackId: string; spectrogram: boolean }
   | { type: "set-track-send"; trackId: string; busId: string; gainDb: number | null }
   | { type: "set-clip-fx"; trackId: string; clipId: string; fx: TrackFx[] }
@@ -825,6 +866,128 @@ export function copyLane(points: readonly AutoPoint[], start: number, end: numbe
   return laneByTime(out);
 }
 
+/** A lane with `len` samples from `at` replaced by the source lane's from `start` (a range pasted from a track): inside
+ *  it plays as the source did, outside as it did. An empty lane plays `flat` (its track's fader or pan), so pasting
+ *  makes a lane where the source has one; a source without one leaves the lane as it is. */
+export function pasteLane(points: readonly AutoPoint[], flat: number, source: readonly AutoPoint[], start: number, len: number, at: number, gain: boolean): AutoPoint[] {
+  if (len <= 0 || !source.length) return [...points];
+  const outside = points.length ? points : [{ time: 0, value: flat }];
+  const stop = at + len;
+  const inside = source.filter((p) => p.time >= start && p.time < start + len).map((p) => ({ time: p.time - start + at, value: p.value }));
+  return laneByTime([
+    ...outside.filter((p) => p.time < at || p.time >= stop),
+    ...(at > 0 ? [{ time: at - 1, value: laneValue(outside, at - 1, gain) }] : []),
+    { time: stop, value: laneValue(outside, stop, gain) },
+    { time: at, value: laneValue(source, start, gain) },
+    ...inside,
+    { time: stop - 1, value: laneValue(source, start + len - 1, gain) },
+  ]);
+}
+
+/** Memory location numbers (Pro Tools' Memory Locations): a marker's or a region's own number; those made before
+ *  numbers existed take the free numbers in time order. */
+export function memoryNumbers(doc: SessionDoc): Map<string, number> {
+  const all = [...doc.markers.map((m) => ({ id: m.id, at: m.at, number: m.number })), ...(doc.regions ?? []).map((r) => ({ id: r.id, at: r.start, number: r.number }))].sort((a, b) => a.at - b.at);
+  const used = new Set(all.flatMap((x) => (x.number ? [x.number] : [])));
+  const out = new Map<string, number>();
+  let n = 1;
+  for (const x of all) {
+    if (x.number) {
+      out.set(x.id, x.number);
+      continue;
+    }
+    while (used.has(n)) n++;
+    used.add(n);
+    out.set(x.id, n);
+  }
+  return out;
+}
+
+/** The number the next memory location takes: the lowest one free. */
+export function nextMemoryNumber(doc: SessionDoc): number {
+  const used = new Set(memoryNumbers(doc).values());
+  let n = 1;
+  while (used.has(n)) n++;
+  return n;
+}
+
+type MemoryFields = { number?: number; comment?: string; color?: string };
+
+/** set-marker's and set-region's memory location fields: a number no other one holds (1 to 999), a comment, a palette
+ *  colour ("" for none). */
+function memoryFields(doc: SessionDoc, item: { id: string }, cmd: MemoryFields): MemoryFields {
+  const out: MemoryFields = {};
+  if (cmd.number !== undefined) {
+    const n = Math.round(cmd.number);
+    if (n >= 1 && n <= 999 && ![...memoryNumbers(doc)].some(([id, k]) => id !== item.id && k === n)) out.number = n;
+  }
+  if (cmd.comment !== undefined) out.comment = cmd.comment.slice(0, 500);
+  if (cmd.color !== undefined) out.color = PALETTE.includes(cmd.color) ? cmd.color : "";
+  return out;
+}
+
+function dropEmpty<T extends MemoryFields>(x: T): T {
+  const out = { ...x };
+  if (!out.comment) delete out.comment;
+  if (!out.color) delete out.color;
+  return out;
+}
+
+const sameFields = (a: object, b: object) => {
+  const x = a as Record<string, unknown>;
+  const y = b as Record<string, unknown>;
+  return Object.keys(x).length === Object.keys(y).length && Object.keys(x).every((k) => x[k] === y[k]);
+};
+
+/** S5's clip locks, checked before any command runs: either lock refuses what would move its clip in time (a move, a
+ *  trim that slides the audio, time opened or closed before it); an edit lock also refuses any edit of the clip. */
+function refusedByLock(doc: SessionDoc, cmd: Command): boolean {
+  if (!doc.tracks.some((t) => t.clips.some((c) => c.lock))) return false;
+  const clip = (trackId: string, clipId: string) => doc.tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === clipId);
+  const sealed = (c: Clip | undefined) => c?.lock === "edit";
+  const placed = (trackIds: readonly string[], test: (c: Clip) => boolean) => doc.tracks.some((t) => trackIds.includes(t.id) && t.clips.some((c) => !!c.lock && test(c)));
+  const clears = (trackIds: readonly string[], a: number, b: number, ripple: boolean) =>
+    placed(trackIds, (c) => (c.start < b && c.start + c.length > a && (c.lock === "edit" || ripple)) || (ripple && c.start >= b));
+  switch (cmd.type) {
+    case "move-clip":
+      return !!clip(cmd.trackId, cmd.clipId)?.lock;
+    case "move-clip-to-track": {
+      const c = clip(cmd.trackId, cmd.clipId);
+      return sealed(c) || (!!c?.lock && Math.round(cmd.start) !== c.start);
+    }
+    case "set-clip-bounds": {
+      const c = clip(cmd.trackId, cmd.clipId);
+      if (!c?.lock) return false;
+      const m = doc.media[c.mediaId];
+      const ratio = m ? m.sampleRate / doc.sampleRate : 1;
+      return c.lock === "edit" || Math.abs(cmd.start - cmd.sourceIn / ratio - (c.start - c.sourceIn / ratio)) > 1;
+    }
+    case "split-clip":
+    case "remove-clip":
+    case "set-clip-fades":
+    case "set-clip-media":
+    case "set-range-media":
+    case "set-clip-warp":
+    case "set-clip-pitch":
+    case "set-clip-notes":
+    case "set-clip-take":
+    case "comp-range":
+      return sealed(clip(cmd.trackId, cmd.clipId));
+    case "crossfade":
+      return sealed(clip(cmd.trackId, cmd.leftClipId)) || sealed(clip(cmd.trackId, cmd.rightClipId));
+    case "clear-range":
+      return clears([cmd.trackId], Math.min(cmd.start, cmd.end), Math.max(cmd.start, cmd.end), cmd.ripple);
+    case "clear-ranges":
+      return cmd.ranges.some((r) => clears(cmd.trackIds, Math.min(r.start, r.end), Math.max(r.start, r.end), cmd.ripple));
+    case "insert-time":
+      return placed(cmd.trackIds, (c) => c.start + c.length > cmd.at);
+    case "move-range":
+      return placed(cmd.trackIds, (c) => c.start + c.length > Math.min(cmd.start, cmd.end, cmd.to));
+    default:
+      return false;
+  }
+}
+
 /** A track with each automation lane (volume in gain, pan and the filters' parameters as they are) passed through
  *  `fn`; the same track comes back when no lane changed. */
 export function mapLanes(track: Track, fn: (points: readonly AutoPoint[], gain: boolean) => AutoPoint[]): Track {
@@ -875,6 +1038,7 @@ function cutMarks(doc: SessionDoc, a: number, b: number): SessionDoc {
 }
 
 export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string): SessionDoc {
+  if (refusedByLock(doc, cmd)) return doc;
   switch (cmd.type) {
     case "clear-ranges": {
       const ranges = cmd.ranges
@@ -1583,7 +1747,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const start = Math.max(0, Math.round(Math.min(cmd.start, cmd.end)));
       const end = Math.max(0, Math.round(Math.max(cmd.start, cmd.end)));
       if (end <= start) return doc;
-      const region: Region = { id: newId(), start, end, label: cmd.label.trim() || "Region" };
+      const region: Region = { id: newId(), start, end, label: cmd.label.trim() || "Region", number: nextMemoryNumber(doc) };
       return { ...doc, regions: [...(doc.regions ?? []), region].sort((a, b) => a.start - b.start) };
     }
     case "remove-region": {
@@ -1591,8 +1755,15 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const regions = before.filter((r) => r.id !== cmd.regionId);
       return regions.length === before.length ? doc : { ...doc, regions };
     }
-    case "batch":
-      return cmd.commands.reduce((current, command) => applyCommand(current, command, newId), doc);
+    case "batch": {
+      if (!cmd.whole) return cmd.commands.reduce((current, command) => applyCommand(current, command, newId), doc);
+      let current = doc;
+      for (const command of cmd.commands) {
+        if (refusedByLock(current, command)) return doc;
+        current = applyCommand(current, command, newId);
+      }
+      return current;
+    }
     case "set-clip-gain": {
       const gainDb = Math.max(-60, Math.min(12, Math.round(cmd.gainDb * 10) / 10));
       return mapTrack(doc, cmd.trackId, (t) => {
@@ -1759,9 +1930,12 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           const fadeIn = Math.max(0, Math.min(c.length, Math.round(cmd.fadeIn)));
           const fadeOut = Math.max(0, Math.min(c.length - fadeIn, Math.round(cmd.fadeOut)));
           const fadeShape = cmd.shape ?? c.fadeShape ?? "linear";
-          if ((c.fadeIn ?? 0) === fadeIn && (c.fadeOut ?? 0) === fadeOut && (c.fadeShape ?? "linear") === fadeShape) return c;
+          const own = cmd.outShape === undefined ? c.fadeOutShape : (cmd.outShape ?? undefined);
+          const outShape = own === fadeShape ? undefined : own;
+          if ((c.fadeIn ?? 0) === fadeIn && (c.fadeOut ?? 0) === fadeOut && (c.fadeShape ?? "linear") === fadeShape && c.fadeOutShape === outShape) return c;
           changed = true;
-          return { ...c, fadeIn, fadeOut, fadeShape };
+          const { fadeOutShape: _old, ...rest } = c;
+          return { ...rest, fadeIn, fadeOut, fadeShape, ...(outShape ? { fadeOutShape: outShape } : {}) };
         });
         return changed ? { ...t, clips } : t;
       });
@@ -1773,8 +1947,17 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         const span = Math.min(left.start + left.length - right.start, left.length, right.length);
         if (span <= 0) return t;
         const shape = cmd.shape ?? "equal-power";
+        // each clip's other edge keeps its shape
+        const edges = (c: Clip, a: FadeShape, b: FadeShape): Clip => {
+          const { fadeOutShape: _old, ...rest } = c;
+          return { ...rest, fadeShape: a, ...(b !== a ? { fadeOutShape: b } : {}) };
+        };
         const clips = t.clips.map((c) =>
-          c.id === left.id ? { ...c, fadeOut: span, fadeShape: shape } : c.id === right.id ? { ...c, fadeIn: span, fadeShape: shape } : c,
+          c.id === left.id
+            ? { ...edges(c, c.fadeShape ?? "linear", shape), fadeOut: span }
+            : c.id === right.id
+              ? { ...edges(c, shape, c.fadeOutShape ?? c.fadeShape ?? "linear"), fadeIn: span }
+              : c,
         );
         return { ...t, clips };
       });
@@ -1873,8 +2056,9 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       let changed = false;
       const markers = doc.markers.map((m) => {
         if (m.id !== cmd.markerId) return m;
-        const next = { ...m, at: cmd.at === undefined ? m.at : Math.max(0, Math.round(cmd.at)), label: cmd.label === undefined ? m.label : cmd.label };
-        changed = next.at !== m.at || next.label !== m.label;
+        const next = dropEmpty({ ...m, at: cmd.at === undefined ? m.at : Math.max(0, Math.round(cmd.at)), label: cmd.label === undefined ? m.label : cmd.label, ...memoryFields(doc, m, cmd) });
+        if (sameFields(next, m)) return m;
+        changed = true;
         return next;
       });
       return changed ? { ...doc, markers: [...markers].sort((a, b) => a.at - b.at) } : doc;
@@ -1885,8 +2069,9 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         if (r.id !== cmd.regionId) return r;
         const start = Math.max(0, Math.round(cmd.start ?? r.start));
         const end = Math.max(start + 1, Math.round(cmd.end ?? r.end));
-        const next = { ...r, start, end, label: cmd.label === undefined ? r.label : cmd.label };
-        changed = next.start !== r.start || next.end !== r.end || next.label !== r.label;
+        const next = dropEmpty({ ...r, start, end, label: cmd.label === undefined ? r.label : cmd.label, ...memoryFields(doc, r, cmd) });
+        if (sameFields(next, r)) return r;
+        changed = true;
         return next;
       });
       return changed ? { ...doc, regions: [...regions].sort((a, b) => a.start - b.start) } : doc;
@@ -1953,12 +2138,122 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       });
     }
     case "set-snap": {
-      if (doc.snap?.grid === cmd.grid && doc.snap?.bars === cmd.bars) return doc;
-      return { ...doc, snap: { grid: cmd.grid, bars: cmd.bars } };
+      const value = cmd.value === undefined ? doc.snap?.value : cmd.value || undefined;
+      const nudge = cmd.nudge === undefined ? doc.snap?.nudge : cmd.nudge || undefined;
+      if (doc.snap?.grid === cmd.grid && doc.snap?.bars === cmd.bars && doc.snap?.value === value && doc.snap?.nudge === nudge) return doc;
+      return { ...doc, snap: { grid: cmd.grid, bars: cmd.bars, ...(value ? { value } : {}), ...(nudge ? { nudge } : {}) } };
     }
     case "add-marker": {
-      const marker: Marker = { id: newId(), at: Math.max(0, Math.round(cmd.at)), label: cmd.label, ...(cmd.clipId ? { clipId: cmd.clipId } : {}) };
+      const marker: Marker = { id: newId(), at: Math.max(0, Math.round(cmd.at)), label: cmd.label, number: nextMemoryNumber(doc), ...(cmd.clipId ? { clipId: cmd.clipId } : {}) };
       return { ...doc, markers: [...doc.markers, marker].sort((a, b) => a.at - b.at) };
+    }
+    case "set-clips-mute": {
+      const ids = new Set(cmd.clipIds);
+      let changed = false;
+      const tracks = doc.tracks.map((t) => {
+        if (!t.clips.some((c) => ids.has(c.id) && !!c.mute !== cmd.mute)) return t;
+        changed = true;
+        return {
+          ...t,
+          clips: t.clips.map((c) => {
+            if (!ids.has(c.id) || !!c.mute === cmd.mute) return c;
+            const { mute: _old, ...rest } = c;
+            return cmd.mute ? { ...rest, mute: true } : rest;
+          }),
+        };
+      });
+      return changed ? { ...doc, tracks } : doc;
+    }
+    case "set-clips-lock": {
+      const ids = new Set(cmd.clipIds);
+      const lock = cmd.lock ?? undefined;
+      let changed = false;
+      const tracks = doc.tracks.map((t) => {
+        if (!t.clips.some((c) => ids.has(c.id) && c.lock !== lock)) return t;
+        changed = true;
+        return {
+          ...t,
+          clips: t.clips.map((c) => {
+            if (!ids.has(c.id) || c.lock === lock) return c;
+            const { lock: _old, ...rest } = c;
+            return lock ? { ...rest, lock } : rest;
+          }),
+        };
+      });
+      return changed ? { ...doc, tracks } : doc;
+    }
+    case "rename-clip": {
+      const name = cmd.name.trim().slice(0, 80);
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const c = t.clips.find((x) => x.id === cmd.clipId);
+        if (!c || (c.name ?? "") === name) return t;
+        return {
+          ...t,
+          clips: t.clips.map((x) => {
+            if (x !== c) return x;
+            const { name: _old, ...rest } = x;
+            return name ? { ...rest, name } : rest;
+          }),
+        };
+      });
+    }
+    case "duplicate-track": {
+      // Pro Tools' Duplicate track: its clips (new ids, out of any group), playlists, effects, automation, sends and
+      // routing, named after it, right below it
+      const index = doc.tracks.findIndex((t) => t.id === cmd.trackId);
+      if (index < 0) return doc;
+      const t = doc.tracks[index];
+      const copy = (c: Clip): Clip => {
+        const { groupId: _g, ...rest } = c;
+        return { ...rest, id: newId() };
+      };
+      const names = new Set(doc.tracks.map((x) => x.name));
+      let name = `${t.name} copy`;
+      for (let k = 2; names.has(name); k++) name = `${t.name} copy ${k}`;
+      const { stem: _stem, hidden: _hidden, ...base } = t;
+      const track: Track = {
+        ...base,
+        id: newId(),
+        name,
+        clips: t.clips.map(copy),
+        ...(t.playlists ? { playlists: t.playlists.map((p) => ({ name: p.name, clips: p.clips.map(copy) })) } : {}),
+      };
+      return { ...doc, tracks: [...doc.tracks.slice(0, index + 1), track, ...doc.tracks.slice(index + 1)] };
+    }
+    case "move-track": {
+      const from = doc.tracks.findIndex((t) => t.id === cmd.trackId);
+      const to = Math.max(0, Math.min(doc.tracks.length - 1, Math.round(cmd.to)));
+      if (from < 0 || from === to) return doc;
+      const tracks = doc.tracks.filter((t) => t.id !== cmd.trackId);
+      tracks.splice(to, 0, doc.tracks[from]);
+      return { ...doc, tracks };
+    }
+    case "set-tracks-hidden": {
+      const ids = new Set(cmd.trackIds);
+      let changed = false;
+      const tracks = doc.tracks.map((t) => {
+        if (!ids.has(t.id) || !!t.hidden === cmd.hidden) return t;
+        changed = true;
+        const { hidden: _old, ...rest } = t;
+        return cmd.hidden ? { ...rest, hidden: true } : rest;
+      });
+      return changed ? { ...doc, tracks } : doc;
+    }
+    case "set-track-height": {
+      const height = cmd.height === "medium" ? undefined : cmd.height;
+      return mapTrack(doc, cmd.trackId, (t) => {
+        if (t.height === height) return t;
+        const { height: _old, ...rest } = t;
+        return height ? { ...rest, height } : rest;
+      });
+    }
+    case "set-track-comments": {
+      const comments = cmd.comments.slice(0, 2000);
+      return mapTrack(doc, cmd.trackId, (t) => {
+        if ((t.comments ?? "") === comments) return t;
+        const { comments: _old, ...rest } = t;
+        return comments.trim() ? { ...rest, comments } : rest;
+      });
     }
   }
 }

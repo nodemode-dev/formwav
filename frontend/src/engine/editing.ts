@@ -2,7 +2,7 @@
  * PLAN_v13 S4's editing commands as pure functions of the session: each returns one command, a labelled batch that is
  * one undo step, or null when there is nothing to do. The interface dispatches what they return (ui/editing.ts).
  */
-import { applyCommand, copyLane, insertLane, mapLanes, sessionLength, type AutoPoint, type Clip, type Command, type MediaRef, type SessionDoc } from "./document";
+import { applyCommand, copyLane, insertLane, mapLanes, memoryNumbers, pasteLane, sessionLength, type AutoPoint, type Clip, type Command, type FadeShape, type MediaRef, type SessionDoc } from "./document";
 
 export interface EditRange {
   trackId: string;
@@ -23,7 +23,7 @@ const rate = (doc: SessionDoc, c: Clip) => {
   return m ? m.sampleRate / doc.sampleRate : 1;
 };
 
-const batch = (label: string, commands: Command[]): Command | null => (commands.length ? { type: "batch", label, commands } : null);
+const batch = (label: string, commands: Command[], whole = false): Command | null => (commands.length ? { type: "batch", label, commands, ...(whole ? { whole } : {}) } : null);
 
 /** The part of a clip between a and b as a clip of its own (the cut split-clip makes at each end). */
 export function clipPiece(doc: SessionDoc, c: Clip, a: number, b: number): Omit<Clip, "id"> {
@@ -95,7 +95,7 @@ export function repeatSpan(doc: SessionDoc, target: EditTarget, count: number, s
       }
     });
   }
-  return batch(n === 1 ? (target.range ? "Duplicated a range" : "Duplicated clips") : `Repeated ${target.range ? "a range" : "clips"} ${n} times`, commands);
+  return batch(n === 1 ? (target.range ? "Duplicated a range" : "Duplicated clips") : `Repeated ${target.range ? "a range" : "clips"} ${n} times`, commands, true);
 }
 
 /** Pro Tools' Shift: the selected clips moved later by `by` samples (earlier when negative), stopped at the start. */
@@ -250,10 +250,11 @@ export function healSeparations(doc: SessionDoc, target: EditTarget, at: number)
   return batch("Healed a separation", commands);
 }
 
-/** Separate on Grid: clips split at each grid line, `step` samples apart from the session start, inside the range or
- *  inside each selected clip; null for no line or a grid finer than a sample or of more than 2000 lines. */
-export function separateOnGrid(doc: SessionDoc, target: EditTarget, step: number): Command | null {
-  if (!(step >= 1)) return null;
+/** Separate on Grid: clips split at each grid line, `step` samples apart from the session start (or the lines a grid
+ *  value gives between two positions), inside the range or inside each selected clip; null for no line or a grid finer
+ *  than a sample or of more than 2000 lines. */
+export function separateOnGrid(doc: SessionDoc, target: EditTarget, step: number | ((from: number, to: number) => number[])): Command | null {
+  if (typeof step === "number" && !(step >= 1)) return null;
   const ids = new Set(target.clipIds);
   const commands: Command[] = [];
   for (const t of doc.tracks) {
@@ -263,7 +264,10 @@ export function separateOnGrid(doc: SessionDoc, target: EditTarget, step: number
       const from = Math.max(c.start, r ? r.start : c.start);
       const to = Math.min(c.start + c.length, r ? r.end : c.start + c.length);
       const lines: number[] = [];
-      for (let k = Math.ceil(from / step); k * step <= to; k++) {
+      const given = typeof step === "number" ? null : step(from, to);
+      if (given && given.length > 2001) return null;
+      for (const at of given ?? []) if (at > c.start && at < c.start + c.length && at >= from && at <= to) lines.push(at);
+      for (let k = typeof step === "number" ? Math.ceil(from / step) : 0; typeof step === "number" && k * step <= to; k++) {
         const at = Math.round(k * step);
         if (at > c.start && at < c.start + c.length && at >= from && at <= to) lines.push(at);
         if (lines.length > 2000) return null;
@@ -312,7 +316,7 @@ export function fitToRange(doc: SessionDoc, trackId: string, clipId: string, med
   return batch("Fitted a clip to the selection", [
     { type: "set-clip-media", trackId, clipId, media },
     { type: "set-clip-bounds", trackId, clipId, start: Math.max(0, Math.round(start)), sourceIn: clip.sourceIn, length: Math.max(1, Math.min(Math.round(length), available)) },
-  ]);
+  ], true);
 }
 
 /** A media's transients (its own seconds) where they fall inside the clip, in session samples. */
@@ -336,4 +340,215 @@ export function nextStop(doc: SessionDoc, trackIds: readonly string[] | null, at
   if (direction > 0) return sorted.find((s) => s > at) ?? null;
   for (let i = sorted.length - 1; i >= 0; i--) if (sorted[i] < at) return sorted[i];
   return null;
+}
+
+/** Nudge: the selected clips moved by `by` samples (the nudge value, either way), stopped at the session start; a
+ *  locked clip stays where it is. */
+export function nudgeClips(doc: SessionDoc, clipIds: readonly string[], by: number): Command | null {
+  const ids = new Set(clipIds);
+  const chosen = doc.tracks.flatMap((t) => t.clips.filter((c) => ids.has(c.id) && !c.lock).map((clip) => ({ trackId: t.id, clip })));
+  if (!chosen.length) return null;
+  const delta = Math.max(-Math.min(...chosen.map((x) => x.clip.start)), Math.round(by));
+  if (!delta) return null;
+  return batch(delta > 0 ? "Nudged clips later" : "Nudged clips earlier", chosen.map(({ trackId, clip }) => ({ type: "move-clip", trackId, clipId: clip.id, start: clip.start + delta })));
+}
+
+const inShape = (c: Clip): FadeShape => c.fadeShape ?? "linear";
+const outShape = (c: Clip): FadeShape => c.fadeOutShape ?? inShape(c);
+
+/** Create Fades from a selection (Pro Tools' Cmd F): where the range crosses a butt splice, a crossfade over the whole
+ *  of the range around it, each clip lengthened past the splice by as much of the range as lies on the other side and
+ *  its file still holds; where the range takes in a clip's start and ends inside it, a fade-in to the range's end; where
+ *  it starts inside a clip and takes in its end, a fade-out from the range's start. */
+export function createFades(doc: SessionDoc, range: EditRange, shape: FadeShape): Command | null {
+  const track = doc.tracks.find((t) => t.id === range.trackId);
+  if (!track || range.end <= range.start) return null;
+  const trackId = track.id;
+  const inside = (at: number) => range.start < at && at < range.end;
+  const ordered = [...track.clips].sort((a, b) => a.start - b.start);
+  const splices = ordered.flatMap((left, i) => {
+    const right = ordered[i + 1];
+    return right && right.start === left.start + left.length && inside(right.start) ? [{ left, right, at: right.start }] : [];
+  });
+  const faded = new Set(splices.flatMap((s) => [s.left.id, s.right.id]));
+  const commands: Command[] = [];
+  for (const { left, right, at } of splices) {
+    const rangeBefore = at - Math.max(range.start, left.start);
+    const rangeAfter = Math.min(range.end, right.start + right.length) - at;
+    const leftHandle = Math.max(0, Math.min(rangeAfter, reach(doc, left, left.sourceIn) - left.length));
+    const rightHandle = Math.max(0, Math.min(rangeBefore, Math.floor(right.sourceIn / rate(doc, right))));
+    if (leftHandle > 0) commands.push({ type: "set-clip-bounds", trackId, clipId: left.id, start: left.start, sourceIn: left.sourceIn, length: left.length + leftHandle });
+    if (rightHandle > 0) {
+      const sourceIn = right.sourceIn - Math.round(rightHandle * rate(doc, right));
+      commands.push({ type: "set-clip-bounds", trackId, clipId: right.id, start: at - rightHandle, sourceIn, length: right.length + rightHandle });
+    }
+    commands.push({ type: "set-clip-fades", trackId, clipId: left.id, fadeIn: left.fadeIn ?? 0, fadeOut: rangeBefore + leftHandle, outShape: shape });
+    commands.push({ type: "set-clip-fades", trackId, clipId: right.id, fadeIn: rangeAfter + rightHandle, fadeOut: right.fadeOut ?? 0, shape, outShape: outShape(right) });
+  }
+  for (const c of ordered) {
+    if (faded.has(c.id)) continue;
+    const end = c.start + c.length;
+    const takesStart = range.start <= c.start && c.start < range.end && range.end < end;
+    const takesEnd = c.start < range.start && range.start < end && end <= range.end;
+    if (takesStart) commands.push({ type: "set-clip-fades", trackId, clipId: c.id, fadeIn: range.end - c.start, fadeOut: c.fadeOut ?? 0, shape, outShape: outShape(c) });
+    else if (takesEnd) commands.push({ type: "set-clip-fades", trackId, clipId: c.id, fadeIn: c.fadeIn ?? 0, fadeOut: end - range.start, outShape: shape });
+  }
+  return batch("Created fades", commands, true);
+}
+
+/** Delete Fades: the fades of the clips the range touches, or of the selected clips. */
+export function deleteFades(doc: SessionDoc, target: EditTarget): Command | null {
+  const ids = new Set(target.clipIds);
+  const r = target.range;
+  const commands: Command[] = doc.tracks.flatMap((t) =>
+    t.clips
+      .filter((c) => (r ? t.id === r.trackId && c.start < r.end && c.start + c.length > r.start : ids.has(c.id)) && ((c.fadeIn ?? 0) > 0 || (c.fadeOut ?? 0) > 0))
+      .map((c) => ({ type: "set-clip-fades", trackId: t.id, clipId: c.id, fadeIn: 0, fadeOut: 0 }) as Command),
+  );
+  return batch("Deleted fades", commands);
+}
+
+/** Fade to Start and Fade to End: the clips under the playhead fade in from their start to it, or out from it. */
+export function fadeToPlayhead(doc: SessionDoc, target: EditTarget, at: number, edge: "start" | "end"): Command | null {
+  const x = Math.round(at);
+  const commands = underPlayhead(doc, target, x).map(({ trackId, clip }): Command =>
+    edge === "start"
+      ? { type: "set-clip-fades", trackId, clipId: clip.id, fadeIn: x - clip.start, fadeOut: Math.min(clip.fadeOut ?? 0, clip.start + clip.length - x) }
+      : { type: "set-clip-fades", trackId, clipId: clip.id, fadeIn: Math.min(clip.fadeIn ?? 0, x - clip.start), fadeOut: clip.start + clip.length - x },
+  );
+  return batch(edge === "start" ? "Faded in to the playhead" : "Faded out from the playhead", commands);
+}
+
+/** A copied range: the audio in it (starts counted from the range's start), its length, and its track's volume and pan
+ *  lanes with where the range began on them. */
+export interface RangeClip {
+  start: number;
+  length: number;
+  pieces: Omit<Clip, "id">[];
+  volume?: AutoPoint[];
+  pan?: AutoPoint[];
+}
+
+/** Range copy (Pro Tools' Copy with an edit selection): what plays in the range, its automation with it. */
+export function copyRange(doc: SessionDoc, range: EditRange): RangeClip | null {
+  const span = editSpan(doc, { range, clipIds: [] });
+  const track = doc.tracks.find((t) => t.id === range.trackId);
+  if (!span || !track) return null;
+  return {
+    start: span.start,
+    length: span.end - span.start,
+    pieces: span.pieces.map((p) => ({ ...p.clip, start: p.clip.start - span.start })),
+    ...(track.automation?.volume?.length ? { volume: [...track.automation.volume] } : {}),
+    ...(track.automation?.pan?.length ? { pan: [...track.automation.pan] } : {}),
+  };
+}
+
+/** Paste a copied range at `at` on a track, over what lies there (with Shuffle, opening time for it), its automation
+ *  pasted with it so the range plays as it did where it was copied. */
+export function pasteRange(doc: SessionDoc, copied: RangeClip, trackId: string, at: number, shuffle: boolean): Command | null {
+  const track = doc.tracks.find((t) => t.id === trackId);
+  if (!track || copied.length < 1) return null;
+  const a = Math.max(0, Math.round(at));
+  const commands: Command[] = [
+    shuffle ? { type: "insert-time", trackIds: [trackId], at: a, length: copied.length, follow: "tracks" } : { type: "clear-range", trackId, start: a, end: a + copied.length, ripple: false },
+    ...copied.pieces.map((p): Command => ({ type: "paste-clip", trackId, clip: { ...p, start: p.start + a } })),
+  ];
+  const opened = shuffle ? mapLanes(track, (points, gain) => insertLane(points, a, copied.length, gain)) : track;
+  for (const param of ["volume", "pan"] as const) {
+    const source = copied[param];
+    if (!source?.length) continue;
+    const flat = param === "volume" ? track.gainDb : (track.pan ?? 0);
+    commands.push({ type: "set-automation", trackId, param, points: pasteLane(opened.automation?.[param] ?? [], flat, source, copied.start, copied.length, a, param === "volume") });
+  }
+  return batch("Pasted a range", commands, true);
+}
+
+const picked = (doc: SessionDoc, clipIds: readonly string[]) => {
+  const ids = new Set(clipIds);
+  return doc.tracks.flatMap((t) => t.clips.filter((c) => ids.has(c.id)));
+};
+
+/** Clip mute (Pro Tools' Mute Clips): the selected clips muted, or unmuted when every one already is. */
+export function muteClips(doc: SessionDoc, clipIds: readonly string[]): Command | null {
+  const chosen = picked(doc, clipIds);
+  if (!chosen.length) return null;
+  const mute = chosen.some((c) => !c.mute);
+  return batch(mute ? "Muted clips" : "Unmuted clips", [{ type: "set-clips-mute", clipIds: chosen.map((c) => c.id), mute }]);
+}
+
+/** Time Lock and Edit Lock: the selected clips locked that way, or unlocked when every one already is. */
+export function lockClips(doc: SessionDoc, clipIds: readonly string[], kind: "time" | "edit"): Command | null {
+  const chosen = picked(doc, clipIds);
+  if (!chosen.length) return null;
+  const lock = chosen.every((c) => c.lock === kind) ? null : kind;
+  return batch(lock === null ? "Unlocked clips" : kind === "time" ? "Time-locked clips" : "Edit-locked clips", [{ type: "set-clips-lock", clipIds: chosen.map((c) => c.id), lock }]);
+}
+
+/** Space Clips: on each track, its selected clips laid out in time order from where the first one starts, each the
+ *  next `gap` samples after the last one's end (or, start to start, after its start); a locked clip neither moves nor
+ *  takes a place. */
+export function spaceClips(doc: SessionDoc, clipIds: readonly string[], gap: number, startToStart: boolean): Command | null {
+  const ids = new Set(clipIds);
+  const commands: Command[] = [];
+  for (const t of doc.tracks) {
+    const lineUp = t.clips.filter((c) => ids.has(c.id) && !c.lock).sort((a, b) => a.start - b.start);
+    let next = lineUp.length > 1 ? lineUp[0].start : null;
+    for (const c of next === null ? [] : lineUp) {
+      const start = Math.max(0, Math.round(next as number));
+      if (start !== c.start) commands.push({ type: "move-clip", trackId: t.id, clipId: c.id, start });
+      next = start + gap + (startToStart ? 0 : c.length);
+    }
+  }
+  return batch("Spaced clips", commands);
+}
+
+/** Snap to Next and Previous: each selected clip moved up against the nearest clip after it (its end on that clip's
+ *  start) or before it (its start on that clip's end), on its own track; selected clips are not what it snaps to. */
+export function snapClips(doc: SessionDoc, clipIds: readonly string[], to: "next" | "previous"): Command | null {
+  const ids = new Set(clipIds);
+  const commands: Command[] = [];
+  for (const t of doc.tracks) {
+    const fixed = t.clips.filter((c) => !ids.has(c.id));
+    for (const c of t.clips.filter((x) => ids.has(x.id) && !x.lock)) {
+      const end = c.start + c.length;
+      const target =
+        to === "next"
+          ? fixed.filter((o) => o.start >= end).reduce<number | null>((best, o) => (best === null || o.start < best ? o.start : best), null)
+          : fixed.filter((o) => o.start + o.length <= c.start).reduce<number | null>((best, o) => (best === null || o.start + o.length > best ? o.start + o.length : best), null);
+      if (target === null) continue;
+      const start = to === "next" ? target - c.length : target;
+      if (start !== c.start) commands.push({ type: "move-clip", trackId: t.id, clipId: c.id, start });
+    }
+  }
+  return batch(to === "next" ? "Snapped clips to the next clip" : "Snapped clips to the previous clip", commands);
+}
+
+/** A memory location: a marker (start equals end) or a region (a selection location), with its number. */
+export interface MemoryLocation {
+  id: string;
+  kind: "marker" | "region";
+  number: number;
+  start: number;
+  end: number;
+}
+
+/** The session's memory locations in time order. */
+export function memoryLocations(doc: SessionDoc): MemoryLocation[] {
+  const numbers = memoryNumbers(doc);
+  return [
+    ...doc.markers.map((m): MemoryLocation => ({ id: m.id, kind: "marker", number: numbers.get(m.id) ?? 0, start: m.at, end: m.at })),
+    ...(doc.regions ?? []).map((r): MemoryLocation => ({ id: r.id, kind: "region", number: numbers.get(r.id) ?? 0, start: r.start, end: r.end })),
+  ].sort((a, b) => a.start - b.start || a.number - b.number);
+}
+
+/** The memory location numbered `n`. */
+export function findMemory(doc: SessionDoc, n: number): MemoryLocation | null {
+  return memoryLocations(doc).find((m) => m.number === n) ?? null;
+}
+
+/** The first memory location after `at`, or the last one before it. */
+export function nextMemory(doc: SessionDoc, at: number, direction: 1 | -1): MemoryLocation | null {
+  const all = memoryLocations(doc);
+  if (direction > 0) return all.find((m) => m.start > at) ?? null;
+  return [...all].reverse().find((m) => m.start < at) ?? null;
 }
