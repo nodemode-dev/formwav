@@ -3,7 +3,7 @@
 Living log of all comment content, explainers, rationale, TODOs and removed code for the frontend. formwav's own source files stay comment-free per dev-rules `sub-skills/hashout-log/SUB-SKILL.md`; everything they would have said lives here. Files under `src/vendor/` are third-party copies kept verbatim, upstream comments included, so they can be resynced. Read this first, then edit code surgically.
 
 Current build version: v2.14.3
-Last updated: 2026-10-08 · v2.14.3: the editing commands (src/engine/editing.ts; insert-time, clear-range and clear-ranges with follow in src/engine/document.ts; src/ui/editing.ts and src/ui/big-counter.ts; the Zoom tool in src/ui/toolbar.ts; Identify Beat in src/ui/musical.ts; Fit to selection in src/ui/inspector-pane.ts) and AU-13's page turn (src/ui/lanes.ts, src/ui/ruler.ts, src/ui/transport.ts, src/ui/meter.ts). v2.14.2: the Export dialog's range, twelve formats, dither switch and peak normalisation, and the true peak in its notice (src/ui/export.ts, src/io/render-client.ts, src/styles/workspace.css). v2.14.1: the mixer basics (src/ui/mixer.ts: solo safe and solo alone, Clear solos and mutes, trim, polarity, Off, bypass by kind, the pan law, the peak hold and the clip light; the commands in src/engine/document.ts and describe.ts; every kind but the filters on a track's bus with its filter automation, and gain reduction by insert, in src/audio/player.ts and player-worklet.ts; a dynamics card's reduction in src/ui/editor-tabs.ts; src/styles/canvas.css). v2.14.0: the studio processors, formwav's own library (src/engine/processors.ts; the processor entry in src/engine/document.ts; src/audio/player.ts and player-worklet.ts; the browser's list in src/ui/browser-effects.ts, the cards in src/ui/editor-tabs.ts, the rows in src/ui/inspector-pane.ts, the agent's tool in src/ui/agent-pane.ts; the chain wrapping in src/styles/canvas.css). v2.13.1: the Clip tab's Separate row names speech, music and effects and says which method split them (src/ui/clip-tab.ts), the agent's separate_clip reports its method (src/ui/agent-pane.ts), Sounds > Models installs any model on this machine (src/ui/models-pane.ts). v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
+Last updated: 2026-10-08 · v2.14.4: editing depth (src/engine/grid.ts; clip mute, locks, names, a fade-out's own shape, memory location fields and the track commands in src/engine/document.ts and describe.ts; the builders in src/engine/editing.ts; the Track and Clip menus, nudge, Create fades and memory locations in src/ui/editing.ts and src/ui/shell.ts; the lanes' drawing, range copy and paste and the picked track in src/ui/lanes.ts; src/ui/labels-pane.ts; Snap's dialog in src/ui/musical.ts; src/ui/grid.ts; the Clip tab's new fields; the fade code in src/audio/player.ts; the ruler's colours; the mixer's hidden strips). v2.14.3: the editing commands (src/engine/editing.ts; insert-time, clear-range and clear-ranges with follow in src/engine/document.ts; src/ui/editing.ts and src/ui/big-counter.ts; the Zoom tool in src/ui/toolbar.ts; Identify Beat in src/ui/musical.ts; Fit to selection in src/ui/inspector-pane.ts) and AU-13's page turn (src/ui/lanes.ts, src/ui/ruler.ts, src/ui/transport.ts, src/ui/meter.ts). v2.14.2: the Export dialog's range, twelve formats, dither switch and peak normalisation, and the true peak in its notice (src/ui/export.ts, src/io/render-client.ts, src/styles/workspace.css). v2.14.1: the mixer basics (src/ui/mixer.ts: solo safe and solo alone, Clear solos and mutes, trim, polarity, Off, bypass by kind, the pan law, the peak hold and the clip light; the commands in src/engine/document.ts and describe.ts; every kind but the filters on a track's bus with its filter automation, and gain reduction by insert, in src/audio/player.ts and player-worklet.ts; a dynamics card's reduction in src/ui/editor-tabs.ts; src/styles/canvas.css). v2.14.0: the studio processors, formwav's own library (src/engine/processors.ts; the processor entry in src/engine/document.ts; src/audio/player.ts and player-worklet.ts; the browser's list in src/ui/browser-effects.ts, the cards in src/ui/editor-tabs.ts, the rows in src/ui/inspector-pane.ts, the agent's tool in src/ui/agent-pane.ts; the chain wrapping in src/styles/canvas.css). v2.13.1: the Clip tab's Separate row names speech, music and effects and says which method split them (src/ui/clip-tab.ts), the agent's separate_clip reports its method (src/ui/agent-pane.ts), Sounds > Models installs any model on this machine (src/ui/models-pane.ts). v2.13.0: the interface rebuilt on the agreed canvas (src/styles/canvas.css and the shell's modules), real Synth controls, the agent column's History tab (src/engine/describe.ts), and what the last Firefox check found (the Clip tab's rows, the Inspector's columns, Route, the head's context, the search); 160 older entries still sit under the v0.38.0 heading
 
 ---
 
@@ -24,7 +24,8 @@ frontend/
     ├── engine/
     │   ├── index.ts             headless state with granular events; dispatch, undo, redo, setSelection, the History tab's entries
     │   ├── document.ts          session model and the pure command reducer
-    │   ├── editing.ts           the editing commands (Duplicate to Strip silence) as pure functions of the session
+    │   ├── editing.ts           the editing commands (Duplicate to Strip silence, fades from a range to memory locations) as pure functions of the session
+    │   ├── grid.ts              grid and nudge values: notes, dotted and triplet, seconds, frames, samples; steps, lines, snapping
     │   ├── describe.ts          each command in a few plain words for the History tab
     │   └── history.ts           snapshot undo and redo, 200 steps
     ├── extensions/
@@ -42,7 +43,7 @@ frontend/
     │   ├── browser.ts           the browser column: one search, the click hint, effect groups, Sounds sections that fold, media rows
     │   ├── browser-effects.ts   the browser's Effects tab: the realtime effects in four groups (FX_GROUPS)
     │   ├── toolbar.ts           the arrangement's toolbar: Add a track, Select, Split, Fade, Draw, Zoom, zoom, Fit, Follow; the hidden store
-    │   ├── editing.ts           the Edit menu's editing commands, their keys and dialog, Tab, zoom presets, Zoom to selection
+    │   ├── editing.ts           the Edit, Track and Clip menus' commands, their keys and dialog, Tab, zoom presets, nudge, memory locations
     │   ├── big-counter.ts       the Big Counter, a floating panel with the clock in large figures
     │   ├── musical.ts           the footer's Tempo, Meter and Snap with their popovers
     │   ├── dock.ts              the bottom editor: tabs, More, what the open tab works on, Ask the agent, floating panels
@@ -94,6 +95,13 @@ frontend/
 
 ## Table of contents
 
+- [src/engine/grid.ts · grid and nudge values (PLAN_v13 S5)](#src-engine-grid-s5)
+- [src/engine/document.ts · editing depth in the session (PLAN_v13 S5)](#src-engine-document-s5)
+- [src/engine/editing.ts · editing depth's commands (PLAN_v13 S5)](#src-engine-editing-s5)
+- [src/ui/editing.ts · the Track and Clip menus, nudge and memory locations (PLAN_v13 S5)](#src-ui-editing-s5)
+- [src/ui/lanes.ts · what the lanes draw and range copy and paste (PLAN_v13 S5)](#src-ui-lanes-s5)
+- [src/ui/labels-pane.ts · memory locations (PLAN_v13 S5)](#src-ui-labels-pane-s5)
+- [src/ui/musical.ts and src/ui/clip-tab.ts · Snap's dialog and the Clip tab (PLAN_v13 S5)](#src-ui-musical-s5)
 - [src/engine/editing.ts · editing commands (PLAN_v13 S4)](#src-engine-editing-s4)
 - [src/engine/document.ts · time that carries automation and marks (PLAN_v13 S4)](#src-engine-document-s4)
 - [src/ui/editing.ts · the editing commands in the interface (PLAN_v13 S4)](#src-ui-editing-s4)
@@ -164,6 +172,69 @@ frontend/
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
+
+## src/engine/grid.ts · grid and nudge values (PLAN_v13 S5) {#src-engine-grid-s5}
+
+### Grid values for one tempo and meter
+- refers-to: src/engine/grid.ts (GridValue, GRID_CHOICES, NUDGE_DEFAULT, gridShort, parseGrid, gridStepOf, lineAtOrBefore, nextLine, snapToGrid, gridLines); src/ui/grid.ts (gridDoc, frameRate, fixedGrid, gridCuts, snapSamples)
+- kind: rationale
+- logged: v2.14.4 · 2026-10-08
+
+For formwav's single tempo and n/4 meter a note value is quarters at the session's tempo and a bar is beatsPerBar quarters; dotted multiplies by 3/2, triplet by 2/3. A note value's lines are counted from the bar line before them, so a value that does not divide the bar starts again on each downbeat (a dotted quarter in 4/4 lies at 0, 1.5 and 3 beats and then at the next bar's start), which keeps a dotted or triplet grid anchored to the music rather than drifting across bars; seconds, frames and samples count from the session start. Positions stay fractional until snapped (a frame at 29.97 is 1601.6 samples) and a small epsilon keeps a position exactly on a line from flooring below it. Ids are strings (1/16, 1/8t, 1/4., bar, 0.5s, 1f, 100smp) kept in the session's snap settings, so they save with it and an undo reaches them; absent, the grid follows the zoom as before and the nudge is 0.1 s, as Pro Tools ships. A frame counts at the clock's timecode rate, 30 while it shows time: the session has no frame rate of its own until S6. The Grid button and G still turn snapping on and off; choosing a value turns it on.
+
+## src/engine/document.ts · editing depth in the session (PLAN_v13 S5) {#src-engine-document-s5}
+
+### Clip mute, the locks, names, a fade-out's own shape, memory locations and the track commands
+- refers-to: src/engine/document.ts (FADE_SHAPES logarithmic, fadeCurve, fadeCode, Clip.fadeOutShape, name, mute, lock; Track.hidden, height, comments; Marker and Region number, comment, color; snap value and nudge; pasteLane, memoryNumbers, nextMemoryNumber, memoryFields, refusedByLock; a batch's whole; set-clip-fades outShape, set-clips-mute, set-clips-lock, rename-clip, duplicate-track, move-track, set-tracks-hidden, set-track-height, set-track-comments, crossfade's edges); src/engine/describe.ts
+- kind: rationale
+- logged: v2.14.4 · 2026-10-08
+
+A fade-out's own shape is a field beside the one shape a clip had, so every older session plays as it did; set-clip-fades' shape stays the fade-in's (and the fade-out's while it has none), outShape sets the fade-out's own and null makes it follow again, so the callers that passed the clip's shape back to keep it keep both. The core takes both shapes in its one code (fadeCode, render.rs fade_shapes): below 16 a single shape, as every code was. crossfade now shapes only the edges that meet, each clip's other edge keeping its shape. The locks are one field (time, or edit, which includes time) checked by refusedByLock before any command runs, so every path is held, the agent's and a batch's parts included: either lock refuses a move, a trim that slides the audio against the timeline (a time-locked clip can still be trimmed in place) and time opened or closed ahead of the clip on its track; an edit lock also refuses a split, a removal, fades and any change of the clip's audio, but not its gain, name, colour or mute. A batch whose parts depend on each other carries whole and is refused whole when a lock refuses any part as it comes to it, the session returned as it was: refused part by part it would leave half an edit (a paste on top of a locked clip whose clearing was refused, half a crossfade, copies over audio that did not move aside, a stretched file in a clip that did not move). A plain batch still applies part by part, so an edit made clip by clip skips the locked clips. Memory location numbers are their own field so they stay put; markers made before numbers take the free numbers in time order (memoryNumbers), and a new one takes the lowest free number. duplicate-track copies the track whole below it with new clip ids, out of any group (a group is a selection on one track's clips) and not a stem of anything; set-track-height stores small, large or jumbo and drops medium.
+
+## src/engine/editing.ts · editing depth's commands (PLAN_v13 S5) {#src-engine-editing-s5}
+
+### Fades from a range, range copy and paste, nudge, Space clips, snapping and memory locations
+- refers-to: src/engine/editing.ts (nudgeClips, createFades, deleteFades, fadeToPlayhead, RangeClip, copyRange, pasteRange, muteClips, lockClips, spaceClips, snapClips, MemoryLocation, memoryLocations, findMemory, nextMemory; separateOnGrid takes a value's lines)
+- kind: rationale
+- logged: v2.14.4 · 2026-10-08
+
+createFades works as Pro Tools' Create Fades on a selection: at a butt splice inside the range each clip reaches into the other's side as far as the range and its file allow (the left clip's audio after its end, the right clip's before its start, counted in session samples so a file at another rate reaches as far), each fading over the whole overlap, so a linear crossfade of a split adds to one and plays as the unsplit clip; outside crossfades a range from at or before a clip's start into it fades it in, one from inside it past its end fades it out. pasteRange clears what lies there (or, with Shuffle, opens time) and pastes the copied pieces, then writes each lane the source track had through pasteLane: inside the paste the source's values, outside the destination's, a lane made from the destination's fader or pan where it had none; a source without a lane leaves the destination's as it was, so pasting audio from a plain track never rewrites another's automation. A lane keeps 0.01 dB (set-automation), so the pasted second matches its source within that. Space clips lays a track's selected clips out from the first one's start, a gap apart end to start or start to start; snapping moves each selected clip up against its nearest unselected neighbour; both use formwav's layering moves (move-clip), and a locked clip is left out of both. Nudge is Shift's arithmetic by the nudge value, locked clips left out. Create fades, pasteRange, and S4's repeatSpan and fitToRange return whole batches (batch's third argument), their parts depending on each other.
+
+## src/ui/editing.ts · the Track and Clip menus, nudge and memory locations (PLAN_v13 S5) {#src-ui-editing-s5}
+
+### Which track a Track command acts on, the keys, and the dialog's text and choice fields
+- refers-to: src/ui/editing.ts (current, latest, trackNow, onTrack, the Track and Clip menus, rename, space, nudge, makeFades, recall, addMemory, the keypad sequence, fw-recall-memory); src/ui/shell.ts (the Track and Clip menus); src/ui/dock.ts (a clip's own name in the head)
+- kind: rationale
+- logged: v2.14.4 · 2026-10-08
+
+formwav has no track selection of its own, so a Track command acts on the track picked last: a click on its head or an empty stretch of its lane (the lanes' fw-track event), a clip on it, or a range on it. The keys: Alt Shift D duplicates a track (Pro Tools' key); the comma and the full stop nudge, and the keypad's minus and plus too (the main row's minus and plus keep zooming, so the lanes now ignore the keypad's); Cmd or Ctrl F creates fades only with a range drawn, so the browser's find still works otherwise; Enter adds a memory location only with nothing focused but the page or the lanes, so a focused button still takes its own Enter; the keypad's point, digits and point (or Enter) recall a number within three seconds, which a laptop without a keypad does from the list or previous and next instead (Alt and a number switches tabs in some browsers). The small dialog gained text and choice fields: a text field shows the current value rather than the last one typed, and Enter in a choice confirms as in a number. Muting and locking toggle the selection as one: mute all when any is unmuted, unlock when every one has that lock, so a mixed selection always ends in one state. run() says when a command changed nothing while a clip is locked, so a whole batch refused by a lock (Duplicate, Repeat, Create fades) does not report itself done; Fit to selection in the Inspector says the same.
+
+## src/ui/lanes.ts · what the lanes draw and range copy and paste (PLAN_v13 S5) {#src-ui-lanes-s5}
+
+### Mute, locks, names, each fade's curve, heights, hidden tracks, the picked track, a range on the clipboard
+- refers-to: src/ui/lanes.ts (clipNode's lock badge, updateClip's name, data-mute and lock, paint's curve per edge, updateLane's height and comments, hideLane, the fade handle's click, the drag refused on a locked clip, the fw-track listener, rangeClip, the keydown's range copy, cut and paste, the zoom keys and the keypad); src/ui/mixer.ts (hidden strips); src/ui/ruler.ts (a memory location's colour); src/styles/canvas.css
+- kind: rationale
+- logged: v2.14.4 · 2026-10-08
+
+Every new state is an attribute or a field on nodes the lanes already keep (data-mute, the lock badge's hidden flag, data-height, data-current), so nothing is rebuilt; a height change paints the lane's waves again a frame later at the new size. A click on a fade changes that fade's curve alone, the other edge's shape passed back unchanged. A drag that a lock refuses does not start, and the notice says which lock and where it is undone. The clipboard holds whole clips or a range, the last copy winning: with a range drawn, Cmd or Ctrl C and X take the range (X clears it as Delete does, Shuffle closing it); Cmd or Ctrl V pastes a range at the range's start, or at the playhead, on the range's track, else the track picked last (pickedTrack: a click on its head or an empty stretch of it, or a press on one of its clips, whichever came last), else the track it came from, and the range moves onto what was pasted. A paste or cut a lock refuses changes nothing and says so (a cut still copies). A pasted clip keeps its fade-out shape, name and mute. Hidden tracks leave the mixer as well as the lanes.
+
+## src/ui/labels-pane.ts · memory locations (PLAN_v13 S5) {#src-ui-labels-pane-s5}
+
+### Rows patched by id, with number, colour and comment
+- refers-to: src/ui/labels-pane.ts (Label number, comment, color; labelRow, updateLabelRow, render with patchList; Previous and Next; fw-recall-memory); src/styles/workspace.css (.fw-label-row's two rows, .fw-label-num)
+- kind: rationale
+- logged: v2.14.4 · 2026-10-08
+
+The list was rebuilt (replaceChildren) whenever a label came, went or moved, which lost a name being typed in another row; it is now patched by each label's id, rows created once and updated in place, a field being typed in never overwritten. The number recalls its memory location through the editing module (fw-recall-memory), which seeks and, for a region, sets the range again on the picked track. New markers and regions are named after the number they will take.
+
+## src/ui/musical.ts and src/ui/clip-tab.ts · Snap's dialog and the Clip tab (PLAN_v13 S5) {#src-ui-musical-s5}
+
+### Snap opens a dialog; the Clip tab's new fields go under its actions
+- refers-to: src/ui/musical.ts (choices, setSnap, the snap, grid and nudge selects; the readout); src/ui/clip-tab.ts (Clip name, Fade-out shape, Mute, Lock under the actions; Fade shape sets both fades); src/ui/inspector-pane.ts (Fade curve sets both, logarithmic listed); src/styles/canvas.css (the selects' width, the readout's reserved width)
+- kind: rationale
+- logged: v2.14.4 · 2026-10-08
+
+Snap stepped Off, Grid, Beats on each click; it now opens the footer's small dialog with Snap, Grid and Nudge (the G key still toggles), and its readout shows a chosen grid value (1/16, 1/8T, 0.1 s) in a width reserved for it. The Clip tab's four new fields sit under the actions with its source and colour, since the canvas keeps the actions in view at all three sizes (a third row of fields pushed them out, which the fit test caught); its Fade shape sets both fades, as the Inspector's Fade curve does, and Fade-out shape the fade-out's own.
 
 ## src/engine/editing.ts · editing commands (PLAN_v13 S4) {#src-engine-editing-s4}
 
