@@ -17,6 +17,7 @@ CHECKS = [
     "formwav_debleed", "formwav_debleed refuses the recording as its own reference", "formwav_export_media", "formwav_list_inputs", "formwav_record", "formwav_cloud_status",
     "formwav_cloud_list_files not connected", "formwav_cloud_import not connected", "formwav_cloud_save not connected",
     "formwav_list_sessions", "formwav_get_session", "formwav_render_session mix", "formwav_render_session surround51", "formwav_render_session adm",
+    "formwav_render_session a range as AIFF, normalized", "formwav_render_session refuses a range for ADM",
 ]
 
 

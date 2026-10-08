@@ -124,6 +124,11 @@ async def main():
             path = OUT / f"render_{what}.wav"
             err, out, text = await call("formwav_render_session", {"name": "MCP check", "path": str(path), "what": what})
             record(f"formwav_render_session {what}", not err and out.get("what") == what and path.stat().st_size > 1000, text[:120])
+        path = OUT / "render_range.aiff"
+        err, out, text = await call("formwav_render_session", {"name": "MCP check", "path": str(path), "format": "aiff", "start": 0.5, "end": 2.5, "normalize": -1.0})
+        record("formwav_render_session a range as AIFF, normalized", not err and out.get("seconds") == 2.0 and path.read_bytes()[8:12] == b"AIFF" and abs(float(out.get("peak_dbfs") or "nan") + 1.0) < 0.01, text[:160])
+        err, out, text = await call("formwav_render_session", {"name": "MCP check", "path": str(OUT / "range.wav"), "what": "adm", "start": 1.0})
+        record("formwav_render_session refuses a range for ADM", says(err, text, "whole session"), text[:140])
 
 
 asyncio.run(main())

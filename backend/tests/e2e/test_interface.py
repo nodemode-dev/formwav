@@ -1,5 +1,6 @@
 import os
 import socket
+import struct
 import subprocess
 import sys
 import time
@@ -242,6 +243,31 @@ def test_while_it_plays_a_strip_holds_its_peak_and_latches_a_clip_and_a_dynamics
     page.wait_for_function(f"[...document.querySelectorAll('{strip} .fw-out-hold')].every((h) => h.dataset.on === 'false')")
     page.click(f"{strip} .fw-strip-clip")
     assert page.get_attribute(f"{strip} .fw-strip-clip", "data-clip") == "false"
+    assert _clean(page)["errors"] == []
+
+
+def test_the_export_dialog_writes_a_range_as_24_bit_aiff_normalised_and_reports_its_true_peak(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    page.click('[data-action="export"]')
+    dialog = "dialog.fw-export-dialog[open]"
+    page.select_option(f'{dialog} [data-x="format"]', "aiff")
+    assert page.locator(f'{dialog} [data-x="dither"]').is_enabled() and page.locator(f'{dialog} [data-x="from"]').is_disabled()
+    page.select_option(f'{dialog} [data-x="range"]', "span")
+    page.fill(f'{dialog} [data-x="from"]', "1")
+    page.fill(f'{dialog} [data-x="to"]', "3")
+    page.check(f'{dialog} [data-x="normalize"]')
+    page.fill(f'{dialog} [data-x="normalize-db"]', "-1")
+    with page.expect_download() as info:
+        page.click(f'{dialog} button[value="export"]')
+    data = open(info.value.path(), "rb").read()
+    assert info.value.suggested_filename == "Untitled session.aiff" and data[8:12] == b"AIFF"
+    i = data.index(b"COMM")
+    channels, frames, bits = struct.unpack(">hIh", data[i + 8 : i + 16])
+    assert (channels, frames, bits) == (2, 96000, 24)
+    page.wait_for_function("document.querySelector('.fw-notice').textContent.startsWith('Exported')")
+    notice = page.evaluate("document.querySelector('.fw-notice').textContent")
+    assert "peak -1.0 dBFS" in notice and "dBTP" in notice and "normalized +" in notice
     assert _clean(page)["errors"] == []
 
 
