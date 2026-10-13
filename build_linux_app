@@ -13,6 +13,7 @@ command -v python3 >/dev/null || { echo "python3 is required: sudo apt install p
 python3 -m venv --help >/dev/null 2>&1 || { echo "python3's venv is required: sudo apt install python3-venv"; exit 1; }
 command -v npm >/dev/null || { echo "npm is required (https://nodejs.org)"; exit 1; }
 command -v cargo >/dev/null || { echo "Rust is required: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"; exit 1; }
+rustup target list --installed 2>/dev/null | grep -qx wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown
 command -v pkg-config >/dev/null || { echo "pkg-config is required: sudo apt install pkg-config"; exit 1; }
 # the shell's WebView and the native helpers' libraries (Nyquist and Vamp: libsndfile, portaudio; LV2: lilv; MIDI: ALSA)
 for lib in webkit2gtk-4.1 gtk+-3.0 sndfile portaudio-2.0 lilv-0 alsa; do

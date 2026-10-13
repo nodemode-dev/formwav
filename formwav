@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -e
 cd "$(dirname "$0")"
+if [ "${1:-}" = desktop ] && [ "${2:-}" = build ]; then
+  [ "$(uname -s)" = Darwin ] && exec ./build_macos_app
+  exec ./build_linux_app
+fi
 trap 'trap - EXIT INT TERM; kill 0 2>/dev/null' EXIT INT TERM
 if [ -d backend ]; then
   ( cd backend && ./boot_backend ) &
