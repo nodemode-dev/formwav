@@ -57,6 +57,68 @@ def export_aaf(document: dict = Body(...)) -> Response:
     return Response(content=data, media_type="application/octet-stream", headers={"Content-Disposition": 'attachment; filename="formwav-session.aaf"'})
 
 
+@router.post("/projects/export-otio")
+def export_otio(document: dict = Body(...), name: str = "formwav session") -> Response:
+    """PLAN_v14 W4: the session's timeline as OpenTimelineIO, an .otioz bundle with the clips' audio (services/otio.py)."""
+    from ..services import otio
+
+    try:
+        data = otio.export_otioz(document, name)
+    except (media.MediaError, KeyError, ValueError) as err:
+        raise HTTPException(422, str(err)) from err
+    return Response(content=data, media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="formwav-session.otioz"'})
+
+
+def _autosave_file():
+    from ..core.paths import data_dir
+
+    folder = data_dir() / "autosave"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / "session.json"
+
+
+@router.put("/autosave")
+def put_autosave(body: dict = Body(...)) -> dict:
+    """PLAN_v14 W4: the open session's latest unsaved state, kept by the window every half minute while it has unsaved
+    changes, written whole to a temporary file and renamed so a crash mid-write leaves the last good copy."""
+    import json
+    import os
+    import time
+
+    doc = body.get("document")
+    if not isinstance(doc, dict) or not isinstance(doc.get("tracks"), list):
+        raise HTTPException(400, "document must be a session")
+    path = _autosave_file()
+    tmp = path.with_suffix(".tmp")
+    record = {"name": str(body.get("name") or "Untitled session")[:200], "savedAt": time.time(), "document": doc}
+    tmp.write_text(json.dumps(record))
+    os.replace(tmp, path)
+    return {"savedAt": record["savedAt"]}
+
+
+@router.get("/autosave")
+def get_autosave(full: bool = False) -> dict:
+    import json
+
+    path = _autosave_file()
+    try:
+        record = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {"exists": False}
+    doc = record.get("document") or {}
+    summary = {"exists": True, "name": record.get("name"), "savedAt": record.get("savedAt"), "tracks": len(doc.get("tracks") or []), "clips": sum(len(t.get("clips") or []) for t in doc.get("tracks") or [])}
+    return {**summary, "document": doc} if full else summary
+
+
+@router.delete("/autosave")
+def delete_autosave() -> dict:
+    try:
+        _autosave_file().unlink()
+    except FileNotFoundError:
+        pass
+    return {"ok": True}
+
+
 @router.get("/projects")
 def list_projects() -> list[dict]:
     return projects.list_projects()
