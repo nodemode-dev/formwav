@@ -5,3 +5,4 @@ maturin==1.15.0
 pyaaf2==1.7.1
 httpx==0.28.1
 onnxruntime==1.30.0
+pywinpty==3.0.5; sys_platform == "win32"

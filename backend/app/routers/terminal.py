@@ -7,7 +7,7 @@ and when the socket closes the shell is hung up.
 
 Browsers let any page open a WebSocket to 127.0.0.1, so the socket is only accepted from the app's own origins (the
 same list as CORS, FORMWAV_CORS_ORIGINS); a page from anywhere else is refused before a shell is started.
-FORMWAV_TERMINAL=0 turns the terminal off. POSIX only for now (macOS, Linux); Windows needs ConPTY, not built yet.
+FORMWAV_TERMINAL=0 turns the terminal off. On Windows the same protocol runs over ConPTY (services/winpty_relay.py).
 """
 
 from __future__ import annotations
@@ -33,8 +33,23 @@ def _allowed(origin: str | None, host: str | None) -> bool:
 
 @router.websocket("/terminal")
 async def terminal(ws: WebSocket) -> None:
-    if os.environ.get("FORMWAV_TERMINAL", "1") == "0" or os.name != "posix" or not _allowed(ws.headers.get("origin"), ws.headers.get("host")):
+    if os.environ.get("FORMWAV_TERMINAL", "1") == "0" or os.name not in ("posix", "nt") or not _allowed(ws.headers.get("origin"), ws.headers.get("host")):
         await ws.close(code=4403)  # before accept: the handshake is refused (HTTP 403)
+        return
+    if os.name == "nt":
+        from ..services import claude_code, winpty_relay
+
+        await ws.accept()
+        argv, cwd = winpty_relay.shell(), os.path.expanduser("~")
+        if ws.query_params.get("run") == "claude":
+            try:
+                argv = claude_code.argv(f"http://{ws.headers.get('host')}", resume=ws.query_params.get("resume") or None)
+                cwd = str(claude_code.workdir())
+            except FileNotFoundError as err:
+                await ws.send_bytes(f"\r\n{err}\r\n".encode())
+                await ws.close()
+                return
+        await winpty_relay.relay(ws, argv, cwd, claude_code.child_env())
         return
     import fcntl
     import pty

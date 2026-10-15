@@ -51,7 +51,7 @@ export function mountTerminal(host: HTMLElement): void {
     };
     ws.onmessage = (e) => term?.write(typeof e.data === "string" ? e.data : new Uint8Array(e.data as ArrayBuffer));
     ws.onclose = (e) => {
-      if (socket === ws) setText(state, e.code === 4403 && navigator.platform.startsWith("Win") ? "The terminal needs macOS or Linux for now" : e.code === 1006 || e.code === 4403 ? "The engine would not open a shell" : claude ? "Claude Code ended; Restart opens a shell, Claude Code a new session" : "The shell ended; Restart opens a new one");
+      if (socket === ws) setText(state, e.code === 1006 || e.code === 4403 ? "The engine would not open a shell" : claude ? "Claude Code ended; Restart opens a shell, Claude Code a new session" : "The shell ended; Restart opens a new one");
     };
   };
   const open = () => {
