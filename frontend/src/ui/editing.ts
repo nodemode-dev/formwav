@@ -481,6 +481,27 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       say(`Could not commit: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
+  const commitTracks = async () => {
+    const doc = engine.get("document");
+    const ids = target().clipIds;
+    let tracks = doc.tracks.filter((t) => !t.inactive && t.clips.some((c) => ids.includes(c.id)));
+    const busId = trackNow()?.busId;
+    if (tracks.length < 2 && busId) tracks = doc.tracks.filter((t) => !t.inactive && t.busId === busId);
+    tracks = tracks.filter((t) => !t.surround);
+    if (!tracks.length) return say("Select clips on the tracks to commit, or click a track in a folder to commit the folder");
+    const commands: { type: "commit-track"; trackId: string; media: MediaRef; length: number }[] = [];
+    try {
+      for (const [n, track] of tracks.entries()) {
+        say(`Committing ${track.name} (${n + 1} of ${tracks.length})...`);
+        const media = await bounceTrack({ trackId: track.id, mode: "track" });
+        commands.push({ type: "commit-track", trackId: track.id, media, length: media.frames });
+      }
+    } catch (err) {
+      return say(`Could not commit: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    engine.dispatch({ type: "batch", commands, label: `Committed ${commands.length} track${commands.length === 1 ? "" : "s"}` });
+    say(`Committed ${commands.length} track${commands.length === 1 ? "" : "s"}: one Undo takes them all back`);
+  };
   const trackPop = host.querySelector(".fw-track-pop");
   trackPop?.append(
     item("New track", "", "Add an empty stereo track at the bottom", () => engine.dispatch({ type: "add-track" })),
@@ -514,6 +535,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       (sync) => trackListeners.add(sync),
     ),
     item("Commit", "⌥⇧C", "Render the track through its fader and effects onto a new track below it, and make the original inactive and hidden", () => void commitTrack()),
+    item("Commit selected tracks", "", "Commit every track with a selected clip, or every track in the clicked track's folder, as one step", () => void commitTracks()),
     sep(),
     Object.assign(document.createElement("span"), { className: "fw-menu-label", textContent: "Height" }),
     ...heights.map((h) =>
