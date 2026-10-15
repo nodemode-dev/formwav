@@ -1,6 +1,7 @@
 node_modules/
 dist/
 build/
+build_app.log
 venv/
 .venv/
 __pycache__/

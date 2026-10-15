@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# formwav's one-shot desktop build: install what is missing, build the app for this computer, and with --open install
+# and launch it. Flags: --no-install, --open, --clean. Logs to build_app.log beside this script.
+set -euo pipefail
+cd "$(dirname "$0")"
+ROOT="$(pwd)"
+LOG="$ROOT/build_app.log"
+INSTALL=1 OPEN=0 CLEAN=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-install) INSTALL=0 ;;
+    --open) OPEN=1 ;;
+    --clean) CLEAN=1 ;;
+    -h|--help) sed -n '2,3p' "$0"; exit 0 ;;
+    *) echo "build_app: unknown option $arg" >&2; exit 2 ;;
+  esac
+done
+: > "$LOG"
+say() { printf '\n== %s\n' "$*" | tee -a "$LOG"; }
+need() { command -v "$1" >/dev/null 2>&1 || { echo "build_app: $1 is needed: $2" | tee -a "$LOG" >&2; exit 1; }; }
+
+say "Checking the tools"
+need python3 "install Python 3.12 or newer"
+need node "install Node 20.19 or newer"
+need npm "install Node 20.19 or newer"
+if ! command -v cargo >/dev/null 2>&1; then
+  [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
+fi
+need cargo "install Rust from https://rustup.rs"
+if command -v claude >/dev/null 2>&1; then echo "Claude Code: $(claude --version 2>/dev/null | head -1)" | tee -a "$LOG"; else echo "Claude Code not found: the Agent column's Claude Code needs it (https://claude.com/claude-code)" | tee -a "$LOG"; fi
+
+if [ "$CLEAN" = 1 ]; then
+  say "Cleaning earlier builds"
+  rm -rf frontend/dist src-tauri/target/release/bundle backend/build backend/dist
+fi
+
+if [ "$INSTALL" = 1 ]; then
+  say "Installing the engine and interface"
+  ./formwav_oc_install 2>&1 | tee -a "$LOG"
+fi
+
+say "Building the desktop app"
+case "$(uname -s)" in
+  Darwin) ./build_macos_app 2>&1 | tee -a "$LOG" ;;
+  Linux) ./build_linux_app 2>&1 | tee -a "$LOG" ;;
+  *) echo "On Windows run build_windows_app.ps1 in PowerShell" | tee -a "$LOG"; exit 1 ;;
+esac
+
+if [ "$OPEN" = 1 ]; then
+  say "Installing and opening formwav"
+  case "$(uname -s)" in
+    Darwin)
+      app=$(ls -d src-tauri/target/release/bundle/macos/*.app 2>/dev/null | head -1)
+      [ -n "$app" ] || { echo "no .app was built" >&2; exit 1; }
+      rm -rf "/Applications/$(basename "$app")" && cp -R "$app" /Applications/ && open "/Applications/$(basename "$app")" ;;
+    Linux)
+      deb=$(ls src-tauri/target/release/bundle/deb/*.deb 2>/dev/null | head -1)
+      [ -n "$deb" ] || { echo "no .deb was built" >&2; exit 1; }
+      sudo apt-get install -y "./$deb" && (formwav >/dev/null 2>&1 &) ;;
+  esac
+fi
+say "Done. The log is $LOG"

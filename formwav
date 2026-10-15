@@ -5,6 +5,31 @@ if [ "${1:-}" = desktop ] && [ "${2:-}" = build ]; then
   [ "$(uname -s)" = Darwin ] && exec ./build_macos_app
   exec ./build_linux_app
 fi
+case "${1:-}" in
+  app) shift; exec ./build_app "$@" ;;
+  install) shift; exec ./formwav_oc_install "$@" ;;
+  build) cd frontend && exec npm run build ;;
+  claude)
+    shift
+    port="${FORMWAV_PORT:-8060}"
+    exec claude --mcp-config "{\"mcpServers\":{\"formwav\":{\"type\":\"http\",\"url\":\"http://127.0.0.1:$port/mcp\"}}}" --allowedTools mcp__formwav "$@" ;;
+  doctor)
+    for tool in python3 node npm cargo ffmpeg claude; do
+      if command -v "$tool" >/dev/null 2>&1; then echo "$tool: $(command -v "$tool")"; else echo "$tool: missing"; fi
+    done
+    [ -d backend/venv ] && echo "engine: installed" || echo "engine: not installed (./formwav install)"
+    [ -d frontend/node_modules ] && echo "interface: installed" || echo "interface: not installed (./formwav install)"
+    exit 0 ;;
+  help|-h|--help)
+    echo "./formwav              the engine and interface for development (:8060, :3060)"
+    echo "./formwav install      install the engine and interface"
+    echo "./formwav build        build the interface"
+    echo "./formwav app [--open] install, build the desktop app, and with --open install and launch it"
+    echo "./formwav desktop build  build the desktop app only"
+    echo "./formwav claude       Claude Code with formwav's tools for the open session"
+    echo "./formwav doctor       what is installed"
+    exit 0 ;;
+esac
 trap 'trap - EXIT INT TERM; kill 0 2>/dev/null' EXIT INT TERM
 if [ -d backend ]; then
   ( cd backend && ./boot_backend ) &
