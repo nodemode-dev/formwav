@@ -1,4 +1,5 @@
 import { rangesOf, sessionWords, type MediaWord, type SessionWord } from "./transcript-pane";
+import { commands, type CommandParam } from "./commands";
 import type { Engine, HistoryEntry, MediaRef, Track } from "../engine";
 import type { TrackFx } from "../engine/document";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
@@ -506,6 +507,61 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
       },
     },
   ];
+  // PLAN_v14 W2: the session tools are commands too (group Session), and four tools reach every command
+  for (const t of tools) {
+    const props = (t.input_schema.properties ?? {}) as Record<string, Json>;
+    const required = new Set((t.input_schema.required ?? []) as string[]);
+    commands.add({
+      id: `session.${t.name.replace(/_/g, "-")}`,
+      label: t.name.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()),
+      group: "Session",
+      description: t.description,
+      params: Object.fromEntries(Object.entries(props).map(([k, p]) => [k, { type: (p.type as CommandParam["type"]) ?? "string", required: required.has(k), ...(p.description ? { description: String(p.description) } : {}), ...(Array.isArray(p.enum) ? { enum: p.enum as string[] } : {}) }])),
+      mutates: !/^(get|analyze|list|local)/.test(t.name),
+      run: (params) => t.run(params),
+    });
+  }
+  const commandId = { type: "string", description: "A command's id from list_commands, such as edit.duplicate or session.set-track-gain" };
+  tools.push(
+    {
+      name: "list_commands",
+      description: "Every command formwav has, by group (the menus' items and the session tools): id, label, group, keys, whether it changes the session and whether it is risky. Filter by group or by words.",
+      input_schema: obj({ group: { type: "string" }, text: { type: "string", description: "Words to look for in the label or description" } }),
+      run: (i) => {
+        const text = String(i.text ?? "").toLowerCase();
+        return commands
+          .all()
+          .filter((c) => (!i.group || c.group.toLowerCase() === String(i.group).toLowerCase()) && (!text || `${c.label} ${c.description ?? ""}`.toLowerCase().includes(text)))
+          .map((c) => ({ id: c.id, label: c.label, group: c.group, keys: c.keys, mutates: c.mutates ?? true, risky: c.risky ?? false }));
+      },
+    },
+    {
+      name: "describe_command",
+      description: "One command in full: its description, parameters with their types and ranges, and whether it is available now.",
+      input_schema: obj({ id: commandId }, ["id"]),
+      run: (i) => {
+        const c = commands.get(String(i.id));
+        if (!c) throw new Error(`There is no command ${String(i.id)}; call list_commands.`);
+        return commands.describe(c);
+      },
+    },
+    {
+      name: "run_command",
+      description: "Runs one command with its parameters, as one undoable step; answers with its result and the History step it made.",
+      input_schema: obj({ id: commandId, params: { type: "object", description: "The command's parameters by name" } }, ["id"]),
+      run: async (i) => {
+        const r = await commands.call(String(i.id), (i.params ?? {}) as Json);
+        if (!r.ok) throw new Error(r.error);
+        return r;
+      },
+    },
+    {
+      name: "run_commands",
+      description: "Runs several commands in order; stops at the first that fails and takes back what the batch did.",
+      input_schema: obj({ commands: { type: "array", description: "[{id, params}] in order" } }, ["commands"]),
+      run: async (i) => commands.batch((Array.isArray(i.commands) ? i.commands : []) as { id: string; params?: Json }[]),
+    },
+  );
   const byName = new Map(tools.map((t) => [t.name, t]));
   const definitions = tools.map(({ name, description, input_schema }) => ({ name, description, input_schema }));
 
@@ -611,7 +667,24 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
         const res = await fetch("/api/bridge/next");
         if (res.status === 204) continue;
         if (!res.ok) throw new Error(String(res.status));
-        const item = (await res.json()) as { id: string; name: string; arguments?: Json; who?: string };
+        const item = (await res.json()) as { id: string; name: string; arguments?: Json; who?: string; consent?: boolean; client?: string };
+        if (item.consent) {
+          if (dock.hidden) open();
+          const li = document.createElement("li");
+          li.className = "fw-agent-consent";
+          li.innerHTML = `<span></span><span class="fw-agent-consent-acts"><button type="button" class="fw-ibtn" data-choice="allow">Allow</button><button type="button" class="fw-ibtn" data-choice="always">Always allow</button><button type="button" class="fw-ibtn" data-choice="block">Block</button></span>`;
+          setText(li.firstElementChild, `${item.client || "An agent outside formwav"} asks to use formwav's tools on this session (first: ${item.name}).`);
+          log.append(li);
+          li.scrollIntoView({ block: "nearest" });
+          const choice = await new Promise<string>((done) => li.addEventListener("click", (e) => {
+            const pick = (e.target as HTMLElement).closest<HTMLElement>("[data-choice]")?.dataset.choice;
+            if (pick) done(pick);
+          }));
+          for (const b of li.querySelectorAll("button")) b.disabled = true;
+          setText(li.firstElementChild, `${item.client || "An outside agent"}: ${choice === "block" ? "blocked" : choice === "always" ? "always allowed" : "allowed until formwav closes"}`);
+          await postJson("/api/bridge/result", { id: item.id, ok: true, result: choice });
+          continue;
+        }
         const tool = byName.get(item.name);
         const was = running;
         engine.setAuthor("agent");
