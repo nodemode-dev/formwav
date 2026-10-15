@@ -19,6 +19,8 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
     `<output class="fw-strip-db"></output>` +
     `<input class="fw-strip-pan" type="range" min="-1" max="1" step="0.01" data-default="0" aria-label="Pan"${kind === "master" || kind === "vca" ? " hidden" : ""}>` +
     `<div class="fw-strip-buttons"${kind === "master" ? " hidden" : ""}><button type="button" class="fw-strip-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute">M</button><button type="button" class="fw-strip-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo (Alt-click solos it alone; Cmd or Ctrl-click makes it solo safe)"${kind !== "track" ? " hidden" : ""}>S</button></div>` +
+    `<button type="button" class="fw-strip-phase" aria-pressed="false" aria-label="Invert polarity" title="Invert the polarity, ahead of the inserts"${kind !== "track" ? " hidden" : ""}>&#216;</button>` +
+    `<output class="fw-strip-lufs" title="Integrated loudness of what plays, LUFS"${kind !== "master" ? " hidden" : ""}>-- LUFS I</output>` +
     `<details class="fw-strip-route"${kind === "master" ? " hidden" : ""}><summary>${kind === "track" ? "Route" : "More"}</summary><div class="fw-route-box">` +
     `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>` +
     `<select class="fw-strip-vca" aria-label="VCA"${kind !== "track" ? " hidden" : ""}></select>` +
@@ -91,6 +93,7 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
     if (solo && (solo.dataset.safe === "true") !== !!strip.item.soloSafe) solo.dataset.safe = String(!!strip.item.soloSafe);
     setAttr(solo, "title", strip.item.soloSafe ? "Solo safe: plays through other tracks' solos (Cmd or Ctrl-click to clear)" : "Solo (Alt-click solos it alone; Cmd or Ctrl-click makes it solo safe)");
     setAttr(node.querySelector(".fw-strip-invert"), "aria-pressed", String(!!strip.item.invert));
+    setAttr(node.querySelector(".fw-strip-phase"), "aria-pressed", String(!!strip.item.invert));
     const trim = node.querySelector<HTMLInputElement>(".fw-strip-trim");
     if (trim && node.dataset.dragging !== "trim") {
       const value = String(strip.item.trimDb ?? 0);
@@ -191,6 +194,17 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     }
   });
   panel.append(bar, strips);
+  const linked = new Set<string>();
+  const markLinked = () => {
+    for (const node of strips.querySelectorAll<HTMLElement>(".fw-strip[data-kind=\"track\"]")) {
+      const on = linked.has(node.dataset.key ?? "");
+      if ((node.dataset.linked !== undefined) !== on) {
+        if (on) node.dataset.linked = "";
+        else delete node.dataset.linked;
+      }
+      setAttr(node.querySelector(".fw-strip-name"), "title", on ? "Linked: its fader moves with the other linked faders (Cmd or Ctrl-click to unlink)" : "Cmd or Ctrl-click to link this fader with others");
+    }
+  };
   if (transport) transport.before(panel);
   else host.append(panel);
 
@@ -213,6 +227,8 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
       },
       update: (node, s) => updateStrip(node, s, doc),
     });
+    for (const id of linked) if (!doc.tracks.some((t) => t.id === id && !t.hidden)) linked.delete(id);
+    markLinked();
   };
   engine.subscribe("document", render);
 
@@ -276,6 +292,20 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     const before = lastFader.get(s.id);
     lastFader.set(s.id, now);
     setText(s.node.querySelector(".fw-strip-db"), dbText(now));
+    if (linked.has(s.id) && linked.size > 1 && !engine.get("transport").playing) {
+      const doc = engine.get("document");
+      const delta = now - (doc.tracks.find((t) => t.id === s.id)?.gainDb ?? 0);
+      for (const id of linked) {
+        if (id === s.id) continue;
+        const node = strips.querySelector<HTMLElement>(`.fw-strip[data-key="${id}"]`);
+        const other = node?.querySelector<HTMLInputElement>(".fw-strip-fader");
+        if (!node || !other || other.disabled) continue;
+        const db = Math.max(-60, Math.min(12, (doc.tracks.find((t) => t.id === id)?.gainDb ?? 0) + delta));
+        node.dataset.dragging = "fader";
+        other.value = String(db);
+        setText(node.querySelector(".fw-strip-db"), dbText(db));
+      }
+    }
     const mode = s.node.dataset.kind === "track" ? modeOf(s.id) : "read";
     const transport = engine.get("transport");
     if (mode === "read" || !transport.playing) return;
@@ -324,6 +354,16 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
         return;
       }
       const gainDb = Number(el.value);
+      if (linked.has(s.id) && linked.size > 1) {
+        const doc = engine.get("document");
+        const delta = gainDb - (doc.tracks.find((t) => t.id === s.id)?.gainDb ?? 0);
+        const commands = doc.tracks
+          .filter((t) => linked.has(t.id) && (t.id === s.id || !(t.automation?.volume?.length && t.autoOff !== true)))
+          .map((t) => ({ type: "set-track-gain" as const, trackId: t.id, gainDb: t.id === s.id ? gainDb : Math.round(Math.max(-60, Math.min(12, t.gainDb + delta)) * 10) / 10 }));
+        for (const id of linked) if (id !== s.id) delete strips.querySelector<HTMLElement>(`.fw-strip[data-key="${id}"]`)?.dataset.dragging;
+        engine.dispatch({ type: "batch", commands, label: `Moved ${commands.length} faders together` });
+        return;
+      }
       if (s.node.dataset.kind === "master") engine.dispatch({ type: "set-master-gain", gainDb });
       else if (s.node.dataset.kind === "vca") engine.dispatch({ type: "set-vca-gain", vcaId: s.id, gainDb });
       else engine.dispatch(s.bus ? { type: "set-bus-gain", busId: s.id, gainDb } : { type: "set-track-gain", trackId: s.id, gainDb });
@@ -378,7 +418,15 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
       if (e.metaKey || e.ctrlKey) engine.dispatch({ type: "set-track-solo-safe", trackId: s.id, soloSafe: button.dataset.safe !== "true" });
       else if (e.altKey) engine.dispatch({ type: "set-track-solo", trackId: s.id, solo: true, exclusive: true });
       else engine.dispatch({ type: "set-track-solo", trackId: s.id, solo: on });
-    } else if (button.classList.contains("fw-strip-invert") && !s.bus && !vca) engine.dispatch({ type: "set-track-invert", trackId: s.id, invert: on });
+    } else if ((button.classList.contains("fw-strip-invert") || button.classList.contains("fw-strip-phase")) && !s.bus && !vca) engine.dispatch({ type: "set-track-invert", trackId: s.id, invert: on });
+  });
+  panel.addEventListener("click", (e) => {
+    const name = (e.target as HTMLElement).closest(".fw-strip-name");
+    const s = stripOf(e.target);
+    if (!name || !s || s.node.dataset.kind !== "track" || !(e.metaKey || e.ctrlKey)) return;
+    if (linked.has(s.id)) linked.delete(s.id);
+    else linked.add(s.id);
+    markLinked();
   });
 
   const shown = new Map<string, number[]>();

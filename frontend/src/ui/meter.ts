@@ -78,6 +78,10 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
     if (lufs.textContent !== text) lufs.textContent = text;
     const title = `Output loudness (BS.1770): momentary ${show(m).trim()}, short-term ${show(s).trim()}, integrated ${show(integrated).trim()} LUFS`;
     if (lufs.title !== title) lufs.title = title;
+    const strip = document.querySelector<HTMLOutputElement>(".fw-strip[data-kind=\"master\"] .fw-strip-lufs");
+    const whole = `${show(integrated).trim()} LUFS I`;
+    if (strip && strip.textContent !== whole) strip.textContent = whole;
+    if (strip && strip.title !== title) strip.title = title;
   };
   writeLufs();
   player.onOutputLevel((_left, _right, _tracks, loudness) => {

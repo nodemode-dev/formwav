@@ -510,6 +510,13 @@
 .fw-dock .fw-strip-db { grid-area: db; text-align: center; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-primary); }
 .fw-dock .fw-strip-buttons { grid-area: buttons; display: flex; gap: 4px; }
 .fw-dock .fw-strip-buttons button { inline-size: 26px; block-size: 22px; font-size: var(--fs-11); font-weight: 700; }
+.fw-dock .fw-strip-phase { grid-area: kind; justify-self: end; inline-size: 20px; block-size: 18px; padding: 0; border: 1px solid var(--border-light); border-radius: 5px; background: var(--bg-tertiary); color: var(--text-secondary); font-size: var(--fs-11); font-weight: 700; line-height: 1; }
+.fw-dock .fw-strip-phase[hidden] { display: none; }
+.fw-dock .fw-strip-phase[aria-pressed="true"] { border-color: var(--accent-color); background: var(--accent-color); color: var(--bg-primary); }
+.fw-dock .fw-strip-lufs { grid-row: 5; grid-column: 1 / -1; block-size: 22px; line-height: 22px; text-align: center; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-secondary); white-space: nowrap; }
+.fw-dock .fw-strip-lufs[hidden] { display: none; }
+.fw-dock .fw-strip[data-linked] { outline: 1px solid var(--accent-color); outline-offset: -1px; }
+.fw-dock .fw-strip[data-linked] .fw-strip-name { color: var(--accent-color); }
 .fw-dock .fw-strip-route { grid-area: route; min-inline-size: 0; font-size: var(--fs-11); color: var(--text-secondary); }
 .fw-dock .fw-strip-route[hidden] { display: none; }
 .fw-dock .fw-strip-route > summary { cursor: pointer; list-style: none; padding: 2px 4px; border-radius: 5px; }
