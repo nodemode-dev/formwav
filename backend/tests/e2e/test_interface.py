@@ -549,6 +549,7 @@ def test_the_in_app_agent_carries_out_a_chain_of_tools(page, app_url):
     anthropic.REQUESTS.clear()
     _open(page, app_url)
     _import_speech(page)
+    page.select_option(".fw-agent-via", "api")
     page.fill(".fw-agent-ask textarea", "Lower the track by 6 dB, fade its clip in and out, and mark one second")
     page.click('[data-agent="run"]')
     page.wait_for_function("document.querySelector('.fw-agent-log').textContent.includes('Done:')", timeout=60000)
