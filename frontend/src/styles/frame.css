@@ -510,7 +510,7 @@
 .fw-dock .fw-strip-db { grid-area: db; text-align: center; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-primary); }
 .fw-dock .fw-strip-buttons { grid-area: buttons; display: flex; gap: 4px; }
 .fw-dock .fw-strip-buttons button { inline-size: 26px; block-size: 22px; font-size: var(--fs-11); font-weight: 700; }
-.fw-dock .fw-strip-phase { grid-area: kind; justify-self: end; inline-size: 20px; block-size: 18px; padding: 0; border: 1px solid var(--border-light); border-radius: 5px; background: var(--bg-tertiary); color: var(--text-secondary); font-size: var(--fs-11); font-weight: 700; line-height: 1; }
+.fw-dock .fw-strip-phase { grid-area: kind; justify-self: end; margin-inline-end: 14px; inline-size: 20px; block-size: 18px; padding: 0; border: 1px solid var(--border-light); border-radius: 5px; background: var(--bg-tertiary); color: var(--text-secondary); font-size: var(--fs-11); font-weight: 700; line-height: 1; }
 .fw-dock .fw-strip-phase[hidden] { display: none; }
 .fw-dock .fw-strip-phase[aria-pressed="true"] { border-color: var(--accent-color); background: var(--accent-color); color: var(--bg-primary); }
 .fw-dock .fw-strip-lufs { grid-row: 5; grid-column: 1 / -1; block-size: 22px; line-height: 22px; text-align: center; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-secondary); white-space: nowrap; }
