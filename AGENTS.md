@@ -34,9 +34,11 @@ Claude Code runs inside formwav (PLAN_v14 W1): `backend/app/services/claude_code
 environment, `backend/app/routers/claude.py` streams the Agent column's chat and serves `POST /mcp` on the engine, whose
 tools are the open window's (the in-app agent's tools, relayed through `/api/bridge/*`), so every agent edits the open
 session as undoable steps. A new session tool is added once, in `frontend/src/ui/agent-pane.ts`, and reaches both.
+Every menu bar item and session tool is a command in `frontend/src/ui/commands.ts` (W2): a new menu item becomes a
+command by itself (menu.words), so give it clear words and a title; agents reach commands through `run_command`.
 
 Agents drive formwav through two surfaces; extend them rather than adding a third. The MCP server in
 `backend/formwav_mcp` (started by `backend/formwav_mcp/serve`, or from a checkout by `mcp/formwav_mcp.py`) gives 28 tools over the engine's HTTP API; the in-app
-agent (`frontend/src/ui/agent-pane.ts`) gives 30 tools over the session's commands, placing what it makes on tracks. The playbook in
+agent (`frontend/src/ui/agent-pane.ts`) gives 34 tools over the session's commands (30 tools and the 4 command tools), placing what it makes on tracks. The playbook in
 `.claude/skills/formwav-harness/SKILL.md` (plain Markdown, with sub-skills under it) teaches an agent to use the MCP tools well: what to check first, which tool fits, the
 order of steps and how to recover; read it before driving formwav, and update its tools reference whenever a tool changes.
