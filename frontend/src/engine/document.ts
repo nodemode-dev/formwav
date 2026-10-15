@@ -595,6 +595,8 @@ export interface SessionDoc {
   masterGainDb?: number;
   /** The pan law for a mono source: -3, -4.5 or -6 dB at the centre; absent is the balance every session had (0 dB). */
   panLaw?: "-3" | "-4.5" | "-6";
+  /** Media folders in the media pane: a media id to its folder's name; media absent here is in no folder. */
+  mediaFolders?: Record<string, string>;
   /** Realtime effects on the summed mix, before the master fader (Audacity's master stack). */
   masterFx?: TrackFx[];
   /** The session tempo, for the bars ruler, beat snapping and Quantize (set by hand or detected). */
@@ -727,6 +729,7 @@ export type Command =
   | { type: "clear-solos" }
   | { type: "clear-mutes" }
   | { type: "set-pan-law"; law: "0" | "-3" | "-4.5" | "-6" }
+  | { type: "set-media-folder"; mediaIds: string[]; folder: string | null }
   | { type: "bypass-fx-category"; trackIds: string[]; category: FxCategory; bypass: boolean }
   | { type: "set-bus-mute"; busId: string; mute: boolean }
   | { type: "set-master-gain"; gainDb: number }
@@ -2031,6 +2034,20 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       if (doc.panLaw === law) return doc;
       const { panLaw: _old, ...rest } = doc;
       return law ? { ...rest, panLaw: law } : rest;
+    }
+    case "set-media-folder": {
+      const folder = cmd.folder?.trim().slice(0, 80) || null;
+      const next: Record<string, string> = { ...(doc.mediaFolders ?? {}) };
+      let changed = false;
+      for (const id of cmd.mediaIds) {
+        if (!doc.media[id] || (next[id] ?? null) === folder) continue;
+        if (folder) next[id] = folder;
+        else delete next[id];
+        changed = true;
+      }
+      if (!changed) return doc;
+      const { mediaFolders: _old, ...rest } = doc;
+      return Object.keys(next).length ? { ...rest, mediaFolders: next } : rest;
     }
     case "bypass-fx-category": {
       const ids = new Set(cmd.trackIds);

@@ -197,6 +197,13 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-pane-media .fw-media-list .fw-media-meta { grid-area: meta; font-size: var(--fs-11); color: var(--text-secondary); }
 .fw-pane-media .fw-media-list .fw-media-len { grid-area: len; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-secondary); }
 .fw-pane-media .fw-media-list .fw-media-item > button { display: none; }
+.fw-media-folder { display: flex; align-items: center; gap: 6px; min-block-size: 30px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-12); font-weight: 700; text-align: start; cursor: pointer; }
+.fw-media-folder:hover { background: var(--bg-tertiary); }
+.fw-pane-media .fw-media-list .fw-media-folder ~ .fw-media-item { padding-inline-start: 28px; }
+.fw-media-folder svg { flex: none; inline-size: 14px; block-size: 14px; color: var(--text-muted); transition: transform var(--transition-fast); }
+.fw-media-folder[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.fw-media-folder-name { flex: 1; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-media-folder-count { font-family: var(--font-mono); font-size: var(--fs-11); font-weight: 400; color: var(--text-muted); }
 .fw-fx-groups { display: flex; flex-direction: column; gap: 2px; }
 .fw-fx-group-row { display: flex; align-items: center; justify-content: space-between; min-block-size: 32px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-13); text-align: start; cursor: pointer; }
 .fw-fx-group-row:hover { background: var(--bg-tertiary); }

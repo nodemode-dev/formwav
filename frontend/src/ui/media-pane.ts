@@ -13,7 +13,8 @@ function fill(row: HTMLElement, m: MediaRef): void {
   setText(row.querySelector(".fw-media-name"), m.name);
   setText(row.querySelector(".fw-media-meta"), `${m.channels === 1 ? "Mono" : m.channels === 2 ? "Stereo" : `${m.channels} channels`}, ${(m.sampleRate / 1000).toFixed(1)} kHz`);
   setText(row.querySelector(".fw-media-len"), length(m));
-  if (row.title !== m.name) row.title = m.name;
+  const title = `${m.name} (right-click to move it to a folder)`;
+  if (row.title !== title) row.title = title;
 }
 
 /** The session's audio files, as formcut's media pane lists a project's media. */
@@ -227,14 +228,40 @@ export function mountMediaPane(host: HTMLElement, engine: Engine, player?: { pla
   });
   showFields();
 
+  type Entry = { kind: "folder"; id: string; name: string; count: number; open: boolean } | { kind: "media"; id: string; m: MediaRef };
+  const closed = new Set<string>();
+  const fillFolder = (row: HTMLElement, f: { name: string; count: number; open: boolean }) => {
+    setText(row.querySelector(".fw-media-folder-name"), f.name);
+    setText(row.querySelector(".fw-media-folder-count"), String(f.count));
+    if (row.getAttribute("aria-expanded") !== String(f.open)) row.setAttribute("aria-expanded", String(f.open));
+    if (row.dataset.folder !== f.name) row.dataset.folder = f.name;
+  };
   const render = (doc: SessionDoc) => {
-    const items = Object.values(doc.media);
-    const placeholder = items.length ? "" : emptyText;
+    const all = Object.values(doc.media);
+    const folders = doc.mediaFolders ?? {};
+    const names = [...new Set(all.map((m) => folders[m.id]).filter((f): f is string => !!f))].sort((a, b) => a.localeCompare(b));
+    const items: Entry[] = all.filter((m) => !folders[m.id]).map((m) => ({ kind: "media" as const, id: m.id, m }));
+    for (const name of names) {
+      const inside = all.filter((m) => folders[m.id] === name);
+      items.push({ kind: "folder", id: `folder:${name}`, name, count: inside.length, open: !closed.has(name) });
+      if (!closed.has(name)) items.push(...inside.map((m) => ({ kind: "media" as const, id: m.id, m })));
+    }
+    const placeholder = all.length ? "" : emptyText;
     if (list.dataset.empty !== placeholder) list.dataset.empty = placeholder;
-    setText(meta, items.length ? `${items.length} file${items.length === 1 ? "" : "s"}` : "");
+    setText(meta, all.length ? `${all.length} file${all.length === 1 ? "" : "s"}` : "");
     patchList(list, items, {
-      key: (m) => m.id,
-      create: (m) => {
+      key: (e) => e.id,
+      create: (e) => {
+        if (e.kind === "folder") {
+          const head = document.createElement("button");
+          head.type = "button";
+          head.className = "fw-media-folder";
+          head.title = "Click to fold or open; drop media here to move it into this folder";
+          head.innerHTML = `${fcIcon("chevD")}<span class="fw-media-folder-name"></span><span class="fw-media-folder-count"></span>`;
+          fillFolder(head, e);
+          return head;
+        }
+        const m = e.m;
         const row = document.createElement("div");
         row.className = "fw-media-item";
         row.tabIndex = 0;
@@ -244,9 +271,52 @@ export function mountMediaPane(host: HTMLElement, engine: Engine, player?: { pla
         fill(row, m);
         return row;
       },
-      update: (row, m) => fill(row, m),
+      update: (row, e) => (e.kind === "folder" ? fillFolder(row, e) : fill(row, e.m)),
     });
   };
+  const DRAG = "application/x-formwav-media";
+  list.addEventListener("click", (e) => {
+    const head = (e.target as HTMLElement).closest<HTMLElement>(".fw-media-folder");
+    const name = head?.dataset.folder;
+    if (!name) return;
+    if (closed.has(name)) closed.delete(name);
+    else closed.add(name);
+    render(engine.get("document"));
+  });
+  list.addEventListener("dragover", (e) => {
+    if (!(e.target as HTMLElement).closest(".fw-media-folder") || !e.dataTransfer || !Array.from(e.dataTransfer.types).includes(DRAG)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  });
+  list.addEventListener("drop", (e) => {
+    const name = (e.target as HTMLElement).closest<HTMLElement>(".fw-media-folder")?.dataset.folder;
+    const id = e.dataTransfer?.getData(DRAG);
+    if (!name || !id) return;
+    e.preventDefault();
+    engine.dispatch({ type: "set-media-folder", mediaIds: [id], folder: name });
+  });
+  list.addEventListener("contextmenu", (e) => {
+    const id = (e.target as HTMLElement).closest<HTMLElement>(".fw-media-item")?.dataset.key;
+    const doc = engine.get("document");
+    const media = id ? doc.media[id] : undefined;
+    if (!media) return;
+    e.preventDefault();
+    const names = [...new Set(Object.values(doc.mediaFolders ?? {}))].sort((a, b) => a.localeCompare(b));
+    const field = { key: "folder", label: "Folder", value: doc.mediaFolders?.[media.id] ?? "", text: true, placeholder: names.length ? names.join(", ") : "Dialogue, Music, Effects" };
+    host.dispatchEvent(
+      new CustomEvent("fw-ask", {
+        detail: {
+          title: "Move to a folder",
+          note: `The folder ${media.name} is listed under in the media pane. Leave it empty to take it out of its folder.`,
+          fields: [field],
+          ok: "Move",
+          done: (v: Record<string, unknown> | null) => {
+            if (v) engine.dispatch({ type: "set-media-folder", mediaIds: [media.id], folder: String(v.folder ?? "").trim() || null });
+          },
+        },
+      }),
+    );
+  });
 
   // The selected clips (from the lanes' fw-selection events): placing media uses the first one's track.
   let selectedIds: string[] = [];

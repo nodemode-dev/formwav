@@ -68,6 +68,7 @@ const WORDS: Record<Command["type"], Words> = {
   "clear-solos": ["Cleared every solo", "Cleared every solo"],
   "clear-mutes": ["Cleared every mute", "Cleared every mute"],
   "set-pan-law": ["Changed the pan law", "Changed the pan law"],
+  "set-media-folder": ["Moved media to a folder", "Moved media to folders"],
   "bypass-fx-category": ["Bypassed inserts", "Bypassed inserts"],
   "set-bus-mute": ["Muted a bus", "Muted a bus"],
   "set-master-gain": ["Changed the master volume", "Changed the master volume"],
