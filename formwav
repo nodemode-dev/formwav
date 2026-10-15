@@ -9,6 +9,7 @@ case "${1:-}" in
   app) shift; exec ./build_app "$@" ;;
   install) shift; exec ./formwav_oc_install "$@" ;;
   build) cd frontend && exec npm run build ;;
+  cli) shift; exec python3 backend/formwav_cli.py "$@" ;;
   claude)
     shift
     port="${FORMWAV_PORT:-8060}"
@@ -27,6 +28,7 @@ case "${1:-}" in
     echo "./formwav app [--open] install, build the desktop app, and with --open install and launch it"
     echo "./formwav desktop build  build the desktop app only"
     echo "./formwav claude       Claude Code with formwav's tools for the open session"
+    echo "./formwav cli list|describe <id>|run <id> key=value   formwav's commands on the open session"
     echo "./formwav doctor       what is installed"
     exit 0 ;;
 esac
