@@ -567,6 +567,40 @@ def test_the_in_app_agent_carries_out_a_chain_of_tools(page, app_url):
     assert _clean(page)["errors"] == []
 
 
+def _engine(app_url: str, method: str, path: str, body=None, headers=None):
+    import json
+
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(app_url + path, data=data, method=method, headers={"content-type": "application/json", "x-formwav-local": "1", **(headers or {})})
+    with urllib.request.urlopen(req, timeout=60) as res:
+        return json.loads(res.read() or b"null")
+
+
+def test_unsaved_work_is_offered_back_on_the_next_start_and_recovered_whole(page, app_url):
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    import json
+
+    ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
+    frames = int(ref["frames"])
+    doc = {"sampleRate": ref["sampleRate"], "media": {ref["id"]: ref}, "markers": [], "tracks": [
+        {"id": "t1", "name": "Kept take", "channels": ref["channels"], "gainDb": -2, "mute": False, "solo": False, "clips": [{"id": "c1", "mediaId": ref["id"], "start": 0, "length": frames // 2, "sourceIn": 0, "gainDb": 0}]},
+        {"id": "t2", "name": "Second", "channels": ref["channels"], "gainDb": 0, "mute": False, "solo": False, "clips": [{"id": "c2", "mediaId": ref["id"], "start": frames // 2, "length": frames // 4, "sourceIn": 0, "gainDb": 0}]},
+    ]}
+    _engine(app_url, "PUT", "/api/autosave", {"name": "Lost interview", "document": doc})
+    try:
+        _open(page, app_url)
+        page.wait_for_selector("dialog.fw-ask-dialog[open]")
+        assert "Lost interview" in page.text_content("dialog.fw-ask-dialog .fw-ask-note") and "2 tracks, 2 clips" in page.text_content("dialog.fw-ask-dialog .fw-ask-note")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
+        assert page.evaluate("[...document.querySelectorAll('.fw-lane .fw-lane-name')].map((n) => n.textContent)") == ["Kept take", "Second"]
+        assert page.input_value("input.fw-session-name") == "Lost interview"
+        assert page.evaluate("document.querySelector('.fw-notice').textContent").startswith("Recovered Lost interview")
+        assert _clean(page)["errors"] == []
+    finally:
+        _engine(app_url, "DELETE", "/api/autosave")
+
+
 ROWS = "[...document.querySelectorAll('.fw-piano-list tbody tr')].map((r) => [...r.querySelectorAll('input')].map((i) => i.value))"
 NOTES_STATE = "document.querySelector('.fw-piano .fw-piano-state').textContent"
 
