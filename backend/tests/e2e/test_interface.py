@@ -664,6 +664,24 @@ def test_linked_faders_move_as_one_step_polarity_sits_on_the_strip_the_master_sh
     assert _clean(page)["errors"] == []
 
 
+def test_the_models_section_says_where_the_chosen_model_runs_and_lists_every_models_source_and_licences(page, app_url):
+    _open(page, app_url)
+    page.click('.fw-pane-media .fw-pane-tab[data-tab="sounds"]')
+    page.click(".fw-models > h3")
+    page.wait_for_selector(".fw-models-origin:not([hidden])")
+    line = page.text_content(".fw-models-origin-text")
+    assert "runs on" in line and "Code" in line and "weights" in line
+    assert page.get_attribute(".fw-models-origin-link", "href").startswith("https://")
+    page.select_option(".fw-models-kind", "ld-install")
+    assert page.text_content(".fw-models-origin-text").startswith("Dubbing: Whisper, Argos Translate, Kokoro: runs on this machine; nothing leaves it.")
+    page.click(".fw-models-sources > summary")
+    items = page.evaluate("[...document.querySelectorAll('.fw-models-sources-list li')].map((li) => li.textContent)")
+    assert len(items) >= 14 and any(i.startswith("ElevenLabs") and "uploaded" in i for i in items) and any(i.startswith("Chatterbox") and "watermark" in i for i in items)
+    box = page.locator(".fw-models-sources").bounding_box()
+    assert box["width"] > 0 and page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    assert _clean(page)["errors"] == []
+
+
 ROWS ="[...document.querySelectorAll('.fw-piano-list tbody tr')].map((r) => [...r.querySelectorAll('input')].map((i) => i.value))"
 NOTES_STATE = "document.querySelector('.fw-piano .fw-piano-state').textContent"
 
