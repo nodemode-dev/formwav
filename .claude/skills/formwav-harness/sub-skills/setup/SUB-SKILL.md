@@ -11,7 +11,7 @@ Get the 28 tools in front of the agent. The server is `backend/formwav_mcp/serve
 
 ## The quickest way
 
-In formwav, Settings > Agents adds formwav to Claude Code, Codex, Cursor or Claude Desktop in one click, merging into the client's own configuration beside its other servers and keeping the previous file as a backup; it also shows each client's exact text to copy. Restart the client afterwards.
+In formwav, Settings > Agents adds formwav to Claude Code, Codex, Cursor or Claude Desktop in one click, merging into the client's own configuration beside its other servers and keeping the previous file as a backup; it also shows each client's exact text to copy. Restart the client afterwards. In the installed desktop app the stdio command is the app's own engine with `--mcp-stdio`, which relays to the running app's session tools (the window's, not the 28 here), so the app must be open; Claude Code connects to the app over HTTP at `/mcp` instead.
 
 ## Per client, by hand
 

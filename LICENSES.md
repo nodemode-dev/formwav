@@ -16,6 +16,7 @@ formwav is Apache-2.0 (LICENSE, NOTICE). This ledger covers what the desktop app
 | Starlette, uvicorn, numpy, websockets, python-dotenv | as pinned | BSD-3-Clause | the engine sidecar |
 | uvloop | as pinned | MIT or Apache-2.0 | the engine sidecar |
 | httptools, watchfiles, PyYAML | as pinned | MIT | the engine sidecar |
+| pywinpty | 3.0.5 | MIT | the engine sidecar on Windows only: the embedded terminal's ConPTY |
 | formwav-dsp (the native audio core) | formwav's version | Apache-2.0 (formwav's own) | the engine sidecar |
 | formwav-studio (the studio processors, native/formwav-studio) | 0.1.0 | Apache-2.0 (formwav's own) | inside the audio core, in the engine sidecar and the interface |
 
