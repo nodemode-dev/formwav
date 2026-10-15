@@ -27,6 +27,8 @@ NAME = "formwav"
 
 def server_command() -> tuple[str, list[str], dict[str, str]]:
     """The command an MCP client runs to start formwav's server, its arguments, and any environment it needs."""
+    if getattr(sys, "frozen", False):
+        return sys.executable, ["--mcp-stdio"], {}
     if os.name == "nt":
         return str(BACKEND / "formwav_mcp" / "venv" / "Scripts" / "python.exe"), ["-m", "formwav_mcp.server"], {"PYTHONPATH": str(BACKEND)}
     return str(BACKEND / "formwav_mcp" / "serve"), [], {}

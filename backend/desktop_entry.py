@@ -100,6 +100,11 @@ def selfcheck() -> int:
 def main() -> int:
     if "--selfcheck" in sys.argv:
         return selfcheck()
+    if "--mcp-stdio" in sys.argv:
+        os.environ.setdefault("FORMWAV_DATA_DIR", str(user_data_dir()))
+        from app.services import mcp_stdio
+
+        return mcp_stdio.main()
     if os.environ.get("FORMWAV_EXIT_WITH_STDIN") == "1":
         # The shell holds the write end of this stdin pipe; it closes however the shell ends (a quit, a crash, a
         # SIGKILL), and then the engine ends too. Its own kill alone cannot do it: SIGKILL reaches only the onefile
@@ -134,6 +139,16 @@ def main() -> int:
                 port = 8060
             except OSError:
                 port = 0
+    from app.services import mcp_stdio
+
+    port_file = data / mcp_stdio.PORT_FILE
+    try:
+        if port:
+            port_file.write_text(str(port))
+        else:
+            port_file.unlink(missing_ok=True)
+    except OSError:
+        pass
     uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info")
     return 0
 
