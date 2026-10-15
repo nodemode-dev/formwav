@@ -29,7 +29,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-from . import media
+from . import media, provenance
 
 LOCAL_FILE = Path(__file__).resolve().parents[2] / "models" / "local_models.json"
 FAL_PRESETS = [
@@ -119,8 +119,9 @@ def providers() -> dict:
             {"id": "elevenlabs", "label": "ElevenLabs", "ready": bool(os.environ.get("ELEVENLABS_API_KEY", "").strip()), "needs": "ELEVENLABS_API_KEY", "offers": ["speech", "voice-changer", "music", "stems", "isolation", "sound-effects", "transcription", "voice-design", "dialogue", "alignment", "dubbing"]},
             {"id": "fal", "label": "fal", "ready": bool(os.environ.get("FAL_KEY", "").strip()), "needs": "FAL_KEY", "offers": ["music", "audio"], "presets": FAL_PRESETS},
             _acestep_entry(),
-            {"id": "local", "label": "On this machine", "ready": bool(local_models()), "needs": "backend/models/local_models.json", "offers": ["music", "audio", "speech"], "models": [{k: e.get(k) for k in ("id", "label", "kind", "fields")} for e in local_models()]},
-        ]
+            {"id": "local", "label": "On this machine", "ready": bool(local_models()), "needs": "backend/models/local_models.json", "offers": ["music", "audio", "speech"], "models": [{k: e.get(k) for k in ("id", "label", "kind", "fields", "license", "source")} for e in local_models()]},
+        ],
+        "provenance": provenance.table(),
     }
 
 

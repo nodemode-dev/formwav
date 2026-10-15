@@ -25,7 +25,7 @@ The engine's version and health, and how many media and saved sessions it holds.
 
 Kind: reads only. Parameters: none.
 
-What can make sound on this machine and in the cloud: the local speech engines (Kokoro, Pocket TTS, Chatterbox) and whether each is installed, the dubbing languages installed, whether ACE-Step's server answers, and which cloud providers have their keys. Call it before generating, to pick an engine that will work.
+What can make sound on this machine and in the cloud: the local speech engines (Kokoro, Pocket TTS, Chatterbox) and whether each is installed, the dubbing languages installed, whether ACE-Step's server answers, and which cloud providers have their keys; and for every model its source, the licence of its code and weights, where it runs and what leaves the machine. Call it before generating, to pick an engine that will work and that the person may use.
 
 ## Find and measure media
 

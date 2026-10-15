@@ -255,13 +255,16 @@ def _post(path: str, body: dict[str, Any], timeout: float = 1800.0):
 async def formwav_local_models_status() -> dict[str, Any]:
     """What can make sound on this machine and in the cloud: the local speech engines (Kokoro, Pocket TTS, Chatterbox)
     and whether each is installed, the dubbing languages installed, whether ACE-Step's server answers, and which cloud
-    providers have their keys. Call it before generating, to pick an engine that will work."""
+    providers have their keys; and for every model its source, the licence of its code and weights, where it runs and
+    what leaves the machine. Call it before generating, to pick an engine that will work and that the person may use."""
     speech = (await _call("GET", "/api/providers/local-speech")).json().get("engines", [])
     dub = (await _call("GET", "/api/providers/local-dub")).json()
-    providers = (await _call("GET", "/api/providers")).json().get("providers", [])
+    listing = (await _call("GET", "/api/providers")).json()
+    providers = listing.get("providers", [])
     return {"local_speech": [{"engine": e["id"], "installed": e["installed"], "size": e["size"]} for e in speech],
             "dubbing": {"translator": dub.get("translator"), "languages": [l["code"] for l in dub.get("languages", []) if l.get("installed")]},
-            "providers": [{"id": p["id"], "ready": p["ready"], "needs": p.get("needs")} for p in providers]}
+            "providers": [{"id": p["id"], "ready": p["ready"], "needs": p.get("needs")} for p in providers],
+            "provenance": listing.get("provenance", [])}
 
 
 @mcp.tool(annotations=READ, structured_output=True)

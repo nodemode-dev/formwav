@@ -18,7 +18,20 @@ interface Choice {
 }
 type LocalEngine = { id: string; name: string; installed: boolean; installing: string; clones: boolean; size: string; license: string };
 type LocalDub = { kokoro: boolean; translator: boolean; languages: { code: string; name: string; installed: boolean; installing: string }[] };
-type Providers = { localDub?: LocalDub; localSpeech?: LocalEngine[]; providers: { id: string; ready: boolean; needs: string; presets?: { model: string; label: string; fields: string[] }[]; models?: { id: string; label: string; fields?: string[] }[] }[] };
+type Origin = { id: string; name: string; kind: string; source: string; code: string; weights: string; runs: string; sends: string; note: string };
+type Providers = { localDub?: LocalDub; localSpeech?: LocalEngine[]; provenance?: Origin[]; providers: { id: string; ready: boolean; needs: string; presets?: { model: string; label: string; fields: string[] }[]; models?: { id: string; label: string; fields?: string[]; license?: string; source?: string }[] }[] };
+
+const originId = (choice: string, engine: string): string => {
+  if (choice.startsWith("el-")) return "elevenlabs";
+  if (choice.startsWith("ace-")) return "acestep";
+  if (choice.startsWith("fal")) return "fal";
+  if (choice.startsWith("ld-")) return "dubbing";
+  if (choice === "ls-install") return engine;
+  for (const id of ["kokoro", "pocket", "chatterbox"]) if (choice.startsWith("ls-") && choice.endsWith(id)) return id;
+  return choice.startsWith("local:") ? choice : "";
+};
+
+const originText = (o: Origin) => `${o.name}: runs on ${o.runs}; ${o.sends === "nothing" ? "nothing leaves it" : o.sends}. Code ${o.code}; weights ${o.weights}.${o.note ? ` ${o.note}` : ""}`;
 
 export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   let lastDub: { job: string; lang: string } | null = null;
@@ -28,6 +41,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   const box = document.createElement("section");
   box.className = "fw-insp-section fw-models";
   box.innerHTML = `<h3>Models</h3><label class="fw-models-row">Make<select class="fw-models-kind" aria-label="What to make"></select></label>
+<p class="fw-models-origin" hidden><span class="fw-models-origin-text"></span> <a class="fw-models-origin-link" target="_blank" rel="noopener noreferrer">Source</a></p>
 <label class="fw-models-row" data-field="text">Text<textarea rows="2" class="fw-models-text"></textarea></label>
 <label class="fw-models-row" data-field="voice">Voice<select class="fw-models-voice"></select></label>
 <label class="fw-models-row" data-field="prompt">Prompt<textarea rows="2" class="fw-models-prompt"></textarea></label>
@@ -53,7 +67,8 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-models-row fw-models-check" data-field="loop"><input type="checkbox" class="fw-models-loop"> Loop seamlessly</label>
 <label class="fw-models-row fw-models-check" data-field="instrumental"><input type="checkbox" class="fw-models-instrumental"> Instrumental only</label>
 <label class="fw-models-row fw-models-check" data-field="denoise"><input type="checkbox" class="fw-models-denoise"> Remove background noise first</label>
-<button type="button" class="fw-btn fw-models-go">Make it on a new track</button><p class="fw-models-state" aria-live="polite"></p>`;
+<button type="button" class="fw-btn fw-models-go">Make it on a new track</button><p class="fw-models-state" aria-live="polite"></p>
+<details class="fw-models-sources"><summary>Where every model comes from</summary><ul class="fw-models-sources-list"></ul></details>`;
   lib.after(box);
   const $ = <T extends HTMLElement>(sel: string) => box.querySelector<T>(sel) as T;
   const kind = $<HTMLSelectElement>(".fw-models-kind");
@@ -75,6 +90,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
   };
   const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
   const choices: Choice[] = [];
+  const origins = new Map<string, Origin>();
   // the dubbing language list follows the chosen task (installed ones to dub into, the others to install); one listener,
   // reading the lists the latest build left, since build runs again after every install
   let dubLists: { ready: LocalDub["languages"]; missing: LocalDub["languages"]; fill: (l: LocalDub["languages"]) => void } | null = null;
@@ -100,6 +116,21 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     const keep = kind.value;
     choices.length = 0;
     kind.replaceChildren();
+    origins.clear();
+    for (const o of p.provenance ?? []) origins.set(o.id, o);
+    for (const m of p.providers.find((x) => x.id === "local")?.models ?? [])
+      origins.set(`local:${m.id}`, { id: `local:${m.id}`, name: m.label, kind: "a model you added", source: m.source ?? "", code: m.license ?? "as backend/models/local_models.json says", weights: m.license ?? "not stated in local_models.json", runs: "this machine", sends: "nothing", note: "" });
+    const list = box.querySelector<HTMLElement>(".fw-models-sources-list");
+    const signature = JSON.stringify([...origins.keys()]);
+    if (list && list.dataset.signature !== signature) {
+      list.dataset.signature = signature;
+      list.replaceChildren(...[...origins.values()].map((o) => {
+        const li = document.createElement("li");
+        const link = Object.assign(document.createElement("a"), { href: o.source, target: "_blank", rel: "noopener noreferrer", textContent: o.name });
+        li.append(link, document.createTextNode(` (${o.kind}): ${originText(o).slice(o.name.length + 2)}`));
+        return li;
+      }));
+    }
     const el = p.providers.find((x) => x.id === "elevenlabs");
     const fal = p.providers.find((x) => x.id === "fal");
     const local = p.providers.find((x) => x.id === "local");
@@ -377,6 +408,13 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     const c = choices.find((x) => x.id === kind.value);
     for (const row of box.querySelectorAll<HTMLElement>("[data-field]")) row.hidden = !c?.fields.includes(row.dataset.field ?? "");
     go.disabled = !c?.ready;
+    const origin = c ? origins.get(originId(c.id, value("localengine"))) : undefined;
+    const from = box.querySelector<HTMLElement>(".fw-models-origin");
+    const link = box.querySelector<HTMLAnchorElement>(".fw-models-origin-link");
+    if (from && from.hidden !== !origin) from.hidden = !origin;
+    setText(box.querySelector(".fw-models-origin-text"), origin ? originText(origin) : "");
+    if (link && link.getAttribute("href") !== (origin?.source ?? "")) link.setAttribute("href", origin?.source ?? "");
+    if (link && link.hidden !== !origin?.source) link.hidden = !origin?.source;
     if (c?.fields.includes("voice") && !voicesLoaded) {
       voicesLoaded = true;
       fetch("/api/providers/elevenlabs/voices").then((r) => r.json()).then((d: { voices?: { voice_id: string; name: string }[] }) => {
@@ -414,6 +452,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     }
   };
   kind.addEventListener("change", show);
+  box.querySelector(".fw-models-localengine")?.addEventListener("change", show);
   box.addEventListener("focusin", (e) => {
     if ((e.target as HTMLElement).classList.contains("fw-models-clip")) show();
   });
