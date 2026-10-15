@@ -205,8 +205,8 @@ def _filter_curve_chain(v: dict) -> str:
 #: Adjustable effects: each parameter is (label, min, max, default, unit); the builder makes the chain from clamped values.
 #: Enhance speech's strength follows formcut's own voice-clean strength control (noise floor and ratio scale with it).
 PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]] = {
-    "dialogue-isolate": ({"strength": ("Strength", 0, 100, 100, "%")}, lambda v: f"apad=pad_len=480,arnndn=m={_rnnoise_model()}:mix={v['strength'] / 100:.2f},atrim=start_sample=480"),
-    "voice-clean": ({"strength": ("Strength", 0, 100, 50, "%")}, lambda v: f"highpass=f=90,afftdn=nf={-15 - 20 * v['strength'] / 100:.1f},acompressor=threshold=0.12:ratio={1.5 + 3 * v['strength'] / 100:.2f},alimiter"),
+    "dialogue-isolate": ({"strength": ("Strength", 0, 100, 100, "%"), "amount": ("Amount", 0, 100, 100, "%"), "keep": ("Keep laughs", 0, 1, 0, "", 1)}, lambda v: f"apad=pad_len=480,arnndn=m={_rnnoise_model()}:mix={v['strength'] / 100:.2f},atrim=start_sample=480"),
+    "voice-clean": ({"strength": ("Strength", 0, 100, 50, "%"), "amount": ("Amount", 0, 100, 100, "%"), "keep": ("Keep laughs", 0, 1, 0, "", 1)}, lambda v: f"highpass=f=90,afftdn=nf={-15 - 20 * v['strength'] / 100:.1f},acompressor=threshold=0.12:ratio={1.5 + 3 * v['strength'] / 100:.2f},alimiter"),
     "amplify-up": ({"db": ("Gain", -24, 24, 6, "dB")}, lambda v: f"volume={v['db']:.2f}dB"),
     "peak-normalize": ({"target": ("Peak", -24, 0, -1, "dBFS"), "dc": ("Remove DC (1 = on)", 0, 1, 0, "", 1), "independent": ("Each channel (1 = on)", 0, 1, 0, "", 1)}, None),
     "loudness-streaming": ({"target": ("Target", -36, -8, -14, "LUFS")}, lambda v: f"loudnorm=I={v['target']:.1f}:TP=-1:LRA=11"),
@@ -1791,7 +1791,52 @@ def _enhance_speech(x, rate: int, v: dict):
     return out[: len(x)].copy()
 
 
-NUMPY_EFFECTS = {"voice-clean": _enhance_speech, "dialogue-isolate": _dialogue_isolate, "dereverb": _dereverb, "dereverb-restore": _dereverb_wpe, "derustle": _derustle, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
+def _controlled(x, y, rate: int, v: dict):
+    """PLAN_v14 W3, the enhancers under control (the loudest complaint about Descript's Studio Sound, Adobe's Enhance
+    and ElevenLabs' dubbing: laughter, breaths and word endings taken out, and no way to dial it back). The original is
+    first brought to the processed level (Enhance speech sets -16 LUFS). Keep laughter and breaths finds the moments
+    the processing took down by more than 10 dB where the original stood more than 15 dB above its own noise floor (a
+    sound, not background: the floor is the quietest tenth of 20 ms frames) and lets the original through there, faded
+    in and out over about 80 ms. Amount then mixes the original back under the whole result, 100 % being the
+    processing alone. A peak above -1 dBFS from the mix is brought down by one gain, not clipped."""
+    import numpy as np
+
+    x = np.asarray(x, dtype=np.float32)
+    y = np.asarray(y, dtype=np.float32)[: len(x)]
+    if len(y) < len(x):
+        y = np.pad(y, ((0, len(x) - len(y)), (0, 0)))
+    amount = min(1.0, max(0.0, float(v.get("amount", 100)) / 100))
+    keep = float(v.get("keep", 0)) >= 0.5
+    if amount >= 1.0 and not keep:
+        return y
+    rms = lambda a: float(np.sqrt(np.mean(np.square(a, dtype=np.float64)))) if a.size else 0.0
+    gain = rms(y) / rms(x) if rms(x) > 1e-9 and rms(y) > 1e-9 else 1.0
+    dry = x * np.float32(gain)
+    out = y
+    if keep:
+        hop = max(1, rate // 100)
+        frames = len(x) // hop
+        if frames > 4:
+            def level(a):
+                m = np.abs(a.mean(axis=1))[: frames * hop].reshape(frames, hop)
+                return 20 * np.log10(np.sqrt(np.mean(m.astype(np.float64) ** 2, axis=1)) + 1e-9)
+
+            lx, ly = level(dry), level(y)
+            floor = float(np.percentile(lx, 10))
+            hit = ((lx > floor + 15) & (lx - ly > 10)).astype(np.float64)
+            if hit.any():
+                hit = np.convolve(hit, np.ones(9), mode="same") > 0
+                mask = np.convolve(hit.astype(np.float64), np.ones(8) / 8, mode="same")
+                m = np.interp(np.arange(len(x)), (np.arange(frames) + 0.5) * hop, mask).astype(np.float32)[:, None]
+                out = y * (1 - m) + dry * m
+    out = dry * np.float32(1 - amount) + out * np.float32(amount)
+    peak = float(np.max(np.abs(out))) if out.size else 0.0
+    if peak > 0.891:
+        out = out * np.float32(0.891 / peak)
+    return out.astype(np.float32)
+
+
+NUMPY_EFFECTS = {"voice-clean": lambda x, rate, v: _controlled(x, _enhance_speech(x, rate, v), rate, v), "dialogue-isolate": lambda x, rate, v: _controlled(x, _dialogue_isolate(x, rate, v), rate, v), "dereverb": _dereverb, "dereverb-restore": _dereverb_wpe, "derustle": _derustle, "spot-heal": _spot_heal, "wow-flutter": _wow_flutter, "pitch-correct": _pitch_correct, "dialogue-contour": _dialogue_contour, "peak-normalize": _peak_normalize, "paulstretch": _paulstretch, "downmix-mono": _downmix_mono, "phase-rotate": _phase_rotate, "de-plosive": _de_plosive, "de-wind": _de_wind,
                  "azimuth-measured": _azimuth_measured, "dc-measured": _dc_measured, "breath-control": _breath_control,
                  "de-hum-adaptive": _de_hum_adaptive, "de-ess-spectral": _de_ess_spectral, "spectral-recovery": _spectral_recovery,
                  "spectral-repair": _spectral_repair, "dialogue-leveler": _dialogue_leveler, "dynamics-curve": _dynamics_curve}
