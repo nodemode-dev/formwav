@@ -30,6 +30,11 @@ Invariants worth repeating, because breaking them is silent:
 - The engine binds 127.0.0.1. Only Settings > Devices on this network opens a listener, off by default, for paired
   devices; keep it that way.
 
+Claude Code runs inside formwav (PLAN_v14 W1): `backend/app/services/claude_code.py` finds the user's `claude` and its
+environment, `backend/app/routers/claude.py` streams the Agent column's chat and serves `POST /mcp` on the engine, whose
+tools are the open window's (the in-app agent's tools, relayed through `/api/bridge/*`), so every agent edits the open
+session as undoable steps. A new session tool is added once, in `frontend/src/ui/agent-pane.ts`, and reaches both.
+
 Agents drive formwav through two surfaces; extend them rather than adding a third. The MCP server in
 `backend/formwav_mcp` (started by `backend/formwav_mcp/serve`, or from a checkout by `mcp/formwav_mcp.py`; `.mcp.json`
 registers it for Claude Code) gives 28 tools over the engine's HTTP API; the in-app
