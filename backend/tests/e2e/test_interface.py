@@ -601,7 +601,70 @@ def test_unsaved_work_is_offered_back_on_the_next_start_and_recovered_whole(page
         _engine(app_url, "DELETE", "/api/autosave")
 
 
-ROWS = "[...document.querySelectorAll('.fw-piano-list tbody tr')].map((r) => [...r.querySelectorAll('input')].map((i) => i.value))"
+def test_linked_faders_move_as_one_step_polarity_sits_on_the_strip_the_master_shows_lufs_media_folders_fold_and_selected_tracks_commit_together(page, app_url):
+    import json
+
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
+    frames = int(ref["frames"])
+    doc = {"sampleRate": ref["sampleRate"], "media": {ref["id"]: ref}, "markers": [], "tracks": [
+        {"id": "t1", "name": "Host", "channels": ref["channels"], "gainDb": -2, "mute": False, "solo": False, "clips": [{"id": "c1", "mediaId": ref["id"], "start": 0, "length": frames // 2, "sourceIn": 0, "gainDb": 0}]},
+        {"id": "t2", "name": "Guest", "channels": ref["channels"], "gainDb": 0, "mute": False, "solo": False, "clips": [{"id": "c2", "mediaId": ref["id"], "start": frames // 2, "length": frames // 4, "sourceIn": 0, "gainDb": 0}]},
+        {"id": "t3", "name": "Room", "channels": ref["channels"], "gainDb": -6, "mute": False, "solo": False, "clips": []},
+    ]}
+    _engine(app_url, "PUT", "/api/autosave", {"name": "Mix", "document": doc})
+    try:
+        _open(page, app_url)
+        page.wait_for_selector("dialog.fw-ask-dialog[open]")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
+    finally:
+        _engine(app_url, "DELETE", "/api/autosave")
+    page.click('[data-agent-tab="history"]')
+    if page.locator(".fw-dock").is_hidden():
+        page.click('.fw-panel-toggle[data-pane="editor"]')
+    page.click('.fw-dock-tab[data-panel="mixer"]')
+    host, guest, room = ('.fw-strip[data-key="t1"]', '.fw-strip[data-key="t2"]', '.fw-strip[data-key="t3"]')
+    page.click(f"{host} .fw-strip-name", modifiers=["ControlOrMeta"])
+    page.click(f"{guest} .fw-strip-name", modifiers=["ControlOrMeta"])
+    assert page.evaluate("[...document.querySelectorAll('.fw-strip[data-linked]')].map((s) => s.dataset.key)") == ["t1", "t2"]
+    page.focus(f"{host} .fw-strip-fader")
+    page.keyboard.press("PageDown")
+    _step(page, "Moved 2 faders together")
+    values = [float(page.input_value(f"{s} .fw-strip-fader")) for s in (host, guest, room)]
+    delta = values[0] + 2
+    assert delta < 0 and abs(values[1] - delta) < 0.051 and values[2] == -6
+    page.click(f"{guest} .fw-strip-phase")
+    _step(page, "Inverted the polarity of Guest")
+    assert page.get_attribute(f"{guest} .fw-strip-phase", "aria-pressed") == "true"
+    for s in (host, guest, room):
+        box = page.locator(f"{s} .fw-strip-phase").bounding_box()
+        strip = page.locator(s).bounding_box()
+        assert box and box["width"] > 0 and box["x"] + box["width"] <= strip["x"] + strip["width"]
+    master = '.fw-strip[data-kind="master"] .fw-strip-lufs'
+    assert page.locator(master).is_visible() and page.text_content(master).endswith("LUFS I")
+    page.click(".fw-pane-media .fw-media-item", button="right")
+    page.wait_for_selector("dialog.fw-ask-dialog[open]")
+    page.fill('dialog.fw-ask-dialog [data-k="folder"]', "Dialogue")
+    page.keyboard.press("Enter")
+    page.wait_for_selector('.fw-media-folder[data-folder="Dialogue"]')
+    assert page.text_content('.fw-media-folder[data-folder="Dialogue"] .fw-media-folder-count') == "1"
+    page.click('.fw-media-folder[data-folder="Dialogue"]')
+    assert page.get_attribute('.fw-media-folder[data-folder="Dialogue"]', "aria-expanded") == "false" and page.locator(".fw-pane-media .fw-media-item").count() == 0
+    page.click('.fw-media-folder[data-folder="Dialogue"]')
+    page.locator('.fw-lane .fw-clip').nth(0).click()
+    page.locator('.fw-lane .fw-clip').nth(1).click(modifiers=["Shift"])
+    _menu(page, "Track", "Commit selected tracks")
+    page.wait_for_function("[...document.querySelectorAll('.fw-history-label')].some((l) => l.textContent === 'Committed 2 tracks')", timeout=60000)
+    shown = "[...document.querySelectorAll('.fw-lane .fw-lane-name')].filter((n) => n.offsetParent !== null).map((n) => n.textContent)"
+    assert page.evaluate(shown) == ["Host.cm", "Guest.cm", "Room"]
+    page.evaluate("document.activeElement?.blur()")
+    page.keyboard.press("ControlOrMeta+z")
+    page.wait_for_function(f"{shown}.join() === 'Host,Guest,Room'")
+    assert _clean(page)["errors"] == []
+
+
+ROWS ="[...document.querySelectorAll('.fw-piano-list tbody tr')].map((r) => [...r.querySelectorAll('input')].map((i) => i.value))"
 NOTES_STATE = "document.querySelector('.fw-piano .fw-piano-state').textContent"
 
 
