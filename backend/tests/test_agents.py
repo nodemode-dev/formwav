@@ -69,7 +69,9 @@ def test_a_broken_file_is_refused_and_left_byte_for_byte(client, home):
 
 
 def test_claude_code_without_its_command_says_so(client, home, monkeypatch):
-    monkeypatch.setattr(agents.shutil, "which", lambda name: None)
+    from app.services import claude_code
+
+    monkeypatch.setattr(claude_code, "cli", lambda: None)
     reply = client.post("/api/agents/install", json={"client": "claude-code"})
     assert reply.status_code == 409 and "Claude Code" in reply.json()["detail"]
 
