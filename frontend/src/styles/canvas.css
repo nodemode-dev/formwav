@@ -652,6 +652,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 :is(.fw-dock-tab, .fw-agent-tab, .fw-seg-btn, .fw-seg > .fw-mode > span)[data-label]::after { content: attr(data-label); grid-area: 1 / 1; block-size: 0; overflow: hidden; visibility: hidden; font-weight: 700; }
 .fw-pane-agent .fw-term-state { flex: 1 1 0; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-12); color: var(--text-muted); }
 .fw-agent-who { font-size: var(--fs-12); color: var(--text-secondary); }
+.fw-pane-agent .fw-agent-via { flex: none; min-block-size: 26px; block-size: 26px; padding: 0 var(--space-1); border: 1px solid var(--border-light); border-radius: 7px; background: var(--bg-tertiary); color: var(--text-primary); font: inherit; font-size: var(--fs-12); }
 .fw-pane-agent .fw-agent-quiet { min-block-size: 26px; block-size: 26px; padding: 0 10px; border: 1px solid var(--border-light); border-radius: 7px; background: transparent; color: var(--text-primary); font-size: var(--fs-12); }
 .fw-pane-agent .fw-agent-quiet[data-agent="undo"]:disabled { display: none; }
 .fw-pane-agent .fw-agent-body { flex: 1 1 auto; min-block-size: 0; display: flex; flex-direction: column; }

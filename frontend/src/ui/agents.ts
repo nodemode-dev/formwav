@@ -42,7 +42,7 @@ export function mountAgents(host: HTMLElement): void {
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
       clients = out.clients as Client[];
       draw();
-      if (!out.ready) setText(state, "formwav's MCP server is not installed in this copy: run formwav's installer, then come back");
+      if (!out.ready) setText(state, "Claude Code connects to the open session over HTTP; the other clients need formwav's MCP server, which is installed with formwav_oc_install in a source copy");
     } catch (err) {
       setText(state, `Could not read the clients: ${err instanceof Error ? err.message : String(err)}`);
     }

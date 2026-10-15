@@ -24,7 +24,7 @@ export function mountTerminal(host: HTMLElement): void {
   dock.className = "fw-term";
   dock.hidden = true;
   dock.setAttribute("aria-label", "Terminal");
-  dock.innerHTML = `<div class="fw-term-head"><span class="fw-term-title">Terminal</span><span class="fw-term-state" aria-live="polite"></span><button type="button" class="fw-ibtn" data-term="restart">Restart</button><button type="button" class="fw-ibtn" data-term="hide">Hide</button></div><div class="fw-term-body"></div>`;
+  dock.innerHTML = `<div class="fw-term-head"><span class="fw-term-title">Terminal</span><span class="fw-term-state" aria-live="polite"></span><button type="button" class="fw-ibtn" data-term="claude" title="Claude Code with your own login, given formwav's tools for the open session">Claude Code</button><button type="button" class="fw-ibtn" data-term="restart">Restart</button><button type="button" class="fw-ibtn" data-term="hide">Hide</button></div><div class="fw-term-body"></div>`;
   const transport = host.querySelector<HTMLElement>(".fw-dock-anchor");
   if (transport) transport.before(dock);
   else host.append(dock);
@@ -38,19 +38,20 @@ export function mountTerminal(host: HTMLElement): void {
   const sendSize = () => {
     if (socket?.readyState === WebSocket.OPEN && term) socket.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
   };
+  let claude = false;
   const connect = () => {
     socket?.close();
-    const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal`);
+    const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal${claude ? "?run=claude" : ""}`);
     ws.binaryType = "arraybuffer";
     socket = ws;
-    setText(state, "Starting a shell...");
+    setText(state, claude ? "Starting Claude Code..." : "Starting a shell...");
     ws.onopen = () => {
       setText(state, "");
       sendSize();
     };
     ws.onmessage = (e) => term?.write(typeof e.data === "string" ? e.data : new Uint8Array(e.data as ArrayBuffer));
     ws.onclose = (e) => {
-      if (socket === ws) setText(state, e.code === 1006 || e.code === 4403 ? "The engine would not open a shell" : "The shell ended; Restart opens a new one");
+      if (socket === ws) setText(state, e.code === 4403 && navigator.platform.startsWith("Win") ? "The terminal needs macOS or Linux for now" : e.code === 1006 || e.code === 4403 ? "The engine would not open a shell" : claude ? "Claude Code ended; Restart opens a shell, Claude Code a new session" : "The shell ended; Restart opens a new one");
     };
   };
   const open = () => {
@@ -91,7 +92,20 @@ export function mountTerminal(host: HTMLElement): void {
   dock.addEventListener("click", (e) => {
     const act = (e.target as HTMLElement).closest<HTMLElement>("[data-term]")?.dataset.term;
     if (act === "hide") hide();
-    else if (act === "restart" && term) {
+    else if ((act === "restart" || act === "claude") && term) {
+      claude = act === "claude";
+      term.reset();
+      connect();
+      term.focus();
+    }
+  });
+  host.addEventListener("fw-terminal", (e) => {
+    const wantClaude = Boolean((e as CustomEvent<{ claude?: boolean }>).detail?.claude);
+    const fresh = !term;
+    if (fresh) claude = wantClaude;
+    open();
+    if (!fresh && wantClaude !== claude && term) {
+      claude = wantClaude;
       term.reset();
       connect();
     }
