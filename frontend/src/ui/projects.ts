@@ -79,6 +79,7 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
           lastSaved = doc;
           savedAt = new Date();
           writeState();
+          host.dispatchEvent(new CustomEvent("fw-saved", { detail: name }));
           return `Saved ${name}`;
         } catch (err) {
           if (!(err instanceof RevisionConflict) || attempt > 0) return `Could not save: ${reason(err)}`;

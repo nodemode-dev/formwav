@@ -49,6 +49,7 @@ import { mountBrowserEffects } from "./ui/browser-effects";
 import { mountBrowser } from "./ui/browser";
 import { mountMusical } from "./ui/musical";
 import { commands, mountPalette } from "./ui/commands";
+import { mountAutosave } from "./ui/autosave";
 import { mountToolbar } from "./ui/toolbar";
 import { mountEditing } from "./ui/editing";
 import { mountDock } from "./ui/dock";
@@ -169,6 +170,7 @@ if (host) {
   mountEditing(host, engine, player);
   mountPalette(host, engine); // PLAN_v14 W2: the command registry's palette, Cmd or Ctrl K
   commands.gather(host);
+  mountAutosave(host, engine); // PLAN_v14 W4: unsaved work kept every 30 s and offered back on the next start
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
 activateAll(engine);
