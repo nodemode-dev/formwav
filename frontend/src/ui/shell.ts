@@ -133,7 +133,7 @@ function shellHtml(): string {
           <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>
           <h1 class="fw-empty-title">No session open</h1>
           <p class="fw-empty-body">Import any audio or video file, drop one here, or press Record to start a session.</p>
-          <div class="fw-empty-actions"><button type="button" class="fw-ibtn fw-empty-import" data-empty="import">Import audio</button><button type="button" class="fw-ibtn" data-empty="open">Open a session</button></div>
+          <div class="fw-empty-actions"><button type="button" class="fw-ibtn fw-empty-import" data-empty-act="import">Import audio</button><button type="button" class="fw-ibtn" data-empty-act="open">Open a session</button></div>
         </section>
         <div class="fw-lanes"></div>
         <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi,.mxf,.aup,.aup3,.zip,.mid,.midi,.aaf,.edl" multiple hidden>
@@ -306,7 +306,7 @@ export function mountShell(host: HTMLElement, engine: Engine): void {
   if (clock && clock.dataset.mode !== currentMode) clock.dataset.mode = currentMode;
 
   host.querySelector(".fw-empty-actions")?.addEventListener("click", (e) => {
-    const act = (e.target as HTMLElement).closest<HTMLElement>("[data-empty]")?.dataset.empty;
+    const act = (e.target as HTMLElement).closest<HTMLElement>("[data-empty-act]")?.dataset.emptyAct;
     if (act === "import") host.querySelector<HTMLInputElement>(".fw-file")?.click();
     else if (act === "open") host.querySelector<HTMLButtonElement>('.fw-topbar [data-action="open"]')?.click();
   });

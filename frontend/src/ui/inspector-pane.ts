@@ -21,7 +21,7 @@ import { mountEssentialSound } from "./essential-sound";
 const BODY = `
 <div class="fw-insp-section fw-insp-master">
   <div class="fw-insp-head">Master effects</div>
-  <div class="fw-rtfx-list" data-scope="master"></div>
+  <div class="fw-rtfx-list" data-scope="master" data-empty="No realtime effects yet"></div>
   <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option>${PROCESSOR_OPTIONS}</select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
   <div class="fw-insp-head">Time track</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Playback speed at the session's start, in percent"><span>Start</span><input type="number" data-tt="from" min="25" max="400" step="1" value="100" aria-label="Time track speed at the start in percent"> %</label><label class="fw-sam-opt" title="Playback speed at the end of the session's audio, in percent"><span>End</span><input type="number" data-tt="to" min="25" max="400" step="1" value="100" aria-label="Time track speed at the end in percent"> %</label></div>
@@ -123,7 +123,7 @@ const BODY = `
   <label class="fw-field"><span>Sensitivity</span><input type="number" min="3" max="50" step="1" value="20" data-duck="sensitivity" title="How far under the other track's loud level still counts as active (dB); more catches quieter speech" aria-label="Sensitivity, dB under the loud level"><span>dB</span></label>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
   <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
-  <div class="fw-rtfx-list" data-scope="track"></div>
+  <div class="fw-rtfx-list" data-scope="track" data-empty="No realtime effects yet"></div>
   <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument (Pro Tools' MIDI effect plugins): its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option><option value="duration">Duration</option><option value="delay">Delay</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
   <div data-midifx-list></div>
   <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
@@ -133,12 +133,12 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-clipfx">
   <div class="fw-insp-head" title="Realtime EQ and dynamics on the selected clip alone, ahead of its track's effects; the compressor follows the clip gain, not the fader">Clip effects</div>
-  <div class="fw-rtfx-list" data-scope="clip"></div>
+  <div class="fw-rtfx-list" data-scope="clip" data-empty="No realtime effects yet"></div>
   <div class="fw-analyze-buttons" data-scope="clip"><select data-rtfx="kind" aria-label="Realtime effect to add to the clip"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option></select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-bus" hidden>
   <div class="fw-insp-head fw-bus-head">Bus effects</div>
-  <div class="fw-rtfx-list" data-scope="bus"></div>
+  <div class="fw-rtfx-list" data-scope="bus" data-empty="No realtime effects yet"></div>
   <div class="fw-analyze-buttons" data-scope="bus"><select data-rtfx="kind" aria-label="Realtime effect to add to the bus"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="voice">Dialogue isolate</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option>${PROCESSOR_OPTIONS}</select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>

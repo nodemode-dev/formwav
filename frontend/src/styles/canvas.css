@@ -664,7 +664,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-pane-agent .fw-agent-quiet[data-agent="undo"]:disabled { display: none; }
 .fw-pane-agent .fw-agent-body { flex: 1 1 auto; min-block-size: 0; display: flex; flex-direction: column; }
 .fw-pane-agent .fw-agent-log { flex: 1 1 auto; min-block-size: 0; display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 14px; list-style: none; overflow: auto; }
-.fw-pane-agent .fw-agent-log:empty::before { content: "Tell the agent what this session needs, in your own words: it reads the session, measures it, changes it, and says what it did."; font-size: var(--fs-13); line-height: 1.5; color: var(--text-muted); }
+.fw-pane-agent .fw-agent-log:empty::before { content: attr(data-empty); font-size: var(--fs-13); line-height: 1.5; color: var(--text-muted); }
 .fw-pane-agent .fw-agent-you { align-self: flex-end; max-inline-size: 88%; padding: 10px 12px; border-radius: 12px; background: var(--bg-tertiary); color: var(--text-primary); line-height: 1.4; }
 .fw-pane-agent .fw-agent-says { font-size: var(--fs-13); line-height: 1.5; color: var(--text-primary); }
 .fw-pane-agent .fw-agent-did { padding: 2px 12px; border-inline-start: 2px solid var(--border-light); font-family: var(--font-mono); font-size: var(--fs-11); line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }

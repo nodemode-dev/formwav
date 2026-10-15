@@ -30,7 +30,7 @@ export function mountBrowser(host: HTMLElement, engine: Engine): void {
       const row = (e.target as HTMLElement).closest<HTMLElement>("[data-fx-group]");
       if (!row) return;
       pane.querySelector<HTMLButtonElement>('.fw-pane-tab[data-tab="effects"]')?.click();
-      pane.querySelector<HTMLElement>(`.fw-fxlib-group[aria-label="${row.dataset.fxGroup}"]`)?.scrollIntoView({ block: "start" });
+      pane.querySelector<HTMLElement>(`.fw-fxlib-group[data-fx-label="${row.dataset.fxGroup}"]`)?.scrollIntoView({ block: "start" });
     });
   }
 

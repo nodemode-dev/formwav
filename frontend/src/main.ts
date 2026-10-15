@@ -43,6 +43,7 @@ import { mountLatencyProbe } from "./ui/latency-probe";
 import { mountStatusBar } from "./ui/status-bar";
 import { mountFileMenu } from "./ui/file-menu";
 import { mountThemeMenu } from "./ui/theme-menu";
+import { mountLanguage, startI18n } from "./ui/i18n";
 import { mountEditorTabs } from "./ui/editor-tabs";
 import { mountClipTab } from "./ui/clip-tab";
 import { mountBrowserEffects } from "./ui/browser-effects";
@@ -87,6 +88,18 @@ const player = new Player(engine);
 // AU-22: the Inspector's output device, rate and channel map reach the player
 document.addEventListener("fw-output", (e) => void player.setOutput((e as CustomEvent<Partial<OutputChoice>>).detail));
 const host = document.getElementById("app");
+const i18nReady = startI18n(() => {
+  const doc = engine.get("document");
+  return [
+    ...doc.tracks.flatMap((t) => [t.name, ...t.clips.map((c) => c.name ?? "")]),
+    ...Object.values(doc.media).map((m) => m.name),
+    ...(doc.buses ?? []).map((b) => b.name),
+    ...(doc.vcas ?? []).map((v) => v.name),
+    ...doc.markers.map((m) => m.label),
+    ...(doc.regions ?? []).map((r) => r.label),
+    document.querySelector<HTMLInputElement>(".fw-session-name")?.value ?? "",
+  ];
+});
 if (host) {
   mountShell(host, engine);
   mountCounters(host, engine);
@@ -153,6 +166,7 @@ if (host) {
   mountOutputSelect(host, player);
   mountFileMenu(host);
   mountThemeMenu(host);
+  mountLanguage(host);
   mountClipTab(host, engine);
   mountEditorTabs(host, engine, player);
   mountBrowserEffects(host, engine);
@@ -177,6 +191,6 @@ activateAll(engine);
 // The suite's faces are requested by name before the reveal: fonts.ready alone resolved before Inter had been asked
 // for, so on a slow network the app showed in a fallback face and shifted when Inter swapped in. Never longer than 4 s.
 Promise.race([
-  Promise.all(["400 13px Inter", "500 13px Inter", "600 13px Inter", '400 12px "JetBrains Mono"'].map((face) => document.fonts.load(face))).then(() => document.fonts.ready),
+  Promise.all(["400 13px Inter", "500 13px Inter", "600 13px Inter", '400 12px "JetBrains Mono"'].map((face) => document.fonts.load(face))).then(() => document.fonts.ready).then(() => i18nReady),
   new Promise((done) => setTimeout(done, 4000)),
 ]).then(revealApp, revealApp);

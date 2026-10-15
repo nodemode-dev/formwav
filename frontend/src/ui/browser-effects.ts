@@ -27,12 +27,12 @@ export function mountBrowserEffects(host: HTMLElement, engine: Engine): void {
   section.setAttribute("aria-label", "Effects");
   section.innerHTML = `<div class="fw-fxlib-head"><span>Effects</span><span class="fw-fxlib-hint">Adds to the selected clip's track</span></div>${FX_GROUPS.map(
     ([label, kinds]) =>
-      `<div class="fw-fxlib-group" role="group" aria-label="${label}"><span class="fw-fxlib-label">${label}</span>${kinds
+      `<div class="fw-fxlib-group" role="group" aria-label="${label}" data-fx-label="${label}"><span class="fw-fxlib-label">${label}</span>${kinds
         .map((k) => `<button type="button" class="fw-fxlib-item" data-kind="${k}" title="Add ${KINDS[k].label} to the selected clip's track, live"><span>${KINDS[k].label}</span><span class="fw-fxlib-sub">${KINDS[k].sub}</span></button>`)
         .join("")}</div>`,
   ).join("")}<div class="fw-fxlib-head"><span>Studio processors</span><span class="fw-fxlib-hint">On the track's sum, a bus or the master</span></div>${PROCESSOR_ROWS.map(
     ([label, ids]) =>
-      `<div class="fw-fxlib-group" role="group" aria-label="Studio ${label}"><span class="fw-fxlib-label">${label}</span>${ids
+      `<div class="fw-fxlib-group" role="group" aria-label="Studio ${label}" data-fx-label="Studio ${label}"><span class="fw-fxlib-label">${label}</span>${ids
         .map((id) => {
           const p = PROCESSOR_BY_ID.get(id);
           const n = p?.params.length ?? 0;
