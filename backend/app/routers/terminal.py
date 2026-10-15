@@ -40,18 +40,29 @@ async def terminal(ws: WebSocket) -> None:
     import pty
     import termios
 
+    from ..services import claude_code
+
     await ws.accept()
     shell = os.environ.get("SHELL") or "/bin/bash"
-    pid, fd = pty.fork()
-    if pid == 0:  # the child becomes the shell
-        os.environ["TERM"] = "xterm-256color"
-        os.environ["COLORTERM"] = "truecolor"
-        os.environ["FORMWAV_TERMINAL_SESSION"] = "1"
+    run_claude = ws.query_params.get("run") == "claude"
+    argv = [shell, "-l"]
+    cwd = os.path.expanduser("~")
+    if run_claude:
         try:
-            os.chdir(os.path.expanduser("~"))
+            argv = claude_code.shell_wrapped(claude_code.argv(f"http://{ws.headers.get('host')}", resume=ws.query_params.get("resume") or None))
+            cwd = str(claude_code.workdir())
+        except FileNotFoundError as err:
+            await ws.send_bytes(f"\r\n{err}\r\n".encode())
+            await ws.close()
+            return
+    env = claude_code.child_env()
+    pid, fd = pty.fork()
+    if pid == 0:  # the child becomes the shell, or Claude Code through a login shell
+        try:
+            os.chdir(cwd)
         except OSError:
             pass
-        os.execvp(shell, [shell, "-l"])
+        os.execvpe(argv[0], argv, env)
     loop = asyncio.get_running_loop()
     out: asyncio.Queue[bytes] = asyncio.Queue()
 

@@ -77,11 +77,13 @@ def _present(client: str) -> bool | None:
         return None
 
 
-def clients() -> list[dict]:
+def clients(base: str = "http://127.0.0.1:8060") -> list[dict]:
     command, args, env = server_command()
-    add = ["claude", "mcp", "add", NAME, "--scope", "user"] + [f for k, v in env.items() for f in ("-e", f"{k}={v}")] + ["--", command, *args]
+    from ..services import claude_code
+
+    add = ["claude", "mcp", "add", "--transport", "http", "--scope", "user", NAME, f"{base}/mcp"]
     return [
-        {"id": "claude-code", "name": "Claude Code", "kind": "command", "file": None, "text": _line(add), "installable": shutil.which("claude") is not None, "present": None},
+        {"id": "claude-code", "name": "Claude Code", "kind": "command", "file": None, "text": _line(add), "installable": claude_code.cli() is not None, "present": None},
         {"id": "codex", "name": "Codex", "kind": "file", "file": str(FILES["codex"]()), "text": _codex_block(), "installable": True, "present": _present("codex")},
         {"id": "cursor", "name": "Cursor", "kind": "file", "file": str(FILES["cursor"]()), "text": json.dumps({"mcpServers": {NAME: _stdio()}}, indent=2), "installable": True, "present": _present("cursor")},
         {"id": "claude-desktop", "name": "Claude Desktop", "kind": "file", "file": str(_desktop_file()), "text": json.dumps({"mcpServers": {NAME: _stdio()}}, indent=2), "installable": True, "present": _present("claude-desktop")},
@@ -99,7 +101,7 @@ def _refuse_remote(request: Request) -> None:
 def connect(request: Request) -> dict:
     _refuse_remote(request)
     command, args, env = server_command()
-    return {"command": command, "args": args, "env": env, "ready": Path(command).exists(), "clients": clients()}
+    return {"command": command, "args": args, "env": env, "ready": Path(command).exists(), "clients": clients(f"http://{request.url.netloc}")}
 
 
 @router.post("/install")
@@ -109,10 +111,12 @@ def install(request: Request, body: dict = Body(...)) -> dict:
     client = str(body.get("client", ""))
     command, args, env = server_command()
     if client == "claude-code":
-        claude = shutil.which("claude")
+        from ..services import claude_code
+
+        claude = claude_code.cli()
         if not claude:
-            raise HTTPException(409, "claude is not on this computer's PATH: install Claude Code first, or paste the command shown")
-        run = subprocess.run([claude, "mcp", "add", NAME, "--scope", "user"] + [f for k, v in env.items() for f in ("-e", f"{k}={v}")] + ["--", command, *args], capture_output=True, text=True, timeout=60, check=False)
+            raise HTTPException(409, claude_code.INSTALL)
+        run = subprocess.run([claude, "mcp", "add", "--transport", "http", "--scope", "user", NAME, f"http://{request.url.netloc}/mcp"], capture_output=True, text=True, timeout=60, check=False, env=claude_code.child_env())
         text = (run.stdout + run.stderr).strip()
         if run.returncode and "already exists" not in text:
             raise HTTPException(502, f"claude mcp add failed: {text[-400:]}")

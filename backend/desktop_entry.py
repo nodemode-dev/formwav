@@ -125,6 +125,15 @@ def main() -> int:
     from app.main import app as fastapi_app
 
     port = int(os.environ.get("FORMWAV_PORT", "0") or 0)
+    if port == 0:
+        import socket
+
+        with socket.socket() as probe:
+            try:
+                probe.bind(("127.0.0.1", 8060))
+                port = 8060
+            except OSError:
+                port = 0
     uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info")
     return 0
 
