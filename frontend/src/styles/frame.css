@@ -454,6 +454,8 @@
 .fw-piano-state { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .fw-piano-canvas { display: block; inline-size: 100%; block-size: 100%; min-block-size: 0; cursor: crosshair; outline: none; }
 .fw-piano-canvas[hidden] { display: none; }
+.fw-dock .fw-piano > .fw-piano-head { flex-wrap: wrap; row-gap: var(--space-2); padding-block: var(--space-2); }
+.fw-piano > .fw-piano-head .fw-piano-state { flex: 1 1 0; min-inline-size: 0; }
 .fw-piano-list { min-block-size: 0; overflow: auto; scrollbar-gutter: stable; }
 .fw-piano-list table { inline-size: 100%; border-collapse: collapse; font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
 .fw-piano-list th { position: sticky; inset-block-start: 0; padding: var(--space-1) var(--space-2); background: var(--bg-secondary); color: var(--text-muted); font-weight: 600; text-align: start; white-space: nowrap; }

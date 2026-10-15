@@ -114,7 +114,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
     target = targets.length ? { trackId: targets[0].trackId, clipId: targets[0].clipId } : null;
     origin = targets.length ? Math.min(...targets.map((t) => t.start)) : 0;
     if (!target) {
-      setText(state, "Select a note clip to edit its notes, or Event > New note clip");
+      setText(state, "No note clip");
       return;
     }
     setText(state, targets.length === 1 ? `${firstName} · ${notes.length} notes` : `${targets.length} clips · ${notes.length} notes`);
