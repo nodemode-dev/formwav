@@ -64,6 +64,122 @@ class Bridge:
 BRIDGE = Bridge()
 
 
+class Consent:
+    """PLAN_v14 W2: an agent from outside formwav (one added with claude mcp add, the command line, another program)
+    is asked about once: the window shows Allow, Always allow and Block; Always allow and Block are kept in the data
+    folder's agents.json (outside: ask, allow or block), Allow lasts until the engine stops. The Agent column's own
+    Claude Code carries the engine's token and is never asked."""
+
+    def __init__(self) -> None:
+        self.session: str | None = None
+        self.lock: asyncio.Lock | None = None
+
+    def _file(self):
+        from ..core.paths import data_dir
+
+        return data_dir() / "agents.json"
+
+    def policy(self) -> str:
+        try:
+            value = json.loads(self._file().read_text()).get("outside", "ask")
+        except (OSError, ValueError, AttributeError):
+            value = "ask"
+        return value if value in ("ask", "allow", "block") else "ask"
+
+    def keep(self, value: str) -> None:
+        try:
+            self._file().write_text(json.dumps({"outside": value}))
+        except OSError:
+            pass
+
+    async def check(self, name: str, client: str) -> str | None:
+        policy = self.policy()
+        if policy == "allow" or self.session == "allow":
+            return None
+        if policy == "block" or self.session == "block":
+            return "The person using formwav has blocked outside agents (Settings > Agents, or the Agent column's prompt)."
+        if self.lock is None:
+            self.lock = asyncio.Lock()
+        async with self.lock:
+            if self.session in ("allow", "block"):
+                return None if self.session == "allow" else "Blocked by the person using formwav."
+            if not BRIDGE.live():
+                return "formwav's window is not open: the session's tools run in it, and the person there is asked first."
+            cid = str(next(BRIDGE.ids))
+            fut: asyncio.Future = asyncio.get_running_loop().create_future()
+            BRIDGE.waiting[cid] = fut
+            await BRIDGE.queue().put({"id": cid, "consent": True, "name": name, "client": client})
+            try:
+                choice = await asyncio.wait_for(fut, timeout=120)
+            except asyncio.TimeoutError:
+                return "Nobody answered formwav's prompt within two minutes; ask again when someone is at formwav."
+            finally:
+                BRIDGE.waiting.pop(cid, None)
+            if choice == "always":
+                self.keep("allow")
+            self.session = "block" if choice == "block" else "allow"
+            return "Blocked by the person using formwav." if choice == "block" else None
+
+
+CONSENT = Consent()
+CLIENTS: dict[str, str] = {}
+
+
+@router.get("/api/agents/outside")
+def outside_policy() -> dict:
+    return {"outside": CONSENT.policy(), "now": CONSENT.session}
+
+
+class Policy(BaseModel):
+    outside: str
+
+
+@router.post("/api/agents/outside")
+def set_outside_policy(body: Policy) -> dict:
+    if body.outside not in ("ask", "allow", "block"):
+        raise HTTPException(status_code=400, detail="outside must be ask, allow or block")
+    CONSENT.keep(body.outside)
+    CONSENT.session = None
+    return {"outside": body.outside}
+
+
+async def _run_tool(name: str, arguments: dict, who: str, client: str) -> tuple[bool, Any]:
+    if who == "outside":
+        refused = await CONSENT.check(name, client)
+        if refused:
+            return False, refused
+    try:
+        return True, await BRIDGE.call(name, arguments, who)
+    except (RuntimeError, asyncio.TimeoutError) as err:
+        return False, str(err) or "the tool took too long"
+
+
+@router.get("/api/commands")
+async def list_commands(group: str | None = None, text: str | None = None) -> Any:
+    ok, out = await _run_tool("list_commands", {k: v for k, v in (("group", group), ("text", text)) if v}, "outside", "formwav's command line")
+    if not ok:
+        raise HTTPException(status_code=409, detail=out)
+    return out
+
+
+@router.get("/api/commands/{cid}")
+async def describe(cid: str) -> Any:
+    ok, out = await _run_tool("describe_command", {"id": cid}, "outside", "formwav's command line")
+    if not ok:
+        raise HTTPException(status_code=404 if "no command" in str(out) else 409, detail=out)
+    return out
+
+
+class Params(BaseModel):
+    params: dict = {}
+
+
+@router.post("/api/commands/{cid}")
+async def run(cid: str, body: Params) -> Any:
+    ok, out = await _run_tool("run_command", {"id": cid, "params": body.params}, "outside", "formwav's command line")
+    return {"ok": True, **out} if ok and isinstance(out, dict) else {"ok": ok, "result" if ok else "error": out}
+
+
 class Catalogue(BaseModel):
     tools: list[dict]
 
@@ -130,6 +246,9 @@ async def mcp(request: Request) -> Response:
         return Response(status_code=202)
     who = "inapp" if request.headers.get("x-formwav-inapp") == claude_code.INAPP_TOKEN else "outside"
     if method == "initialize":
+        info = params.get("clientInfo") or {}
+        if info.get("name"):
+            CLIENTS[request.client.host if request.client else "?"] = str(info.get("name"))[:60]
         asked = params.get("protocolVersion")
         from ..core.version import VERSION
 
@@ -143,12 +262,10 @@ async def mcp(request: Request) -> Response:
         name = params.get("name")
         if not any(t["name"] == name for t in BRIDGE.tools):
             return _rpc(id_, {"content": [{"type": "text", "text": f"There is no formwav tool named {name}; call tools/list." if BRIDGE.live() else "formwav's window is not open: the session's tools run in it."}], "isError": True})
-        try:
-            out = await BRIDGE.call(name, params.get("arguments") or {}, who)
-            text = out if isinstance(out, str) else json.dumps(out)
-            return _rpc(id_, {"content": [{"type": "text", "text": text}], "isError": False})
-        except (RuntimeError, asyncio.TimeoutError) as err:
-            return _rpc(id_, {"content": [{"type": "text", "text": str(err) or "the tool took too long"}], "isError": True})
+        client = request.headers.get("x-formwav-agent") or CLIENTS.get(request.client.host if request.client else "?", "An agent outside formwav")
+        ok, out = await _run_tool(name, params.get("arguments") or {}, who, client)
+        text = out if isinstance(out, str) else json.dumps(out)
+        return _rpc(id_, {"content": [{"type": "text", "text": text}], "isError": not ok})
     return _rpc(id_, error=(-32601, f"no method {method}"))
 
 
