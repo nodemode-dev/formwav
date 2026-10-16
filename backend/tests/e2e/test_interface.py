@@ -495,8 +495,8 @@ def test_the_counters_read_every_timebase_and_the_rulers_stack_with_nothing_movi
     assert page.evaluate("[document.querySelector('.fw-subcounter').textContent, document.querySelector('.fw-st-length').hidden]") == ["Timecode 00:00:03:00", True]
     page.click('.fw-counter-pop [data-c="all"]')
     ruler = "Math.round(document.querySelector('.fw-ruler').getBoundingClientRect().height)"
-    page.wait_for_function(f"{ruler} === 156")
-    assert page.evaluate("[...document.querySelectorAll('.fw-ruler-names span')].map((s) => s.textContent)") == ["Bars|Beats", "Min:Secs", "Timecode", "Timecode 2", "Feet+Frames", "Samples"]
+    page.wait_for_function(f"{ruler} === 236")
+    assert page.evaluate("[...document.querySelectorAll('.fw-ruler-names span')].map((s) => s.textContent)") == ["Bars|Beats", "Min:Secs", "Timecode", "Timecode 2", "Feet+Frames", "Samples", "Tempo", "Meter", "Key", "Chords"]
     page.click('.fw-counter-pop [data-c="minimal"]')
     page.wait_for_function(f"{ruler} === 36")
     page.keyboard.press("Escape")
@@ -1009,7 +1009,14 @@ def test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_
     names = [next((m.name for m in t if m.type == "track_name"), None) for t in out.tracks]
     assert names[1:] == ["Piano", "Drums"]
     meta = {m.type: m for m in out.tracks[0] if m.is_meta}
-    assert round(mido.tempo2bpm(meta["set_tempo"].tempo), 3) == 100.0 and (meta["time_signature"].numerator, meta["time_signature"].denominator) == (3, 4)
+    at, tempos = 0, []
+    for m in out.tracks[0]:
+        at += m.time
+        if m.type == "set_tempo":
+            tempos.append((at, round(mido.tempo2bpm(m.tempo), 3)))
+    # S11: the file's tempo change and its 6/8 come in with it and go back out as they were (the change 4 quarters in,
+    # 1920 at 480 a quarter; before the map the 6/8 was kept as three quarters a bar)
+    assert tempos == [(0, 100.0), (1920, 150.0)] and (meta["time_signature"].numerator, meta["time_signature"].denominator) == (6, 8)
     ticks, markers = 0, []
     for m in out.tracks[0]:
         ticks += m.time
@@ -1037,7 +1044,7 @@ def test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_
     notes = [(n.pitch.nameWithOctave, float(n.quarterLength)) for n in parts[0].recurse().notes]
     assert notes == [("C4", 1.0), ("E4", 1.0)]
     assert [(n.pitch.midi, float(n.quarterLength), float(n.getOffsetInHierarchy(parts[1]))) for n in parts[1].recurse().notes] == [(36, 0.5, 0.0), (38, 0.5, 2.0)]
-    assert parts[0].recurse().getElementsByClass("TimeSignature")[0].ratioString == "3/4"
+    assert parts[0].recurse().getElementsByClass("TimeSignature")[0].ratioString == "6/8"
 
     page.evaluate("document.querySelector('[data-panel=\"score\"]').click()")
     page.wait_for_selector(".fw-score-body svg")
@@ -1057,11 +1064,12 @@ def test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_
     rows = page.evaluate(ROWS)
     assert [r[1] for r in rows] == ["C4", "D4", "E4", "C5"]
     starts = [r[0] for r in rows]
-    assert starts == ["1| 1| 000", "1| 1| 240", "1| 1| 480", "1| 2| 000"]
+    # S11: the file's 6/8 is kept, so the counter's beats are eighths (480 ticks)
+    assert starts == ["1| 1| 000", "1| 1| 240", "1| 2| 000", "1| 3| 000"]
     page.evaluate("document.dispatchEvent(new CustomEvent('fw-midi-note', { detail: { pitch: 67, velocity: 90 } })); document.dispatchEvent(new CustomEvent('fw-midi-note', { detail: { pitch: 71, velocity: 90 } }))")
     page.wait_for_function(f"{NOTES_STATE}.endsWith('6 notes')", timeout=10000)
     rows = page.evaluate(ROWS)
-    assert [(r[0], r[1]) for r in rows[4:]] == [("1| 2| 240", "G4"), ("1| 2| 240", "B4")]
+    assert [(r[0], r[1]) for r in rows[4:]] == [("1| 3| 240", "G4"), ("1| 3| 240", "B4")]
     assert _clean(page)["errors"] == []
 
 
@@ -1175,4 +1183,50 @@ def test_every_send_shows_on_the_strip_with_pre_mute_and_pan_a_bus_plays_into_a_
     assert page.evaluate(f"[...document.querySelector('{b2} .fw-strip-bus-out').options].map((o) => o.value)") == [""]
     _menu(page, "Track", "Ungroup")
     _step(page, "Ungrouped tracks")
+    assert _clean(page)["errors"] == []
+
+
+def test_tempo_meter_key_and_chord_rulers_take_changes_by_double_click_and_the_event_menu_ramps_and_stretches_the_tempo(page, app_url):
+    page.add_init_script("try { localStorage.setItem('formwav.rulers', JSON.stringify(['tempo', 'meter', 'key', 'chords'])); } catch {}")
+    notes = [{"at": 0, "length": 96000, "pitch": p, "velocity": 90} for p in (60, 64, 67)]
+    doc = {"sampleRate": 48000, "media": {}, "markers": [], "tempo": {"bpm": 120, "beatsPerBar": 4}, "loop": {"start": 0, "end": 192000, "enabled": False}, "tracks": [
+        {"id": "t1", "name": "Keys", "channels": 2, "gainDb": 0, "mute": False, "solo": False, "clips": [{"id": "c1", "mediaId": "", "start": 0, "length": 384000, "sourceIn": 0, "gainDb": 0, "notes": notes}]},
+    ]}
+    _engine(app_url, "PUT", "/api/autosave", {"name": "Tempo", "document": doc})
+    try:
+        _open(page, app_url)
+        page.wait_for_selector("dialog.fw-ask-dialog[open]")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1")
+    finally:
+        _engine(app_url, "DELETE", "/api/autosave")
+    page.click('[data-agent-tab="history"]')
+    assert page.evaluate("[...document.querySelectorAll('.fw-ruler-names span')].length") == 4
+    top = page.evaluate("document.querySelector('.fw-ruler-corner').offsetHeight")
+    canvas = page.locator(".fw-ruler-canvas").first
+    dialog = "dialog.fw-ask-dialog[open]"
+
+    def change(row: int, x: float, field: str, value: str, label: str) -> None:
+        canvas.dblclick(position={"x": x, "y": top + row * 20 + 10})
+        page.wait_for_selector(dialog)
+        if page.locator(f"{dialog} select[data-k='{field}']").count():
+            page.select_option(f"{dialog} select[data-k='{field}']", value)
+        else:
+            page.fill(f"{dialog} [data-k='{field}']", value)
+        page.keyboard.press("Enter")
+        _step(page, label)
+
+    px = page.evaluate("document.querySelector('.fw-ruler-canvas').getBoundingClientRect().width") / 8
+    change(1, 2 * px + 20, "num", "3", "Changed the meter map")
+    change(2, 2 * px + 20, "key", "A minor", "Changed the key map")
+    change(0, 1 * px + 20, "bpm", "90", "Changed the tempo map")
+    _menu(page, "Event", "Tempo ramp across the selection")
+    page.wait_for_selector(dialog)
+    page.fill(f"{dialog} [data-k='end']", "140")
+    page.keyboard.press("Enter")
+    _step(page, "Ramped the tempo")
+    _menu(page, "Event", "Stretch the selection's tempo")
+    page.wait_for_selector(dialog)
+    page.keyboard.press("Enter")
+    _step(page, "Stretched the tempo")
     assert _clean(page)["errors"] == []

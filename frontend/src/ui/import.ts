@@ -2,6 +2,33 @@ import type { Command, Engine, MediaRef, SessionDoc } from "../engine";
 import { importFile } from "../io/media-client";
 import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
 
+type SongMap = { tempos?: { tick: number | null; bpm: number }[]; meters?: { tick?: number | null; numerator: number; denominator: number }[]; keys?: { tick?: number | null; fifths: number; minor: boolean }[] };
+
+const MAJORS = ["Cb", "Gb", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E", "B", "F#", "C#"];
+const MINORS = ["Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E", "B", "F#", "C#", "G#", "D#", "A#"];
+
+/** S11: a MIDI file's tempo, meter and key changes as the session's (meters placed at the bar their tick starts). */
+function songMap(song: SongMap): Command[] {
+  const out: Command[] = [];
+  const tempos = (song.tempos ?? []).filter((t) => t.tick !== null);
+  if (tempos.length > 1) out.push({ type: "set-tempo-map", changes: tempos.map((t) => ({ tick: t.tick as number, bpm: Math.round(t.bpm * 1000) / 1000 })) });
+  let bar = 0;
+  let tick = 0;
+  let perBar = 3840;
+  for (const m of song.meters ?? []) {
+    if (m.tick === null || m.tick === undefined) continue;
+    bar += Math.round((m.tick - tick) / perBar);
+    tick = m.tick;
+    perBar = (m.numerator * 3840) / m.denominator;
+    out.push({ type: "set-meter-change", bar, num: m.numerator, den: m.denominator });
+  }
+  for (const k of song.keys ?? []) {
+    const name = (k.minor ? MINORS : MAJORS)[k.fifths + 7];
+    if (name && k.tick !== null && k.tick !== undefined) out.push({ type: "set-key-change", tick: k.tick, key: `${name} ${k.minor ? "minor" : "major"}` });
+  }
+  return out;
+}
+
 export function mountImport(host: HTMLElement, engine: Engine): void {
   const input = host.querySelector<HTMLInputElement>(".fw-file");
   const button = host.querySelector<HTMLButtonElement>('[data-action="import"]');
@@ -83,7 +110,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
       } else if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
         // the engine reads the file and the built-in instrument renders its notes; the rendering plays like any audio
         const res = await fetch(`/api/midi/import?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST", body: file, headers: { "X-Filename": file.name } });
-        type Song = { detail?: unknown; tempo?: number; meters?: { numerator: number; denominator: number }[]; markers?: { time: number; label: string }[]; tracks?: { name: string; channel: number; media: MediaRef; notes: { start: number; length: number; pitch: number; velocity: number }[]; controllers: { time: number; kind: "cc" | "bend" | "program" | "pressure"; number: number; value: number }[] }[] };
+        type Song = SongMap & { detail?: unknown; tempo?: number; markers?: { time: number; label: string }[]; tracks?: { name: string; channel: number; media: MediaRef; notes: { start: number; length: number; pitch: number; velocity: number }[]; controllers: { time: number; kind: "cc" | "bend" | "program" | "pressure"; number: number; value: number }[] }[] };
         const out = (await res.json().catch(() => ({}))) as Song;
         if (!res.ok || !out.tracks?.length) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
         // S8: one note track per track of the file, its name, notes and controllers; the file's markers; its first tempo and
@@ -99,6 +126,8 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
         const beats = meter ? Math.max(1, Math.round((meter.numerator * 4) / meter.denominator)) : 4;
         const tempoSet = !before.tempo && out.tempo;
         if (tempoSet) commands.push({ type: "set-tempo", bpm: Math.round((out.tempo ?? 120) * 100) / 100, beatsPerBar: beats });
+        // S11: a file placed at the start brings its whole tempo, meter and key map, in ticks at 960 a quarter
+        if (tempoSet && at === 0) commands.push(...songMap(out));
         engine.dispatch({ type: "batch", commands, label: `Imported ${file.name}` });
         const count = out.tracks.reduce((n, t) => n + t.notes.length, 0);
         final = `Imported ${file.name}: ${out.tracks.length} track${out.tracks.length === 1 ? "" : "s"}, ${count} notes${out.markers?.length ? `, ${out.markers.length} markers` : ""}${tempoSet ? `; the session tempo is now ${Math.round(out.tempo ?? 120)} BPM` : ""}, played by the built-in instrument`;

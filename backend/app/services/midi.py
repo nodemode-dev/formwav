@@ -175,10 +175,10 @@ def read_song(data: bytes) -> dict:
                 markers.append({"time": seconds(tick), "label": _text(body) or "Marker"})
                 continue
             if status == 0xFF58 and len(body) >= 2:
-                meters.append({"time": seconds(tick), "numerator": body[0], "denominator": 2 ** body[1]})
+                meters.append({"time": seconds(tick), "tick": None if smpte else round(tick * 960 / division), "numerator": body[0], "denominator": 2 ** body[1]})
                 continue
             if status == 0xFF59 and len(body) >= 2:
-                keys.append({"time": seconds(tick), "fifths": body[0] - 256 if body[0] > 127 else body[0], "minor": bool(body[1])})
+                keys.append({"time": seconds(tick), "tick": None if smpte else round(tick * 960 / division), "fifths": body[0] - 256 if body[0] > 127 else body[0], "minor": bool(body[1])})
                 continue
             if status >= 0xFF00:
                 continue
@@ -223,7 +223,7 @@ def read_song(data: bytes) -> dict:
         "ticks": division if not smpte else None,
         "smpte": smpte,
         "tempo": tempos[0][1],
-        "tempos": [{"time": seconds(at), "bpm": bpm} for at, bpm in tempos],
+        "tempos": [{"time": seconds(at), "tick": None if smpte else round(at * 960 / division), "bpm": bpm} for at, bpm in tempos],
         "meters": sorted(meters, key=lambda m: m["time"]) or [{"time": 0.0, "numerator": 4, "denominator": 4}],
         "markers": sorted(markers, key=lambda m: m["time"]),
         "keys": sorted(keys, key=lambda k: k["time"]),

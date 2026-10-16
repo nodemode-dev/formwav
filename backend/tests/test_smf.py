@@ -46,9 +46,10 @@ def test_a_format_1_file_comes_back_as_named_tracks_with_its_tempo_map_meter_mar
     assert [(n["pitch"], round(n["start"], 4), round(n["length"], 4), n["velocity"]) for n in piano["notes"]] == [(60, 0.0, 0.6, 90), (64, 0.6, 0.6, 80)]
     assert drums["drums"] and drums["channel"] == 9 and [round(n["start"], 4) for n in drums["notes"]] == [0.0, 1.2]
     assert [(round(t["time"], 4), round(t["bpm"], 3)) for t in song["tempos"]] == [(0.0, 100.0), (2.4, 150.0)]
-    assert song["meters"] == [{"time": 0.0, "numerator": 6, "denominator": 8}]
+    assert song["meters"] == [{"time": 0.0, "tick": 0, "numerator": 6, "denominator": 8}]
+    assert [t["tick"] for t in song["tempos"]] == [0, round(4 * 960)]
     assert [(round(m["time"], 4), m["label"]) for m in song["markers"]] == [(1.2, "Verse")]
-    assert song["keys"] == [{"time": 0.0, "fifths": 2, "minor": False}]
+    assert song["keys"] == [{"time": 0.0, "tick": 0, "fifths": 2, "minor": False}]
     kinds = {(c["kind"], c["number"], c["value"], round(c["time"], 4)) for c in piano["controllers"]}
     assert kinds == {("program", 0, 5, 0.0), ("cc", 7, 100, 0.0), ("bend", 0, 4096, 0.3)}
 
