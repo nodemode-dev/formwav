@@ -1,5 +1,6 @@
 import { PROCESSOR_BY_ID, processorValues } from "./processors";
 import { FRAME_RATES, type FrameRateId } from "./timebase";
+import type { KeyChange, MeterChange, TempoChange } from "./tempo";
 
 export interface MediaRef {
   id: string;
@@ -197,6 +198,17 @@ export function cleanLane(points: readonly AutoPoint[], lo: number, hi: number, 
     byTime.set(Math.max(0, Math.round(p.time)), stepped ? (p.value >= 0.5 ? 1 : 0) : Math.min(hi, Math.max(lo, Math.round(p.value * 100) / 100)));
   }
   return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
+}
+
+/** S11: the tempo changes after tick 0 set in order, the same tempo twice in a row dropped. */
+function withTempos(doc: SessionDoc, changes: readonly TempoChange[]): SessionDoc {
+  const sorted = [...changes].sort((a, b) => a.tick - b.tick);
+  const next: TempoChange[] = [];
+  let last = doc.tempo?.bpm ?? 120;
+  for (const c of sorted) if (c.bpm !== last) next.push({ tick: c.tick, bpm: (last = c.bpm) });
+  if (JSON.stringify(next) === JSON.stringify(doc.tempoChanges ?? [])) return doc;
+  const { tempoChanges: _t, ...rest } = doc;
+  return next.length ? { ...rest, tempoChanges: next } : rest;
 }
 
 /** S10: the other tracks of the active group a track belongs to, when that group links `what`. */
@@ -648,7 +660,12 @@ export interface SessionDoc {
   /** Realtime effects on the summed mix, before the master fader (Audacity's master stack). */
   masterFx?: TrackFx[];
   /** The session tempo, for the bars ruler, beat snapping and Quantize (set by hand or detected). */
-  tempo?: { bpm: number; beatsPerBar: number };
+  tempo?: { bpm: number; beatsPerBar: number; beatUnit?: number };
+  /** S11: tempo changes after the first (engine/tempo.ts; ticks at 960 a quarter), meter changes from a bar (counted
+   *  from 0), and key changes after the session's key. */
+  tempoChanges?: readonly TempoChange[];
+  meterChanges?: readonly MeterChange[];
+  keyChanges?: readonly KeyChange[];
   /** PT-26: the timecode the session starts at, in seconds (Pro Tools' session start); timecode reads add it. */
   timecodeStart?: number;
   /** The session's timecode rate (engine/timebase.ts), for timecode, Feet+Frames and a grid of frames; absent is 30. */
@@ -753,6 +770,10 @@ export type Command =
   | { type: "set-master-fx"; fx: TrackFx[] }
   | { type: "set-bus-fx"; busId: string; fx: TrackFx[] }
   | { type: "set-tempo"; bpm: number; beatsPerBar: number }
+  | { type: "set-tempo-change"; tick: number; bpm: number | null }
+  | { type: "set-meter-change"; bar: number; num: number; den: number; remove?: boolean }
+  | { type: "set-key-change"; tick: number; key: string | null }
+  | { type: "set-tempo-map"; changes: readonly TempoChange[]; label?: string }
   | { type: "set-time-track"; points: TimePoint[]; log?: boolean }
   | { type: "set-clip-envelope"; trackId: string; clipId: string; points: { at: number; db: number }[] }
   | { type: "set-clip-type"; trackId: string; clipId: string; soundType: "dialogue" | "music" | "effects" | "ambience" | null }
@@ -1556,7 +1577,51 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const bpm = Math.round(Math.min(300, Math.max(30, cmd.bpm)) * 10) / 10;
       const beatsPerBar = Math.round(Math.min(16, Math.max(1, cmd.beatsPerBar)));
       if (doc.tempo && doc.tempo.bpm === bpm && doc.tempo.beatsPerBar === beatsPerBar) return doc;
-      return { ...doc, tempo: { bpm, beatsPerBar } };
+      return { ...doc, tempo: { bpm, beatsPerBar, ...(doc.tempo?.beatUnit && doc.tempo.beatUnit !== 4 ? { beatUnit: doc.tempo.beatUnit } : {}) } };
+    }
+    case "set-tempo-change": {
+      // S11: tick 0 is the session's tempo; a change at another tick replaces any there, null removes it
+      const tick = Math.max(0, Math.round(cmd.tick));
+      if (!Number.isFinite(tick)) return doc;
+      const bpm = cmd.bpm === null ? null : Math.round(Math.min(300, Math.max(20, cmd.bpm)) * 1000) / 1000;
+      if (tick === 0) {
+        if (bpm === null || !Number.isFinite(bpm) || doc.tempo?.bpm === bpm) return doc;
+        return { ...doc, tempo: { ...(doc.tempo ?? { beatsPerBar: 4 }), bpm } };
+      }
+      return withTempos(doc, [...(doc.tempoChanges ?? []).filter((c) => c.tick !== tick), ...(bpm !== null && Number.isFinite(bpm) ? [{ tick, bpm }] : [])]);
+    }
+    case "set-tempo-map": {
+      const first = cmd.changes.find((c) => c.tick <= 0);
+      const base = first ? Math.round(Math.min(300, Math.max(20, first.bpm)) * 1000) / 1000 : doc.tempo?.bpm ?? 120;
+      const based = base === (doc.tempo?.bpm ?? 120) && doc.tempo ? doc : { ...doc, tempo: { ...(doc.tempo ?? { beatsPerBar: 4 }), bpm: base } };
+      return withTempos(based, cmd.changes.filter((c) => c.tick > 0 && Number.isFinite(c.bpm)).map((c) => ({ tick: Math.round(c.tick), bpm: Math.round(Math.min(300, Math.max(20, c.bpm)) * 1000) / 1000 })));
+    }
+    case "set-meter-change": {
+      const bar = Math.max(0, Math.round(cmd.bar));
+      const num = Math.round(Math.min(32, Math.max(1, cmd.num)));
+      const den = [1, 2, 4, 8, 16, 32].includes(cmd.den) ? cmd.den : 4;
+      if (!Number.isFinite(bar) || !Number.isFinite(num)) return doc;
+      if (bar === 0) {
+        if (cmd.remove) return doc;
+        const { beatUnit: _u, ...rest } = doc.tempo ?? { bpm: 120, beatsPerBar: 4 };
+        const tempo = { ...rest, beatsPerBar: num, ...(den !== 4 ? { beatUnit: den } : {}) };
+        return JSON.stringify(tempo) === JSON.stringify(doc.tempo) ? doc : { ...doc, tempo };
+      }
+      const others = (doc.meterChanges ?? []).filter((m) => m.bar !== bar);
+      const next = (cmd.remove ? others : [...others, { bar, num, den }]).sort((a, b) => a.bar - b.bar);
+      if (JSON.stringify(next) === JSON.stringify(doc.meterChanges ?? [])) return doc;
+      const { meterChanges: _m, ...rest } = doc;
+      return next.length ? { ...rest, meterChanges: next } : rest;
+    }
+    case "set-key-change": {
+      const tick = Math.max(0, Math.round(cmd.tick));
+      const key = cmd.key?.trim().slice(0, 24) || null;
+      if (!Number.isFinite(tick)) return doc;
+      const others = (doc.keyChanges ?? []).filter((k) => k.tick !== tick);
+      const next = (key ? [...others, { tick, key }] : others).sort((a, b) => a.tick - b.tick);
+      if (JSON.stringify(next) === JSON.stringify(doc.keyChanges ?? [])) return doc;
+      const { keyChanges: _k, ...rest } = doc;
+      return next.length ? { ...rest, keyChanges: next } : rest;
     }
     case "set-bus-fx": {
       const fx = cleanFx(cmd.fx);

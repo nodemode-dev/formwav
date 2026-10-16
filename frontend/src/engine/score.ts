@@ -1,5 +1,6 @@
 import type { SessionDoc } from "./document";
 import { noteTracks, trackEvents } from "./smf";
+import { PPQ, sampleToTick, tempoMap } from "./tempo";
 
 export interface ScoreItem {
   rest: boolean;
@@ -19,6 +20,8 @@ export interface Score {
   title: string;
   bpm: number;
   beats: number;
+  /** S11: the note value a beat is (4 a quarter, 8 an eighth) */
+  unit: number;
   measures: number;
   parts: ScorePart[];
 }
@@ -46,8 +49,11 @@ const split = (dur: number) => {
 export function layout(doc: SessionDoc, title = "formwav session"): Score {
   const bpm = doc.tempo?.bpm ?? 120;
   const beats = Math.max(1, Math.round(doc.tempo?.beatsPerBar ?? 4));
-  const bar = beats * 4;
-  const sixteenth = (frames: number) => Math.round((frames / doc.sampleRate) * (bpm / 60) * 4);
+  const unit = doc.tempo?.beatUnit ?? 4;
+  const bar = (beats * 16) / unit;
+  // S11: positions through the tempo map (the score keeps the session's first meter for every bar)
+  const map = tempoMap(doc);
+  const sixteenth = (frames: number) => Math.round(sampleToTick(map, frames) / (PPQ / 4));
   const tracks = noteTracks(doc);
   const raw = tracks.map((t) => trackEvents(doc, t).notes.map((n) => ({ at: sixteenth(n.at), len: Math.max(1, sixteenth(n.at + n.length) - sixteenth(n.at)), pitch: n.pitch })));
   const end = Math.max(1, ...raw.flat().map((n) => n.at + n.len));
@@ -93,7 +99,7 @@ export function layout(doc: SessionDoc, title = "formwav session"): Score {
     const middle = all.length ? all[Math.floor(all.length / 2)] : 60;
     return { name: t.name, clef: middle >= 57 ? ("G" as const) : ("F" as const), measures: items };
   });
-  return { title, bpm, beats, measures, parts };
+  return { title, bpm, beats, unit, measures, parts };
 }
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -116,12 +122,12 @@ export function musicXml(score: Score): string {
     p.measures.forEach((items, m) => {
       out.push(`    <measure number="${m + 1}">`);
       if (m === 0) {
-        out.push(`      <attributes><divisions>4</divisions><key><fifths>0</fifths></key><time><beats>${score.beats}</beats><beat-type>4</beat-type></time><clef><sign>${p.clef}</sign><line>${p.clef === "G" ? 2 : 4}</line></clef></attributes>`);
+        out.push(`      <attributes><divisions>4</divisions><key><fifths>0</fifths></key><time><beats>${score.beats}</beats><beat-type>${score.unit}</beat-type></time><clef><sign>${p.clef}</sign><line>${p.clef === "G" ? 2 : 4}</line></clef></attributes>`);
         out.push(`      <direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${Math.round(score.bpm)}</per-minute></metronome></direction-type><sound tempo="${Math.round(score.bpm * 100) / 100}"/></direction>`);
       }
       const whole = items.length > 0 && items.every((it) => it.rest);
       if (whole) {
-        out.push(`      <note><rest measure="yes"/><duration>${score.beats * 4}</duration><voice>1</voice></note>`);
+        out.push(`      <note><rest measure="yes"/><duration>${(score.beats * 16) / score.unit}</duration><voice>1</voice></note>`);
       } else {
         for (const it of items) {
           const [type, dotted] = TYPE[it.dur];
@@ -162,7 +168,7 @@ export function scoreSvg(score: Score, barsPerSystem = 4, width = 820): string {
   const top = 90;
   const height = top + systems * systemH + 30;
   const barW = (width - left - 20) / barsPerSystem;
-  const bar = score.beats * 4;
+  const bar = (score.beats * 16) / score.unit;
   const out: string[] = [];
   let heads = 0;
   out.push(`<text x="${width / 2}" y="34" text-anchor="middle" font-size="20" font-weight="700">${esc(score.title)}</text>`);
@@ -178,7 +184,7 @@ export function scoreSvg(score: Score, barsPerSystem = 4, width = 820): string {
       out.push(`<text x="${left + 4}" y="${p.clef === "G" ? sy + 3 * gap + 4 : sy + gap + 4}" font-size="18" font-family="serif" font-weight="700">${p.clef}</text>`);
       if (s === 0) {
         out.push(`<text x="${left + 22}" y="${sy + gap * 2 - 1}" font-size="15" font-weight="700" font-family="serif">${score.beats}</text>`);
-        out.push(`<text x="${left + 22}" y="${sy + gap * 4 - 1}" font-size="15" font-weight="700" font-family="serif">4</text>`);
+        out.push(`<text x="${left + 22}" y="${sy + gap * 4 - 1}" font-size="15" font-weight="700" font-family="serif">${score.unit}</text>`);
       }
       out.push(`<line x1="${left}" y1="${sy}" x2="${left}" y2="${bottom}" stroke="#000"/>`);
       for (let b = 0; b < barsPerSystem; b++) {

@@ -1,4 +1,5 @@
 import type { SessionDoc, Track } from "./document";
+import { PPQ, sampleToTick, tempoMap } from "./tempo";
 
 /** A note track's notes and controllers in session frames (each clip's own media frames mapped through its trim and
  *  its media's rate), cut to the part of each clip that plays. */
@@ -48,20 +49,43 @@ function chunk(events: [number, number, number[]][]): number[] {
   return [0x4d, 0x54, 0x72, 0x6b, ...u32(body.length), ...body];
 }
 
+const SHARPS = ["C", "G", "D", "A", "E", "B", "F#", "C#"];
+const FLATS = ["C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"];
+const RELATIVE: Record<string, string> = { A: "C", E: "G", B: "D", "F#": "A", "C#": "E", "G#": "B", "D#": "F#", "A#": "C#", D: "F", G: "Bb", C: "Eb", F: "Ab", Bb: "Db", Eb: "Gb", Ab: "Cb" };
+
+/** S11: a key's name ("E minor", "Bb major") as a MIDI key signature: sharps (+) or flats (-), and 1 for minor. */
+export function keySignature(name: string): [number, number] | null {
+  const m = name.trim().match(/^([A-G][#b]?)\s*(major|minor|maj|min|m)?$/i);
+  if (!m) return null;
+  const minor = /^(minor|min|m)$/i.test(m[2] ?? "");
+  const tonic = m[1][0].toUpperCase() + m[1].slice(1);
+  const major = minor ? RELATIVE[tonic] : tonic;
+  if (major === undefined) return null;
+  const sharp = SHARPS.indexOf(major);
+  if (sharp >= 0) return [sharp, minor ? 1 : 0];
+  const flat = FLATS.indexOf(major);
+  return flat >= 0 ? [-flat, minor ? 1 : 0] : null;
+}
+
 /** S8: the whole session as a Standard MIDI File, format 1: a first track with the session's name, tempo, meter and
  *  markers, then one track per note track with its name, notes and controllers on its own channel (the file's channel
  *  where the clip came from one, the drums kept on 10). Note-offs sort before note-ons at a tick so repeats retrigger. */
 export function sessionMidi(doc: SessionDoc, name = "formwav session", ppq = 480): Uint8Array<ArrayBuffer> {
-  const bpm = doc.tempo?.bpm ?? 120;
-  const beats = Math.min(255, Math.max(1, Math.round(doc.tempo?.beatsPerBar ?? 4)));
-  const ticks = (frames: number) => Math.max(0, Math.round((frames / doc.sampleRate) * (bpm / 60) * ppq));
-  const tempo = Math.round(60_000_000 / bpm);
+  // S11: positions through the tempo map, and every tempo, meter and key change written where it falls
+  const map = tempoMap(doc);
+  const ticks = (frames: number) => Math.max(0, Math.round((sampleToTick(map, frames) * ppq) / PPQ));
   const name0 = text(name);
-  const first: [number, number, number[]][] = [
-    [0, 0, [0xff, 0x03, ...vlq(name0.length), ...name0]],
-    [0, 1, [0xff, 0x51, 0x03, (tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff]],
-    [0, 2, [0xff, 0x58, 0x04, beats, 2, 24, 8]],
-  ];
+  const first: [number, number, number[]][] = [[0, 0, [0xff, 0x03, ...vlq(name0.length), ...name0]]];
+  for (const s of map.segments) {
+    const tempo = Math.round(60_000_000 / s.bpm);
+    first.push([Math.round((s.tick * ppq) / PPQ), 1, [0xff, 0x51, 0x03, (tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff]]);
+  }
+  for (const m of map.meters) first.push([Math.round((m.tick * ppq) / PPQ), 2, [0xff, 0x58, 0x04, Math.min(255, m.num), Math.round(Math.log2(m.den)), 24, 8]]);
+  const keys = [...(doc.key ? [{ tick: 0, key: doc.key.name }] : []), ...(doc.keyChanges ?? [])];
+  for (const k of keys) {
+    const sf = keySignature(k.key);
+    if (sf) first.push([Math.round((k.tick * ppq) / PPQ), 2, [0xff, 0x59, 0x02, sf[0] & 0xff, sf[1]]]);
+  }
   for (const m of doc.markers) {
     const label = text(m.label || "Marker");
     first.push([ticks(m.at), 3, [0xff, 0x06, ...vlq(label.length), ...label]]);

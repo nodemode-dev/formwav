@@ -6,6 +6,7 @@
  * samples.
  */
 import type { SessionDoc } from "./document";
+import { barBeatAt as mapBarBeat, barStartTick, hasMap, meterAtTick, sampleToTick, tempoMap, tickToSample, ticksPerBeat, type TempoMap } from "./tempo";
 
 export type FrameRateId = "23.976" | "24" | "25" | "29.97" | "29.97df" | "30" | "47.952" | "48" | "50" | "59.94" | "59.94df" | "60" | "100" | "119.88" | "120";
 
@@ -150,11 +151,13 @@ export interface TimeContext {
   beatsPerBar: number;
   rate: FrameRate;
   startSeconds: number;
+  /** S11: the session's tempo and meter map, when it has more than one tempo or meter */
+  map?: TempoMap;
 }
 
 export function timeContext(doc: SessionDoc, rate?: string | null): TimeContext {
   const tempo = doc.tempo ?? { bpm: 120, beatsPerBar: 4 };
-  return { sampleRate: doc.sampleRate, bpm: tempo.bpm, beatsPerBar: tempo.beatsPerBar, rate: frameRate(rate ?? doc.frameRate), startSeconds: doc.timecodeStart ?? 0 };
+  return { sampleRate: doc.sampleRate, bpm: tempo.bpm, beatsPerBar: tempo.beatsPerBar, rate: frameRate(rate ?? doc.frameRate), startSeconds: doc.timecodeStart ?? 0, ...(hasMap(doc) ? { map: tempoMap(doc) } : {}) };
 }
 
 /** The session's timecode start as a whole frame count at `r` (the start is itself a frame's label). */
@@ -181,10 +184,15 @@ export function barBeatAtTick(tick: number, ctx: TimeContext): BarBeat {
 }
 
 export function barBeatAt(samples: number, ctx: TimeContext): BarBeat {
+  if (ctx.map) {
+    const at = mapBarBeat(ctx.map, roundHalfAway(sampleToTick(ctx.map, samples)));
+    return { bar: at.bar + 1, beat: at.beat + 1, tick: at.ticks };
+  }
   return barBeatAtTick(ticksAt(samples, ctx), ctx);
 }
 
 export function samplesAtBarBeat(bb: BarBeat, ctx: TimeContext): number {
+  if (ctx.map) return roundHalfAway(tickToSample(ctx.map, barStartTick(ctx.map, bb.bar - 1) + (Math.max(1, bb.beat) - 1) * ticksPerBeat(meterAtTick(ctx.map, barStartTick(ctx.map, bb.bar - 1)).den) + bb.tick));
   const ticks = (bb.bar - 1) * barTicks(ctx) + (Math.max(1, bb.beat) - 1) * TICKS_PER_QUARTER + bb.tick;
   return roundHalfAway(ticks * tickLength(ctx));
 }

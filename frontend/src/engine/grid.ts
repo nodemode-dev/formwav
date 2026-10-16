@@ -5,6 +5,7 @@
  * session's start. Positions are session samples.
  */
 import type { SessionDoc } from "./document";
+import { barBeatAt, barStartTick, hasMap, PPQ, sampleToTick, tempoMap, tickToSample } from "./tempo";
 
 export type GridValue =
   | { kind: "note"; quarters: number | "bar"; dotted: boolean; triplet: boolean }
@@ -101,8 +102,22 @@ function origin(doc: SessionDoc, g: GridValue, pos: number): number {
   return Math.floor(pos / bar + SLACK) * bar;
 }
 
+/** S11: a note value's lines across a tempo or meter map, in ticks from the bar line before (a bar value is the bar). */
+function mappedLine(doc: SessionDoc, g: GridValue & { kind: "note" }, pos: number, ahead: boolean): number {
+  const map = tempoMap(doc);
+  const tick = sampleToTick(map, Math.max(0, pos));
+  const { bar } = barBeatAt(map, tick + 1e-6);
+  const start = barStartTick(map, bar);
+  const end = barStartTick(map, bar + 1);
+  const step = g.quarters === "bar" ? end - start : g.quarters * PPQ * (g.dotted ? 3 / 2 : 1) * (g.triplet ? 2 / 3 : 1);
+  const before = start + Math.floor((tick - start) / step + SLACK) * step;
+  if (!ahead) return tickToSample(map, before);
+  return tickToSample(map, Math.min(end, before + step));
+}
+
 /** The grid line at or before `pos` (not rounded). */
 export function lineAtOrBefore(doc: SessionDoc, g: GridValue, pos: number, fps: number): number {
+  if (g.kind === "note" && hasMap(doc)) return mappedLine(doc, g, pos, false);
   const step = gridStepOf(doc, g, fps);
   const from = origin(doc, g, pos);
   return from + Math.floor((pos - from) / step + SLACK) * step;
@@ -110,6 +125,7 @@ export function lineAtOrBefore(doc: SessionDoc, g: GridValue, pos: number, fps: 
 
 /** The first line after `line`: one step on, or the next bar line when that comes first (for a note value). */
 export function nextLine(doc: SessionDoc, g: GridValue, line: number, fps: number): number {
+  if (g.kind === "note" && hasMap(doc)) return mappedLine(doc, g, line, true);
   const ahead = line + gridStepOf(doc, g, fps);
   if (g.kind !== "note") return ahead;
   const { bar } = meterOf(doc);

@@ -32,6 +32,10 @@ const WORDS: Record<Command["type"], Words> = {
   "set-master-fx": ["Changed the master effects", "Changed the master effects"],
   "set-bus-fx": ["Changed a bus's effects", "Changed a bus's effects"],
   "set-tempo": ["Changed the tempo", "Changed the tempo"],
+  "set-tempo-change": ["Changed the tempo map", "Changed the tempo map"],
+  "set-meter-change": ["Changed the meter map", "Changed the meter map"],
+  "set-key-change": ["Changed the key map", "Changed the key map"],
+  "set-tempo-map": ["Changed the tempo map", "Changed the tempo map"],
   "set-time-track": ["Changed the time track", "Changed the time track"],
   "set-clip-envelope": ["Changed a clip's volume line on {t}", "Changed a clip's volume line"],
   "set-clip-type": ["Set a clip's sound type on {t}", "Set a clip's sound type"],
@@ -130,6 +134,7 @@ const WORDS: Record<Command["type"], Words> = {
 /** A command in a few plain words for the History tab, with its track's name read from the session before it ran. */
 export function describeCommand(command: Command, before: SessionDoc): string {
   if (command.type === "batch") return command.label ?? (command.commands.length ? describeCommand(command.commands[0], before) : WORDS.batch[1]);
+  if (command.type === "set-tempo-map" && command.label) return command.label;
   const [withTrack, without] = WORDS[command.type];
   const trackId = "trackId" in command ? command.trackId : undefined;
   const track = trackId ? before.tracks.find((t) => t.id === trackId) : undefined;

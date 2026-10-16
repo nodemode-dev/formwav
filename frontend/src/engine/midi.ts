@@ -7,6 +7,19 @@
  */
 import type { NoteEvent, SessionDoc } from "./document";
 import { gridStepOf, lineAtOrBefore, nextLine, type GridValue } from "./grid";
+import { barsBetween, barStartTick, tempoMap, tickToSample } from "./tempo";
+
+/** S11: the chords of the session's playing note clips, bar by bar (each listed where it changes), for the Chords
+ *  ruler. */
+export function chordsPerBar(doc: SessionDoc): { at: number; name: string }[] {
+  const notes: NoteEvent[] = [];
+  for (const t of doc.tracks) {
+    if (t.mute || t.inactive) continue;
+    for (const c of t.clips) for (const n of c.notes ?? []) if (n.at < c.length) notes.push({ ...n, at: c.start + n.at, length: Math.min(n.length, c.length - n.at) });
+  }
+  if (!notes.length) return [];
+  return chordsByBar(doc, notes, Math.min(...notes.map((n) => n.at)), Math.max(...notes.map((n) => n.at + n.length)));
+}
 
 export type Pick = ReadonlySet<number> | null;
 
@@ -255,12 +268,15 @@ export function chordName(pitches: readonly number[]): string | null {
 /** The chord of each bar the notes sound in, from `from` to `to`: the pitch classes sounding for at least a quarter of
  *  the bar, named over the lowest of their notes; a bar is listed only where its chord differs from the bar before. */
 export function chordsByBar(doc: SessionDoc, notes: readonly NoteEvent[], from: number, to: number): { at: number; name: string }[] {
-  const bar = barOf(doc);
   const out: { at: number; name: string }[] = [];
   let last: string | null = null;
-  for (let k = Math.max(0, Math.floor(from / bar + 1e-6)); k * bar < to; k++) {
-    const a = k * bar;
-    const b = a + bar;
+  // S11: the bars as the tempo and meter map lays them (one length at one tempo and meter)
+  const map = tempoMap(doc);
+  const lines = barsBetween(map, from, to).filter((x) => x.at < to);
+  for (const line of lines) {
+    const a = line.at;
+    const b = tickToSample(map, barStartTick(map, line.bar + 1));
+    const bar = b - a;
     const heard = new Map<number, number>();
     const pitches = new Map<number, number>();
     for (const n of notes) {
