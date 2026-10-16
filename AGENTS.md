@@ -42,3 +42,7 @@ Agents drive formwav through two surfaces; extend them rather than adding a thir
 agent (`frontend/src/ui/agent-pane.ts`) gives 34 tools over the session's commands (30 tools and the 4 command tools), placing what it makes on tracks. The playbook in
 `.claude/skills/formwav-harness/SKILL.md` (plain Markdown, with sub-skills under it) teaches an agent to use the MCP tools well: what to check first, which tool fits, the
 order of steps and how to recover; read it before driving formwav, and update its tools reference whenever a tool changes.
+
+The interface is in 26 languages: code writes English, and `frontend/src/ui/i18n.ts` translates it in place from the tables in `frontend/src/i18n/<code>.json` (keyed by
+the English, numbers as {0}, names as {a}). A new interface string needs an entry in all 25 tables, which the interface test for languages lists; never find an element by
+its visible words or aria-label in code, and mark containers of user content `translate="no"`.

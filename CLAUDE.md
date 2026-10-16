@@ -43,3 +43,11 @@ registers it for Claude Code) gives 28 tools over the engine's HTTP API; the in-
 agent (`frontend/src/ui/agent-pane.ts`) gives 34 tools over the session's commands (30 tools and the 4 command tools), placing what it makes on tracks. The project skill
 `.claude/skills/formwav-harness` teaches an agent to use the MCP tools well: what to check first, which tool fits, the
 order of steps and how to recover; load it before driving formwav, and update its tools reference whenever a tool changes.
+
+The interface is in 26 languages (PLAN_v14 W7): code writes English everywhere, and `frontend/src/ui/i18n.ts` translates
+text, title, aria-label, placeholder, data-empty and data-label in place from `frontend/src/i18n/<code>.json`, tables
+keyed by the English with numbers as {0}, {1} and the session's names and file names as {a}, {b}. A new or changed
+interface string needs an entry in all 25 tables: the interface test
+`test_every_string_on_screen_has_a_translation_in_all_twenty_five_languages...` lists what is missing. Never find an
+element by its visible words or its aria-label in code (they are translated); use a data attribute. User content
+(names, transcripts, the agent's messages) is never translated; mark any new such container `translate="no"`.
