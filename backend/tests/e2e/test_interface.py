@@ -980,3 +980,81 @@ def test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes(bro
         assert {k: v for k, v in found.items() if v} == {}
     finally:
         context.close()
+
+
+def test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_score_and_step_input_adds_notes(page, app_url, tmp_path):
+    import mido
+    import music21
+
+    from test_smf import song_bytes
+
+    song = tmp_path / "song.mid"
+    song.write_bytes(song_bytes())
+    _open(page, app_url)
+    page.set_input_files(".fw-file", str(song))
+    page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
+    assert page.evaluate("[...document.querySelectorAll('.fw-lane .fw-lane-name')].map((n) => n.textContent)") == ["Piano", "Drums"]
+    page.wait_for_function("document.querySelector('.fw-notice').textContent.includes('2 tracks')")
+    assert "1 markers" in page.text_content(".fw-notice") and "100 BPM" in page.text_content(".fw-notice")
+
+    with page.expect_download() as got:
+        _menu(page, "File", "Export MIDI file")
+    out = mido.MidiFile(got.value.path())
+    assert out.type == 1 and out.ticks_per_beat == 480
+    names = [next((m.name for m in t if m.type == "track_name"), None) for t in out.tracks]
+    assert names[1:] == ["Piano", "Drums"]
+    meta = {m.type: m for m in out.tracks[0] if m.is_meta}
+    assert round(mido.tempo2bpm(meta["set_tempo"].tempo), 3) == 100.0 and (meta["time_signature"].numerator, meta["time_signature"].denominator) == (3, 4)
+    ticks, markers = 0, []
+    for m in out.tracks[0]:
+        ticks += m.time
+        if m.type == "marker":
+            markers.append((m.text, ticks))
+    assert markers == [("Verse", 960)]
+    def played(track):
+        at, rows = 0, []
+        for m in track:
+            at += m.time
+            if not m.is_meta:
+                rows.append((at, m.type, getattr(m, "channel", None), getattr(m, "note", None) or getattr(m, "program", None) or getattr(m, "control", None) or getattr(m, "pitch", None)))
+        return rows
+    piano, drums = played(out.tracks[1]), played(out.tracks[2])
+    assert (0, "program_change", 0, 5) in piano and (0, "control_change", 0, 7) in piano and (240, "pitchwheel", 0, 4096) in piano
+    assert [(a, n) for a, kind, _, n in piano if kind == "note_on"] == [(0, 60), (480, 64)]
+    assert [(a, n) for a, kind, _, n in piano if kind == "note_off"] == [(480, 60), (960, 64)]
+    assert {c for _, kind, c, _ in drums if kind == "note_on"} == {9} and [(a, n) for a, kind, _, n in drums if kind == "note_on"] == [(0, 36), (960, 38)]
+
+    with page.expect_download() as got:
+        _menu(page, "File", "Export MusicXML")
+    score = music21.converter.parse(got.value.path(), format="musicxml")
+    parts = score.parts
+    assert [p.partName for p in parts] == ["Piano", "Drums"]
+    notes = [(n.pitch.nameWithOctave, float(n.quarterLength)) for n in parts[0].recurse().notes]
+    assert notes == [("C4", 1.0), ("E4", 1.0)]
+    assert [(n.pitch.midi, float(n.quarterLength), float(n.getOffsetInHierarchy(parts[1]))) for n in parts[1].recurse().notes] == [(36, 0.5, 0.0), (38, 0.5, 2.0)]
+    assert parts[0].recurse().getElementsByClass("TimeSignature")[0].ratioString == "3/4"
+
+    page.evaluate("document.querySelector('[data-panel=\"score\"]').click()")
+    page.wait_for_selector(".fw-score-body svg")
+    svg = page.evaluate("({ ...document.querySelector('.fw-score-body svg').dataset })")
+    assert svg == {"measures": "1", "heads": "4"}
+    assert page.evaluate("document.querySelectorAll('.fw-score-body svg ellipse.head').length") == 4
+
+    page.click('[data-agent-tab="history"]')
+    _menu(page, "Event", "New note clip")
+    page.wait_for_function("!document.querySelector('.fw-piano').hidden")
+    page.click(".fw-piano [data-step]")
+    for key in ("a", "s", "d", "Space", "k"):
+        page.keyboard.press(key)
+    _step(page, "Step input")
+    page.wait_for_function(f"{NOTES_STATE}.endsWith('4 notes')")
+    page.click(".fw-piano [data-list]")
+    rows = page.evaluate(ROWS)
+    assert [r[1] for r in rows] == ["C4", "D4", "E4", "C5"]
+    starts = [r[0] for r in rows]
+    assert starts == ["1| 1| 000", "1| 1| 240", "1| 1| 480", "1| 2| 000"]
+    page.evaluate("document.dispatchEvent(new CustomEvent('fw-midi-note', { detail: { pitch: 67, velocity: 90 } })); document.dispatchEvent(new CustomEvent('fw-midi-note', { detail: { pitch: 71, velocity: 90 } }))")
+    page.wait_for_function(f"{NOTES_STATE}.endsWith('6 notes')", timeout=10000)
+    rows = page.evaluate(ROWS)
+    assert [(r[0], r[1]) for r in rows[4:]] == [("1| 2| 240", "G4"), ("1| 2| 240", "B4")]
+    assert _clean(page)["errors"] == []
