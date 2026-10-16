@@ -7,7 +7,7 @@
  */
 import type { Command, Engine } from "../engine";
 import type { Player } from "../audio/player";
-import { FADE_SHAPES, laneAt, nextMemoryNumber, type FadeShape, type MediaRef, type Track } from "../engine/document";
+import { FADE_SHAPES, laneAt, nextMemoryNumber, type Clip, type FadeShape, type MediaRef, type Track } from "../engine/document";
 import { clipGainToVolume, glideLane, thinLane, volumeToClipGain, writeLane } from "../engine/automation";
 import { clipTransients, consolidate, createFades, deleteFades, editSpan, fadeToPlayhead, findMemory, healSeparations, insertSilence, lockClips, muteClips, nextMemory, nextStop, nudgeClips, repeatSpan, separateOnGrid, shiftClips, snapClips, spaceClips, stripGaps, timeOperation, trimToFile, trimToFill, trimToPlayhead, trimToRange, type EditRange, type EditTarget, type MemoryLocation } from "../engine/editing";
 import { gridStepOf, NUDGE_DEFAULT, parseGrid } from "../engine/grid";
@@ -343,6 +343,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     sep(),
     item("Duplicate", "⌘D", "Copy the selected clips or range right after themselves (over what lies there; with Shuffle, opening time for the copy)", duplicate),
     item("Repeat...", "⌥R", "Copy the selection end to end a number of times", () => void repeat()),
+    item("Paste special: merge notes", "", "Add the copied note clip's notes into the note clip under the playhead, keeping what is there", () => host.dispatchEvent(new CustomEvent("fw-paste-merge"))),
     item("Paste special: repeat to fill selection", "", "Lay the copied clips end to end across the range from its start, the last copy cut at its end", () => host.dispatchEvent(new CustomEvent("fw-paste-repeat"))),
     item("Shift...", "⌥H", "Move the selected clips later or earlier by an amount", () => void shift()),
     item("Insert silence", "", "Open the range's length of silence at its start on its track, moving what follows later", () => run(insertSilence(engine.get("document"), target()), "Inserted silence", "Select a range or clips for the silence's place and length")),
@@ -819,12 +820,58 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     engine.dispatch({ type: "batch", commands: list, label: `Rendered clip gain on ${picked.length} clip${picked.length === 1 ? "" : "s"}` });
     say(`Rendered the clip gain of ${picked.length} clip${picked.length === 1 ? "" : "s"}: the audio now carries it, at 0 dB`);
   };
+  // PLAN_v13 S13, clip group files: the selected clips (a whole group when any member is selected) with their media as
+  // one .fwclips file; importing one lays its clips at the playhead from the current track down, as one new group
+  const exportClips = async () => {
+    const doc = engine.get("document");
+    const picked = new Set(clipsNow());
+    const groups = new Set(doc.tracks.flatMap((t) => t.clips.filter((c) => picked.has(c.id) && c.groupId).map((c) => c.groupId)));
+    const tracks = doc.tracks.map((t) => ({ name: t.name, clips: t.clips.filter((c) => picked.has(c.id) || (c.groupId && groups.has(c.groupId))) })).filter((t) => t.clips.length);
+    if (!tracks.length) return say("Select the clips (or one clip of a group) to keep as a file");
+    const used = new Set(tracks.flatMap((t) => t.clips.map((c) => c.mediaId)));
+    const media = Object.fromEntries(Object.entries(doc.media).filter(([id]) => used.has(id)));
+    const res = await fetch("/api/projects/clips-file", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sampleRate: doc.sampleRate, media, tracks }) });
+    if (!res.ok) return say(`Could not keep the clips: ${((await res.json().catch(() => ({}))) as { detail?: string }).detail ?? res.status}`);
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement("a"), { href: url, download: `${tracks[0].clips[0].name ?? tracks[0].name}.fwclips` });
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+    say(`Kept ${tracks.reduce((n, t) => n + t.clips.length, 0)} clips from ${tracks.length} track${tracks.length === 1 ? "" : "s"} as a file`);
+  };
+  const clipsInput = Object.assign(document.createElement("input"), { type: "file", accept: ".fwclips", hidden: true });
+  clipsInput.className = "fw-clips-file";
+  host.append(clipsInput);
+  clipsInput.addEventListener("change", async () => {
+    const file = clipsInput.files?.[0];
+    clipsInput.value = "";
+    if (!file) return;
+    const res = await fetch("/api/projects/clips-file/open", { method: "POST", body: file });
+    if (!res.ok) return say(`Could not bring the clips in: ${((await res.json().catch(() => ({}))) as { detail?: string }).detail ?? res.status}`);
+    const group = (await res.json()) as { sampleRate: number; media: Record<string, MediaRef>; tracks: { name: string; clips: Omit<Clip, "id">[] }[] };
+    let doc = engine.get("document");
+    const start = Math.max(0, doc.tracks.findIndex((t) => t.id === trackNow()?.id));
+    const missing = Math.max(0, start + group.tracks.length - doc.tracks.length);
+    if (missing) engine.dispatch({ type: "batch", commands: group.tracks.slice(group.tracks.length - missing).map((t) => ({ type: "add-track" as const, name: t.name })), label: "Added tracks for the clips" });
+    doc = engine.get("document");
+    const origin = Math.min(...group.tracks.flatMap((t) => t.clips.map((c) => c.start)));
+    const groupId = `g${Date.now().toString(36)}`;
+    const commands: Command[] = [];
+    for (const [i, t] of group.tracks.entries()) {
+      const target = doc.tracks[start + i];
+      for (const c of t.clips) commands.push({ type: "paste-clip", trackId: target.id, clip: { ...c, start: playhead() + c.start - origin, groupId }, media: group.media[c.mediaId] });
+    }
+    engine.dispatch({ type: "batch", commands, label: `Brought in ${file.name.replace(/\.fwclips$/, "")}` });
+    say(`Brought in ${group.tracks.reduce((n, t) => n + t.clips.length, 0)} clips at the playhead as a group`);
+  });
   const clipPop = host.querySelector(".fw-clip-pop");
   clipPop?.append(
     item("Mute or unmute", "", "Silence the selected clips in playback and export, keeping them in place (again to unmute)", () => run(muteClips(engine.get("document"), clipsNow()), "Muted or unmuted the clips", "Select the clips to mute")),
     item("Edit lock", "", "Keep the selected clips from any edit but their gain (again to unlock)", () => run(lockClips(engine.get("document"), clipsNow(), "edit"), "Changed the clips' edit lock", "Select the clips to lock")),
     item("Time lock", "", "Keep the selected clips where they are in time; they can still be trimmed (again to unlock)", () => run(lockClips(engine.get("document"), clipsNow(), "time"), "Changed the clips' time lock", "Select the clips to lock")),
     item("Rename...", "", "A name for the selected clip alone", () => void rename()),
+    sep(),
+    item("Export clips as a file...", "", "Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file", () => void exportClips()),
+    item("Import a clips file...", "", "Bring in a .fwclips file at the playhead, from the current track down, as one group", () => clipsInput.click()),
     sep(),
     item("Bypass clip gain", "", "Play the selected clips at 0 dB with no gain line, keeping both (again to bring them back)", bypassGain),
     item("Copy clip gain", "", "Keep the first selected clip's gain and gain line to paste onto others", copyGain),

@@ -139,6 +139,29 @@ def save_project(name: str, document: dict = Body(...), base: int | None = None)
         raise HTTPException(400, str(err)) from err
 
 
+@router.post("/projects/clips-file")
+def clips_file(group: dict = Body(...)) -> Response:
+    """PLAN_v13 S13: clips and their media as a .fwclips file (services/projects.pack_clips)."""
+    try:
+        data = projects.pack_clips(group)
+    except projects.ProjectError as err:
+        raise HTTPException(400, str(err)) from err
+    except media.CoreMissing as err:
+        raise HTTPException(503, str(err)) from err
+    return Response(data, media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="clips.fwclips"'})
+
+
+@router.post("/projects/clips-file/open")
+async def open_clips_file(request: Request) -> dict:
+    """A .fwclips file read back: its media brought in, its clips returned track by track."""
+    try:
+        return projects.unpack_clips(await request.body())
+    except projects.ProjectError as err:
+        raise HTTPException(400, str(err)) from err
+    except (media.CoreMissing, media.MediaError) as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/projects/demo")
 def demo_session(rate: int = 48000) -> dict:
     """PLAN_v13 S12: the demo session made in code (services/demo.py), its media written to the engine."""

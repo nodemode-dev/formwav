@@ -48,6 +48,7 @@ const WORDS: Record<Command["type"], Words> = {
   "set-frame-rate": ["Changed the frame rate", "Changed the frame rate"],
   "set-track-instrument": ["Changed the instrument on {t}", "Changed the instrument"],
   "switch-playlist": ["Switched playlists on {t}", "Switched playlists"],
+  "comp-from-playlist": ["Comped from a playlist on {t}", "Comped from a playlist"],
   "set-key": ["Changed the key", "Changed the key"],
   "clear-range": ["Cleared a range on {t}", "Cleared a range"],
   "resample-session": ["Changed the sample rate", "Changed the sample rate"],

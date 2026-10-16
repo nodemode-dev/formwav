@@ -1,6 +1,7 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
 import { documentLength, fadeCurve, groupPeers, nextFadeShape, sessionLength, type AutoPoint, type SessionView } from "../engine/document";
 import { copyRange, pasteRange, type RangeClip } from "../engine/editing";
+import { renderNotes } from "../audio/notes";
 import { icon as fcIcon } from "../vendor/formcut/icons";
 import { fetchPeaks, type PeakData } from "../io/media-client";
 import { gridEnabled, shuffleEnabled, snapSamples, spotEnabled } from "./grid";
@@ -504,7 +505,7 @@ function updateFolder(row: HTMLElement, bus: { id: string; name: string }, count
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-num" aria-hidden="true"></span><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead. Shift-click to arm several tracks at once">R</button><button type="button" class="fw-takes-toggle fw-icon-btn" hidden aria-expanded="false" aria-label="Takes" title="Show every take as a lane; drag across a take to comp that range">${fcIcon("layers")}</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><div class="fw-lane-ms"><button type="button" class="fw-lane-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute this track">M</button><button type="button" class="fw-lane-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo this track">S</button></div><button type="button" class="fw-auto-toggle fw-icon-btn" aria-expanded="false" aria-label="Automation" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">A</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span><span class="fw-auto-fx-head" hidden><select class="fw-auto-fx" aria-label="Effect parameter to automate"></select></span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="fx" data-fx="0" data-key="freq" aria-label="Effect parameter automation" hidden><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-heads" hidden aria-hidden="true"></div><div class="fw-take-rows" hidden></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-num" aria-hidden="true"></span><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead. Shift-click to arm several tracks at once">R</button><button type="button" class="fw-takes-toggle fw-icon-btn" hidden aria-expanded="false" aria-label="Takes and playlists" title="Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)">${fcIcon("layers")}</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><div class="fw-lane-ms"><button type="button" class="fw-lane-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute this track">M</button><button type="button" class="fw-lane-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo this track">S</button></div><button type="button" class="fw-auto-toggle fw-icon-btn" aria-expanded="false" aria-label="Automation" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">A</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span><span class="fw-auto-fx-head" hidden><select class="fw-auto-fx" aria-label="Effect parameter to automate"></select></span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="fx" data-fx="0" data-key="freq" aria-label="Effect parameter automation" hidden><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-heads" hidden aria-hidden="true"></div><div class="fw-take-rows" hidden></div>`;
   return lane;
 }
 
@@ -570,21 +571,26 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
   }
   const takeClips = track.clips.filter((c) => (c.takes?.length ?? 0) > 1);
   const count = takeClips.reduce((most, c) => Math.max(most, c.takes?.length ?? 0), 0);
-  const open = count > 0 && expandedTracks.has(track.id);
+  // S13: the track's other playlists show as lanes under its takes; dragging across one comps that span from it
+  const lists = track.playlists ?? [];
+  const open = count + lists.length > 0 && expandedTracks.has(track.id);
   const toggle = node.querySelector<HTMLButtonElement>(".fw-takes-toggle");
   if (toggle) {
-    if (toggle.hidden !== (count === 0)) toggle.hidden = count === 0;
+    if (toggle.hidden !== (count + lists.length === 0)) toggle.hidden = count + lists.length === 0;
     if (toggle.getAttribute("aria-expanded") !== String(open)) toggle.setAttribute("aria-expanded", String(open));
   }
   const takeHeads = node.querySelector<HTMLElement>(".fw-take-heads");
   if (takeHeads) {
     if (takeHeads.hidden === open) takeHeads.hidden = !open;
     if (open)
-      patchList(takeHeads, Array.from({ length: count }, (_, k) => k), {
-        key: (k) => String(k),
+      patchList(takeHeads, [...Array.from({ length: count }, (_, k) => String(k)), ...lists.map((p) => `pl:${p.name}`)], {
+        key: (k) => k,
         create: (k) => {
           const label = document.createElement("span");
-          label.textContent = `Take ${k + 1}`;
+          if (k.startsWith("pl:")) {
+            label.textContent = k.slice(3);
+            label.setAttribute("translate", "no");
+          } else label.textContent = `Take ${Number(k) + 1}`;
           return label;
         },
         update: () => {},
@@ -594,6 +600,17 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
   if (!rows) return;
   if (rows.hidden === open) rows.hidden = !open;
   if (!open) return;
+  const fillPlaylist = (row: HTMLElement, name: string) =>
+    patchList(row, [...(lists.find((p) => p.name === name)?.clips ?? [])], {
+      key: (c) => c.id,
+      create: (c) => {
+        const seg = clipNode();
+        seg.classList.add("fw-take-seg", "fw-playlist-seg");
+        updateClip(seg, { ...c, id: `${c.id}:playlist` }, doc, spp);
+        return seg;
+      },
+      update: (seg, c) => updateClip(seg, { ...c, id: `${c.id}:playlist` }, doc, spp),
+    });
   const fillRow = (row: HTMLElement, k: number) =>
     patchList(row, takeClips.filter((c) => k < (c.takes?.length ?? 0)), {
       key: (c) => c.id,
@@ -605,17 +622,23 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
       },
       update: (seg, c) => updateTakeSegment(seg, c, k, doc, spp),
     });
-  patchList(rows, Array.from({ length: count }, (_, k) => k), {
-    key: (k) => String(k),
+  patchList(rows, [...Array.from({ length: count }, (_, k) => String(k)), ...lists.map((p) => `pl:${p.name}`)], {
+    key: (k) => k,
     create: (k) => {
       const row = document.createElement("div");
       row.className = "fw-take-row";
-      row.dataset.take = String(k);
-      row.setAttribute("aria-label", `Take ${k + 1}`);
-      fillRow(row, k);
+      if (k.startsWith("pl:")) {
+        row.dataset.playlist = k.slice(3);
+        row.setAttribute("aria-label", `Playlist ${k.slice(3)}`);
+        fillPlaylist(row, k.slice(3));
+      } else {
+        row.dataset.take = k;
+        row.setAttribute("aria-label", `Take ${Number(k) + 1}`);
+        fillRow(row, Number(k));
+      }
       return row;
     },
-    update: (row, k) => fillRow(row, k),
+    update: (row, k) => (k.startsWith("pl:") ? fillPlaylist(row, k.slice(3)) : fillRow(row, Number(k))),
   });
 }
 
@@ -971,7 +994,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     render(engine.get("document"));
   });
 
-  let takeDrag: { trackId: string; clip: Clip; take: number; seg: HTMLElement; x0: number; moved: boolean } | null = null;
+  let takeDrag: { trackId: string; clip: Clip; take: number; seg: HTMLElement; x0: number; moved: boolean; playlist?: string } | null = null;
   const takeRange = (d: NonNullable<typeof takeDrag>, clientX: number): [number, number] => {
     const doc = engine.get("document");
     const spp = samplesPerPixel(doc);
@@ -986,6 +1009,16 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   };
   const startTakeDrag = (e: PointerEvent, seg: HTMLElement) => {
     const trackId = seg.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    const playlist = seg.closest<HTMLElement>(".fw-take-row")?.dataset.playlist;
+    if (playlist !== undefined) {
+      const source = engine.get("document").tracks.find((t) => t.id === trackId)?.playlists?.find((p) => p.name === playlist);
+      const clip = source?.clips.find((c) => c.id === seg.dataset.key);
+      if (!trackId || !clip) return;
+      takeDrag = { trackId, clip, take: -1, seg, x0: e.clientX, moved: false, playlist };
+      seg.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
     const take = Number(seg.closest<HTMLElement>(".fw-take-row")?.dataset.take);
     const clip = engine.get("document").tracks.find((t) => t.id === trackId)?.clips.find((c) => c.id === seg.dataset.key);
     if (!trackId || !clip || !Number.isFinite(take)) return;
@@ -1012,6 +1045,12 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (!d) return;
     if (!marquee.hidden) marquee.hidden = true;
     if (!apply) return;
+    if (d.playlist !== undefined) {
+      // a click comps the whole clip from that playlist, a drag the span dragged across
+      const [a, b] = d.moved ? takeRange(d, clientX) : [d.clip.start, d.clip.start + d.clip.length];
+      if (b > a) engine.dispatch({ type: "comp-from-playlist", trackId: d.trackId, name: d.playlist, start: a, end: b });
+      return;
+    }
     if (!d.moved) {
       engine.dispatch({ type: "set-clip-take", trackId: d.trackId, clipId: d.clip.id, take: d.take });
       return;
@@ -2101,6 +2140,30 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
     engine.dispatch({ type: "batch", commands, label: "Repeated to fill the selection" });
     say(`Filled ${((r.end - r.start) / doc.sampleRate).toFixed(2)} s with ${commands.length - 1} copies`);
+  });
+  // S13, Paste Special > Merge: the copied note clips' notes added into the note clip under the playhead on the same
+  // track (nothing there is replaced), the clip played again with its instrument, in one step
+  host.addEventListener("fw-paste-merge", () => {
+    const doc = engine.get("document");
+    const say = (s: string) => setText(host.querySelector<HTMLElement>(".fw-notice"), s);
+    const copied = clipboard.filter((c) => c.clip.notes?.length);
+    if (!copied.length) return say("Copy a note clip first (Cmd or Ctrl C)");
+    const at = engine.get("transport").positionSamples;
+    const track = doc.tracks.find((t) => t.id === copied[0].trackId);
+    const target = track?.clips.find((c) => c.notes && at >= c.start && at < c.start + c.length);
+    if (!track || !target) return say("Put the playhead inside a note clip on the copied clip's track");
+    const origin = Math.min(...copied.map((c) => c.clip.start));
+    const added = copied.flatMap(({ clip }) => (clip.notes ?? []).map((n) => ({ ...n, at: at + clip.start - origin + n.at - target.start })));
+    const fits = added.filter((n) => n.at >= 0 && n.at < target.length).map((n) => ({ ...n, length: Math.min(n.length, target.length - n.at) }));
+    const key = (n: { at: number; pitch: number }) => `${n.at}:${n.pitch}`;
+    const have = new Set((target.notes ?? []).map(key));
+    const merged = [...(target.notes ?? []), ...fits.filter((n) => !have.has(key(n)))].sort((a, b) => a.at - b.at || a.pitch - b.pitch);
+    if (merged.length === target.notes?.length) return say("Nothing to merge: the copied notes are there already or fall outside the clip");
+    say("Merging the notes...");
+    void renderNotes(engine, track.id, target.id, merged).then(
+      () => say(`Merged ${merged.length - (target.notes?.length ?? 0)} notes into the clip`),
+      (err) => say(`Could not merge: ${err instanceof Error ? err.message : String(err)}`),
+    );
   });
   const paste = () => {
     const doc = engine.get("document");

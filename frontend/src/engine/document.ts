@@ -1,6 +1,7 @@
 import { PROCESSOR_BY_ID, processorValues } from "./processors";
 import { FRAME_RATES, type FrameRateId } from "./timebase";
 import type { KeyChange, MeterChange, TempoChange } from "./tempo";
+import { clipPiece } from "./editing";
 
 export interface MediaRef {
   id: string;
@@ -790,6 +791,7 @@ export type Command =
   | { type: "set-frame-rate"; rate: FrameRateId | null }
   | { type: "set-track-instrument"; trackId: string; instrument: Instrument | null }
   | { type: "switch-playlist"; trackId: string; name: string }
+  | { type: "comp-from-playlist"; trackId: string; name: string; start: number; end: number }
   | { type: "set-key"; name: string; camelot: string }
   | { type: "clear-range"; trackId: string; start: number; end: number; ripple: boolean; follow?: "tracks" }
   | { type: "resample-session"; sampleRate: number; swaps: { from: string; to: MediaRef }[] }
@@ -829,7 +831,7 @@ export type Command =
   | { type: "set-bus-mute"; busId: string; mute: boolean }
   | { type: "set-master-gain"; gainDb: number }
   | { type: "add-clip"; trackId: string; mediaId: string; start: number; sourceIn: number; length: number }
-  | { type: "paste-clip"; trackId: string; clip: Omit<Clip, "id"> }
+  | { type: "paste-clip"; trackId: string; clip: Omit<Clip, "id">; media?: MediaRef }
   | { type: "remove-clip"; trackId: string; clipId: string }
   | { type: "launch-clip"; trackId: string; mediaId: string; at: number; repeats: number }
   | { type: "stop-launched"; trackId: string; at: number }
@@ -1514,6 +1516,21 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         return { ...t, playlist: name, playlists: [...(t.playlists ?? []), { name: current, clips: t.clips }], clips };
       });
     }
+    case "comp-from-playlist": {
+      // S13: comping: the span from start to end of another playlist replaces the same span of the active one (what
+      // lies there is cleared first, without closing the gap), as Pro Tools' Copy Selection to Main Playlist does
+      const track = doc.tracks.find((t) => t.id === cmd.trackId);
+      const source = track?.playlists?.find((p) => p.name === cmd.name);
+      const start = Math.max(0, Math.round(cmd.start));
+      const end = Math.round(cmd.end);
+      if (!track || !source || end <= start) return doc;
+      let next = applyCommand(doc, { type: "clear-range", trackId: cmd.trackId, start, end, ripple: false }, newId);
+      for (const c of source.clips) {
+        if (c.start >= end || c.start + c.length <= start) continue;
+        next = applyCommand(next, { type: "paste-clip", trackId: cmd.trackId, clip: clipPiece(next, c, start, end) }, newId);
+      }
+      return next;
+    }
     case "switch-playlist": {
       // PT-14: the chosen playlist's clips become the track's (they play and export), the active ones stashed in turn
       const track = doc.tracks.find((t) => t.id === cmd.trackId);
@@ -2189,9 +2206,11 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         return changed ? { ...t, clips } : t;
       });
     case "paste-clip": {
-      if (!doc.media[cmd.clip.mediaId]) return doc;
+      // S13: a clip from elsewhere (a clips file) brings its media with it
+      const withMedia = !doc.media[cmd.clip.mediaId] && cmd.media?.id === cmd.clip.mediaId ? { ...doc, media: { ...doc.media, [cmd.media.id]: cmd.media } } : doc;
+      if (!withMedia.media[cmd.clip.mediaId]) return doc;
       const clip: Clip = { ...cmd.clip, id: newId(), start: Math.max(0, Math.round(cmd.clip.start)) };
-      return mapTrack(doc, cmd.trackId, (t) => ({ ...t, clips: [...t.clips, clip].sort((a, b) => a.start - b.start) }));
+      return mapTrack(withMedia, cmd.trackId, (t) => ({ ...t, clips: [...t.clips, clip].sort((a, b) => a.start - b.start) }));
     }
     case "add-clip": {
       if (!doc.media[cmd.mediaId]) return doc;

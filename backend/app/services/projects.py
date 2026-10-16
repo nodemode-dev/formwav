@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import os
 import re
@@ -241,6 +242,56 @@ def open_project(name: str) -> dict:
                 raise ProjectError("a media file inside the session is damaged")
             media.import_wav(doc["media"][mid].get("name", f"{mid}.wav"), data)
     return {"name": path.stem, "savedAt": manifest.get("savedAt"), "revision": int(manifest.get("revision", 1)), "document": doc}
+
+
+CLIPS_FORMAT = "formwav-clips"
+
+
+def pack_clips(group: object) -> bytes:
+    """PLAN_v13 S13, clip group files: clips from one or more tracks ({sampleRate, media, tracks: [{name, clips}]})
+    and the media they play, as one file another session can bring in."""
+    if not isinstance(group, dict) or not isinstance(group.get("tracks"), list) or not group["tracks"]:
+        raise ProjectError("give the clips to keep, track by track")
+    doc = {"sampleRate": group.get("sampleRate"), "media": group.get("media") or {}, "tracks": group["tracks"]}
+    ids = _media_ids(doc)
+    if not any(t.get("clips") for t in doc["tracks"] if isinstance(t, dict)):
+        raise ProjectError("there are no clips to keep")
+    for mid in ids:
+        try:
+            media.media_info(mid)
+        except KeyError as err:
+            raise ProjectError("the clips use media the engine no longer has") from err
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        z.writestr("manifest.json", json.dumps({"format": CLIPS_FORMAT, "formatVersion": 1, "app": "formwav", "appVersion": VERSION}, indent=2))
+        z.writestr("clips.json", json.dumps(doc))
+        for mid in sorted(ids):
+            z.write(media_dir() / f"{mid}.wav", f"media/{mid}.wav", compress_type=zipfile.ZIP_STORED)
+    return out.getvalue()
+
+
+def unpack_clips(data: bytes) -> dict:
+    """A clip group file read back: its media brought into the engine (each checked against its id) and its clips."""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+        manifest = json.loads(z.read("manifest.json"))
+        doc = json.loads(z.read("clips.json"))
+    except (zipfile.BadZipFile, KeyError, ValueError) as err:
+        raise ProjectError("the file is not a formwav clips file") from err
+    if manifest.get("format") != CLIPS_FORMAT:
+        raise ProjectError("the file is not a formwav clips file")
+    if int(manifest.get("formatVersion", 0)) > 1:
+        raise ProjectError("the clips were saved by a newer formwav")
+    with z:
+        for mid in _media_ids(doc):
+            try:
+                wav = z.read(f"media/{mid}.wav")
+            except KeyError as err:
+                raise ProjectError("a media file is missing from the clips file") from err
+            if hashlib.sha256(wav).hexdigest() != mid:
+                raise ProjectError("a media file inside the clips file is damaged")
+            media.import_wav(doc["media"][mid].get("name", f"{mid}.wav"), wav)
+    return doc
 
 
 def open_file(path_text: str) -> dict:
