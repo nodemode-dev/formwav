@@ -1326,3 +1326,127 @@ def test_commands_focus_keys_shortcuts_window_clip_gain_paste_special_templates_
     assert page.input_value("input.fw-session-name") == "Untitled"
     assert page.locator("[data-postroll]").count() == 1
     assert _clean(page)["errors"] == []
+
+
+def test_playlists_as_lanes_comp_merge_notes_clips_files_and_window_configurations(page, app_url, tmp_path):
+    import json
+
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
+    rate = ref["sampleRate"]
+    clip = lambda cid, start, length, **more: {"id": cid, "mediaId": ref["id"], "start": start, "sourceIn": 0, "length": length, "gainDb": 0, **more}
+    chord = [{"at": 0, "length": rate // 2, "pitch": p, "velocity": 90} for p in (60, 64, 67)]
+    doc = {"sampleRate": rate, "media": {ref["id"]: ref}, "markers": [], "tracks": [
+        {"id": "t1", "name": "Vox", "channels": ref["channels"], "gainDb": 0, "mute": False, "solo": False, "playlist": "Main", "clips": [clip("c1", 0, 4 * rate)], "playlists": [{"name": "Take 2", "clips": [clip("c9", 0, 4 * rate, gainDb=-6, sourceIn=rate)]}]},
+        {"id": "t2", "name": "Keys", "channels": 2, "gainDb": 0, "mute": False, "solo": False, "clips": [clip("n1", 0, rate, notes=chord), clip("n2", 2 * rate, rate, notes=[{"at": 0, "length": rate // 4, "pitch": 48, "velocity": 80}])]},
+    ]}
+    _engine(app_url, "PUT", "/api/autosave", {"name": "Comp", "document": doc})
+    try:
+        _open(page, app_url)
+        page.wait_for_selector("dialog.fw-ask-dialog[open]")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 3")
+    finally:
+        _engine(app_url, "DELETE", "/api/autosave")
+    page.click('[data-agent-tab="history"]')
+    # the other playlist as a lane: a drag across its clip comps that span into the main playlist
+    page.click('.fw-lane[data-key="t1"] .fw-takes-toggle')
+    seg = page.locator('.fw-lane[data-key="t1"] .fw-take-row[data-playlist="Take 2"] .fw-take-seg').first
+    box = seg.bounding_box()
+    page.mouse.move(box["x"] + 100, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(box["x"] + 200, box["y"] + box["height"] / 2)
+    page.mouse.move(box["x"] + 300, box["y"] + box["height"] / 2)
+    page.mouse.up()
+    _step(page, "Comped from a playlist on Vox")
+    assert page.locator('.fw-lane[data-key="t1"] .fw-lane-body .fw-clip').count() == 3
+    # Paste Special, merge: the first note clip's chord merged into the second at the playhead
+    keys = page.locator('.fw-lane[data-key="t2"] .fw-lane-body .fw-clip').first
+    kb = keys.bounding_box()
+    keys.click(position={"x": 10, "y": kb["height"] * 0.8})
+    page.keyboard.press("ControlOrMeta+c")
+    page.locator(".fw-ruler-canvas").first.click(position={"x": 200, "y": 10})
+    _menu(page, "Edit", "Paste special: merge notes")
+    _step(page, "Edited notes on Keys")
+    # a clips file out of the session and back in, as one group
+    page.locator('.fw-lane[data-key="t2"] .fw-lane-body .fw-clip').first.click(position={"x": 10, "y": kb["height"] * 0.8})
+    with page.expect_download() as got:
+        _menu(page, "Clip", "Export clips as a file")
+    path = tmp_path / "keys.fwclips"
+    got.value.save_as(path)
+    page.locator(".fw-ruler-canvas").first.click(position={"x": 500, "y": 10})
+    page.set_input_files(".fw-clips-file", str(path))
+    _step(page, "Brought in keys")
+    assert page.locator('.fw-lane[data-key="t2"] .fw-lane-body .fw-clip').count() == 3
+    # window configurations: a saved layout is the active one, updated on request and kept up to date
+    page.once("dialog", lambda d: d.accept("Mixing"))
+    # the layout menu sits in the toolbar's overflow at this width; it is chosen as its change event would be
+    choose = "(v) => { const s = document.querySelector('.fw-layout-select'); s.value = v; s.dispatchEvent(new Event('change')); }"
+    page.evaluate(choose, "save")
+    values = page.evaluate("[...document.querySelector('.fw-layout-select').options].map((o) => o.value)")
+    assert "update" in values and "auto" in values and "saved:Mixing" in values
+    page.evaluate(choose, "auto")
+    assert page.evaluate("localStorage.getItem('formwav.layouts.auto')") == "1" and page.evaluate("localStorage.getItem('formwav.layouts.active')") == "Mixing"
+    assert _clean(page)["errors"] == []
+
+
+def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_and_out_on_the_fly(browser, app_url):
+    import json
+
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
+    rate = ref["sampleRate"]
+    doc = {"sampleRate": rate, "media": {ref["id"]: ref}, "markers": [], "loop": {"start": rate, "end": 2 * rate, "enabled": False}, "tracks": [
+        {"id": "t1", "name": "Vox", "channels": ref["channels"], "gainDb": 0, "mute": False, "solo": False, "clips": [{"id": "c1", "mediaId": ref["id"], "start": 0, "sourceIn": 0, "length": 8 * rate, "gainDb": 0}]},
+    ]}
+    # a browser of its own with Chromium's stand-in microphone (a tone), allowed without asking
+    mic = browser.browser_type.launch(args=["--autoplay-policy=no-user-gesture-required", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
+    context = mic.new_context(viewport=SMALLEST, permissions=["microphone"])
+    page = context.new_page()
+    page.add_init_script(WATCH)
+    page.console_errors = []
+    page.on("console", lambda m: page.console_errors.append(m.text) if m.type == "error" and not m.text.startswith("Failed to load resource") else None)
+    _engine(app_url, "PUT", "/api/autosave", {"name": "Punch", "document": doc})
+    try:
+        _open(page, app_url)
+        page.wait_for_selector("dialog.fw-ask-dialog[open]")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1")
+        _engine(app_url, "DELETE", "/api/autosave")
+        clips = """[...document.querySelectorAll('.fw-lane[data-key="t1"] .fw-lane-body > .fw-clip')].map((c) => parseFloat(c.style.left)).sort((a, b) => a - b)"""
+        page.click('.fw-lane[data-key="t1"] .fw-arm')
+        # the Punch switch sits in the transport's overflow at this width
+        punch = """document.querySelector('button.fw-mode[title^="Recording on the armed track"]').click()"""
+        page.evaluate(punch)
+        page.evaluate("(() => { const f = document.querySelector('[data-postroll]'); f.value = '0.5'; f.dispatchEvent(new Event('change', { bubbles: true })); })()")
+        page.locator(".fw-ruler-canvas").first.click(position={"x": 2, "y": 10})
+        clock = "document.querySelector('.fw-clock').textContent"
+        page.keyboard.press("r")
+        page.wait_for_function("document.querySelector('.fw-transport [data-action=\"record\"], .fw-rec')?.getAttribute('aria-pressed') !== 'true' && document.querySelectorAll('.fw-lane[data-key=\"t1\"] .fw-lane-body > .fw-clip').length === 3", timeout=30000)
+        # the punch kept rolling half a second past its out point at 2 s, and its take is exactly the punch range
+        stopped = page.evaluate(clock)
+        seconds = int(stopped[3:5]) * 60 + float(stopped[6:])
+        assert seconds >= 2.4, stopped
+        assert page.evaluate(clips)[:3] == [0, 100, 200]
+        # on the fly: Record while playing punches in where the playhead is, Record again punches out and playback goes on
+        page.evaluate(punch)
+        page.locator(".fw-ruler-canvas").first.click(position={"x": 400, "y": 10})
+        page.keyboard.press("Space")
+        page.wait_for_timeout(700)
+        page.keyboard.press("r")
+        page.wait_for_timeout(1200)
+        page.keyboard.press("r")
+        try:
+            page.wait_for_function("document.querySelectorAll('.fw-lane[data-key=\"t1\"] .fw-lane-body > .fw-clip').length >= 4", timeout=30000)
+        except Exception:
+            raise AssertionError(f"{page.text_content('.fw-notice')} | {page.evaluate(clips)}")
+        a = page.evaluate(clock)
+        page.wait_for_timeout(600)
+        assert page.evaluate(clock) != a, "playback stopped at the punch out"
+        page.keyboard.press("Space")
+        lefts = page.evaluate(clips)
+        assert any(450 < x < 700 for x in lefts), lefts
+        assert page.console_errors == []
+    finally:
+        context.close()
+        mic.close()
