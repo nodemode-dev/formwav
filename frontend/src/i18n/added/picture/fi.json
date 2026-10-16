@@ -1,0 +1,17 @@
+{
+"At playhead": "Toisto-osoittimessa",
+"Changed the picture": "Videota muutettu",
+"Changed the timecode burn-in": "Kuvaan poltettu timecode muutettu",
+"Could not open the picture: {a}": "Videota ei voitu avata: {a}",
+"Moved the picture": "Video siirretty",
+"Opened the picture {a}": "Video {a} avattu",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "{a} avattu; videota {b} ei löytynyt (aseta se session viereen ja avaa uudelleen)",
+"Opening {a}...": "Avataan {a}...",
+"Picture start timecode": "Videon aloitus-timecode",
+"Picture: click to move the playhead": "Video: siirrä toisto-osoitin napsauttamalla",
+"Put the picture's first frame at the playhead": "Aseta videon ensimmäinen ruutu toisto-osoittimen kohtaan",
+"Starts at": "Alkaa kohdasta",
+"Take the picture out of the session (its sound stays)": "Poista video sessiosta (ääni säilyy)",
+"Timecode burn-in": "Kuvaan poltettu timecode",
+"{a} (missing)": "{a} (puuttuu)"
+}

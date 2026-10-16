@@ -1,0 +1,17 @@
+{
+"At playhead": "A lejátszófejnél",
+"Changed the picture": "Videó módosítva",
+"Changed the timecode burn-in": "Beégetett timecode módosítva",
+"Could not open the picture: {a}": "A videó nem nyitható meg: {a}",
+"Moved the picture": "Videó áthelyezve",
+"Opened the picture {a}": "Videó megnyitva: {a}",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "Megnyitva: {a}; a(z) {b} videó nem található (tegye a munkamenet mellé, és nyissa meg újra)",
+"Opening {a}...": "{a} megnyitása...",
+"Picture start timecode": "A videó kezdő timecode-ja",
+"Picture: click to move the playhead": "Videó: kattintson a lejátszófej mozgatásához",
+"Put the picture's first frame at the playhead": "A videó első képkockáját a lejátszófejre helyezi",
+"Starts at": "Kezdete",
+"Take the picture out of the session (its sound stays)": "Videó eltávolítása a munkamenetből (a hang megmarad)",
+"Timecode burn-in": "Beégetett timecode",
+"{a} (missing)": "{a} (hiányzik)"
+}

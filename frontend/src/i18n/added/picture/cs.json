@@ -1,0 +1,17 @@
+{
+"At playhead": "U kurzoru",
+"Changed the picture": "Video změněno",
+"Changed the timecode burn-in": "Vypálený timecode změněn",
+"Could not open the picture: {a}": "Video se nepodařilo otevřít: {a}",
+"Moved the picture": "Video přesunuto",
+"Opened the picture {a}": "Video {a} otevřeno",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "Otevřeno {a}; video {b} nebylo nalezeno (vložte ho vedle session a otevřete znovu)",
+"Opening {a}...": "Otevírání {a}...",
+"Picture start timecode": "Počáteční timecode videa",
+"Picture: click to move the playhead": "Video: kliknutím přesunete kurzor přehrávání",
+"Put the picture's first frame at the playhead": "Umístit první snímek videa na kurzor přehrávání",
+"Starts at": "Začíná na",
+"Take the picture out of the session (its sound stays)": "Odebrat video ze session (zvuk zůstane)",
+"Timecode burn-in": "Vypálený timecode",
+"{a} (missing)": "{a} (chybí)"
+}

@@ -1,0 +1,17 @@
+{
+"At playhead": "ที่เพลย์เฮด",
+"Changed the picture": "เปลี่ยนวิดีโอแล้ว",
+"Changed the timecode burn-in": "เปลี่ยนไทม์โค้ดฝังบนภาพแล้ว",
+"Could not open the picture: {a}": "เปิดวิดีโอไม่ได้: {a}",
+"Moved the picture": "ย้ายวิดีโอแล้ว",
+"Opened the picture {a}": "เปิดวิดีโอ {a} แล้ว",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "เปิด {a} แล้ว แต่ไม่พบวิดีโอ {b} (วางไว้ข้างเซสชันแล้วเปิดอีกครั้ง)",
+"Opening {a}...": "กำลังเปิด {a}...",
+"Picture start timecode": "ไทม์โค้ดเริ่มต้นของวิดีโอ",
+"Picture: click to move the playhead": "วิดีโอ: คลิกเพื่อย้ายเพลย์เฮด",
+"Put the picture's first frame at the playhead": "วางเฟรมแรกของวิดีโอที่เพลย์เฮด",
+"Starts at": "เริ่มที่",
+"Take the picture out of the session (its sound stays)": "นำวิดีโอออกจากเซสชัน (เสียงยังอยู่)",
+"Timecode burn-in": "ไทม์โค้ดฝังบนภาพ",
+"{a} (missing)": "{a} (ไม่พบ)"
+}

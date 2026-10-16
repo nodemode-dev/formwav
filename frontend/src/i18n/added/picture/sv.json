@@ -1,0 +1,17 @@
+{
+"At playhead": "Vid markören",
+"Changed the picture": "Ändrade videon",
+"Changed the timecode burn-in": "Ändrade inbränd timecode",
+"Could not open the picture: {a}": "Det gick inte att öppna videon: {a}",
+"Moved the picture": "Flyttade videon",
+"Opened the picture {a}": "Öppnade videon {a}",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "Öppnade {a}; videon {b} hittades inte (lägg den bredvid sessionen och öppna igen)",
+"Opening {a}...": "Öppnar {a}...",
+"Picture start timecode": "Starttimecode för videon",
+"Picture: click to move the playhead": "Video: klicka för att flytta uppspelningsmarkören",
+"Put the picture's first frame at the playhead": "Placera videons första bildruta vid uppspelningsmarkören",
+"Starts at": "Börjar vid",
+"Take the picture out of the session (its sound stays)": "Ta bort videon från sessionen (ljudet finns kvar)",
+"Timecode burn-in": "Inbränd timecode",
+"{a} (missing)": "{a} (saknas)"
+}

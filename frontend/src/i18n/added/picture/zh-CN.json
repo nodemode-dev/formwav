@@ -1,0 +1,17 @@
+{
+"At playhead": "在播放头处",
+"Changed the picture": "已更改视频",
+"Changed the timecode burn-in": "已更改时间码烧录",
+"Could not open the picture: {a}": "无法打开视频：{a}",
+"Moved the picture": "已移动视频",
+"Opened the picture {a}": "已打开视频 {a}",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "已打开 {a}；未找到视频 {b}（请将其放在会话旁边，然后重新打开）",
+"Opening {a}...": "正在打开 {a}...",
+"Picture start timecode": "视频起始时间码",
+"Picture: click to move the playhead": "视频：点击可移动播放头",
+"Put the picture's first frame at the playhead": "将视频的第一帧放在播放头位置",
+"Starts at": "起始于",
+"Take the picture out of the session (its sound stays)": "从会话中移除视频（声音保留）",
+"Timecode burn-in": "时间码烧录",
+"{a} (missing)": "{a}（缺失）"
+}

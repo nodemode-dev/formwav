@@ -1,0 +1,17 @@
+{
+"At playhead": "재생 헤드 위치",
+"Changed the picture": "영상을 변경했습니다",
+"Changed the timecode burn-in": "타임코드 번인을 변경했습니다",
+"Could not open the picture: {a}": "영상을 열 수 없습니다: {a}",
+"Moved the picture": "영상을 이동했습니다",
+"Opened the picture {a}": "영상 {a}을(를) 열었습니다",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "{a}을(를) 열었습니다. 영상 {b}을(를) 찾을 수 없습니다(세션 옆에 두고 다시 여세요)",
+"Opening {a}...": "{a} 여는 중...",
+"Picture start timecode": "영상 시작 타임코드",
+"Picture: click to move the playhead": "영상: 클릭하여 재생 헤드 이동",
+"Put the picture's first frame at the playhead": "영상의 첫 프레임을 재생 헤드 위치에 놓기",
+"Starts at": "시작 위치",
+"Take the picture out of the session (its sound stays)": "세션에서 영상 제거(소리는 유지)",
+"Timecode burn-in": "타임코드 번인",
+"{a} (missing)": "{a}(없음)"
+}

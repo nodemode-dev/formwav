@@ -1,0 +1,17 @@
+{
+"At playhead": "На курсоре",
+"Changed the picture": "Видео изменено",
+"Changed the timecode burn-in": "Вшитый таймкод изменён",
+"Could not open the picture: {a}": "Не удалось открыть видео: {a}",
+"Moved the picture": "Видео перемещено",
+"Opened the picture {a}": "Видео {a} открыто",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "Открыто: {a}; видео {b} не найдено (положите его рядом с сессией и откройте снова)",
+"Opening {a}...": "Открывается {a}...",
+"Picture start timecode": "Начальный таймкод видео",
+"Picture: click to move the playhead": "Видео: щёлкните, чтобы переместить курсор воспроизведения",
+"Put the picture's first frame at the playhead": "Поместить первый кадр видео на курсор воспроизведения",
+"Starts at": "Начинается в",
+"Take the picture out of the session (its sound stays)": "Убрать видео из сессии (звук останется)",
+"Timecode burn-in": "Вшитый таймкод",
+"{a} (missing)": "{a} (отсутствует)"
+}

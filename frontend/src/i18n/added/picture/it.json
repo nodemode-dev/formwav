@@ -1,0 +1,17 @@
+{
+"At playhead": "Sul cursore",
+"Changed the picture": "Video modificato",
+"Changed the timecode burn-in": "Timecode in sovrimpressione modificato",
+"Could not open the picture: {a}": "Impossibile aprire il video: {a}",
+"Moved the picture": "Video spostato",
+"Opened the picture {a}": "Video {a} aperto",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "Aperto {a}; il video {b} non è stato trovato (metterlo accanto alla sessione e riaprirla)",
+"Opening {a}...": "Apertura di {a}...",
+"Picture start timecode": "Timecode di inizio del video",
+"Picture: click to move the playhead": "Video: fare clic per spostare il cursore di riproduzione",
+"Put the picture's first frame at the playhead": "Posizionare il primo fotogramma del video sul cursore di riproduzione",
+"Starts at": "Inizia a",
+"Take the picture out of the session (its sound stays)": "Rimuovere il video dalla sessione (l'audio resta)",
+"Timecode burn-in": "Timecode in sovrimpressione",
+"{a} (missing)": "{a} (mancante)"
+}

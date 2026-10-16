@@ -1,0 +1,17 @@
+{
+"At playhead": "На курсорі",
+"Changed the picture": "Відео змінено",
+"Changed the timecode burn-in": "Вшитий таймкод змінено",
+"Could not open the picture: {a}": "Не вдалося відкрити відео: {a}",
+"Moved the picture": "Відео переміщено",
+"Opened the picture {a}": "Відео {a} відкрито",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "Відкрито: {a}; відео {b} не знайдено (покладіть його поруч із сесією та відкрийте знову)",
+"Opening {a}...": "Відкривається {a}...",
+"Picture start timecode": "Початковий таймкод відео",
+"Picture: click to move the playhead": "Відео: клацніть, щоб перемістити курсор відтворення",
+"Put the picture's first frame at the playhead": "Помістити перший кадр відео на курсор відтворення",
+"Starts at": "Починається з",
+"Take the picture out of the session (its sound stays)": "Прибрати відео із сесії (звук залишиться)",
+"Timecode burn-in": "Вшитий таймкод",
+"{a} (missing)": "{a} (відсутній)"
+}

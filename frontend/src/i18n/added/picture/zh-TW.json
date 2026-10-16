@@ -1,0 +1,17 @@
+{
+"At playhead": "於播放頭處",
+"Changed the picture": "已變更影片",
+"Changed the timecode burn-in": "已變更時間碼燒錄",
+"Could not open the picture: {a}": "無法開啟影片：{a}",
+"Moved the picture": "已移動影片",
+"Opened the picture {a}": "已開啟影片 {a}",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "已開啟 {a}；找不到影片 {b}（請將其放在工作階段旁邊，然後重新開啟）",
+"Opening {a}...": "正在開啟 {a}...",
+"Picture start timecode": "影片起始時間碼",
+"Picture: click to move the playhead": "影片：按一下以移動播放頭",
+"Put the picture's first frame at the playhead": "將影片的第一個畫格放在播放頭位置",
+"Starts at": "起始於",
+"Take the picture out of the session (its sound stays)": "從工作階段移除影片（聲音保留）",
+"Timecode burn-in": "時間碼燒錄",
+"{a} (missing)": "{a}（遺失）"
+}

@@ -1,0 +1,17 @@
+{
+"At playhead": "Oynatma konumunda",
+"Changed the picture": "Video değiştirildi",
+"Changed the timecode burn-in": "Gömülü timecode değiştirildi",
+"Could not open the picture: {a}": "Video açılamadı: {a}",
+"Moved the picture": "Video taşındı",
+"Opened the picture {a}": "{a} videosu açıldı",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "{a} açıldı; {b} videosu bulunamadı (oturumun yanına koyup yeniden açın)",
+"Opening {a}...": "{a} açılıyor...",
+"Picture start timecode": "Video başlangıç timecode'u",
+"Picture: click to move the playhead": "Video: oynatma konumunu taşımak için tıklayın",
+"Put the picture's first frame at the playhead": "Videonun ilk karesini oynatma konumuna yerleştir",
+"Starts at": "Başlangıç",
+"Take the picture out of the session (its sound stays)": "Videoyu oturumdan kaldır (ses kalır)",
+"Timecode burn-in": "Gömülü timecode",
+"{a} (missing)": "{a} (eksik)"
+}

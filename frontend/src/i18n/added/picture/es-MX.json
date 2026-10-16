@@ -1,0 +1,17 @@
+{
+"At playhead": "En el cursor",
+"Changed the picture": "Video cambiado",
+"Changed the timecode burn-in": "Timecode incrustado cambiado",
+"Could not open the picture: {a}": "No se pudo abrir el video: {a}",
+"Moved the picture": "Video movido",
+"Opened the picture {a}": "Video {a} abierto",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "Se abrió {a}; no se encontró el video {b} (colóquelo junto a la sesión y ábrala de nuevo)",
+"Opening {a}...": "Abriendo {a}...",
+"Picture start timecode": "Timecode de inicio del video",
+"Picture: click to move the playhead": "Video: haga clic para mover el cursor de reproducción",
+"Put the picture's first frame at the playhead": "Colocar el primer cuadro del video en el cursor de reproducción",
+"Starts at": "Inicia en",
+"Take the picture out of the session (its sound stays)": "Quitar el video de la sesión (el audio se conserva)",
+"Timecode burn-in": "Timecode incrustado",
+"{a} (missing)": "{a} (no encontrado)"
+}

@@ -1,0 +1,17 @@
+{
+"At playhead": "Tại đầu phát",
+"Changed the picture": "Đã đổi video",
+"Changed the timecode burn-in": "Đã đổi timecode chèn vào hình",
+"Could not open the picture: {a}": "Không mở được video: {a}",
+"Moved the picture": "Đã di chuyển video",
+"Opened the picture {a}": "Đã mở video {a}",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "Đã mở {a}; không tìm thấy video {b} (hãy đặt cạnh phiên rồi mở lại)",
+"Opening {a}...": "Đang mở {a}...",
+"Picture start timecode": "Timecode bắt đầu của video",
+"Picture: click to move the playhead": "Video: nhấp để di chuyển đầu phát",
+"Put the picture's first frame at the playhead": "Đặt khung hình đầu tiên của video tại đầu phát",
+"Starts at": "Bắt đầu tại",
+"Take the picture out of the session (its sound stays)": "Gỡ video khỏi phiên (âm thanh vẫn giữ)",
+"Timecode burn-in": "Timecode chèn vào hình",
+"{a} (missing)": "{a} (thiếu)"
+}

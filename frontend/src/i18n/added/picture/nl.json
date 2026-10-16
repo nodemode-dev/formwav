@@ -1,0 +1,17 @@
+{
+"At playhead": "Bij afspeelkop",
+"Changed the picture": "Video gewijzigd",
+"Changed the timecode burn-in": "Timecode-burn-in gewijzigd",
+"Could not open the picture: {a}": "Kan de video niet openen: {a}",
+"Moved the picture": "Video verplaatst",
+"Opened the picture {a}": "Video {a} geopend",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "{a} geopend; de video {b} is niet gevonden (plaats de video naast de sessie en open die opnieuw)",
+"Opening {a}...": "{a} openen...",
+"Picture start timecode": "Starttimecode van de video",
+"Picture: click to move the playhead": "Video: klik om de afspeelkop te verplaatsen",
+"Put the picture's first frame at the playhead": "Plaats het eerste frame van de video op de afspeelkop",
+"Starts at": "Begint bij",
+"Take the picture out of the session (its sound stays)": "Haal de video uit de sessie (het geluid blijft)",
+"Timecode burn-in": "Timecode-burn-in",
+"{a} (missing)": "{a} (ontbreekt)"
+}

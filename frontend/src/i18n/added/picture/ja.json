@@ -1,0 +1,17 @@
+{
+"At playhead": "再生ヘッド位置",
+"Changed the picture": "映像を変更しました",
+"Changed the timecode burn-in": "タイムコードのバーンインを変更しました",
+"Could not open the picture: {a}": "映像を開けませんでした：{a}",
+"Moved the picture": "映像を移動しました",
+"Opened the picture {a}": "映像 {a} を開きました",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "{a} を開きました。映像 {b} が見つかりませんでした（セッションと同じ場所に置いて、もう一度開いてください）",
+"Opening {a}...": "{a} を開いています...",
+"Picture start timecode": "映像の開始タイムコード",
+"Picture: click to move the playhead": "映像：クリックして再生ヘッドを移動",
+"Put the picture's first frame at the playhead": "映像の最初のフレームを再生ヘッドの位置に置く",
+"Starts at": "開始位置",
+"Take the picture out of the session (its sound stays)": "映像をセッションから外す（音声は残ります）",
+"Timecode burn-in": "タイムコードのバーンイン",
+"{a} (missing)": "{a}（見つかりません）"
+}

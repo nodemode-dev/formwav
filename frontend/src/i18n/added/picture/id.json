@@ -1,0 +1,17 @@
+{
+"At playhead": "Di playhead",
+"Changed the picture": "Video diubah",
+"Changed the timecode burn-in": "Burn-in timecode diubah",
+"Could not open the picture: {a}": "Tidak dapat membuka video: {a}",
+"Moved the picture": "Video dipindahkan",
+"Opened the picture {a}": "Video {a} dibuka",
+"Opened {a}; the picture {b} was not found (put it beside the session and open it again)": "{a} dibuka; video {b} tidak ditemukan (letakkan di samping sesi lalu buka lagi)",
+"Opening {a}...": "Membuka {a}...",
+"Picture start timecode": "Timecode awal video",
+"Picture: click to move the playhead": "Video: klik untuk memindahkan playhead",
+"Put the picture's first frame at the playhead": "Letakkan frame pertama video di playhead",
+"Starts at": "Mulai di",
+"Take the picture out of the session (its sound stays)": "Keluarkan video dari sesi (suara tetap ada)",
+"Timecode burn-in": "Burn-in timecode",
+"{a} (missing)": "{a} (hilang)"
+}
