@@ -1495,3 +1495,37 @@ def test_a_note_track_plays_the_drum_and_subtractive_synths_and_a_tracks_effects
     _step(page, "Rendered track effects into 1 clip")
     page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Rendered the track effects into 1 clip; the effects stay on the track, bypassed'")
     assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
+
+
+def test_a_prores_picture_plays_through_its_proxy_with_thumbnails_an_offset_and_timecode_burnt_in(page, app_url, tmp_path):
+    import subprocess
+
+    movie = tmp_path / "scene.mov"
+    subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=25", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "6", "-c:v", "prores_ks", "-c:a", "pcm_s16le", str(movie)], check=True, timeout=120)
+    _open(page, app_url)
+    page.evaluate("document.querySelector('[data-picture]').click()")
+    page.set_input_files("[data-picture-file]", str(movie))
+    page.click('[data-agent-tab="history"]')
+    _step(page, "Opened the picture scene.mov")
+    page.wait_for_function("document.querySelector('.fw-picture-video').readyState >= 2", timeout=60000)
+    # a frame of the proxy drawn into a canvas is not black
+    lit = """(() => { const v = document.querySelector('.fw-picture-video'); const c = document.createElement('canvas'); c.width = 64; c.height = 36;
+      const x = c.getContext('2d'); x.drawImage(v, 0, 0, 64, 36); const d = x.getImageData(0, 0, 64, 36).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2]; return s / (d.length / 4); })()"""
+    assert page.evaluate(lit) > 30
+    assert page.locator(".fw-lane .fw-clip").count() == 1
+    # the picture lane: the movie's frames along the timeline, painted once its strip has come back
+    assert page.is_visible(".fw-picture-lane") and page.text_content("[data-picture-lane-name]") == "scene.mov"
+    page.wait_for_function("""(() => { const c = document.querySelector('.fw-picture-lane-paint'); const d = c.getContext('2d').getImageData(0, 0, Math.min(c.width, 400), c.height).data;
+      let lit = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 0) lit++; return lit > 1000; })()""", timeout=60000)
+    # the picture starts 2 s in: at 3 s it shows its frame at 1 s; the burn-in reads the session's timecode there
+    page.fill("[data-picture-start]", "00:00:02:00")
+    page.press("[data-picture-start]", "Tab")
+    _step(page, "Moved the picture")
+    page.check("[data-picture-burn]")
+    _step(page, "Changed the timecode burn-in")
+    per_second = page.evaluate("document.querySelector('.fw-lane .fw-clip').getBoundingClientRect().width") / 6.0
+    box = page.locator(".fw-picture-lane-track").bounding_box()
+    page.mouse.click(box["x"] + 3.0 * per_second, box["y"] + box["height"] / 2)
+    page.wait_for_function("Math.abs(document.querySelector('.fw-picture-video').currentTime - 1.0) <= 0.03")
+    assert page.text_content("[data-picture-tc]").endswith("00:00:03:00") and page.is_visible("[data-picture-tc]")
+    assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
