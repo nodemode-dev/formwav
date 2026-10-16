@@ -130,6 +130,10 @@ pub struct Player {
     /// The master's volume automation (an envelope id, 0 for none), applied after the master chain.
     master_env: u32,
     bus_peaks: Vec<(f32, f32)>,
+    /// S10: each bus's output (bus index to the index of the bus it plays into), absent for the master.
+    bus_outs: Vec<Option<usize>>,
+    /// What earlier buses played into each bus this block.
+    bus_in: Vec<[Vec<f32>; 2]>,
     /// The session's sample rate, for designing filters (48 kHz when unset).
     rate: f32,
     /// Each clip's track effect chain, parallel to `clips`: one copy advanced by the audio mix, one by the meter
@@ -850,6 +854,15 @@ impl Player {
         self.bus_fx.clear();
         self.bus_fx_spec.clear();
         self.bus_fx_auto.clear();
+        self.bus_outs.clear();
+    }
+
+    /// S10: bus `id` plays into bus `out` (0, or an id not added, for the master). Buses run in the order they were
+    /// added, so a bus must come after every bus that plays into it; one that would not plays into the master.
+    pub fn set_bus_out(&mut self, id: u32, out: u32) {
+        let Some(k) = self.buses.iter().position(|b| b.id == id) else { return };
+        self.bus_outs.resize(self.buses.len(), None);
+        self.bus_outs[k] = if out == 0 { None } else { self.buses.iter().position(|b| b.id == out).filter(|&j| j > k) };
     }
 
     pub fn add_bus(&mut self, bus: Bus) {
@@ -910,6 +923,15 @@ impl Player {
         let mut primed = std::mem::take(&mut self.bus_primed);
         primed.resize(self.buses.len(), false);
         let mut prime = std::mem::take(&mut self.prime_scratch);
+        let mut bus_in = std::mem::take(&mut self.bus_in);
+        let routed = self.bus_outs.iter().any(|o| o.is_some());
+        if routed {
+            bus_in.resize_with(self.buses.len(), || [Vec::new(), Vec::new()]);
+            for ch in bus_in.iter_mut().flatten() {
+                ch.clear();
+                ch.resize(n, 0.0);
+            }
+        }
         for (k, bus) in self.buses.iter().enumerate() {
             scratch_left[..n].fill(0.0);
             scratch_right[..n].fill(0.0);
@@ -932,6 +954,13 @@ impl Player {
                 primed[k] = true;
             }
             self.mix(fx, &mut scratch_left[..n], &mut scratch_right[..n], from + ahead as u64, |c| c.bus == id);
+            if routed {
+                let [in_left, in_right] = &bus_in[k];
+                for i in 0..n {
+                    scratch_left[i] += in_left[i];
+                    scratch_right[i] += in_right[i];
+                }
+            }
             if let Some(chain) = bus_fx.get_mut(k) {
                 self.run_bus_chain(k, chain, &mut scratch_left[..n], &mut scratch_right[..n], from + ahead as u64);
             }
@@ -939,15 +968,22 @@ impl Player {
             let gain_left = bus.gain * pan_left;
             let gain_right = bus.gain * pan_right;
             let peak = &mut bus_peaks[k];
+            let out = self.bus_outs.get(k).copied().flatten();
             for i in 0..n {
                 let l = scratch_left[i] * gain_left;
                 let r = scratch_right[i] * gain_right;
-                left[i] += l;
-                right[i] += r;
+                if let Some(j) = out {
+                    bus_in[j][0][i] += l;
+                    bus_in[j][1][i] += r;
+                } else {
+                    left[i] += l;
+                    right[i] += r;
+                }
                 peak.0 = peak.0.max(l.abs());
                 peak.1 = peak.1.max(r.abs());
             }
         }
+        self.bus_in = bus_in;
         self.bus_fx = bus_fx;
         self.bus_primed = primed;
         self.prime_scratch = prime;

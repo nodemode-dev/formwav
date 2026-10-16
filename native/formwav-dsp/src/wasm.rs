@@ -137,6 +137,12 @@ pub unsafe extern "C" fn fw_add_bus(player: *mut Player, id: u32, gain: f32, pan
     (*player).add_bus(crate::render::Bus { id, gain, pan });
 }
 
+/// S10: bus `id` plays into bus `out` (0 for the master), after every bus has been added.
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_bus_out(player: *mut Player, id: u32, out: u32) {
+    (*player).set_bus_out(id, out);
+}
+
 /// # Safety
 /// `player` must come from `fw_player_new` and not have been freed.
 #[no_mangle]
