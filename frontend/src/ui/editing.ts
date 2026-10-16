@@ -820,6 +820,42 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     engine.dispatch({ type: "batch", commands: list, label: `Rendered clip gain on ${picked.length} clip${picked.length === 1 ? "" : "s"}` });
     say(`Rendered the clip gain of ${picked.length} clip${picked.length === 1 ? "" : "s"}: the audio now carries it, at 0 dB`);
   };
+  // PLAN_v13 S14: every clip of the selected clips' tracks rendered through its own effects and its track's live
+  // effects by the audio core, as new media (the clip gain first, as playback applies it); the effects rendered are
+  // then cleared from the clips and bypassed on the tracks, so the session plays as it did
+  const renderTrackFx = async () => {
+    const doc = engine.get("document");
+    const ids = new Set(chosen().map((p) => p.trackId));
+    const tracks = doc.tracks.filter((t) => ids.has(t.id) && (t.fx ?? []).some((f) => !f.bypass));
+    if (!tracks.length) return say("Select a clip on a track with live effects to render");
+    const post = async (url: string, body: object): Promise<MediaRef> => {
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { detail?: string }).detail ?? `the engine answered ${res.status}`);
+      return (await res.json()) as MediaRef;
+    };
+    const list: Command[] = [];
+    let count = 0;
+    say("Rendering the track effects into the clips...");
+    try {
+      for (const t of tracks) {
+        const live = (t.fx ?? []).filter((f) => !f.bypass);
+        for (const clip of t.clips) {
+          const gained = !clip.gainBypass && (clip.gainDb !== 0 || clip.envelope?.length);
+          const source = gained ? (await post(`/api/media/${encodeURIComponent(clip.mediaId)}/clip-gain`, { gainDb: clip.gainDb, envelope: clip.envelope ?? [] })).id : clip.mediaId;
+          const media = await post(`/api/media/${encodeURIComponent(source)}/render-chain`, { chain: [...(clip.fx ?? []).filter((f) => !f.bypass), ...live], label: `${t.name} effects` });
+          list.push({ type: "set-clip-media", trackId: t.id, clipId: clip.id, media });
+          if (gained) list.push({ type: "set-clip-gain", trackId: t.id, clipId: clip.id, gainDb: 0 }, { type: "set-clip-envelope", trackId: t.id, clipId: clip.id, points: [] });
+          if (clip.fx?.length) list.push({ type: "set-clip-fx", trackId: t.id, clipId: clip.id, fx: [] });
+          count++;
+        }
+        list.push({ type: "set-track-fx", trackId: t.id, fx: (t.fx ?? []).map((f) => ({ ...f, bypass: true })) });
+      }
+    } catch (err) {
+      return say(`Could not render the effects: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    engine.dispatch({ type: "batch", commands: list, label: `Rendered track effects into ${count} clip${count === 1 ? "" : "s"}` });
+    say(`Rendered the track effects into ${count} clip${count === 1 ? "" : "s"}; the effects stay on the track, bypassed`);
+  };
   // PLAN_v13 S13, clip group files: the selected clips (a whole group when any member is selected) with their media as
   // one .fwclips file; importing one lays its clips at the playhead from the current track down, as one new group
   const exportClips = async () => {
@@ -877,6 +913,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     item("Copy clip gain", "", "Keep the first selected clip's gain and gain line to paste onto others", copyGain),
     item("Paste clip gain", "", "Give the selected clips the copied gain and gain line, from each clip's start", pasteGain),
     item("Render clip gain", "", "Write the selected clips' gain and gain line into their audio, as new media; they then play the same at 0 dB", () => void renderGain()),
+    item("Render track effects into clips", "", "Write the live effects of the selected clips' tracks into every clip on them through the audio core, as new media, and bypass the effects; the tracks play as before", () => void renderTrackFx()),
     sep(),
     item("Space clips...", "", "Set the selected clips one after another, a gap apart", () => void space()),
     item("Snap to previous", "", "Move each selected clip so its start meets the end of the clip before it", () => run(snapClips(engine.get("document"), clipsNow(), "previous"), "Snapped to the previous clip", "No clip before to snap to (or the clips are locked)")),

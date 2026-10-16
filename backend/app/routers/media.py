@@ -176,6 +176,25 @@ def media_clip_gain(media_id: str, payload: dict) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/render-chain", status_code=201)
+def media_render_chain(media_id: str, payload: dict) -> dict:
+    """PLAN_v13 S14: {chain: [track effect entries], label} rendered into a copy of the file through the audio core, as
+    an export plays the chain (services/core_effects.render_chain)."""
+    from ..services import core_effects
+
+    chain = payload.get("chain")
+    if not isinstance(chain, list):
+        raise HTTPException(422, "chain must be a list of effects")
+    try:
+        return core_effects.render_chain(media_id, [f for f in chain if isinstance(f, dict)], str(payload.get("label") or "effects"))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except media.CoreMissing as err:
+        raise HTTPException(503, str(err)) from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/excerpt", status_code=201)
 def media_excerpt(media_id: str, start: float, end: float) -> dict:
     from ..services import tools

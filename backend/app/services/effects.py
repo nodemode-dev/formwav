@@ -416,7 +416,9 @@ def catalogue() -> list[dict]:
     from . import plugins
 
     built_in = [{"group": group, "effects": [{"id": key, "label": label, "params": _controls(key), "retimes": key in RETIMING, "learnsNoise": key in LEARNS_NOISE} for key, label in items]} for group, items in GROUPS]
-    return built_in + plugins.catalogue_group()
+    from . import core_effects
+
+    return built_in + core_effects.catalogue_group() + plugins.catalogue_group()
 
 
 def _dereverb(x, rate: int, v: dict):
@@ -2109,6 +2111,10 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
         from . import plugins
 
         return plugins.apply(media_id, name, params)
+    if name.startswith("live:"):
+        from . import core_effects
+
+        return core_effects.apply(media_id, name, params)
     chain = ALL_CHAINS.get(name)
     if chain is None:
         raise media.MediaError(f"no effect named {name}")
