@@ -52,6 +52,13 @@ export async function saveProject(name: string, doc: SessionDoc, base: number | 
   return (await res.json()) as ProjectSummary;
 }
 
+/** PLAN_v13 S12: the demo session the engine makes in code, at `rate`. */
+export async function openDemo(rate: number): Promise<{ name: string; document: OpenedProject["document"] }> {
+  const res = await fetch(`/api/projects/demo?rate=${rate}`, { method: "POST" });
+  if (!res.ok) throw await failure(res);
+  return (await res.json()) as { name: string; document: OpenedProject["document"] };
+}
+
 export async function openProject(name: string): Promise<OpenedProject> {
   const res = await fetch(`/api/projects/${encodeURIComponent(name)}`);
   if (!res.ok) throw await failure(res);

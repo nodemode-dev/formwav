@@ -1,6 +1,6 @@
 import type { Engine, SessionDoc } from "../engine";
 import type { Player } from "../audio/player";
-import { listProjects, openProject, RevisionConflict, saveProject, type ProjectSummary } from "../io/projects-client";
+import { listProjects, openDemo, openProject, RevisionConflict, saveProject, type ProjectSummary } from "../io/projects-client";
 import { delayedIndicator, patchList, setText } from "../vendor/nodemode/dom-stable";
 import { currentView } from "./lanes";
 
@@ -167,6 +167,26 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
   };
   // The cloud (ui/cloud.ts) opens a session it brought in through the same path, unsaved-changes guard included
   host.addEventListener("fw-open-project", (e) => open((e as CustomEvent<string>).detail));
+  // PLAN_v13 S12: File > Open the demo session, a new unsaved session the engine makes in code
+  host.querySelector('[data-action="demo"]')?.addEventListener("click", () => {
+    if (unsaved() && !window.confirm("Open the demo session? Unsaved changes to the current session will be lost.")) return;
+    void withNotice("Making the demo session", async () => {
+      let made;
+      try {
+        made = await openDemo(engine.get("document").tracks.length ? engine.get("document").sampleRate : 48000);
+      } catch (err) {
+        return `Could not make the demo session: ${reason(err)}`;
+      }
+      player.stop();
+      engine.loadDocument(made.document);
+      lastSaved = engine.get("document");
+      known = null;
+      savedAt = null;
+      writeState();
+      if (nameField && nameField.value !== made.name) nameField.value = made.name;
+      return "Opened the demo session: 16 bars at 104 BPM; save it to keep it";
+    });
+  });
   savedSession = () => (known && !unsaved() ? known.name : null);
   const docState = host.querySelector<HTMLElement>(".fw-doc-state");
   let savedAt: Date | null = null;

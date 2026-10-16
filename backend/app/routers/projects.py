@@ -139,6 +139,19 @@ def save_project(name: str, document: dict = Body(...), base: int | None = None)
         raise HTTPException(400, str(err)) from err
 
 
+@router.post("/projects/demo")
+def demo_session(rate: int = 48000) -> dict:
+    """PLAN_v13 S12: the demo session made in code (services/demo.py), its media written to the engine."""
+    from ..services import demo
+
+    if rate not in (44100, 48000, 88200, 96000):
+        raise HTTPException(400, "the demo is made at 44100, 48000, 88200 or 96000 Hz")
+    try:
+        return {"name": "Demo", "document": demo.build(rate)}
+    except media.CoreMissing as err:
+        raise HTTPException(503, str(err)) from err
+
+
 @router.post("/projects/open-file")
 def open_project_file(body: dict = Body(...)) -> dict:
     try:
