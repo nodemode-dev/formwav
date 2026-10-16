@@ -1450,3 +1450,48 @@ def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_
     finally:
         context.close()
         mic.close()
+
+
+def test_a_note_track_plays_the_drum_and_subtractive_synths_and_a_tracks_effects_render_into_its_clips(page, app_url):
+    import json
+
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
+    rate = ref["sampleRate"]
+    beat = [{"at": i * rate // 4, "length": rate // 8, "pitch": p, "velocity": 100} for i, p in enumerate((36, 42, 38, 42))]
+    doc = {"sampleRate": rate, "media": {ref["id"]: ref}, "markers": [], "tracks": [
+        {"id": "t1", "name": "Beat", "channels": 2, "gainDb": 0, "mute": False, "solo": False, "clips": [{"id": "n1", "mediaId": ref["id"], "start": 0, "sourceIn": 0, "length": rate, "gainDb": 0, "notes": beat}]},
+        {"id": "t2", "name": "Vox", "channels": ref["channels"], "gainDb": 0, "mute": False, "solo": False, "fx": [{"kind": "echo", "delayMs": 200, "feedback": 0.3, "mix": 0.4}], "clips": [{"id": "c1", "mediaId": ref["id"], "start": 0, "sourceIn": 0, "length": 2 * rate, "gainDb": -3}]},
+    ]}
+    _engine(app_url, "PUT", "/api/autosave", {"name": "Kit", "document": doc})
+    try:
+        _open(page, app_url)
+        page.wait_for_selector("dialog.fw-ask-dialog[open]")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
+    finally:
+        _engine(app_url, "DELETE", "/api/autosave")
+    clip = page.locator('.fw-lane[data-key="t1"] .fw-clip').first.bounding_box()
+    page.mouse.click(clip["x"] + 20, clip["y"] + clip["height"] * 0.75)
+    page.click(".fw-dock-more > .fw-menu-btn")
+    page.click('.fw-dock-more [data-panel="inspector"]')
+    page.select_option("[data-instrument]", "drums")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Instrument set: 1 note clip re-rendered'")
+    assert page.is_visible('[data-inst-params="drums"]') and not page.is_visible('[data-inst-params="subtractive"]')
+    page.fill('[data-inst-params="drums"] [data-inst-param="kickDecay"]', "0.9")
+    page.press('[data-inst-params="drums"] [data-inst-param="kickDecay"]', "Tab")
+    page.click('[data-agent-tab="history"]')
+    _step(page, "Edited notes on Beat")
+    page.select_option("[data-instrument]", "subtractive")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Instrument set: 1 note clip re-rendered'")
+    page.select_option('[data-inst-params="subtractive"] [data-inst-param="osc1"]', "0")
+    page.wait_for_function("[...document.querySelectorAll('.fw-history-label')].filter((l) => l.textContent === 'Changed the instrument on Beat').length === 4")
+    page.wait_for_function("document.querySelector('[data-inst-params=\"subtractive\"] [data-inst-param=\"osc1\"]').dataset.shown === '0'")
+    assert page.input_value('[data-inst-params="subtractive"] [data-inst-param="cutoff"]') == "1800"
+    # the Vox track's echo rendered into its clip through the core, the clip gain first, the echo then bypassed
+    vox = page.locator('.fw-lane[data-key="t2"] .fw-clip').first.bounding_box()
+    page.mouse.click(vox["x"] + 20, vox["y"] + vox["height"] * 0.75)
+    _menu(page, "Clip", "Render track effects into clips")
+    _step(page, "Rendered track effects into 1 clip")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Rendered the track effects into 1 clip; the effects stay on the track, bypassed'")
+    assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
