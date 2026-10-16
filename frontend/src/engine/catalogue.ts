@@ -80,6 +80,7 @@ export const COMMAND_PARAMS: Record<Command["type"], string> = {
   "stop-launched": "trackId: string; at: number",
   "set-clip-fades": "trackId: string; clipId: string; fadeIn: number; fadeOut: number; shape?: FadeShape; outShape?: FadeShape | null",
   "set-clips-mute": "clipIds: string[]; mute: boolean",
+  "set-clips-gain-bypass": "clipIds: string[]; bypass: boolean",
   "set-clips-lock": `clipIds: string[]; lock: "time" | "edit" | null`,
   "rename-clip": "trackId: string; clipId: string; name: string",
   "duplicate-track": "trackId: string",

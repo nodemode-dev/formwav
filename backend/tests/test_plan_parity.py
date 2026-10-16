@@ -123,6 +123,8 @@ def _cases() -> dict:
         masterGainDb=-2,
         masterAutomation=ramp,
     )
+    # PLAN_v13 S13: a clip whose clip gain and gain line are bypassed beside one that keeps them
+    cases["gain bypass"] = _doc([_track("t1", [_clip("c1", "a", gainDb=-9, envelope=[{"at": 0, "db": 0}, {"at": 24000, "db": -12}], gainBypass=True), _clip("c2", "a", 48000, gainDb=-4, envelope=[{"at": 0, "db": -3}])])])
     # PLAN_v13 S10: buses into buses (ordered so each plays after what feeds it, a muted destination silencing its
     # sources), pre-fader, muted and panned sends
     cases["routing"] = _doc(

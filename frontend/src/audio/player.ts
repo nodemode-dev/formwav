@@ -348,8 +348,10 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     const g = s && doc.spatialFormat !== "foa" ? surroundGains(s.x, s.y) : null;
     // PT-42: an ambisonic session encodes each placed track by direction and elevation (W Y Z X, the last two slots empty)
     const record = !doc.surroundFold || !s ? null : g ? [g.L, g.R, g.C, lfeGain, g.Ls, g.Rs] : [...foaGains(s.x, s.y, s.el ?? 0), 0, 0];
-    for (const clip of track.clips) {
-      if (clip.mute) continue;
+    for (const given of track.clips) {
+      if (given.mute) continue;
+      // S13: a clip whose clip gain is bypassed plays at 0 dB with no gain line (both kept for when it is back on)
+      const clip = given.gainBypass ? { ...given, gainDb: 0, envelope: undefined } : given;
       // A pitched clip plays its derived render (non-destructive pitch; same length as the original).
       const playId = clip.pitchMediaId && doc.media[clip.pitchMediaId] ? clip.pitchMediaId : clip.mediaId;
       const media = doc.media[playId];

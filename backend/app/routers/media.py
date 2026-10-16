@@ -161,6 +161,21 @@ def generate_signal(kind: str, seconds: float = 5.0, rate: int = 48000, freq: fl
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/media/{media_id}/clip-gain", status_code=201)
+def media_clip_gain(media_id: str, payload: dict) -> dict:
+    """PLAN_v13 S13, Render Clip Gain: {gainDb, envelope} written into a copy of the file (services/tools.clip_gain)."""
+    from ..services import tools
+
+    try:
+        return tools.clip_gain(media_id, float(payload.get("gainDb", 0)), list(payload.get("envelope") or []))
+    except KeyError as err:
+        raise HTTPException(404, "no media with that id") from err
+    except (TypeError, ValueError) as err:
+        raise HTTPException(422, f"the gain line cannot be read: {err}") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/media/{media_id}/excerpt", status_code=201)
 def media_excerpt(media_id: str, start: float, end: float) -> dict:
     from ..services import tools

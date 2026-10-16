@@ -627,6 +627,36 @@ def spectrogram_png(media_id: str, width: int = 640, height: int = 240, legend: 
                      "-lavfi", f"showspectrumpic=s={width}x{height}:legend={1 if legend else 0}:color=intensity:scale=log", "-frames:v", "1", str(out)], out)
 
 
+def clip_gain(media_id: str, gain_db: float, envelope: list[dict]) -> dict:
+    """PLAN_v13 S13, Render Clip Gain: the whole file times a clip's gain and its gain line (points at the file's own
+    frames, interpolated in dB and held outside them, exactly as playback and the export apply them), as new media, so
+    the clip keeps its place in the file and plays the same at 0 dB with no line."""
+    import numpy as np
+
+    from .audacity import _wav_bytes
+    from .render import _clip_env_gain
+
+    view, rate = _wav_view(media_id)
+    x = np.asarray(view, dtype=np.float64)
+    frames = len(x)
+    gain = np.full(frames, 10 ** (float(gain_db) / 20))
+    points = sorted((int(p["at"]), float(p["db"])) for p in envelope or [])
+    if points:
+        knots = sorted({0, frames - 1, *[min(frames - 1, max(0, t)) for t, _ in points]})
+        dense = []
+        for a, b in zip(knots, knots[1:]):
+            steps = max(1, min(b - a, 4096))
+            dense += [a + (b - a) * k // steps for k in range(steps)]
+        dense.append(knots[-1])
+        at = np.array(sorted(set(dense)), dtype=np.float64)
+        db = np.array([20 * np.log10(_clip_env_gain(points, t)) for t in at])
+        gain *= 10 ** (np.interp(np.arange(frames), at, db) / 20)
+    out = (x * gain[:, None]).astype(np.float32)
+    info = media.media_info(media_id)
+    stem = str(info["name"]).rsplit(".", 1)[0]
+    return media.import_wav(f"{stem} (clip gain).wav", _wav_bytes([out[:, c] for c in range(out.shape[1])], int(rate)))
+
+
 def excerpt(media_id: str, start: float, end: float) -> dict:
     """The part of a media file between `start` and `end` (its own seconds) as new media, sample-exact via atrim."""
     info = media.media_info(media_id)

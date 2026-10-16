@@ -308,6 +308,8 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         for clip in track.get("clips", []):
             if clip.get("mute"):
                 continue
+            if clip.get("gainBypass"):
+                clip = {**clip, "gainDb": 0, "envelope": []}
             # A pitched clip plays its derived render (non-destructive pitch; same length as the original).
             play_id = clip.get("pitchMediaId") if clip.get("pitchMediaId") in doc["media"] else clip.get("mediaId")
             info = doc["media"].get(play_id)

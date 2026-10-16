@@ -91,6 +91,7 @@ const WORDS: Record<Command["type"], Words> = {
   "stop-launched": ["Stopped the launcher on {t}", "Stopped the launcher"],
   "set-clip-fades": ["Changed fades on {t}", "Changed fades"],
   "set-clips-mute": ["Muted clips", "Muted clips"],
+  "set-clips-gain-bypass": ["Bypassed clip gain", "Bypassed clip gain"],
   "set-clips-lock": ["Locked clips", "Locked clips"],
   "rename-clip": ["Renamed a clip on {t}", "Renamed a clip"],
   "duplicate-track": ["Duplicated {t}", "Duplicated a track"],
@@ -147,6 +148,7 @@ export function describeCommand(command: Command, before: SessionDoc): string {
   if (command.type === "set-track-automation-off" && !command.off) words = words.replace("Turned off", "Turned on");
   if (command.type === "bypass-fx-category" && !command.bypass) words = words.replace("Bypassed", "Switched on");
   if (command.type === "set-clips-mute" && !command.mute) words = "Unmuted clips";
+  if (command.type === "set-clips-gain-bypass" && !command.bypass) words = "Restored clip gain";
   if (command.type === "set-clips-lock") words = command.lock === "time" ? "Time-locked clips" : command.lock ? "Edit-locked clips" : "Unlocked clips";
   if (command.type === "set-tracks-hidden" && !command.hidden) words = "Showed hidden tracks";
   if (command.type === "set-tracks-inactive" && !command.inactive) words = "Made tracks active";

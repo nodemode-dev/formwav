@@ -158,6 +158,8 @@ export interface Clip {
   gainDb: number;
   /** Audacity's clip volume envelope: dB points at the media's frames (so they stay with the audio through trims and splits), linear in dB between points as Audacity 2's are (measured against its own render; until v1.75.0 linear in gain) and held outside them, multiplying the clip's gain. */
   envelope?: readonly { at: number; db: number }[];
+  /** S13: the clip gain and its line set aside (the clip plays at 0 dB), both kept for when it is back on */
+  gainBypass?: boolean;
   /** AA-07, Audition's Essential Sound: what the clip is, which decides its tasks and presets. */
   soundType?: "dialogue" | "music" | "effects" | "ambience";
   fadeIn?: number;
@@ -688,6 +690,8 @@ export interface SessionDoc {
   regions?: readonly Region[];
   patterns?: readonly StepPattern[];
   launcher?: LauncherState;
+  /** S13: saved by Save As Template (engine/template.ts); opening it starts a new session from it */
+  template?: boolean;
   loop?: LoopRange;
   buses?: readonly Bus[];
   /** S10: mix and edit groups. */
@@ -833,6 +837,7 @@ export type Command =
    *  to follow `shape` again); either left out stays as it is. */
   | { type: "set-clip-fades"; trackId: string; clipId: string; fadeIn: number; fadeOut: number; shape?: FadeShape; outShape?: FadeShape | null }
   | { type: "set-clips-mute"; clipIds: string[]; mute: boolean }
+  | { type: "set-clips-gain-bypass"; clipIds: string[]; bypass: boolean }
   | { type: "set-clips-lock"; clipIds: string[]; lock: "time" | "edit" | null }
   | { type: "rename-clip"; trackId: string; clipId: string; name: string }
   | { type: "duplicate-track"; trackId: string }
@@ -2465,6 +2470,23 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "add-marker": {
       const marker: Marker = { id: newId(), at: Math.max(0, Math.round(cmd.at)), label: cmd.label, number: nextMemoryNumber(doc), ...(cmd.clipId ? { clipId: cmd.clipId } : {}) };
       return { ...doc, markers: [...doc.markers, marker].sort((a, b) => a.at - b.at) };
+    }
+    case "set-clips-gain-bypass": {
+      const ids = new Set(cmd.clipIds);
+      let changed = false;
+      const tracks = doc.tracks.map((t) => {
+        if (!t.clips.some((c) => ids.has(c.id) && !!c.gainBypass !== cmd.bypass)) return t;
+        changed = true;
+        return {
+          ...t,
+          clips: t.clips.map((c) => {
+            if (!ids.has(c.id) || !!c.gainBypass === cmd.bypass) return c;
+            const { gainBypass: _b, ...rest } = c;
+            return cmd.bypass ? { ...rest, gainBypass: true } : rest;
+          }),
+        };
+      });
+      return changed ? { ...doc, tracks } : doc;
     }
     case "set-clips-mute": {
       const ids = new Set(cmd.clipIds);
