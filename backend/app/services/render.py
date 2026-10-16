@@ -121,6 +121,67 @@ def _clip_envelope(own: list[tuple[int, float]], track: list[tuple[int, float]])
     return [(t, 20 * math.log10(max(_clip_env_gain(own, t) * (_env_gain(track, t) if track else 1.0), 1e-6))) for t in at]
 
 
+def track_volume(track: dict, vca: dict | None) -> list[tuple[int, float]] | None:
+    """S9, as the browser's trackVolume: the track's fader or volume lane times its VCA's fader or lane times its trim
+    lane, -300 dB where its mute lane is on; the volume lane alone (or nothing) when there is no VCA, trim or mute lane.
+    Sampled at every breakpoint and eight times inside each span, a mute step two points at its time."""
+    lanes = {} if track.get("autoOff") else (track.get("automation") or {})
+
+    def pts(lane):
+        return [(int(p["time"]), float(p["value"])) for p in lane] if lane else None
+
+    volume, vca_lane, trim = pts(lanes.get("volume")), pts((vca or {}).get("automation")), pts(lanes.get("trim"))
+    mute = lanes.get("mute") or None
+    if not vca_lane and not trim and not mute:
+        return volume
+    base = sorted({t for lane in (volume, vca_lane, trim) if lane for t, _ in lane})
+    times = set(base)
+    for a, b in zip(base, base[1:]):
+        times.update(math.floor(a + (b - a) * k / 8 + 0.5) for k in range(1, 8))
+    if not times:
+        times.add(0)
+    steps: dict[int, tuple[bool, bool]] = {}
+    for prev, cur in zip(mute or [], (mute or [])[1:]):
+        if cur["value"] != prev["value"]:
+            steps[int(cur["time"])] = (prev["value"] >= 0.5, cur["value"] >= 0.5)
+    times.update(steps)
+
+    def muted(t: int) -> bool:
+        if not mute:
+            return False
+        on = mute[0]["value"] >= 0.5
+        for p in mute:
+            if p["time"] <= t:
+                on = p["value"] >= 0.5
+        return on
+
+    track_gain = 10 ** (float(track.get("gainDb", 0)) / 20)
+    vca_gain = 10 ** (float((vca or {}).get("gainDb", 0)) / 20)
+
+    def gain(t: int) -> float:
+        return (_env_gain(volume, t) if volume else track_gain) * (_env_gain(vca_lane, t) if vca_lane else vca_gain) * (_env_gain(trim, t) if trim else 1)
+
+    def db(g: float, off: bool) -> float:
+        return -300.0 if off else 20 * math.log10(max(g, 1e-15))
+
+    out: list[tuple[int, float]] = []
+    for t in sorted(times):
+        g = gain(t)
+        if t in steps:
+            out += [(t, db(g, steps[t][0])), (t, db(g, steps[t][1]))]
+        else:
+            out.append((t, db(g, muted(t))))
+    return out
+
+
+def master_lane(doc: dict) -> tuple[float, list[tuple[int, float]] | None]:
+    """S9: the master fader in dB and its volume lane, which replaces it (the fader then 0 dB) while present."""
+    pts = doc.get("masterAutomation") or []
+    if pts:
+        return 0.0, [(int(p["time"]), float(p["value"])) for p in pts]
+    return float(doc.get("masterGainDb") or 0), None
+
+
 FADE_SHAPES = {"linear": 0, "equal-power": 1, "s-curve": 2, "exponential": 3, "logarithmic": 4}
 
 
@@ -177,13 +238,15 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         trim_db = float(track.get("trimDb") or 0)
         polarity = -1.0 if track.get("invert") else 1.0
         gain_env = pan_env = 0
-        if automation.get("volume"):
-            envelopes.append(([(int(p["time"]), float(p["value"])) for p in automation["volume"]], True))
+        volume_pts = track_volume(track, vca)
+        folded = bool(vca and vca.get("automation")) or bool(automation.get("trim") or automation.get("mute"))
+        if volume_pts:
+            envelopes.append((volume_pts, True))
             gain_env = len(envelopes)
         if automation.get("pan"):
             envelopes.append(([(int(p["time"]), float(p["value"])) for p in automation["pan"]], False))
             pan_env = len(envelopes)
-        track_db = (0.0 if gain_env else float(track.get("gainDb", 0))) + (float(vca.get("gainDb", 0)) if vca else 0.0)
+        track_db = (0.0 if gain_env else float(track.get("gainDb", 0))) + (float(vca.get("gainDb", 0)) if vca and not folded else 0.0)
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
 
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
@@ -237,10 +300,11 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             start, length = int(clip["start"]), int(clip["length"])
             fade_shape = _fade_code(clip)
             clip_env = gain_env
+            main_pts = volume_pts or []
             if clip.get("envelope"):
                 own = [(start + int(p["at"]) - int(clip.get("sourceIn", 0)), float(p["db"])) for p in clip["envelope"]]
-                track_pts = [(int(p["time"]), float(p["value"])) for p in automation["volume"]] if automation.get("volume") else []
-                envelopes.append((_clip_envelope(own, track_pts), True))
+                main_pts = _clip_envelope(own, volume_pts or [])
+                envelopes.append((main_pts, True))
                 clip_env = len(envelopes)
             clips.append((source, start, int(clip.get("sourceIn", 0)), length, gain, track_pan, int(clip.get("fadeIn") or 0), int(clip.get("fadeOut") or 0), fade_shape, bus_index, clip_env, pan_env))
             owners.append(tracks.index(track))
@@ -267,8 +331,13 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             for send in track.get("sends") or []:
                 if send.get("busId") not in buses or send.get("busId") in muted_buses:
                     continue
-                level = 10 ** (float(send.get("gainDb", 0.0)) / 20)
-                clips.append((*main[:4], main[4] * level, *main[5:9], buses[send["busId"]][0], *main[10:]))
+                lane = [] if off else [(int(p["time"]), float(p["value"])) for p in (send.get("automation") or [])]
+                level = 1.0 if lane else 10 ** (float(send.get("gainDb", 0.0)) / 20)
+                send_env = main[10]
+                if lane:
+                    envelopes.append((_clip_envelope(lane, main_pts), True))
+                    send_env = len(envelopes)
+                clips.append((*main[:4], main[4] * level, *main[5:9], buses[send["busId"]][0], send_env, *main[11:]))
                 owners.append(tracks.index(track))
                 add_chain(len(clips) - 1)
             end = max(end, start + length)
@@ -320,7 +389,10 @@ def render(doc: object, start: int = 0, stop: int | None = None) -> dict:
     spatial = 1 if isinstance(doc, dict) and doc.get("spatialFormat") == "foa" else 0
     places = places_for(doc, owners, spatial) if isinstance(doc, dict) and doc.get("surroundFold") else []
     chains, processors = native_chains(chains)
-    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, float(doc.get("masterGainDb") or 0), float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0))
+    master_db, master_pts = master_lane(doc)
+    if master_pts:
+        envelopes.append((master_pts, True))
+    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0)
     frames = length
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:

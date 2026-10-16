@@ -17,6 +17,7 @@ interface CoreExports {
   fw_add_clip(player: number, source: number, start: number, sourceIn: number, length: number, gain: number, pan: number, fadeIn: number, fadeOut: number, fadeShape: number, bus: number, track: number, gainEnv: number, panEnv: number): void;
   fw_clear_envelopes(player: number): void;
   fw_set_master_db(player: number, db: number): void;
+  fw_set_master_envelope?(player: number, id: number): void;
   fw_add_envelope(player: number, points: number, count: number, db: number): number;
   fw_free(ptr: number, bytes: number): void;
   fw_clear_buses(player: number): void;
@@ -95,7 +96,7 @@ export type WorkletMessage =
   | { type: "alloc"; id: number; rate: number; channels: number; frames: number; window?: number }
   | { type: "stats" }
   | { type: "write"; id: number; offset: number; data: Float32Array }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterFx?: number[]; processors?: string[]; panLaw?: number; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean; surroundFormat?: number }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterPoints?: number[]; masterFx?: number[]; processors?: string[]; panLaw?: number; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean; surroundFormat?: number }
   | { type: "play" }
   | { type: "speed"; value: number }
   | { type: "rate-ratio"; value: number }
@@ -314,6 +315,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
           else core.fw_add_master_stage(this.player, mfx[k], mfx[k + 1], mfx[k + 2], mfx[k + 3], mfx[k + 4], mfx[k + 5]);
         }
         core.fw_set_master_db(this.player, msg.masterDb);
+        core.fw_set_master_envelope?.(this.player, envelope(msg.masterPoints, true));
         // PT-38, AA-11: the placements and the fold mode, after the master chain (the core copies it for the C and LFE
         // pair and the surrounds); a session not hearing its fold-down clears both
         const records = msg.fold && msg.places ? msg.places : [];

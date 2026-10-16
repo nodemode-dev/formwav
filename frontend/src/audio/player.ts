@@ -1,5 +1,5 @@
 import type { Engine, SessionDoc } from "../engine";
-import { cleanSynth, DEFAULT_SYNTH, fadeCode, type SynthPatch, type TrackFx } from "../engine/document";
+import { cleanSynth, DEFAULT_SYNTH, fadeCode, type SynthPatch, type Track, type TrackFx } from "../engine/document";
 import { processorSpec } from "../engine/processors";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
@@ -20,6 +20,8 @@ export interface ClipPlan {
   buses: WorkletBus[];
   /** Master fader in dB (0 turns the master stage off). */
   masterDb: number;
+  /** S9: the master's volume lane (time, dB pairs), which replaces masterDb while present. */
+  masterPoints?: number[];
   /** The processor stages' specs, which a stage [20, k, ...] names by k. */
   processors: string[];
   /** Whose each processor is, by k: a track's insert (its place in the track's fx), or a bus's (null). */
@@ -183,6 +185,53 @@ function clipEnvelope(clipPoints: [number, number][], trackFlat: number[] | unde
   return out;
 }
 
+/**
+ * S9: a track's volume as the one lane the core plays, its fader or volume lane times its VCA's fader or lane times
+ * its trim lane, silenced (-300 dB) where its mute lane is on. Without a VCA lane, a trim lane or a mute lane it is the
+ * volume lane as before (or none). Combined lanes are sampled at every breakpoint and eight times inside each span
+ * (each lane linear in gain, as the core plays one), and a mute step is two points at its time, before and after.
+ */
+export function trackVolume(track: Track, vca: { gainDb: number; automation?: readonly { time: number; value: number }[] } | undefined): number[] | undefined {
+  const lanes = track.autoOff === true ? undefined : track.automation;
+  const pts = (l: readonly { time: number; value: number }[] | undefined) => (l?.length ? l.map((p) => [p.time, p.value] as [number, number]) : null);
+  const volume = pts(lanes?.volume);
+  const vcaLane = pts(vca?.automation);
+  const trim = pts(lanes?.trim);
+  const mute = lanes?.mute?.length ? lanes.mute : null;
+  if (!vcaLane && !trim && !mute) return volume ? volume.flat() : undefined;
+  const base = new Set<number>();
+  for (const l of [volume, vcaLane, trim]) for (const p of l ?? []) base.add(p[0]);
+  const sorted = [...base].sort((a, b) => a - b);
+  const times = new Set<number>(sorted);
+  for (let i = 0; i + 1 < sorted.length; i++) for (let k = 1; k < 8; k++) times.add(Math.round(sorted[i] + ((sorted[i + 1] - sorted[i]) * k) / 8));
+  if (!times.size) times.add(0);
+  const steps = new Map<number, [boolean, boolean]>();
+  if (mute) for (let i = 1; i < mute.length; i++) if (mute[i].value !== mute[i - 1].value) steps.set(mute[i].time, [mute[i - 1].value >= 0.5, mute[i].value >= 0.5]);
+  for (const t of steps.keys()) times.add(t);
+  const muted = (t: number) => {
+    if (!mute) return false;
+    let on = mute[0].value >= 0.5;
+    for (const p of mute) if (p.time <= t) on = p.value >= 0.5;
+    return on;
+  };
+  const gain = (t: number) => (volume ? envGain(volume, t) : 10 ** (track.gainDb / 20)) * (vcaLane ? envGain(vcaLane, t) : 10 ** ((vca?.gainDb ?? 0) / 20)) * (trim ? envGain(trim, t) : 1);
+  const db = (g: number, off: boolean) => (off ? -300 : 20 * Math.log10(Math.max(g, 1e-15)));
+  const out: number[] = [];
+  for (const t of [...times].sort((a, b) => a - b)) {
+    const step = steps.get(t);
+    const g = gain(t);
+    if (step) out.push(t, db(g, step[0]), t, db(g, step[1]));
+    else out.push(t, db(g, muted(t)));
+  }
+  return out;
+}
+
+/** S9: a send's level as its lane (dB) times the track's volume points, or its static level when it has no lane. */
+function sendPoints(main: number[] | undefined, lane: readonly { time: number; value: number }[] | undefined): number[] | undefined {
+  if (!lane?.length) return main;
+  return clipEnvelope(lane.map((p) => [p.time, p.value] as [number, number]), main);
+}
+
 /** AU-36: how many output samples `end` samples of session take under a time track: the integral of 1 / speed, exact
  *  for each linear or logarithmic segment, the speed held before the first point and after the last (as the worklet
  *  and the export renderer play it). */
@@ -274,7 +323,8 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       fxFlat = [];
       fxAuto = [];
     }
-    const volumePoints = !off && track.automation?.volume?.length ? track.automation.volume.flatMap((p) => [p.time, p.value]) : undefined;
+    const volumePoints = trackVolume(track, vca);
+    const folded = !!vca?.automation?.length || (!off && !!(track.automation?.trim?.length || track.automation?.mute?.length));
     const panPoints = !off && track.automation?.pan?.length ? track.automation.pan.flatMap((p) => [p.time, p.value]) : undefined;
     // PT-38, AA-11: a session hearing its 5.1 as a fold-down gives the core each placed clip's speaker gains, and the
     // core plays its six-channel bus folded to stereo (the engine's stereo mix does the same)
@@ -300,7 +350,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
         start: clip.start,
         sourceIn: clip.sourceIn,
         length: clip.length,
-        gain: (track.invert ? -1 : 1) * dbToGain((volumePoints ? 0 : track.gainDb) + (vca?.gainDb ?? 0) + (track.trimDb ?? 0) + clip.gainDb),
+        gain: (track.invert ? -1 : 1) * dbToGain((volumePoints ? 0 : track.gainDb) + (folded ? 0 : vca?.gainDb ?? 0) + (track.trimDb ?? 0) + clip.gainDb),
         pan: panPoints ? 0 : track.pan ?? 0,
         gainPoints: envPoints,
         panPoints,
@@ -318,12 +368,14 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       for (const send of track.sends ?? []) {
         const sendBus = busIndex.get(send.busId);
         if (sendBus === undefined || mutedBuses.has(send.busId)) continue;
-        clips.push({ ...main, gain: main.gain * dbToGain(send.gainDb), bus: sendBus, track: 0 });
+        const lane = off ? undefined : send.automation;
+        clips.push({ ...main, gain: main.gain * (lane?.length ? 1 : dbToGain(send.gainDb)), gainPoints: sendPoints(main.gainPoints, lane), bus: sendBus, track: 0 });
       }
       end = Math.max(end, clip.start + clip.length);
     }
   }
-  return { clips, end, skipped, buses, masterDb: doc.masterGainDb ?? 0, places, fold: !!doc.surroundFold && places.length > 0, surroundFormat: doc.spatialFormat === "foa" ? 1 : 0, processors, processorTracks, panLaw: PAN_LAWS[doc.panLaw ?? ""] ?? 0 };
+  const masterLane = doc.masterAutomation?.length ? doc.masterAutomation.flatMap((p) => [p.time, p.value]) : undefined;
+  return { clips, end, skipped, buses, masterDb: masterLane ? 0 : doc.masterGainDb ?? 0, ...(masterLane ? { masterPoints: masterLane } : {}), places, fold: !!doc.surroundFold && places.length > 0, surroundFormat: doc.spatialFormat === "foa" ? 1 : 0, processors, processorTracks, panLaw: PAN_LAWS[doc.panLaw ?? ""] ?? 0 };
 }
 
 function send(node: AudioWorkletNode, message: WorkletMessage, transfer: Transferable[] = []): void {
@@ -673,7 +725,7 @@ export class Player {
     this.lastPlan = planClips(doc, this.sources);
     const loop = doc.loop?.enabled && doc.loop.end > doc.loop.start ? doc.loop : null;
     const processors = [...this.lastPlan.processors];
-    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterFx: flatStages(doc.masterFx, processors), processors, panLaw: this.lastPlan.panLaw, timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true, places: this.lastPlan.places, fold: this.lastPlan.fold, surroundFormat: this.lastPlan.surroundFormat });
+    send(node, { type: "clips", clips: this.lastPlan.clips, end: this.open || loop ? 0 : this.lastPlan.end, buses: this.lastPlan.buses, masterDb: this.lastPlan.masterDb, masterPoints: this.lastPlan.masterPoints, masterFx: flatStages(doc.masterFx, processors), processors, panLaw: this.lastPlan.panLaw, timeTrack: doc.timeTrack?.length ? doc.timeTrack.flatMap((p) => [p.at, p.speed]) : undefined, timeTrackLog: doc.timeTrackLog === true, places: this.lastPlan.places, fold: this.lastPlan.fold, surroundFormat: this.lastPlan.surroundFormat });
     send(node, { type: "loop", start: loop?.start ?? 0, end: loop?.end ?? 0 });
   }
 
@@ -956,7 +1008,7 @@ export class Player {
     await Promise.all(Object.keys(doc.media).map((id) => loadInto(node, sources, id, () => ++counter, streamInfo(doc, id, 0), true)));
     const plan = planClips(doc, sources);
     const processors = [...plan.processors];
-    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterFx: flatStages(doc.masterFx, processors), processors, panLaw: plan.panLaw, timeTrack, timeTrackLog: doc.timeTrackLog === true, places: plan.places, fold: plan.fold, surroundFormat: plan.surroundFormat });
+    send(node, { type: "clips", clips: plan.clips, end: plan.end, buses: plan.buses, masterDb: plan.masterDb, masterPoints: plan.masterPoints, masterFx: flatStages(doc.masterFx, processors), processors, panLaw: plan.panLaw, timeTrack, timeTrackLog: doc.timeTrackLog === true, places: plan.places, fold: plan.fold, surroundFormat: plan.surroundFormat });
     send(node, { type: "play" });
     await request(node, { type: "seek", position: 0 }, (r) => r.type === "position");
     const rendered = await ctx.startRendering();
