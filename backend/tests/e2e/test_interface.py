@@ -94,6 +94,8 @@ def browser():
 
 @pytest.fixture
 def page(browser, app_url):
+    # an earlier test's autosave (kept every 30 s while a session has unsaved changes) would greet this one with Recover
+    urllib.request.urlopen(urllib.request.Request(app_url + "/api/autosave", method="DELETE", headers={"x-formwav-local": "1"}), timeout=10).close()
     context = browser.new_context(viewport=SMALLEST)
     page = context.new_page()
     page.add_init_script(WATCH)
@@ -935,6 +937,7 @@ STATES = [
 
 @pytest.mark.parametrize("size", [(1280, 674), (1440, 900), (1710, 940)], ids=["1280", "1440", "1710"])
 def test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes(browser, app_url, size):
+    _engine(app_url, "DELETE", "/api/autosave")
     context = browser.new_context(viewport={"width": size[0], "height": size[1]})
     page = context.new_page()
     try:
