@@ -40,6 +40,13 @@ def main(argv: list[str]) -> int:
         print(__doc__.split("\n\n")[0])
         return 0
     verb, rest = argv[0], argv[1:]
+    if verb in ("headless", "commands"):
+        # PLAN_v13 S12: with no window, in the engine's own Python (backend/venv): engine commands on a saved session
+        here = os.path.dirname(os.path.abspath(__file__))
+        python = next((p for p in (os.path.join(here, "venv", "bin", "python"), os.path.join(here, "venv", "Scripts", "python.exe")) if os.path.exists(p)), sys.executable)
+        import subprocess
+
+        return subprocess.call([python, "-m", "app.headless", *(rest if verb == "headless" else ["commands", *rest])], cwd=here)
     if verb == "list":
         out = call("GET", "/api/commands" + (f"?group={urllib.parse.quote(rest[0])}" if rest else ""))
         for c in out:
@@ -58,7 +65,7 @@ def main(argv: list[str]) -> int:
         out = call("POST", f"/api/commands/{urllib.parse.quote(rest[0])}", {"params": params})
         print(json.dumps(out, indent=2))
         return 0 if out.get("ok") else 1
-    sys.exit("formwav: cli list [group] | describe <id> | run <id> key=value ...")
+    sys.exit("formwav: cli list [group] | describe <id> | run <id> key=value ... | commands [words] | headless run (--in FILE.fmw | --demo) [--cmd JSON]... [--bounce OUT.wav] [--save OUT.fmw] [--inspect]")
 
 
 if __name__ == "__main__":
