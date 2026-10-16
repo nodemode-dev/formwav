@@ -36,12 +36,35 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
   const ws = host.querySelector<HTMLElement>(".fw-workspace");
   if (!ws) return;
   let layout = read();
+  // PLAN_v13 S13, window configurations: the saved layout last recalled is the active one; Update writes the current
+  // layout into it, and with Keep up to date on every change of the panes is written into it as it happens
+  const ACTIVE = "formwav.layouts.active";
+  const AUTO = "formwav.layouts.auto";
+  const stored = (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  };
+  let active = stored(ACTIVE);
+  let auto = stored(AUTO) === "1";
+  const keep = (key: string, value: string | null) => {
+    try {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    } catch {
+      /* storage refused: kept for this visit */
+    }
+  };
+  let writeActive: () => void = () => undefined;
   const save = () => {
     try {
       localStorage.setItem(KEY, JSON.stringify(layout));
     } catch {
       /* storage refused: the layout still applies for this visit */
     }
+    if (auto) writeActive();
   };
   const agent = ws.querySelector<HTMLElement>(".fw-pane-agent > .fw-agent");
   const shown = (side: Side) => (side === "media" ? layout.showMedia : !!agent && !agent.hidden);
@@ -127,23 +150,45 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
   const menu = document.createElement("select");
   menu.className = "fw-layout-select";
   menu.setAttribute("aria-label", "Workspace layout");
+  writeActive = () => {
+    const saved = readSaved();
+    if (!active || !saved[active]) return;
+    try {
+      localStorage.setItem(SAVED, JSON.stringify({ ...saved, [active]: { ...layout, floating: dockFloating() } }));
+    } catch {
+      /* storage refused */
+    }
+  };
   const fill = () => {
     const saved = Object.keys(readSaved());
+    if (active && !saved.includes(active)) {
+      active = null;
+      keep(ACTIVE, null);
+    }
+    const extra = active ? [new Option(`Update "${active}" to this layout`, "update"), new Option(`${auto ? "Stop keeping" : "Keep"} "${active}" up to date`, "auto")] : [];
     menu.replaceChildren(
       new Option("Layout", ""),
       ...Object.keys(PRESETS).map((name) => new Option(name, `preset:${name}`)),
-      ...saved.map((name) => new Option(name, `saved:${name}`)),
+      ...saved.map((name) => new Option(name === active ? `${name} (active)` : name, `saved:${name}`)),
       new Option("Save current layout...", "save"),
+      ...extra,
     );
     menu.value = "";
   };
   menu.addEventListener("change", () => {
     const [kind, name] = [menu.value.split(":")[0], menu.value.slice(menu.value.indexOf(":") + 1)];
-    if (menu.value === "save") {
+    if (menu.value === "update") writeActive();
+    else if (menu.value === "auto") {
+      auto = !auto;
+      keep(AUTO, auto ? "1" : "0");
+      if (auto) writeActive();
+    } else if (menu.value === "save") {
       const label = window.prompt("Name this layout")?.trim();
       if (label) {
         try {
           localStorage.setItem(SAVED, JSON.stringify({ ...readSaved(), [label]: { ...layout, floating: dockFloating() } }));
+          active = label;
+          keep(ACTIVE, label);
         } catch {
           /* storage refused */
         }
@@ -155,6 +200,8 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
     } else if (kind === "saved") {
       const chosen = readSaved()[name];
       if (chosen) {
+        active = name;
+        keep(ACTIVE, name);
         const { floating, ...panes } = chosen;
         layout = { ...DEFAULTS, ...panes };
         apply();
