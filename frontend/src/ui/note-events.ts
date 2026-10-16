@@ -2,6 +2,7 @@ import { renderPlainNotes } from "../audio/notes";
 import type { Engine } from "../engine";
 import type { Command, NoteEvent } from "../engine/document";
 import { parseGrid } from "../engine/grid";
+import { bpmAt, sampleToTick, scaleTempo, tempoCurve, tempoMap, type CurveShape } from "../engine/tempo";
 import { changeDuration, changeVelocity, chordsByBar, duplicateNotes, noteName, parseNoteName, quantizeNotes, splitNotes, type DurationOp, type QuantizeOptions, type SplitRule, type VelocityOp } from "../engine/midi";
 import { formatPosition, parsePosition, TICKS_PER_QUARTER, timeContext } from "../engine/timebase";
 import { icon } from "../vendor/formvis/icons";
@@ -38,6 +39,9 @@ const ITEMS: [string, string, string?][] = [
   ["duplicates", "Remove duplicate notes"],
   ["split", "Split notes to a new track…"],
   ["chords", "Name chords as markers"],
+  ["ramp", "Tempo ramp across the selection…"],
+  ["scale", "Scale the tempo across the selection…"],
+  ["stretch", "Stretch the selection's tempo…"],
 ];
 
 export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteEditor | null): void {
@@ -260,6 +264,45 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
   host.addEventListener("fw-track", (e) => {
     picked = (e as CustomEvent<string>).detail;
   });
+
+  // S11: tempo operations over the range drawn (else the loop), in ticks from its start to its end: a ramp written as
+  // steps, every tempo scaled, or the span stretched (its length times the factor, so its tempos divided by it)
+  const tempoSpan = () => {
+    const doc = engine.get("document");
+    const span = range ?? (doc.loop && doc.loop.end > doc.loop.start ? doc.loop : null);
+    if (!span) {
+      say("Draw a range or set a loop over the bars to change");
+      return null;
+    }
+    const map = tempoMap(doc);
+    return { doc, map, from: Math.round(sampleToTick(map, span.start)), to: Math.round(sampleToTick(map, span.end)) };
+  };
+  const ramp = async () => {
+    const s = tempoSpan();
+    if (!s) return;
+    const v = await ask("Tempo ramp", "The tempo moves from the first value to the second across the selection, in steps; what follows keeps its tempo.", [
+      { key: "start", label: "From", value: bpmAt(s.map, s.from), min: 20, max: 300, step: 0.1, unit: "BPM" },
+      { key: "end", label: "To", value: bpmAt(s.map, s.from), min: 20, max: 300, step: 0.1, unit: "BPM" },
+      { key: "shape", label: "Curve", value: "linear", options: [["linear", "Linear"], ["parabolic", "Parabolic"], ["s-curve", "S-curve"]] },
+      { key: "every", label: "Steps", value: "960", options: [["960", "1/4"], ["480", "1/8"], ["240", "1/16"]] },
+    ], "Ramp");
+    if (!v) return;
+    const shape = String(v.shape) as CurveShape;
+    engine.dispatch({ type: "set-tempo-map", changes: tempoCurve(s.doc, s.from, s.to, num(v, "start", 120), num(v, "end", 120), shape, Number(v.every) || 960), label: "Ramped the tempo" });
+    say(`Ramped the tempo from ${num(v, "start", 120)} to ${num(v, "end", 120)} BPM`);
+  };
+  const scale = async (stretch: boolean) => {
+    const s = tempoSpan();
+    if (!s) return;
+    const v = await ask(stretch ? "Stretch the tempo" : "Scale the tempo", stretch ? "The selection lasts this many times as long (2 halves its tempos); what follows keeps its tempo." : "Every tempo in the selection times this percentage; what follows keeps its tempo.", [
+      stretch ? { key: "by", label: "Length", value: 2, min: 0.1, max: 10, step: 0.01, unit: "×" } : { key: "by", label: "Tempo", value: 100, min: 10, max: 1000, step: 0.1, unit: "%" },
+    ], stretch ? "Stretch" : "Scale");
+    const by = v ? num(v, "by", 0) : 0;
+    if (!(by > 0)) return;
+    const factor = stretch ? 1 / by : by / 100;
+    engine.dispatch({ type: "set-tempo-map", changes: scaleTempo(s.doc, s.from, s.to, factor), label: stretch ? "Stretched the tempo" : "Scaled the tempo" });
+    say(stretch ? `Stretched the selection ${by} times` : `Scaled the tempo to ${by}%`);
+  };
   host.addEventListener("fw-selection", (e) => {
     const ids = (e as CustomEvent<string[]>).detail ?? [];
     const owner = engine.get("document").tracks.find((t) => t.clips.some((c) => ids.includes(c.id)));
@@ -304,6 +347,9 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
     } else if (id === "duplicates") void duplicates();
     else if (id === "split") void split();
     else if (id === "chords") chords();
+    else if (id === "ramp") void ramp();
+    else if (id === "scale") void scale(false);
+    else if (id === "stretch") void scale(true);
     else if (id === "list") {
       const open = !editor.listOpen();
       if (open) openEditor();

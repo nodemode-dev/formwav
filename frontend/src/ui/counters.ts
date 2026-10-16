@@ -18,6 +18,10 @@ export const RULERS: readonly { id: string; label: string }[] = [
   { id: "timecode2", label: "Timecode 2" },
   { id: "feet_frames", label: "Feet+Frames" },
   { id: "samples", label: "Samples" },
+  { id: "tempo", label: "Tempo" },
+  { id: "meter", label: "Meter" },
+  { id: "key", label: "Key" },
+  { id: "chords", label: "Chords" },
 ];
 
 let shownRulers: string[] = [];

@@ -137,7 +137,7 @@ export function mountMusical(host: HTMLElement, engine: Engine): void {
     const doc = engine.get("document");
     const t = tempo();
     setText(value("tempo"), Number.isInteger(t.bpm) ? String(t.bpm) : t.bpm.toFixed(1));
-    setText(value("meter"), `${t.beatsPerBar}/4`);
+    setText(value("meter"), `${t.beatsPerBar}/${doc.tempo?.beatUnit ?? 4}`);
     const s = doc.snap;
     setText(value("snap"), !s?.grid ? "Off" : s.value ? gridShort(s.value) : s.bars ? "Beats" : "Grid");
   };

@@ -2,6 +2,8 @@ import type { Engine, SessionDoc } from "../engine";
 import type { Player } from "../audio/player";
 import { documentLength } from "../engine/document";
 import { formatPosition, frameRate, nominal, samplesAtFrame, type FrameRate, type TimeFormat } from "../engine/timebase";
+import { barBeatAt, barsBetween, barStartTick, bpmAt, keyAt, meterAtTick, sampleToTick, tempoMap, tickToSample, ticksPerBeat } from "../engine/tempo";
+import { chordsPerBar } from "../engine/midi";
 import { RULERS, rulers } from "./counters";
 import { barsEnabled, labelStep, setBeatGrid, snapSamples } from "./grid";
 import { onZoom, samplesPerPixel } from "./lanes";
@@ -23,7 +25,7 @@ function label(seconds: number, step: number): string {
 /** S6: one timebase's ticks and labels in a row `h` high at `y0`, across the visible pixels: Min:Secs at the main
  *  ruler's steps, samples at 1, 2 and 5 times a power of ten, bars at the session's tempo, and timecode and Feet+Frames
  *  on whole frames at `rate` (whole seconds and minutes once frames crowd), labels at least 60 to 90 px apart. */
-function drawRow(g: CanvasRenderingContext2D, doc: SessionDoc, fmt: TimeFormat, rate: FrameRate, y0: number, h: number, left: number, view: number, spp: number): void {
+function drawRow(g: CanvasRenderingContext2D, doc: SessionDoc, fmt: TimeFormat | "tempo" | "meter" | "key" | "chords", rate: FrameRate, y0: number, h: number, left: number, view: number, spp: number): void {
   const time = timeOf(doc);
   const sr = doc.sampleRate;
   const tick = (x: number, major: boolean) => g.fillRect(Math.round(x), y0 + h * (major ? 0.5 : 0.75), 1, h * (major ? 0.5 : 0.25));
@@ -47,15 +49,36 @@ function drawRow(g: CanvasRenderingContext2D, doc: SessionDoc, fmt: TimeFormat, 
       text((k * step) / spp, String(k * step));
     });
   } else if (fmt === "bars_beats") {
-    const beat = (sr * 60) / time.bpm;
-    const barPx = (beat * time.beatsPerBar) / spp;
+    const map = tempoMap(doc);
+    const barPx = ((sr * 60) / time.bpm) * time.beatsPerBar / spp;
     let every = 1;
     while (every * barPx < 60 && every < 65536) every *= 2;
-    each(barPx * every, (k) => {
-      tick(k * every * barPx, true);
-      text(k * every * barPx, String(k * every + 1));
-      if (barPx >= 240) for (let b = 1; b < time.beatsPerBar; b++) tick(((k * time.beatsPerBar + b) * beat) / spp, false);
-    });
+    for (const b of barsBetween(map, Math.max(0, left - 90) * spp, (left + view) * spp)) {
+      if (b.bar % every !== 0) continue;
+      tick(b.at / spp, true);
+      text(b.at / spp, String(b.bar + 1));
+      const start = barStartTick(map, b.bar);
+      if (barPx >= 240) for (let k = 1; k < b.num; k++) tick(tickToSample(map, start + k * ticksPerBeat(b.den)) / spp, false);
+    }
+  } else if (fmt === "tempo" || fmt === "meter" || fmt === "key" || fmt === "chords") {
+    // S11: the map rows: each change's value where it starts (the first at 0), chords one a bar
+    const map = tempoMap(doc);
+    const marks: [number, string][] =
+      fmt === "tempo"
+        ? [[0, doc.tempo?.bpm ?? 120], ...(doc.tempoChanges ?? []).map((c) => [c.tick, c.bpm] as [number, number])].map(([t, bpm]) => [tickToSample(map, t), `${+bpm.toFixed(2)}`])
+        : fmt === "meter"
+          ? map.meters.map((m) => [tickToSample(map, m.tick), `${m.num}/${m.den}`])
+          : fmt === "key"
+            ? [...(doc.key ? [[0, doc.key.name] as [number, string]] : []), ...(doc.keyChanges ?? []).map((k) => [tickToSample(map, k.tick), k.key] as [number, string])]
+            : chordsPerBar(doc).map((c) => [c.at, c.name]);
+    let lastX = -Infinity;
+    for (const [at, s] of marks) {
+      const x = at / spp;
+      if (x > left + view || x < left - 200) continue;
+      tick(x, true);
+      if (x - lastX >= 28) text(x, s);
+      lastX = x;
+    }
   } else {
     const perFrame = (sr * rate.den) / rate.num;
     const base = nominal(rate);
@@ -147,20 +170,23 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     } else if (tempo) {
       // Bars and beats (Audacity's beats and measures ruler): a line at each bar, numbered every 1, 2, 4... bars as
       // zoom allows; beat ticks from 6 px apart, labelled bar.beat from 48 px.
-      const beatPx = (60 / tempo.bpm) * pxPerSecond;
-      const barPx = beatPx * tempo.beatsPerBar;
+      // S11: bar by bar along the tempo and meter map, so a tempo or meter change moves every line after it
+      const map = tempoMap(doc);
+      const bars = barsBetween(map, Math.max(0, left - 60) * spp, Math.min(width, left + view) * spp);
+      const barPx = (60 / tempo.bpm) * pxPerSecond * tempo.beatsPerBar;
       let every = 1;
       while (every * barPx < 48) every *= 2;
-      for (let b = Math.max(0, Math.floor(left / beatPx) - 1); b * beatPx <= Math.min(width, left + view + beatPx); b++) {
-        const x = Math.round(b * beatPx);
-        const inBar = b % tempo.beatsPerBar;
-        const barIndex = Math.floor(b / tempo.beatsPerBar);
-        if (inBar === 0) {
-          ctx.fillRect(x, height * 0.5, 1, height * 0.5);
-          if (barIndex % every === 0) ctx.fillText(String(barIndex + 1), x + 4, 3);
-        } else if (beatPx >= 6) {
-          ctx.fillRect(x, height * 0.75, 1, height * 0.25);
-          if (beatPx >= 48) ctx.fillText(`${barIndex + 1}.${inBar + 1}`, x + 4, 3);
+      for (const b of bars) {
+        const x = Math.round(b.at / spp);
+        ctx.fillRect(x, height * 0.5, 1, height * 0.5);
+        if (b.bar % every === 0) ctx.fillText(String(b.bar + 1), x + 4, 3);
+        const start = barStartTick(map, b.bar);
+        for (let beat = 1; beat < b.num; beat++) {
+          const bx = Math.round(tickToSample(map, start + beat * ticksPerBeat(b.den)) / spp);
+          const beatPx = (bx - x) / beat;
+          if (beatPx < 6) break;
+          ctx.fillRect(bx, height * 0.75, 1, height * 0.25);
+          if (beatPx >= 48) ctx.fillText(`${b.bar + 1}.${beat + 1}`, bx + 4, 3);
         }
       }
     } else {
@@ -307,6 +333,32 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     } else {
       player.seek(toSamples(e.offsetX));
       if (range) draw();
+    }
+  });
+  // S11: double-clicking the Tempo, Meter or Key row sets a change at the bar under the pointer (the first bar sets the
+  // session's own); Tempo 0, Meter 0 or Key None removes the change there
+  type Values = Record<string, number | string | null>;
+  const ask = (title: string, note: string, fields: unknown[], ok: string) =>
+    new Promise<Values | null>((done) => host.dispatchEvent(new CustomEvent("fw-ask", { detail: { title, note, fields, ok, done } })));
+  canvas.addEventListener("dblclick", async (e) => {
+    const row = rulers()[Math.floor((e.offsetY - corner.offsetHeight) / ROW_H)];
+    if (e.offsetY < corner.offsetHeight || (row !== "tempo" && row !== "meter" && row !== "key")) return;
+    const doc = engine.get("document");
+    const map = tempoMap(doc);
+    const { bar } = barBeatAt(map, sampleToTick(map, e.offsetX * samplesPerPixel(doc)));
+    const tick = barStartTick(map, bar);
+    const where = `bar ${bar + 1}`;
+    if (row === "tempo") {
+      const v = await ask("Tempo change", `The tempo from ${where} on, in quarter notes a minute; 0 removes the change there.`, [{ key: "bpm", label: "Tempo", value: bpmAt(map, tick), min: 0, max: 300, step: 0.001, unit: "BPM" }], "Set");
+      if (v && typeof v.bpm === "number") engine.dispatch({ type: "set-tempo-change", tick, bpm: v.bpm > 0 ? v.bpm : null });
+    } else if (row === "meter") {
+      const m = meterAtTick(map, tick);
+      const v = await ask("Meter change", `The meter from ${where} on; 0 beats removes the change there.`, [{ key: "num", label: "Beats", value: m.num, min: 0, max: 32, step: 1 }, { key: "den", label: "Of", value: String(m.den), options: [["2", "half notes"], ["4", "quarter notes"], ["8", "eighth notes"], ["16", "sixteenth notes"]] }], "Set");
+      if (v && typeof v.num === "number") engine.dispatch({ type: "set-meter-change", bar, num: Math.max(1, v.num), den: Number(v.den), remove: v.num <= 0 });
+    } else {
+      const keys = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"].flatMap((k) => [`${k} major`, `${k} minor`]);
+      const v = await ask("Key change", `The key from ${where} on.`, [{ key: "key", label: "Key", value: keyAt(doc, tick) ?? "C major", options: [["", "None"], ...keys.map((k) => [k, k])] }], "Set");
+      if (v) engine.dispatch({ type: "set-key-change", tick, key: typeof v.key === "string" && v.key ? v.key : null });
     }
   });
   canvas.addEventListener("pointercancel", () => {
