@@ -192,12 +192,16 @@ def bridge_catalogue(body: Catalogue) -> dict:
 
 
 @router.get("/api/bridge/next")
-async def bridge_next() -> Response:
+async def bridge_next(request: Request) -> Response:
     BRIDGE.seen = time.monotonic()
     try:
         item = await asyncio.wait_for(BRIDGE.queue().get(), timeout=20)
     except asyncio.TimeoutError:
         BRIDGE.seen = time.monotonic()
+        return Response(status_code=204)
+    # S12: a window closed while it waited would take the call with it; the next window's wait gets it instead
+    if await request.is_disconnected():
+        BRIDGE.queue().put_nowait(item)
         return Response(status_code=204)
     BRIDGE.seen = time.monotonic()
     return JSONResponse(item)
