@@ -410,3 +410,15 @@
 .fw-agent-present { margin-inline-start: auto; font-size: 11px; color: var(--accent-color); }
 .fw-agent-text { margin: 6px 0; padding: 6px; max-block-size: 140px; overflow: auto; font-size: 11px; background: var(--bg-input); border-radius: var(--radius-sm); white-space: pre; }
 .fw-agents-state { display: block; min-block-size: 1.4em; font-size: 12px; overflow-wrap: anywhere; }
+
+/* PLAN_v13 S13: the Keyboard shortcuts window; its list scrolls inside a fixed height so filtering never resizes it */
+.fw-shortcuts-dialog { inline-size: min(560px, calc(100vw - 32px)); margin: auto; }
+.fw-shortcuts-filter { inline-size: 100%; margin-block: 8px; padding: 6px 8px; color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); }
+.fw-shortcuts-body { block-size: min(420px, 60vh); overflow-y: auto; }
+.fw-shortcuts-section h3 { margin: 10px 0 4px; font-size: var(--fs-11); color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.fw-shortcuts-section dl { margin: 0; }
+.fw-shortcuts-row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border-block-end: 1px solid var(--border-color); }
+.fw-shortcuts-row dt { min-inline-size: 0; }
+.fw-shortcuts-row dd { margin: 0; flex: none; }
+.fw-shortcuts-empty { color: var(--text-secondary); }
+.fw-shortcuts-row[hidden], .fw-shortcuts-section[hidden], .fw-shortcuts-empty[hidden] { display: none; }
