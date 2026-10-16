@@ -1,4 +1,4 @@
-import type { Engine, MediaRef, SessionDoc } from "../engine";
+import type { Command, Engine, MediaRef, SessionDoc } from "../engine";
 import { importFile } from "../io/media-client";
 import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
 
@@ -83,12 +83,25 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
       } else if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
         // the engine reads the file and the built-in instrument renders its notes; the rendering plays like any audio
         const res = await fetch(`/api/midi/import?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST", body: file, headers: { "X-Filename": file.name } });
-        const out = (await res.json().catch(() => ({}))) as { detail?: unknown; media?: MediaRef; notes?: { start: number; length: number; pitch: number; velocity: number }[]; tempo?: number };
-        if (!res.ok || !out.media) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
-        const rate = out.media.sampleRate;
-        const notes = (out.notes ?? []).map((n) => ({ at: n.start * rate, length: n.length * rate, pitch: n.pitch, velocity: n.velocity }));
-        engine.dispatch({ type: "import-media", media: out.media, at, notes });
-        final = `Imported ${file.name}: ${out.notes?.length ?? 0} notes at ${Math.round(out.tempo ?? 120)} BPM, played by the built-in instrument`;
+        type Song = { detail?: unknown; tempo?: number; meters?: { numerator: number; denominator: number }[]; markers?: { time: number; label: string }[]; tracks?: { name: string; channel: number; media: MediaRef; notes: { start: number; length: number; pitch: number; velocity: number }[]; controllers: { time: number; kind: "cc" | "bend" | "program" | "pressure"; number: number; value: number }[] }[] };
+        const out = (await res.json().catch(() => ({}))) as Song;
+        if (!res.ok || !out.tracks?.length) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        // S8: one note track per track of the file, its name, notes and controllers; the file's markers; its first tempo and
+        // meter for a session that has no tempo yet; all one undo step
+        const before = engine.get("document");
+        const sessionRate = before.tracks.length ? before.sampleRate : out.tracks[0].media.sampleRate;
+        const commands: Command[] = out.tracks.map((t) => {
+          const rate = t.media.sampleRate;
+          return { type: "import-media" as const, media: t.media, at, notes: t.notes.map((n) => ({ at: n.start * rate, length: n.length * rate, pitch: n.pitch, velocity: n.velocity })), controllers: t.controllers.map((c) => ({ at: c.time * rate, kind: c.kind, number: c.number, value: c.value })), midiChannel: t.channel };
+        });
+        for (const m of out.markers ?? []) commands.push({ type: "add-marker", at: Math.round(at + m.time * sessionRate), label: m.label });
+        const meter = out.meters?.[0];
+        const beats = meter ? Math.max(1, Math.round((meter.numerator * 4) / meter.denominator)) : 4;
+        const tempoSet = !before.tempo && out.tempo;
+        if (tempoSet) commands.push({ type: "set-tempo", bpm: Math.round((out.tempo ?? 120) * 100) / 100, beatsPerBar: beats });
+        engine.dispatch({ type: "batch", commands, label: `Imported ${file.name}` });
+        const count = out.tracks.reduce((n, t) => n + t.notes.length, 0);
+        final = `Imported ${file.name}: ${out.tracks.length} track${out.tracks.length === 1 ? "" : "s"}, ${count} notes${out.markers?.length ? `, ${out.markers.length} markers` : ""}${tempoSet ? `; the session tempo is now ${Math.round(out.tempo ?? 120)} BPM` : ""}, played by the built-in instrument`;
       } else {
         const media = await importFile(file, doc.tracks.length ? doc.sampleRate : undefined);
         engine.dispatch({ type: "import-media", media, at });

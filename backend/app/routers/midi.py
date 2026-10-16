@@ -151,15 +151,21 @@ def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Samp
 
 @router.post("/import", status_code=201)
 async def import_midi(request: Request, rate: int = 48000) -> dict:
-    """A .mid file's notes (seconds), its first tempo, and their rendering by the built-in instrument as media."""
+    """A .mid file as tracks (S8): each track's name, notes and controllers (seconds) and its rendering by the built-in
+    instrument as media, with the file's tempo map, meters, markers and keys; `notes` and `media` are the first
+    track's, as before."""
     data = await request.body()
     try:
-        song = midi.read(data)
+        song = midi.read_song(data)
     except midi.MidiError as err:
         raise HTTPException(status_code=422, detail=str(err)) from err
-    name = (request.headers.get("x-filename") or "notes.mid").rsplit(".", 1)[0]
-    rendered = _render(song["notes"], rate, Patch(), name)
-    return {"notes": song["notes"], "tempo": song["tempo"], "duration": song["duration"], "media": rendered}
+    if not song["tracks"]:
+        raise HTTPException(status_code=422, detail="the file has no notes")
+    base = (request.headers.get("x-filename") or "notes.mid").rsplit(".", 1)[0]
+    for track in song["tracks"]:
+        track["media"] = _render(track["notes"], rate, Patch(), track["name"] if len(song["tracks"]) > 1 else base)
+    first = song["tracks"][0]
+    return {**song, "notes": first["notes"], "media": first["media"]}
 
 
 @router.post("/from-audio", status_code=201)

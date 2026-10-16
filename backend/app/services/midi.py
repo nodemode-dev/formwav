@@ -54,6 +54,8 @@ def _events(track: bytes):
             pos += size
             if kind == 0x51 and size == 3:
                 yield tick, 0xFF51, body
+            elif kind in (0x03, 0x06, 0x58, 0x59):
+                yield tick, 0xFF00 | kind, body
             elif kind == 0x2F:
                 yield tick, 0xFF2F, b""
                 return
@@ -118,3 +120,113 @@ def read(data: bytes) -> dict:
     notes.sort()
     out = [{"start": seconds(on), "length": max(0.0, seconds(off) - seconds(on)), "pitch": p, "velocity": v, "channel": c, "track": t} for on, off, p, v, c, t in notes]
     return {"format": fmt, "ticks": division, "tempo": tempos[0][1], "duration": max((n["start"] + n["length"] for n in out), default=0.0), "notes": out}
+
+
+def _text(body: bytes) -> str:
+    try:
+        return body.decode("utf-8").strip("\0 ").strip()
+    except UnicodeDecodeError:
+        return body.decode("latin-1").strip("\0 ").strip()
+
+
+def read_song(data: bytes) -> dict:
+    """A whole file for the session (S8): every track with its name, notes and controllers, the tempo map, meters,
+    markers and key signatures, times in seconds. Formats 0, 1 and 2 and SMPTE division are read; a format 0 file's
+    channels become tracks of their own."""
+    chunks = list(_chunks(data))
+    if not chunks or chunks[0][0] != b"MThd" or len(chunks[0][1]) < 6:
+        raise MidiError("not a Standard MIDI File (no MThd header)")
+    fmt, _count, division = struct.unpack(">HHH", chunks[0][1][:6])
+    if fmt not in (0, 1, 2):
+        raise MidiError(f"MIDI format {fmt} is not a Standard MIDI File format")
+    tracks = [list(_events(body)) for kind, body in chunks[1:] if kind == b"MTrk"]
+    smpte = bool(division & 0x8000)
+    if smpte:
+        fps = {232: 24.0, 231: 25.0, 227: 29.97, 226: 30.0}.get((division >> 8) & 0xFF, 30.0)
+        per_second = fps * (division & 0xFF)
+    tempos = sorted((tick, 60_000_000 / struct.unpack(">I", b"\0" + body)[0]) for events in tracks[: 1 if fmt == 1 else None] for tick, status, body in events if status == 0xFF51)
+    if not tempos or tempos[0][0] > 0:
+        tempos.insert(0, (0, 120.0))
+
+    def seconds(tick: int) -> float:
+        if smpte:
+            return tick / per_second
+        total, last_tick, bpm = 0.0, 0, tempos[0][1]
+        for at, next_bpm in tempos:
+            if at >= tick:
+                break
+            total += (at - last_tick) * 60.0 / (bpm * division)
+            last_tick, bpm = at, next_bpm
+        return total + (tick - last_tick) * 60.0 / (bpm * division)
+
+    meters, markers, keys, out_tracks = [], [], [], []
+    names: dict[int, str] = {}
+    for index, events in enumerate(tracks):
+        held: dict[tuple[int, int], list[tuple[int, int]]] = {}
+        notes: dict[int, list] = {}
+        controls: dict[int, list] = {}
+        end_tick = 0
+        for tick, status, body in events:
+            end_tick = max(end_tick, tick)
+            if status == 0xFF03:
+                names.setdefault(index, _text(body))
+                continue
+            if status == 0xFF06:
+                markers.append({"time": seconds(tick), "label": _text(body) or "Marker"})
+                continue
+            if status == 0xFF58 and len(body) >= 2:
+                meters.append({"time": seconds(tick), "numerator": body[0], "denominator": 2 ** body[1]})
+                continue
+            if status == 0xFF59 and len(body) >= 2:
+                keys.append({"time": seconds(tick), "fifths": body[0] - 256 if body[0] > 127 else body[0], "minor": bool(body[1])})
+                continue
+            if status >= 0xFF00:
+                continue
+            kind, channel = status & 0xF0, status & 0x0F
+            if kind in (0x80, 0x90) and len(body) >= 2:
+                pitch, velocity = body[0] & 0x7F, body[1] & 0x7F
+                if kind == 0x90 and velocity > 0:
+                    held.setdefault((channel, pitch), []).append((tick, velocity))
+                elif held.get((channel, pitch)):
+                    on, vel = held[(channel, pitch)].pop(0)
+                    notes.setdefault(channel, []).append((on, tick, pitch, vel))
+            elif kind == 0xB0 and len(body) >= 2:
+                controls.setdefault(channel, []).append({"time": seconds(tick), "kind": "cc", "number": body[0] & 0x7F, "value": body[1] & 0x7F})
+            elif kind == 0xE0 and len(body) >= 2:
+                controls.setdefault(channel, []).append({"time": seconds(tick), "kind": "bend", "number": 0, "value": ((body[1] & 0x7F) << 7 | (body[0] & 0x7F)) - 8192})
+            elif kind == 0xC0 and body:
+                controls.setdefault(channel, []).append({"time": seconds(tick), "kind": "program", "number": 0, "value": body[0] & 0x7F})
+            elif kind == 0xD0 and body:
+                controls.setdefault(channel, []).append({"time": seconds(tick), "kind": "pressure", "number": 0, "value": body[0] & 0x7F})
+        for (channel, pitch), opened in held.items():
+            for on, vel in opened:
+                notes.setdefault(channel, []).append((on, end_tick, pitch, vel))
+        channels = sorted(set(notes) | set(controls))
+        for channel in channels:
+            found = sorted(notes.get(channel, []))
+            if not found:
+                continue
+            name = names.get(index) or ""
+            if fmt == 0 or len(channels) > 1:
+                name = f"{name} ch {channel + 1}".strip() if name else f"Channel {channel + 1}"
+            out_tracks.append({
+                "index": index,
+                "name": name or f"Track {len(out_tracks) + 1}",
+                "channel": channel,
+                "drums": channel == 9,
+                "notes": [{"start": seconds(on), "length": max(0.0, seconds(off) - seconds(on)), "pitch": p, "velocity": max(1, v)} for on, off, p, v in found],
+                "controllers": controls.get(channel, []),
+            })
+    duration = max((n["start"] + n["length"] for t in out_tracks for n in t["notes"]), default=0.0)
+    return {
+        "format": fmt,
+        "ticks": division if not smpte else None,
+        "smpte": smpte,
+        "tempo": tempos[0][1],
+        "tempos": [{"time": seconds(at), "bpm": bpm} for at, bpm in tempos],
+        "meters": sorted(meters, key=lambda m: m["time"]) or [{"time": 0.0, "numerator": 4, "denominator": 4}],
+        "markers": sorted(markers, key=lambda m: m["time"]),
+        "keys": sorted(keys, key=lambda k: k["time"]),
+        "tracks": out_tracks,
+        "duration": duration,
+    }

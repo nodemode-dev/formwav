@@ -61,6 +61,15 @@ export interface NoteEvent {
   velocity: number;
 }
 
+/** S8: a controller event kept from a MIDI file, in frames of the clip's media like its notes; kept and written back
+ *  out, not played by the built-in instrument. Bend runs -8192 to 8191, the others 0 to 127. */
+export interface ControlEvent {
+  at: number;
+  kind: "cc" | "bend" | "program" | "pressure";
+  number: number;
+  value: number;
+}
+
 /** PT-24: an ARA plug-in's state for a clip: the plug-in (plugin:clap:<path>, as the engine names it), its label, its
  *  archive's format id and the archive itself (base64, as the engine returns it), and how many notes it found. */
 export interface ClipAra {
@@ -130,6 +139,9 @@ export interface Clip {
   fx?: TrackFx[];
   /** A note clip's notes, the truth its media renders (the built-in instrument); absent on audio clips. */
   notes?: readonly NoteEvent[];
+  /** S8: a note clip's controllers and MIDI channel (0 to 15, 9 the drums), as a MIDI file brought them. */
+  controllers?: readonly ControlEvent[];
+  midiChannel?: number;
   /** Written by the clip launcher (a launched loop's repeat); Stop ends only clips so marked. */
   launched?: boolean;
   /** A palette key for this clip alone, over its track's colour; absent follows the track. */
@@ -670,7 +682,7 @@ export interface SessionView {
 }
 
 export type Command =
-  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[]; stem?: { of: string; part: string }; by?: "agent" }
+  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[]; controllers?: readonly ControlEvent[]; midiChannel?: number; stem?: { of: string; part: string }; by?: "agent" }
   | { type: "add-track"; name?: string; channels?: number }
   | { type: "set-synth"; patch: Partial<SynthPatch> }
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
@@ -1570,6 +1582,10 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         ...(cmd.notes
           ? { notes: cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))) })) }
           : {}),
+        ...(cmd.notes && cmd.controllers?.length
+          ? { controllers: cmd.controllers.map((e) => ({ at: Math.max(0, Math.round(e.at)), kind: e.kind, number: Math.min(127, Math.max(0, Math.round(e.number))), value: Math.round(e.kind === "bend" ? Math.min(8191, Math.max(-8192, e.value)) : Math.min(127, Math.max(0, e.value))) })) }
+          : {}),
+        ...(cmd.notes && cmd.midiChannel !== undefined ? { midiChannel: Math.min(15, Math.max(0, Math.round(cmd.midiChannel))) } : {}),
         gainDb: 0,
         ...(cmd.by === "agent" ? { by: "agent" as const } : {}),
       };
