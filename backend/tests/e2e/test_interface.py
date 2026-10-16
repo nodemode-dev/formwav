@@ -557,7 +557,7 @@ def test_the_in_app_agent_carries_out_a_chain_of_tools(page, app_url):
     page.wait_for_function("document.querySelector('.fw-agent-log').textContent.includes('Done:')", timeout=60000)
     calls = anthropic.REQUESTS
     assert [c["path"] for c in calls] == ["/v1/messages"] * 3
-    assert all(c["key"] == "stand-in" and len(c["tools"]) == 34 and "get_session" in c["tools"] and "run_command" in c["tools"] for c in calls)
+    assert all(c["key"] == "stand-in" and len(c["tools"]) == 37 and "get_session" in c["tools"] and "apply_document_commands" in c["tools"] and "run_command" in c["tools"] for c in calls)
     assert len(calls[2]["results"]) == 3 and not any(r.get("is_error") for r in calls[2]["results"])
     assert page.locator('[data-agent="undo"]').is_enabled()
     if page.locator(".fw-dock").is_hidden():
@@ -1229,4 +1229,29 @@ def test_tempo_meter_key_and_chord_rulers_take_changes_by_double_click_and_the_e
     page.wait_for_selector(dialog)
     page.keyboard.press("Enter")
     _step(page, "Stretched the tempo")
+    assert _clean(page)["errors"] == []
+
+
+def test_the_demo_session_opens_from_the_file_menu_and_agents_read_and_change_the_open_session_through_the_engine(page, app_url):
+    _open(page, app_url)
+    _menu(page, "File", "Open the demo session")
+    page.wait_for_function("document.querySelectorAll('.fw-lane').length === 6", timeout=60000)
+    assert page.evaluate("[...document.querySelectorAll('.fw-lane .fw-lane-name')].map((n) => n.textContent)") == ["Kick", "Snare", "Hats", "Bass", "Pad", "Keys"]
+    page.click('[data-agent-tab="history"]')
+    _engine(app_url, "POST", "/api/agents/outside", {"outside": "allow"})
+    try:
+        state = _engine(app_url, "POST", "/api/commands/session.get-session-state", {"params": {}})
+        assert state["ok"] and [t["name"] for t in state["result"]["tracks"]] == ["Kick", "Snare", "Hats", "Bass", "Pad", "Keys"]
+        assert state["result"]["buses"][0]["name"] == "Verb" and state["result"]["tempo"]["bpm"] == 104 and state["result"]["unsaved"] is True and state["result"]["saved_as"] is None
+        listed = _engine(app_url, "POST", "/api/commands/session.list-document-commands", {"params": {"text": "route-bus"}})
+        assert [c["type"] for c in listed["result"]] == ["route-bus"]
+        applied = _engine(app_url, "POST", "/api/commands/session.apply-document-commands", {"params": {"commands": [{"type": "set-track-gain", "trackId": "demo1", "gainDb": -20}, {"type": "set-track-mute", "trackId": "demo3", "mute": True}], "label": "Quieter drums"}})
+        assert applied["ok"] and applied["result"] == {"changed": True, "step": "Quieter drums"}
+        _step(page, "Quieter drums")
+        refused = _engine(app_url, "POST", "/api/commands/session.apply-document-commands", {"params": {"commands": [{"type": "explode"}]}})
+        assert not refused["ok"] and "no engine command explode" in refused["error"]
+        after = _engine(app_url, "POST", "/api/commands/session.get-session-state", {"params": {}})["result"]
+        assert after["tracks"][0]["gain_db"] == -20 and after["tracks"][2]["mute"] is True and after["undo"] == "Quieter drums" and after["steps"] == 1
+    finally:
+        _engine(app_url, "POST", "/api/agents/outside", {"outside": "ask"})
     assert _clean(page)["errors"] == []
