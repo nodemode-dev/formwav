@@ -1,6 +1,7 @@
 import type { Engine, SessionDoc } from "../engine";
 import type { Player } from "../audio/player";
 import { listProjects, openDemo, openProject, RevisionConflict, saveProject, type ProjectSummary } from "../io/projects-client";
+import { templateOf } from "../engine/template";
 import { delayedIndicator, patchList, setText } from "../vendor/nodemode/dom-stable";
 import { currentView } from "./lanes";
 
@@ -156,6 +157,17 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
         return `Could not open ${name}: ${reason(err)}`;
       }
       player.stop();
+      if (opened.document.template) {
+        // S13: a template starts a new session; saving it never writes over the template
+        const { template: _t, ...fresh } = opened.document;
+        engine.loadDocument(fresh);
+        lastSaved = engine.get("document");
+        known = null;
+        savedAt = null;
+        writeState();
+        if (nameField && nameField.value !== "Untitled") nameField.value = "Untitled";
+        return `Started a new session from the template ${opened.name}`;
+      }
       engine.loadDocument(opened.document);
       lastSaved = engine.get("document");
       known = { name: opened.name, revision: opened.revision };
@@ -256,6 +268,33 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
   void showRecent();
 
   saveButton?.addEventListener("click", () => void save());
+  // S13: Save as template (asked for a name through the editing dialog) and Revert to saved (Open's own guard asks
+  // before the changes go)
+  host.querySelector('[data-action="save-template"]')?.addEventListener("click", () => {
+    const doc = engine.get("document");
+    if (!doc.tracks.length) return setText(notice, "Add a track first: a template keeps the tracks, buses and effects");
+    const asked = new Promise<Record<string, unknown> | null>((done) =>
+      host.dispatchEvent(new CustomEvent("fw-ask", { detail: { title: "Save as template", note: "The tracks, buses, routing, effects, automation, tempo and markers, without the audio. Open it to start a new session from it.", fields: [{ key: "name", label: "Name", value: `${sessionName()} template`, text: true }], ok: "Save", done } })),
+    );
+    void asked.then((v) => {
+      const name = typeof v?.name === "string" ? v.name.trim() : "";
+      if (!name) return;
+      void withNotice(`Saving the template ${name}`, async () => {
+        try {
+          await saveProject(name, templateOf(doc), 0);
+        } catch (err) {
+          if (!(err instanceof RevisionConflict) || !window.confirm(`A saved session named "${name}" already exists. Replace it with this template?`)) return `Could not save the template: ${reason(err)}`;
+          await saveProject(name, templateOf(doc), err.revision);
+        }
+        return `Saved the template ${name}: open it to start a new session from it`;
+      });
+    });
+  });
+  host.querySelector('[data-action="revert"]')?.addEventListener("click", () => {
+    if (!known) return setText(notice, "Nothing to revert to: this session has not been saved");
+    if (!unsaved()) return setText(notice, `No changes since ${known.name} was saved`);
+    open(known.name);
+  });
   openButton?.setAttribute("aria-expanded", "false");
   openButton?.addEventListener("click", () => (popover.hidden ? void show() : close()));
   list.addEventListener("click", (e) => {
