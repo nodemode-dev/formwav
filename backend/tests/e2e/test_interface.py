@@ -696,6 +696,8 @@ def test_every_string_on_screen_has_a_translation_in_all_twenty_five_languages_a
         page.click('.fw-panel-toggle[data-pane="editor"]')
     page.click('.fw-dock-tab[data-panel="mixer"]')
     page.click('[data-mix="add-bus"]')
+    page.click('[data-mix="add-vca"]')
+    page.click(".fw-lane .fw-auto-toggle")
     page.click('[data-agent-tab="history"]')
     english = page.evaluate("window.__fwI18n.keys()")
     text = page.evaluate("document.body.innerText")
