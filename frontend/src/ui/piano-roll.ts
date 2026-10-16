@@ -59,7 +59,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
   panel.className = "fw-piano";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Note editor");
-  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="">Off</option><option value="1/4">1/4</option><option value="1/8">1/8</option><option value="1/16" selected>1/16</option><option value="1/32">1/32</option><option value="1/8t">1/8 T</option><option value="1/16t">1/16 T</option></select></label><button type="button" class="fw-ibtn" data-zoom="out" title="Shorter rows (Ctrl or Cmd and the wheel)">Zoom −</button><button type="button" class="fw-ibtn" data-zoom="in" title="Taller rows (Ctrl or Cmd and the wheel)">Zoom +</button><button type="button" class="fw-ibtn" data-zoom="fit" title="Fit the notes; the wheel scrolls pitch">Fit</button><button type="button" class="fw-ibtn" data-quantize aria-haspopup="dialog" title="Quantize the selected notes (all notes when none is selected) with a strength, swing and their ends; Q quantizes again as last set">Quantize…</button><button type="button" class="fw-ibtn" data-list aria-pressed="false" title="The notes as a list, each edited by its values (Event list)">List</button><button type="button" class="fw-ibtn" data-export-midi title="Save this note clip as a Standard MIDI File at the session's tempo and meter">Export MIDI</button><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag across to select, drag a note to move, drag an edge to resize, Delete to remove"></canvas><div class="fw-piano-list" role="region" aria-label="Event list" hidden><table><thead><tr><th scope="col">Start</th><th scope="col">Note</th><th scope="col">Length (ticks)</th><th scope="col">Velocity</th><th scope="col" aria-label="Remove"></th></tr></thead><tbody></tbody></table></div>`;
+  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="">Off</option><option value="1/4">1/4</option><option value="1/8">1/8</option><option value="1/16" selected>1/16</option><option value="1/32">1/32</option><option value="1/8t">1/8 T</option><option value="1/16t">1/16 T</option></select></label><button type="button" class="fw-ibtn" data-zoom="out" title="Shorter rows (Ctrl or Cmd and the wheel)">Zoom −</button><button type="button" class="fw-ibtn" data-zoom="in" title="Taller rows (Ctrl or Cmd and the wheel)">Zoom +</button><button type="button" class="fw-ibtn" data-zoom="fit" title="Fit the notes; the wheel scrolls pitch">Fit</button><button type="button" class="fw-ibtn" data-quantize aria-haspopup="dialog" title="Quantize the selected notes (all notes when none is selected) with a strength, swing and their ends; Q quantizes again as last set">Quantize…</button><button type="button" class="fw-ibtn" data-list aria-pressed="false" title="The notes as a list, each edited by its values (Event list)">List</button><button type="button" class="fw-ibtn" data-step aria-pressed="false" title="Step input: play notes on a MIDI keyboard or the computer keys (A W S E D F T G Y H U J K; Z and X change the octave); each lands at the step cursor, one grid step long, and the cursor moves on; Space adds a rest, Backspace takes the last step back">Step</button><button type="button" class="fw-ibtn" data-export-midi title="Save this note clip as a Standard MIDI File at the session's tempo and meter">Export MIDI</button><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag across to select, drag a note to move, drag an edge to resize, Delete to remove"></canvas><div class="fw-piano-list" role="region" aria-label="Event list" hidden><table><thead><tr><th scope="col">Start</th><th scope="col">Note</th><th scope="col">Length (ticks)</th><th scope="col">Velocity</th><th scope="col" aria-label="Remove"></th></tr></thead><tbody></tbody></table></div>`;
   transport.before(panel);
   const canvas = panel.querySelector("canvas") as HTMLCanvasElement;
   const state = panel.querySelector<HTMLElement>(".fw-piano-state");
@@ -84,6 +84,11 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
   let topPitch: number | null = null;
   let band: { x0: number; y0: number; x1: number; y1: number } | null = null;
   let arrowTimer = 0;
+  let stepping = false;
+  let stepAt = 0;
+  let stepOctave = 60;
+  let stepTimer = 0;
+  let lastStep = { time: 0, at: 0 };
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((fn) => fn());
 
@@ -203,6 +208,10 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
       const barH = ((VEL_H - 8) * n.velocity) / 127;
       ctx.fillRect(xOf(n.at), h - 4 - barH, 3, barH);
     });
+    if (stepping && target) {
+      ctx.fillStyle = v("--accent-color");
+      ctx.fillRect(Math.round(xOf(stepAt)) - 1, 0, 2, h - VEL_H);
+    }
     if (band) {
       ctx.globalAlpha = 0.18;
       ctx.fillStyle = v("--accent-color");
@@ -420,7 +429,76 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
       void commit(semis ? "Transposed notes" : "Moved notes");
     }, ARROW_COMMIT_MS);
   };
+  // S8: step input; notes played on a MIDI keyboard within 60 ms of each other make one chord at the same step
+  const stepLength = () => snapFrames() || gridStepOf(engine.get("document"), { kind: "note", quarters: 0.25, dotted: false, triplet: false }, fpsOf(engine.get("document")));
+  const stepCommit = () => {
+    window.clearTimeout(stepTimer);
+    stepTimer = window.setTimeout(() => void commit("Step input"), ARROW_COMMIT_MS * 2);
+  };
+  const addStep = (pitch: number, velocity: number, played = false) => {
+    if (!target || pitch < 0 || pitch > 127) return;
+    const now = performance.now();
+    const chord = played && now - lastStep.time < 60;
+    const at = chord ? lastStep.at : stepAt;
+    const length = stepLength();
+    notes.push({ at, length: Math.max(1, Math.round(length)), pitch, velocity: Math.min(127, Math.max(1, velocity)) });
+    owner.push(0);
+    lastStep = { time: now, at };
+    if (!chord) stepAt = Math.round(at + length);
+    draw();
+    notify();
+    stepCommit();
+  };
+  const STEP_KEYS = "awsedftgyhujk";
+  const stepKey = (e: KeyboardEvent): boolean => {
+    if (e.metaKey || e.ctrlKey || e.altKey || !target) return false;
+    const k = e.key.toLowerCase();
+    const index = STEP_KEYS.indexOf(k);
+    if (index >= 0 && k.length === 1) addStep(stepOctave + index, 100);
+    else if (k === "z" || k === "x") stepOctave = Math.min(108, Math.max(12, stepOctave + (k === "z" ? -12 : 12)));
+    else if (e.key === " ") {
+      stepAt = Math.round(stepAt + stepLength());
+      lastStep = { time: 0, at: stepAt };
+      draw();
+    } else if (e.key === "Backspace") {
+      const back = Math.max(origin, Math.round(stepAt - stepLength()));
+      const keep = notes.map((n) => Math.abs(n.at - back) > 1);
+      owner = owner.filter((_, i) => keep[i]);
+      notes = notes.filter((_, i) => keep[i]);
+      selected = new Set();
+      stepAt = back;
+      lastStep = { time: 0, at: stepAt };
+      draw();
+      stepCommit();
+    } else return false;
+    e.preventDefault();
+    e.stopPropagation();
+    setText(state, `Step input · octave ${Math.floor(stepOctave / 12) - 1} · bar ${Math.floor((stepAt - origin) / (beatFrames() * Math.max(1, engine.get("document").tempo?.beatsPerBar ?? 4))) + 1}`);
+    return true;
+  };
+  const stepButton = panel.querySelector<HTMLButtonElement>("[data-step]");
+  stepButton?.addEventListener("click", () => {
+    stepping = !stepping;
+    stepButton.setAttribute("aria-pressed", String(stepping));
+    if (stepping) {
+      const end = Math.max(origin, ...notes.map((n) => n.at + n.length));
+      stepAt = Math.max(origin, snap(notes.length ? end : engine.get("transport").positionSamples));
+      lastStep = { time: 0, at: stepAt };
+      canvas.focus();
+      setText(state, target ? "Step input: play notes, Space for a rest, Backspace to step back" : "Step input needs a note clip: Event > New note clip");
+    } else {
+      window.clearTimeout(stepTimer);
+      void commit("Step input");
+    }
+    draw();
+  });
+  document.addEventListener("fw-midi-note", (e) => {
+    if (!stepping || panel.hidden) return;
+    const d = (e as CustomEvent<{ pitch: number; velocity: number }>).detail;
+    addStep(d.pitch, d.velocity, true);
+  });
   canvas.addEventListener("keydown", (e) => {
+    if (stepping && stepKey(e)) return;
     if ((e.key === "a" || e.key === "A") && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       e.stopPropagation();

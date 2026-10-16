@@ -84,6 +84,7 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
     const pitch = data[1] & 0x7f;
     const velocity = (data[2] ?? 0) & 0x7f;
     if (status === 0x90 && velocity > 0) {
+      document.dispatchEvent(new CustomEvent("fw-midi-note", { detail: { pitch, velocity } }));
       // PT-16: heard through the armed track's MIDI effects (quantize, duration and delay do not apply to notes as they
       // are played)
       const doc = engine.get("document");
