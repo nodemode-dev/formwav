@@ -301,7 +301,7 @@ def test_the_edit_menu_and_its_keys_duplicate_repeat_shift_trim_and_cut_time_eac
     page.keyboard.press("ControlOrMeta+d")
     page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
     page.locator(".fw-menu-btn", has_text="Edit").click()
-    page.locator(".fw-edit-pop [role=menuitem]", has_text="Repeat").click()
+    page.locator(".fw-edit-pop [role=menuitem]", has_text="Repeat...").click()
     dialog = "dialog.fw-ask-dialog[open]"
     page.fill(f"{dialog} input[data-k=count]", "2")
     page.keyboard.press("Enter")
@@ -1254,4 +1254,75 @@ def test_the_demo_session_opens_from_the_file_menu_and_agents_read_and_change_th
         assert after["tracks"][0]["gain_db"] == -20 and after["tracks"][2]["mute"] is True and after["undo"] == "Quieter drums" and after["steps"] == 1
     finally:
         _engine(app_url, "POST", "/api/agents/outside", {"outside": "ask"})
+    assert _clean(page)["errors"] == []
+
+
+def test_commands_focus_keys_shortcuts_window_clip_gain_paste_special_templates_and_revert(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    page.click('[data-agent-tab="history"]')
+    clip = page.locator(".fw-lane .fw-clip").first
+    box = clip.bounding_box()
+    # Commands Focus: B separates at the playhead, A trims the start to it
+    page.locator(".fw-ruler-canvas").first.click(position={"x": 300, "y": 10})
+    clip.click(position={"x": 40, "y": box["height"] * 0.8})
+    _menu(page, "View", "Commands Focus")
+    page.keyboard.press("b")
+    page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
+    page.keyboard.press("?")
+    page.wait_for_selector(".fw-shortcuts-dialog[open]")
+    assert page.locator(".fw-shortcuts-row").count() > 20
+    page.fill(".fw-shortcuts-filter", "trim end")
+    assert page.evaluate("[...document.querySelectorAll('.fw-shortcuts-row')].filter((r) => !r.hidden).map((r) => r.querySelector('kbd').textContent)") == ["S"]
+    page.keyboard.press("Escape")
+    _menu(page, "View", "Commands Focus")
+    # clip gain: set, copy onto the other clip, bypass, render
+    first = page.locator(".fw-lane .fw-clip").first
+    first.click(position={"x": 40, "y": box["height"] * 0.8})
+    _engine(app_url, "POST", "/api/agents/outside", {"outside": "allow"})
+    try:
+        state = _engine(app_url, "POST", "/api/commands/session.get-session-state", {"params": {}})["result"]
+        ids = [c["id"] for c in state["tracks"][0]["clips"]]
+        tid = state["tracks"][0]["id"]
+        _engine(app_url, "POST", "/api/commands/session.apply-document-commands", {"params": {"commands": [{"type": "set-clip-gain", "trackId": tid, "clipId": ids[0], "gainDb": -6}]}})
+        _menu(page, "Clip", "Copy clip gain")
+        page.locator(".fw-lane .fw-clip").nth(1).click(position={"x": 40, "y": box["height"] * 0.8})
+        _menu(page, "Clip", "Paste clip gain")
+        _step(page, "Pasted clip gain onto 1 clip")
+        for label in ("Bypassed clip gain", "Restored clip gain"):
+            _menu(page, "Clip", "Bypass clip gain")
+            _step(page, label)
+        _menu(page, "Clip", "Render clip gain")
+        _step(page, "Rendered clip gain on 1 clip")
+        after = _engine(app_url, "POST", "/api/commands/session.get-session-state", {"params": {}})["result"]["tracks"][0]["clips"]
+        assert [c["gain_db"] for c in after] == [-6, 0] and after[1]["media"].endswith("(clip gain).wav")
+    finally:
+        _engine(app_url, "POST", "/api/agents/outside", {"outside": "ask"})
+    # Paste Special: the copied clip repeated across a range
+    page.locator(".fw-lane .fw-clip").first.click(position={"x": 40, "y": box["height"] * 0.8})
+    page.keyboard.press("ControlOrMeta+c")
+    _range(page, 4, 10)
+    _menu(page, "Edit", "Paste special: repeat to fill selection")
+    _step(page, "Repeated to fill the selection")
+    filled = page.evaluate("document.querySelectorAll('.fw-lane')[0].querySelectorAll('.fw-clip').length")
+    assert filled >= 4 and page.text_content(".fw-notice").startswith("Filled 6.00 s with")
+    # Save, change, revert; save as a template and start a session from it
+    page.fill("input.fw-session-name", "Workflow")
+    _menu(page, "File", "Save")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Saved Workflow'")
+    page.keyboard.press("ControlOrMeta+z")
+    page.once("dialog", lambda d: d.accept())
+    _menu(page, "File", "Revert to saved")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Opened Workflow'")
+    assert page.evaluate("document.querySelectorAll('.fw-lane')[0].querySelectorAll('.fw-clip').length") == filled
+    _menu(page, "File", "Save as template")
+    page.wait_for_selector("dialog.fw-ask-dialog[open]")
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.querySelector('.fw-notice').textContent.startsWith('Saved the template Workflow template')")
+    page.evaluate("document.querySelector('.fw-topbar [data-action=\"open\"]').click()")
+    page.locator(".fw-popover-row", has_text="Workflow template").click()
+    page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Started a new session from the template Workflow template'")
+    assert page.locator(".fw-lane").count() == 1 and page.locator(".fw-lane .fw-clip").count() == 0
+    assert page.input_value("input.fw-session-name") == "Untitled"
+    assert page.locator("[data-postroll]").count() == 1
     assert _clean(page)["errors"] == []
