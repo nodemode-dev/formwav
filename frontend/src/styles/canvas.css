@@ -620,6 +620,11 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-dock .fw-transcript-body .fw-voice-go { border: 0; background: var(--accent-color); color: var(--text-on-accent); font-weight: 700; }
 .fw-dock :is(.fw-transcript-body, .fw-labels-body) .fw-empty-note { margin: 0; padding: 0; font-size: var(--fs-13); color: var(--text-secondary); }
 .fw-dock .fw-spectrum:not([hidden]) { block-size: 100%; gap: 0; }
+.fw-score { display: flex; flex-direction: column; min-block-size: 0; }
+.fw-score[hidden] { display: none; }
+.fw-dock .fw-score:not([hidden]) { block-size: 100%; }
+.fw-score-body { flex: 1 1 auto; min-block-size: 0; overflow: auto; margin: 12px 16px; border-radius: 10px; background: var(--score-paper); }
+.fw-score-body > svg { display: block; inline-size: 100%; max-inline-size: 820px; block-size: auto; margin-inline: auto; }
 .fw-dock .fw-spectrum-canvas { flex: 1 1 auto; inline-size: auto; block-size: auto; min-block-size: 0; margin: 12px 16px; border-radius: 10px; }
 .fw-dock .fw-term:not(.fw-agent) > .fw-term-head { min-block-size: 46px; padding: 0 16px; background: transparent; border-block-end: 1px solid var(--border-color); }
 

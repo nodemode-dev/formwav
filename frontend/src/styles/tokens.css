@@ -129,6 +129,7 @@
   --line-2: var(--border-light);
   --line-3: color-mix(in srgb, var(--border-light) 75%, var(--text-muted));
   --cta-bg: #ffffff;
+  --score-paper: #ffffff;
   --cta-bg-hover: #f2f2f2;
   --cta-text: #000000;
   --accent-soft: color-mix(in srgb, var(--accent-color) calc(20% * var(--accent-intensity)), var(--surface-2));

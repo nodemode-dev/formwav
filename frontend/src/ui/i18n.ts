@@ -34,7 +34,7 @@ const STORE = "formwav.lang";
 const ATTRS = ["title", "aria-label", "placeholder", "data-empty", "data-label"];
 const SKIP = '[translate="no"], [contenteditable="true"], .xterm, script, style, .fw-agent-log > *';
 const NUM = /-?\d+(?:[.,]\d+)?/g;
-const FILE = /[^\s"'()]+\.(?:wav|mp3|flac|aiff?|ogg|opus|m4a|mp4|mov|webm|fmw|otioz|aaf|json|mid|midi|txt|srt|vtt)\b/gi;
+const FILE = /[^\s"'()]+\.(?:wav|mp3|flac|aiff?|ogg|opus|m4a|mp4|mov|webm|fmw|otioz|aaf|json|mid|midi|musicxml|txt|srt|vtt)\b/gi;
 const SEPARATORS = [" · ", ": ", "; ", " (", ", "];
 const LETTERS = /\p{L}{2}/u;
 const PATH = /^\S*[/\\]\S*$/;

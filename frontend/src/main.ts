@@ -59,6 +59,7 @@ import { renderNotes } from "./audio/notes";
 import { mountPianoRoll } from "./ui/piano-roll";
 import { mountNoteEvents } from "./ui/note-events";
 import { mountSpectrum } from "./ui/spectrum";
+import { mountScore } from "./ui/score";
 import { mountEnvelopeEdit } from "./ui/envelope-edit";
 import { mountProjects } from "./ui/projects";
 import { mountCloud } from "./ui/cloud";
@@ -151,6 +152,7 @@ if (host) {
   const notesEditor = mountPianoRoll(host, engine);
   if (notesEditor) mountNoteEvents(host, engine, notesEditor);
   mountSpectrum(host, engine, player);
+  mountScore(host, engine);
   mountEnvelopeEdit(host, engine);
   mountMediaPane(host, engine, player);
   mountModelsPane(host, engine);
