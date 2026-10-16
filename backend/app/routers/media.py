@@ -35,6 +35,67 @@ async def import_media(request: Request) -> dict:
         raise HTTPException(415, str(err)) from err
 
 
+@router.post("/pictures", status_code=201)
+async def import_picture(request: Request) -> dict:
+    """PLAN_v13 S15: a movie as the session's picture (services/picture.py), proxied when the page cannot play it, and
+    its sound imported as media when it has any ({picture, audio})."""
+    from ..services import picture
+
+    name = unquote(request.headers.get("x-filename", "picture.mov"))[:255]
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "the request carried no movie")
+    if len(data) > media.MAX_IMPORT_BYTES:
+        raise HTTPException(413, "the file is larger than FORMWAV_MAX_IMPORT_MB allows")
+    try:
+        info = picture.import_picture(name, data)
+    except media.MediaError as err:
+        raise HTTPException(415, str(err)) from err
+    try:
+        audio = media.import_audio(name, data, _rate(request.query_params.get("rate")))
+    except media.MediaError:
+        audio = None
+    return {"picture": info, "audio": audio}
+
+
+@router.get("/pictures/{picture_id}")
+def picture_info(picture_id: str) -> dict:
+    from ..services import picture
+
+    try:
+        return picture.record(picture_id)
+    except KeyError as err:
+        raise HTTPException(404, "no picture with that id") from err
+
+
+@router.get("/pictures/{picture_id}/movie")
+def picture_movie(picture_id: str) -> FileResponse:
+    """The movie the page plays (its proxy when it has one), with byte ranges for seeking."""
+    from ..services import picture
+
+    try:
+        path = picture.movie_path(picture_id)
+    except KeyError as err:
+        raise HTTPException(404, "no picture with that id") from err
+    return FileResponse(path, media_type="video/mp4" if path.suffix == ".mp4" else "video/quicktime" if path.suffix == ".mov" else "application/octet-stream")
+
+
+@router.get("/pictures/{picture_id}/sprite")
+def picture_sprite(picture_id: str, times: str, height: int = 44) -> Response:
+    """Frames at `times` (seconds, comma separated, at most 64) side by side as one PNG `height` pixels tall."""
+    from ..services import picture
+
+    try:
+        at = [float(t) for t in times.split(",") if t.strip()]
+        return Response(content=picture.sprite(picture_id, at, height), media_type="image/png", headers={"Cache-Control": "max-age=3600"})
+    except KeyError as err:
+        raise HTTPException(404, "no picture with that id") from err
+    except ValueError as err:
+        raise HTTPException(422, "times must be numbers") from err
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.get("/library")
 def library_catalogue() -> list[dict]:
     from ..services import library

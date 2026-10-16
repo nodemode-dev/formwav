@@ -223,7 +223,7 @@ def _read(path: Path) -> tuple[dict, dict, zipfile.ZipFile]:
     return manifest, doc, z
 
 
-def open_project(name: str) -> dict:
+def open_project(name: str, near: list[Path] | None = None) -> dict:
     path = _path(name)
     if not path.exists():
         raise KeyError(name)
@@ -241,7 +241,17 @@ def open_project(name: str) -> dict:
             if hashlib.sha256(data).hexdigest() != mid:
                 raise ProjectError("a media file inside the session is damaged")
             media.import_wav(doc["media"][mid].get("name", f"{mid}.wav"), data)
-    return {"name": path.stem, "savedAt": manifest.get("savedAt"), "revision": int(manifest.get("revision", 1)), "document": doc}
+    # PLAN_v13 S15: the picture is kept by reference; one gone from the store is looked for by name and size beside the
+    # sessions, in the folders next to them and where the file was opened from, and named as missing when not found
+    missing = []
+    pic = doc.get("picture")
+    if isinstance(pic, dict) and pic.get("id"):
+        from . import picture
+
+        folders = [*(near or []), path.parent, *[p for p in path.parent.parent.iterdir() if p.is_dir() and p != path.parent]]
+        if not picture.relink(pic, folders):
+            missing.append(str(pic.get("name", "")))
+    return {"name": path.stem, "savedAt": manifest.get("savedAt"), "revision": int(manifest.get("revision", 1)), "document": doc, "missing": missing}
 
 
 CLIPS_FORMAT = "formwav-clips"
@@ -322,7 +332,7 @@ def open_file(path_text: str) -> dict:
             break
     else:
         raise ProjectError("too many sessions share this name")
-    return open_project(name)
+    return open_project(name, [source.parent])
 
 
 def list_projects() -> list[dict]:
