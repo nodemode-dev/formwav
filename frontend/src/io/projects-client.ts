@@ -15,6 +15,8 @@ export interface OpenedProject {
   savedAt: string | null;
   revision: number;
   document: SessionDoc;
+  /** PLAN_v13 S15: the picture's file name when it was not found */
+  missing?: string[];
 }
 
 export class RevisionConflict extends Error {

@@ -174,6 +174,8 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       savedAt = null;
       writeState();
       if (nameField && nameField.value !== opened.name) nameField.value = opened.name;
+      // PLAN_v13 S15: a picture found neither in the store nor near the session is named
+      if (opened.missing?.length) return `Opened ${opened.name}; the picture ${opened.missing[0]} was not found (put it beside the session and open it again)`;
       return `Opened ${opened.name}`;
     });
   };

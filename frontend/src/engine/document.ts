@@ -374,6 +374,19 @@ export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | 
 
 /** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
+/** PLAN_v13 S15: the session's picture (the engine's /api/pictures record, placed). */
+export interface Picture {
+  id: string;
+  name: string;
+  size: number;
+  start: number;
+  burnIn?: boolean;
+  width?: number;
+  height?: number;
+  duration?: number;
+  fps?: number;
+}
+
 /** PT-15: a note track's instrument beside the built-in synth. */
 export type Instrument = { kind: "sampler"; media: string; root: number } | { kind: "plugin"; id: string; name: string } | { kind: InstrumentKind; values: Record<string, number> };
 
@@ -672,6 +685,9 @@ export interface SessionDoc {
   keyChanges?: readonly KeyChange[];
   /** PT-26: the timecode the session starts at, in seconds (Pro Tools' session start); timecode reads add it. */
   timecodeStart?: number;
+  /** PLAN_v13 S15: the session's picture, kept by reference (its id is the movie's SHA-256, its name and size find it
+   *  again), its first frame at `start` (session samples), with timecode burnt in over it when `burnIn`. */
+  picture?: Picture;
   /** The session's timecode rate (engine/timebase.ts), for timecode, Feet+Frames and a grid of frames; absent is 30. */
   frameRate?: FrameRateId;
   /** AU-07: this project's snap settings, saved with it: snapping to the grid, and the grid in bars and beats; the grid
@@ -789,6 +805,9 @@ export type Command =
   | { type: "set-spatial-format"; format: "5.1" | "foa" }
   | { type: "set-track-midi-fx"; trackId: string; midiFx: MidiFx[] }
   | { type: "set-timecode-start"; seconds: number }
+  | { type: "set-picture"; picture: Picture | null }
+  | { type: "set-picture-start"; start: number }
+  | { type: "set-picture-burn-in"; on: boolean }
   | { type: "set-frame-rate"; rate: FrameRateId | null }
   | { type: "set-track-instrument"; trackId: string; instrument: Instrument | null }
   | { type: "switch-playlist"; trackId: string; name: string }
@@ -1443,6 +1462,31 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         const { instrument: _old, ...rest } = t;
         return clean ? { ...rest, instrument: clean } : rest;
       });
+    }
+    case "set-picture": {
+      const p = cmd.picture;
+      if (!p) {
+        if (!doc.picture) return doc;
+        const { picture: _old, ...rest } = doc;
+        return rest;
+      }
+      if (typeof p.id !== "string" || !/^[0-9a-f]{64}$/.test(p.id)) return doc;
+      const num = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
+      const clean: Picture = { id: p.id, name: String(p.name ?? "picture"), size: Math.max(0, Math.round(Number(p.size) || 0)), start: Math.max(0, Math.round(Number(p.start) || 0)), ...(p.burnIn ? { burnIn: true } : {}) };
+      for (const k of ["width", "height", "duration", "fps"] as const) {
+        const v = num(p[k]);
+        if (v !== undefined) clean[k] = v;
+      }
+      return { ...doc, picture: clean };
+    }
+    case "set-picture-start": {
+      const start = Math.max(0, Math.round(Number(cmd.start) || 0));
+      return doc.picture && doc.picture.start !== start ? { ...doc, picture: { ...doc.picture, start } } : doc;
+    }
+    case "set-picture-burn-in": {
+      if (!doc.picture || !!doc.picture.burnIn === !!cmd.on) return doc;
+      const { burnIn: _b, ...rest } = doc.picture;
+      return { ...doc, picture: cmd.on ? { ...rest, burnIn: true } : rest };
     }
     case "set-timecode-start": {
       // PT-26: the timecode the session starts at, in seconds (0 to 24 hours); 0 drops the field

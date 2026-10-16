@@ -341,7 +341,38 @@ html, body, #app { height: 100%; }
 .fw-picture[hidden] { display: none; }
 .fw-picture-bar { display: flex; align-items: center; gap: var(--space-2); margin-block-end: var(--space-2); }
 .fw-picture-name { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fw-picture-video { display: block; inline-size: 100%; background: var(--bg-primary); }
+.fw-picture-video { display: block; inline-size: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: var(--bg-primary); }
+.fw-picture-bar[data-off] { visibility: hidden; }
+/* PLAN_v13 S15: the timecode burnt in over the picture, and the picture lane under the ruler */
+.fw-picture-frame { position: relative; }
+.fw-picture-tc {
+  position: absolute;
+  inset-block-end: var(--space-2);
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  padding: 0 var(--space-2);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  pointer-events: none;
+}
+.fw-picture-tc[hidden] { display: none; }
+.fw-picture-lane {
+  --fw-head-w: var(--cv-track-head-w);
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--fw-head-w) auto;
+  justify-self: start;
+  inline-size: max-content;
+  min-inline-size: 100%;
+  block-size: 48px;
+  background: var(--bg-node);
+  border-block-end: 1px solid var(--border-color);
+}
+.fw-picture-lane[hidden], .fw-stage[data-view="empty"] .fw-picture-lane { display: none; }
+.fw-picture-lane-track { cursor: text; }
+.fw-picture-lane-paint { position: absolute; inset-block: 0; block-size: 100%; pointer-events: none; }
 
 /* AU-13: the ruler's paint canvas, placed by the script over the visible window; the canvas under it takes the clicks */
 .fw-ruler-paint {

@@ -28,6 +28,7 @@ import { mountGrid } from "./ui/grid";
 import { mountOutputMeter, mountTrackMeters } from "./ui/meter";
 import { mountDrawTool } from "./ui/draw-tool";
 import { mountPicture } from "./ui/picture";
+import { mountPictureLane } from "./ui/picture-lane";
 import { mountMidiInput } from "./ui/midi-input";
 import { mountMixer } from "./ui/mixer";
 import { mountMediaPane } from "./ui/media-pane";
@@ -139,6 +140,7 @@ if (host) {
   mountTerminal(host);
   mountAgent(host, engine);
   mountRuler(host, engine, player);
+  mountPictureLane(host, engine, player); // PLAN_v13 S15: the picture's frames along the timeline
   mountGrid(host, engine);
   mountOutputMeter(host, player);
   mountTrackMeters(host, engine, player);
