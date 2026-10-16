@@ -174,6 +174,30 @@ def track_volume(track: dict, vca: dict | None) -> list[tuple[int, float]] | Non
     return out
 
 
+def bus_order(doc: dict) -> list[dict]:
+    """S10, as the browser plans it: the buses that sound (neither muted nor playing into a muted bus), each after
+    every bus that plays into it (the longest way to the master first, the document's order kept among equals)."""
+    buses = [b for b in doc.get("buses") or [] if isinstance(b, dict) and isinstance(b.get("id"), str)]
+    by = {b["id"]: b for b in buses}
+
+    def path(b: dict) -> list[dict]:
+        out, at = [], b
+        while at is not None and all(at["id"] != x["id"] for x in out):
+            out.append(at)
+            at = by.get(at.get("out"))
+        return out
+
+    live = [b for b in buses if not any(x.get("mute") for x in path(b))]
+    return sorted(live, key=lambda b: -len(path(b)))
+
+
+def bus_outs(doc: dict) -> list[tuple[int, int]]:
+    """Each routed bus's core id and the core id of the bus it plays into, ids as plan gives them (1, 2, ...)."""
+    order = bus_order(doc)
+    ids = {b["id"]: i + 1 for i, b in enumerate(order)}
+    return [(ids[b["id"]], ids[b["out"]]) for b in order if b.get("out") in ids]
+
+
 def master_lane(doc: dict) -> tuple[float, list[tuple[int, float]] | None]:
     """S9: the master fader in dB and its volume lane, which replaces it (the fader then 0 dB) while present."""
     pts = doc.get("masterAutomation") or []
@@ -204,12 +228,9 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     buses: dict[str, tuple[int, float, float]] = {}
     muted_buses: set[str] = set()
     bus_chains: list[tuple] = []
-    for bus in doc.get("buses") or []:
-        if not isinstance(bus, dict) or not isinstance(bus.get("id"), str):
-            continue
-        if bus.get("mute"):
-            muted_buses.add(bus["id"])
-            continue
+    live = bus_order(doc)
+    muted_buses.update(b["id"] for b in doc.get("buses") or [] if isinstance(b, dict) and isinstance(b.get("id"), str) and b not in live)
+    for bus in live:
         buses[bus["id"]] = (len(buses) + 1, math.pow(10, float(bus.get("gainDb", 0)) / 20), float(bus.get("pan") or 0))
         # A bus's own effects (Pro Tools' routing folders process the summed stem) run on its sum, in order.
         bus_chains.extend((1, len(buses) - 1, *s) for s in (_stage(f) for f in (bus.get("fx") or [])) if s)
@@ -301,8 +322,10 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             fade_shape = _fade_code(clip)
             clip_env = gain_env
             main_pts = volume_pts or []
+            own_line: list[tuple[int, float]] = []
             if clip.get("envelope"):
                 own = [(start + int(p["at"]) - int(clip.get("sourceIn", 0)), float(p["db"])) for p in clip["envelope"]]
+                own_line = own
                 main_pts = _clip_envelope(own, volume_pts or [])
                 envelopes.append((main_pts, True))
                 clip_env = len(envelopes)
@@ -329,15 +352,27 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
             # with its own copy of the inserts and their automation
             main = clips[-1]
             for send in track.get("sends") or []:
-                if send.get("busId") not in buses or send.get("busId") in muted_buses:
+                if send.get("busId") not in buses or send.get("busId") in muted_buses or send.get("mute"):
                     continue
+                # S10: a pre-fader send takes the clip before the track's fader, volume lane and VCA (after trim,
+                # polarity and the clip's own gain and line); a send's own pan replaces the track's
+                pre = bool(send.get("pre"))
+                base_gain = polarity * math.pow(10, (trim_db + float(clip.get("gainDb", 0))) / 20) if pre else main[4]
+                base_pts = (_clip_envelope(own_line, []) if own_line else []) if pre else main_pts
                 lane = [] if off else [(int(p["time"]), float(p["value"])) for p in (send.get("automation") or [])]
                 level = 1.0 if lane else 10 ** (float(send.get("gainDb", 0.0)) / 20)
                 send_env = main[10]
+                if pre:
+                    send_env = 0
+                    if base_pts:
+                        envelopes.append((base_pts, True))
+                        send_env = len(envelopes)
                 if lane:
-                    envelopes.append((_clip_envelope(lane, main_pts), True))
+                    envelopes.append((_clip_envelope(lane, base_pts), True))
                     send_env = len(envelopes)
-                clips.append((*main[:4], main[4] * level, *main[5:9], buses[send["busId"]][0], send_env, *main[11:]))
+                has_pan = isinstance(send.get("pan"), (int, float))
+                send_pan = float(send["pan"]) if has_pan else main[5]
+                clips.append((*main[:4], base_gain * level, send_pan, *main[6:9], buses[send["busId"]][0], send_env, 0 if has_pan else main[11]))
                 owners.append(tracks.index(track))
                 add_chain(len(clips) - 1)
             end = max(end, start + length)
@@ -392,7 +427,7 @@ def render(doc: object, start: int = 0, stop: int | None = None) -> dict:
     master_db, master_pts = master_lane(doc)
     if master_pts:
         envelopes.append((master_pts, True))
-    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, bus_outs(doc))
     frames = length
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:

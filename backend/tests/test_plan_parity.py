@@ -123,6 +123,25 @@ def _cases() -> dict:
         masterGainDb=-2,
         masterAutomation=ramp,
     )
+    # PLAN_v13 S10: buses into buses (ordered so each plays after what feeds it, a muted destination silencing its
+    # sources), pre-fader, muted and panned sends
+    cases["routing"] = _doc(
+        [
+            _track("t1", [_clip("c1", "a", envelope=[{"at": 0, "db": 0}, {"at": 24000, "db": -6}])], gainDb=-5, trimDb=2, invert=True, vcaId="v1", busId="b1",
+                   automation={"volume": [{"time": 0, "value": -8}, {"time": 30000, "value": 0}], "pan": [{"time": 0, "value": -1}, {"time": 48000, "value": 1}]},
+                   sends=[{"busId": "b2", "gainDb": -6, "pre": True}, {"busId": "b3", "gainDb": -3, "pan": 0.5}, {"busId": "b4", "gainDb": 0, "mute": True}, {"busId": "b5", "gainDb": 0}]),
+            _track("t2", [_clip("c2", "a")], busId="b2"),
+        ],
+        buses=[
+            {"id": "b3", "name": "three", "gainDb": -1, "pan": 0, "out": "b2"},
+            {"id": "b2", "name": "two", "gainDb": -2, "pan": 0.2},
+            {"id": "b1", "name": "one", "gainDb": 0, "pan": 0, "out": "b3"},
+            {"id": "b4", "name": "four", "gainDb": 0, "pan": 0},
+            {"id": "b6", "name": "muted", "gainDb": 0, "pan": 0, "mute": True},
+            {"id": "b5", "name": "into muted", "gainDb": 0, "pan": 0, "out": "b6"},
+        ],
+        vcas=[{"id": "v1", "name": "v", "gainDb": -4}],
+    )
     return cases
 
 
@@ -162,7 +181,7 @@ def _export_plan(doc: dict) -> dict:
             for i, c in enumerate(clips)
         ],
         "buses": [
-            {"gain": g, "pan": p, "stages": [list(ch[2:]) for ch in chains if ch[0] == 1 and ch[1] == k], "fxAuto": [[s, prm, env(e)] for bi, s, prm, e in bus_auto if bi == k]}
+            {"gain": g, "pan": p, "out": dict(render.bus_outs(doc)).get(k + 1, 0), "stages": [list(ch[2:]) for ch in chains if ch[0] == 1 and ch[1] == k], "fxAuto": [[s, prm, env(e)] for bi, s, prm, e in bus_auto if bi == k]}
             for k, (_, g, p) in enumerate(buses)
         ],
         "master": [list(s) for s in (render._stage(f) for f in (doc.get("masterFx") or [])) if s],

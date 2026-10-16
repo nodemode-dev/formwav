@@ -18,6 +18,7 @@ interface CoreExports {
   fw_clear_envelopes(player: number): void;
   fw_set_master_db(player: number, db: number): void;
   fw_set_master_envelope?(player: number, id: number): void;
+  fw_set_bus_out?(player: number, id: number, out: number): void;
   fw_add_envelope(player: number, points: number, count: number, db: number): number;
   fw_free(ptr: number, bytes: number): void;
   fw_clear_buses(player: number): void;
@@ -84,6 +85,8 @@ export interface WorkletBus {
   id: number;
   gain: number;
   pan: number;
+  /** S10: the id of the bus this one plays into (absent for the master). */
+  out?: number;
   /** The bus's chain as flat [kind, a, b, c, d, e, ...] (core fx.rs Stage::design); a track's own bus carries its compressor. */
   stages?: number[];
   /** Its filters' automation, numbered by the stages above; points flat [time, value, ...]. */
@@ -307,6 +310,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
             if (env) core.fw_add_bus_fx_auto(this.player, a.stage, a.param, env);
           }
         }
+        for (const b of msg.buses) if (b.out) core.fw_set_bus_out?.(this.player, b.id, b.out);
         core.fw_set_pan_law(this.player, msg.panLaw ?? 0);
         core.fw_clear_master_fx(this.player);
         const mfx = msg.masterFx ?? [];

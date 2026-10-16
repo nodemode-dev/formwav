@@ -199,6 +199,12 @@ export function cleanLane(points: readonly AutoPoint[], lo: number, hi: number, 
   return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
 }
 
+/** S10: the other tracks of the active group a track belongs to, when that group links `what`. */
+export function groupPeers(doc: SessionDoc, trackId: string, what: "volume" | "mute" | "solo" | "edit"): Set<string> {
+  const g = (doc.groups ?? []).find((x) => x.active && x[what] && x.trackIds.includes(trackId));
+  return new Set(g ? g.trackIds.filter((id) => id !== trackId) : []);
+}
+
 export function sameLane(a: readonly AutoPoint[], b: readonly AutoPoint[]): boolean {
   return a.length === b.length && a.every((p, i) => p.time === b[i].time && p.value === b[i].value);
 }
@@ -515,7 +521,7 @@ export interface Track {
   /** AU-30's per-track view: this track shown as a spectrogram whatever the session-wide view is. */
   view?: "spectrogram";
   /** PT-18: post-fader sends, this track's signal (after its inserts and fader) also fed to a bus at a level. */
-  sends?: { busId: string; gainDb: number; automation?: AutoPoint[] }[];
+  sends?: { busId: string; gainDb: number; automation?: AutoPoint[]; pre?: boolean; mute?: boolean; pan?: number }[];
   /** PT-14, Pro Tools' playlists: the active playlist's name (its clips are `clips`, which play and export) and the
    *  other playlists, stashed with their clips until switched in. */
   playlist?: string;
@@ -667,6 +673,8 @@ export interface SessionDoc {
   launcher?: LauncherState;
   loop?: LoopRange;
   buses?: readonly Bus[];
+  /** S10: mix and edit groups. */
+  groups?: readonly TrackGroup[];
   /** VCA masters (Pro Tools' VCA mixing): group faders that scale their member tracks without carrying audio. */
   vcas?: readonly Vca[];
 }
@@ -690,6 +698,20 @@ export interface Bus {
   mute?: boolean;
   /** Effects on the bus's sum (Pro Tools' routing folders process the grouped stem), filters and compressors in order. */
   fx?: TrackFx[];
+  /** S10: the bus this bus plays into (after its effects, fader and pan); absent is the master. Never a cycle. */
+  out?: string;
+}
+
+/** S10: a mix and edit group (Pro Tools' groups): what it links among its tracks while active. */
+export interface TrackGroup {
+  id: string;
+  name: string;
+  trackIds: string[];
+  volume: boolean;
+  mute: boolean;
+  solo: boolean;
+  edit: boolean;
+  active: boolean;
 }
 
 export interface FrequencyBand {
@@ -806,6 +828,10 @@ export type Command =
   | { type: "add-bus"; name: string }
   | { type: "remove-bus"; busId: string }
   | { type: "route-track"; trackId: string; busId: string | null }
+  | { type: "route-bus"; busId: string; to: string | null }
+  | { type: "set-send-options"; trackId: string; busId: string; pre?: boolean; mute?: boolean; pan?: number | null }
+  | { type: "set-group"; group: TrackGroup }
+  | { type: "remove-group"; groupId: string }
   | { type: "add-vca"; name: string }
   | { type: "remove-vca"; vcaId: string }
   | { type: "assign-vca"; trackId: string; vcaId: string | null }
@@ -1719,7 +1745,11 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "remove-track": {
       const tracks = doc.tracks.filter((t) => t.id !== cmd.trackId);
-      return tracks.length === doc.tracks.length ? doc : { ...doc, tracks };
+      if (tracks.length === doc.tracks.length) return doc;
+      if (!doc.groups?.some((g) => g.trackIds.includes(cmd.trackId))) return { ...doc, tracks };
+      const { groups: _old, ...rest } = doc;
+      const groups = doc.groups.map((g) => ({ ...g, trackIds: g.trackIds.filter((id) => id !== cmd.trackId) })).filter((g) => g.trackIds.length >= 2);
+      return groups.length ? { ...rest, tracks, groups } : { ...rest, tracks };
     }
     case "rename-track": {
       const name = cmd.name.trim();
@@ -1803,16 +1833,81 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           return cmd.ara ? { ...rest, ara: cmd.ara } : rest;
         }),
       }));
-    case "set-track-gain":
-      return mapTrack(doc, cmd.trackId, (t) => (t.gainDb === cmd.gainDb ? t : { ...t, gainDb: cmd.gainDb }));
+    case "set-track-gain": {
+      // S10: an active group linking volume moves its other tracks by the same dB (held to -60 to +12)
+      const before = doc.tracks.find((t) => t.id === cmd.trackId);
+      const delta = before ? cmd.gainDb - before.gainDb : 0;
+      const linked = groupPeers(doc, cmd.trackId, "volume");
+      return {
+        ...doc,
+        tracks: doc.tracks.map((t) => {
+          if (t.id === cmd.trackId) return t.gainDb === cmd.gainDb ? t : { ...t, gainDb: cmd.gainDb };
+          if (!delta || !linked.has(t.id)) return t;
+          const gainDb = Math.round(Math.max(-60, Math.min(12, t.gainDb + delta)) * 100) / 100;
+          return gainDb === t.gainDb ? t : { ...t, gainDb };
+        }),
+      };
+    }
+    case "route-bus": {
+      const buses = doc.buses ?? [];
+      const to = cmd.to ?? undefined;
+      if (!buses.some((b) => b.id === cmd.busId) || (to !== undefined && !buses.some((b) => b.id === to))) return doc;
+      // a bus cannot play into itself, or into a bus that already plays into it
+      for (let at = to; at !== undefined; at = buses.find((b) => b.id === at)?.out) if (at === cmd.busId) return doc;
+      let changed = false;
+      const next = buses.map((b) => {
+        if (b.id !== cmd.busId || b.out === to) return b;
+        changed = true;
+        const { out: _old, ...rest } = b;
+        return to ? { ...rest, out: to } : rest;
+      });
+      return changed ? { ...doc, buses: next } : doc;
+    }
+    case "set-send-options":
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const sends = t.sends ?? [];
+        if (!sends.some((s) => s.busId === cmd.busId)) return t;
+        const next = sends.map((s) => {
+          if (s.busId !== cmd.busId) return s;
+          const { pre: _p, mute: _m, pan: _n, ...rest } = s;
+          const pre = cmd.pre ?? s.pre ?? false;
+          const mute = cmd.mute ?? s.mute ?? false;
+          const pan = cmd.pan === null ? undefined : cmd.pan !== undefined ? Math.round(Math.max(-1, Math.min(1, cmd.pan)) * 100) / 100 : s.pan;
+          return { ...rest, ...(pre ? { pre: true } : {}), ...(mute ? { mute: true } : {}), ...(pan !== undefined ? { pan } : {}) };
+        });
+        return JSON.stringify(next) === JSON.stringify(sends) ? t : { ...t, sends: next };
+      });
+    case "set-group": {
+      const g = cmd.group;
+      const trackIds = [...new Set(g.trackIds)].filter((id) => doc.tracks.some((t) => t.id === id));
+      if (trackIds.length < 2) return doc;
+      // a track belongs to one group: joining this one takes it out of any other
+      const clean: TrackGroup = { id: g.id, name: g.name.trim().slice(0, 40) || "Group", trackIds, volume: !!g.volume, mute: !!g.mute, solo: !!g.solo, edit: !!g.edit, active: g.active !== false };
+      const others = (doc.groups ?? []).filter((x) => x.id !== g.id).map((x) => ({ ...x, trackIds: x.trackIds.filter((id) => !trackIds.includes(id)) })).filter((x) => x.trackIds.length >= 2);
+      const existing = (doc.groups ?? []).findIndex((x) => x.id === g.id);
+      const groups = existing >= 0 ? [...others.slice(0, existing), clean, ...others.slice(existing)] : [...others, clean];
+      return JSON.stringify(groups) === JSON.stringify(doc.groups ?? []) ? doc : { ...doc, groups };
+    }
+    case "remove-group": {
+      const groups = (doc.groups ?? []).filter((g) => g.id !== cmd.groupId);
+      if (groups.length === (doc.groups ?? []).length) return doc;
+      const { groups: _old, ...rest } = doc;
+      return groups.length ? { ...rest, groups } : rest;
+    }
     case "add-bus": {
       const bus: Bus = { id: newId(), name: cmd.name.trim() || "Bus", gainDb: 0 };
       return { ...doc, buses: [...(doc.buses ?? []), bus] };
     }
     case "remove-bus": {
       const before = doc.buses ?? [];
-      const buses = before.filter((b) => b.id !== cmd.busId);
-      if (buses.length === before.length) return doc;
+      const kept = before.filter((b) => b.id !== cmd.busId);
+      if (kept.length === before.length) return doc;
+      // S10: a bus that played into it plays into the master again
+      const buses = kept.map((b) => {
+        if (b.out !== cmd.busId) return b;
+        const { out: _old, ...rest } = b;
+        return rest;
+      });
       const tracks = doc.tracks.map((t) => (t.busId === cmd.busId ? { ...t, busId: undefined } : t));
       return { ...doc, buses, tracks };
     }
@@ -2101,10 +2196,17 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const pan = Math.max(-1, Math.min(1, cmd.pan));
       return mapTrack(doc, cmd.trackId, (t) => ((t.pan ?? 0) === pan ? t : { ...t, pan }));
     }
-    case "set-track-mute":
-      return mapTrack(doc, cmd.trackId, (t) => (t.mute === cmd.mute ? t : { ...t, mute: cmd.mute }));
+    case "set-track-mute": {
+      const linked = groupPeers(doc, cmd.trackId, "mute");
+      linked.add(cmd.trackId);
+      const tracks = doc.tracks.map((t) => (!linked.has(t.id) || t.mute === cmd.mute ? t : { ...t, mute: cmd.mute }));
+      return tracks.some((t, i) => t !== doc.tracks[i]) ? { ...doc, tracks } : doc;
+    }
     case "set-track-solo": {
-      const next = mapTrack(doc, cmd.trackId, (t) => (t.solo === cmd.solo ? t : { ...t, solo: cmd.solo }));
+      const linked = cmd.exclusive ? new Set<string>() : groupPeers(doc, cmd.trackId, "solo");
+      linked.add(cmd.trackId);
+      const soloed = doc.tracks.map((t) => (!linked.has(t.id) || t.solo === cmd.solo ? t : { ...t, solo: cmd.solo }));
+      const next = soloed.some((t, i) => t !== doc.tracks[i]) ? { ...doc, tracks: soloed } : doc;
       if (!cmd.exclusive || !cmd.solo) return next;
       // X-OR solo: soloing one track unsolos the others, in the same step
       const tracks = next.tracks.map((t) => (t.id !== cmd.trackId && t.solo ? { ...t, solo: false } : t));
@@ -2277,6 +2379,8 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         }
         const gainDb = Math.max(-60, Math.min(12, Math.round(cmd.gainDb * 10) / 10));
         if (t.sends?.some((s) => s.busId === cmd.busId && s.gainDb === gainDb)) return t;
+        // S10: a level change keeps the send's place, pre-fader, mute, pan and lane
+        if (t.sends?.some((s) => s.busId === cmd.busId)) return { ...t, sends: t.sends.map((s) => (s.busId === cmd.busId ? { ...s, gainDb } : s)) };
         return { ...t, sends: [...rest, { busId: cmd.busId, gainDb }] };
       });
     }

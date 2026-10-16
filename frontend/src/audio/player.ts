@@ -1,5 +1,5 @@
 import type { Engine, SessionDoc } from "../engine";
-import { cleanSynth, DEFAULT_SYNTH, fadeCode, type SynthPatch, type Track, type TrackFx } from "../engine/document";
+import { cleanSynth, DEFAULT_SYNTH, fadeCode, type Bus, type SynthPatch, type Track, type TrackFx } from "../engine/document";
 import { processorSpec } from "../engine/processors";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
@@ -226,6 +226,19 @@ export function trackVolume(track: Track, vca: { gainDb: number; automation?: re
   return out;
 }
 
+/** S10: the buses that sound (neither muted nor playing into a muted bus), each after every bus that plays into it
+ *  (the longest way to the master first, the document's order kept among equals), as the export orders them. */
+export function busOrder(doc: SessionDoc): Bus[] {
+  const all = doc.buses ?? [];
+  const path = (b: Bus) => {
+    const out: Bus[] = [];
+    for (let at: Bus | undefined = b; at && !out.includes(at); at = all.find((x) => x.id === at?.out)) out.push(at);
+    return out;
+  };
+  const live = all.filter((b) => !path(b).some((x) => x.mute));
+  return live.map((b) => [b, path(b).length] as const).sort((a, b) => b[1] - a[1]).map(([b]) => b);
+}
+
 /** S9: a send's level as its lane (dB) times the track's volume points, or its static level when it has no lane. */
 function sendPoints(main: number[] | undefined, lane: readonly { time: number; value: number }[] | undefined): number[] | undefined {
   if (!lane?.length) return main;
@@ -285,16 +298,18 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
   const buses: WorkletBus[] = [];
   const processors: string[] = [];
   const processorTracks: ({ trackId: string; fx: number } | null)[] = [];
-  for (const bus of doc.buses ?? []) {
-    if (bus.mute) {
-      mutedBuses.add(bus.id);
-      continue;
-    }
+  const live = busOrder(doc);
+  for (const bus of doc.buses ?? []) if (!live.includes(bus)) mutedBuses.add(bus.id);
+  for (const bus of live) {
     const id = buses.length + 1;
     busIndex.set(bus.id, id);
     const busStages = flatStages(bus.fx, processors);
     while (processorTracks.length < processors.length) processorTracks.push(null);
     buses.push({ id, gain: dbToGain(bus.gainDb), pan: bus.pan ?? 0, ...(busStages.length ? { stages: busStages } : {}) });
+  }
+  for (const [k, bus] of live.entries()) {
+    const out = bus.out ? live.findIndex((b) => b.id === bus.out) : -1;
+    if (out >= 0) buses[k].out = out + 1;
   }
   const clips: WorkletClip[] = [];
   // PT-38, AA-11: each placed clip as a record of seven numbers (its index in `clips`, then its speaker gains in SMPTE
@@ -367,9 +382,15 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       const main = clips[clips.length - 1];
       for (const send of track.sends ?? []) {
         const sendBus = busIndex.get(send.busId);
-        if (sendBus === undefined || mutedBuses.has(send.busId)) continue;
+        if (sendBus === undefined || mutedBuses.has(send.busId) || send.mute) continue;
+        // S10: a pre-fader send takes the clip before the track's fader, volume lane and VCA (after trim, polarity and
+        // the clip's own gain and line); a send's own pan replaces the track's
+        const ownLine = clip.envelope?.length ? clip.envelope.map((p) => [clip.start + p.at - clip.sourceIn, p.db] as [number, number]) : null;
+        const baseGain = send.pre ? (track.invert ? -1 : 1) * dbToGain((track.trimDb ?? 0) + clip.gainDb) : main.gain;
+        const basePoints = send.pre ? (ownLine ? clipEnvelope(ownLine, undefined) : undefined) : main.gainPoints;
         const lane = off ? undefined : send.automation;
-        clips.push({ ...main, gain: main.gain * (lane?.length ? 1 : dbToGain(send.gainDb)), gainPoints: sendPoints(main.gainPoints, lane), bus: sendBus, track: 0 });
+        const panned = typeof send.pan === "number";
+        clips.push({ ...main, gain: baseGain * (lane?.length ? 1 : dbToGain(send.gainDb)), gainPoints: sendPoints(basePoints, lane), pan: panned ? (send.pan as number) : main.pan, panPoints: panned ? undefined : main.panPoints, bus: sendBus, track: 0 });
       }
       end = Math.max(end, clip.start + clip.length);
     }
