@@ -1,4 +1,4 @@
-import { applyMidiFx } from "../audio/notes";
+import { applyMidiFx, instrumentBody } from "../audio/notes";
 import type { Player } from "../audio/player";
 import type { Engine } from "../engine";
 import { cleanSynth, DEFAULT_SYNTH, type MediaRef, type NoteEvent, type SessionDoc } from "../engine/document";
@@ -64,11 +64,11 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
     const notes = quantize ? quantizeNotes(doc, played.map((n) => ({ ...n, at: n.at + done.start })), null, quantize, fpsOf(doc)).map((n) => ({ ...n, at: Math.max(0, n.at - done.start) })) : played;
     if (!notes.length) return;
     // PT-16: the take keeps the notes as played and sounds them through its track's MIDI effects, as any note clip
-    const heard = applyMidiFx(notes, doc.tracks.find((t) => t.id === done.trackId)?.midiFx, rate, doc.tempo?.bpm ?? 120);
-    const p = cleanSynth(doc.synth ?? DEFAULT_SYNTH);
-    const patch = { wave: p.wave, attack: p.attack, decay: p.decay, sustain: p.sustain, release: p.release, gain: 0.25, cutoff: p.cutoff, resonance: p.resonance };
+    const track = doc.tracks.find((t) => t.id === done.trackId);
+    const heard = applyMidiFx(notes, track?.midiFx, rate, doc.tempo?.bpm ?? 120);
     try {
-      const res = await fetch("/api/midi/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ notes: heard.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })), rate, name: "MIDI take", patch }) });
+      // S14: the take sounds through its track's instrument, as the clip will whenever its notes change
+      const res = await fetch("/api/midi/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...instrumentBody(track?.instrument, doc.synth ?? DEFAULT_SYNTH), notes: heard.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })), rate, name: "MIDI take" }) });
       const media = (await res.json().catch(() => ({}))) as Partial<MediaRef> & { detail?: unknown };
       if (!res.ok || !media.id) throw new Error(typeof media.detail === "string" ? media.detail : `the engine answered ${res.status}`);
       engine.dispatch({ type: "import-media", media: media as MediaRef, at: done.start, ...(done.trackId ? { trackId: done.trackId } : {}), notes });
@@ -92,6 +92,7 @@ export function mountMidiInput(engine: Engine, player: Player, notice?: (text: s
       const heard = applyMidiFx([{ at: 0, length: 1, pitch, velocity }], track?.midiFx?.filter((f) => f.kind === "transpose" || f.kind === "velocity"), doc.sampleRate)[0];
       if (heard) {
         sounding.set(pitch, heard.pitch);
+        player.useLiveInstrument(track?.instrument);
         void player.liveNote(heard.pitch, heard.velocity);
       }
       if (take && !take.held.has(pitch)) take.held.set(pitch, { at: now(), velocity });

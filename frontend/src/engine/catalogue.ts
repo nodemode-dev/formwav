@@ -35,7 +35,7 @@ export const COMMAND_PARAMS: Record<Command["type"], string> = {
   "set-track-midi-fx": "trackId: string; midiFx: MidiFx[]",
   "set-timecode-start": "seconds: number",
   "set-frame-rate": "rate: FrameRateId | null",
-  "set-track-instrument": "trackId: string; instrument: Instrument | null",
+  "set-track-instrument": "trackId: string; instrument: { kind: 'sampler'; media: string; root: number } | { kind: 'plugin'; id: string; name: string } | { kind: 'subtractive' | 'drums'; values: Record<string, number> (engine/instruments.ts names) } | null",
   "switch-playlist": "trackId: string; name: string",
   "comp-from-playlist": "trackId: string; name: string; start: number; end: number",
   "set-key": "name: string; camelot: string",

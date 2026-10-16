@@ -44,6 +44,7 @@ interface CoreExports {
   fw_live_note(player: number, pitch: number, velocity: number): void;
   fw_live_patch(player: number, wave: number, attack: number, decay: number, sustain: number, release: number, gain: number, cutoff: number, resonance: number): void;
   fw_live_all_off(player: number): void;
+  fw_live_instrument(player: number, kind: number, values: number, count: number): void;
   fw_live_sounding(player: number): number;
   fw_render_idle(player: number, left: number, right: number, frames: number): void;
   fw_take_correlation(player: number): number;
@@ -108,6 +109,7 @@ export type WorkletMessage =
   | { type: "live-note"; pitch: number; velocity: number }
   | { type: "live-patch"; wave: number; attack: number; decay: number; sustain: number; release: number; gain: number; cutoff: number; resonance: number }
   | { type: "live-all-off" }
+  | { type: "live-instrument"; kind: number; values: number[] }
   | { type: "loop"; start: number; end: number };
 
 export type WorkletReply =
@@ -344,6 +346,15 @@ class PlayerProcessor extends AudioWorkletProcessor {
       case "live-all-off":
         core.fw_live_all_off(this.player);
         break;
+      case "live-instrument": {
+        // S14: the live instrument as a note track's subtractive or drum synth
+        const bytes = Math.max(4, msg.values.length * 4);
+        const at = core.fw_alloc(bytes);
+        new Float32Array(core.memory.buffer, at, msg.values.length).set(msg.values);
+        core.fw_live_instrument(this.player, msg.kind, at, msg.values.length);
+        core.fw_free(at, bytes);
+        break;
+      }
       case "seek":
         core.fw_seek(this.player, msg.position);
         this.readPos = 0;

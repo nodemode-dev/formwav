@@ -1,5 +1,6 @@
 import type { Engine } from "../engine";
-import { cleanSynth, DEFAULT_SYNTH, type MediaRef, type MidiFx, type NoteEvent, type SynthPatch } from "../engine/document";
+import { cleanSynth, DEFAULT_SYNTH, type Instrument, type MediaRef, type MidiFx, type NoteEvent, type SynthPatch } from "../engine/document";
+import { instrumentValues, isInstrumentKind } from "../engine/instruments";
 
 /**
  * A note clip's edited notes rendered again by the built-in instrument (POST /api/midi/render) and swapped in together
@@ -68,12 +69,8 @@ export async function renderNoteMedia(engine: Engine, trackId: string, clipId: s
   // PT-16: the clip keeps the notes as played; its sound is rendered from them after the track's MIDI effects
   const heard = applyMidiFx(notes, track?.midiFx, rate, doc.tempo?.bpm ?? 120);
   // PT-15: through the track's instrument: a sampler (its sample's own shape, so a near-flat envelope) or a plugin
-  const inst = track?.instrument;
-  const own = cleanSynth(synth ?? doc.synth ?? DEFAULT_SYNTH);
   const body = {
-    ...(inst?.kind === "sampler" ? { sampler: { media: inst.media, root: inst.root }, patch: { wave: "sine", attack: 0.002, decay: 0, sustain: 1, release: 0.1, gain: 1 } } : {}),
-    ...(inst?.kind === "plugin" ? { plugin: inst.id } : {}),
-    ...(!inst ? { patch: { wave: own.wave, attack: own.attack, decay: own.decay, sustain: own.sustain, release: own.release, gain: 0.25, cutoff: own.cutoff, resonance: own.resonance } } : {}),
+    ...instrumentBody(track?.instrument, synth ?? doc.synth ?? DEFAULT_SYNTH),
     notes: heard.map((n) => ({ start: n.at / rate, length: n.length / rate, pitch: n.pitch, velocity: n.velocity })),
     rate,
     name: (media?.name ?? "notes").replace(/\.wav$/i, ""),
@@ -81,6 +78,16 @@ export async function renderNoteMedia(engine: Engine, trackId: string, clipId: s
     length: clip.sourceIn / rate + clip.length / doc.sampleRate,
   };
   return renderBody(body);
+}
+
+/** What /api/midi/render needs to play notes through an instrument: a sampler (its sample's own shape, so a near-flat
+ *  envelope), a plugin, the subtractive or drum synth with its values in the core's order, or the built-in synth. */
+export function instrumentBody(inst: Instrument | undefined, synth: SynthPatch): object {
+  if (inst?.kind === "sampler") return { sampler: { media: inst.media, root: inst.root }, patch: { wave: "sine", attack: 0.002, decay: 0, sustain: 1, release: 0.1, gain: 1 } };
+  if (inst?.kind === "plugin") return { plugin: inst.id };
+  if (inst && isInstrumentKind(inst.kind)) return { instrument: { kind: inst.kind, values: instrumentValues(inst.kind, (inst as { values?: Record<string, number> }).values) } };
+  const own = cleanSynth(synth);
+  return { patch: { wave: own.wave, attack: own.attack, decay: own.decay, sustain: own.sustain, release: own.release, gain: 0.25, cutoff: own.cutoff, resonance: own.resonance } };
 }
 
 async function renderBody(body: object): Promise<MediaRef> {

@@ -1,5 +1,6 @@
 import type { Engine, SessionDoc } from "../engine";
-import { cleanSynth, DEFAULT_SYNTH, fadeCode, type Bus, type SynthPatch, type Track, type TrackFx } from "../engine/document";
+import { cleanSynth, DEFAULT_SYNTH, fadeCode, type Bus, type Instrument, type SynthPatch, type Track, type TrackFx } from "../engine/document";
+import { instrumentValues, isInstrumentKind, type InstrumentKind } from "../engine/instruments";
 import { processorSpec } from "../engine/processors";
 import type { WorkletBus, WorkletClip, WorkletMessage, WorkletReply } from "./player-worklet";
 import workletUrl from "./player-worklet.ts?worker&url";
@@ -666,7 +667,35 @@ export class Player {
 
   private patchSent = "";
 
+  private liveSent = "";
+  private liveWanted: { kind: InstrumentKind; values?: Record<string, number> } | undefined;
+
+  /** S14: the live instrument follows a note track's subtractive or drum synth; any other instrument, or no track,
+   *  plays the session's synth. */
+  useLiveInstrument(inst: Instrument | undefined): void {
+    this.liveWanted = inst && isInstrumentKind(inst.kind) ? (inst as { kind: InstrumentKind; values?: Record<string, number> }) : undefined;
+    if (this.node) this.sendLive(this.node);
+  }
+
+  private sendLive(node: AudioWorkletNode): void {
+    const inst = this.liveWanted;
+    if (!inst) {
+      if (this.liveSent) {
+        this.liveSent = "";
+        this.patchSent = "";
+        this.sendPatch(node, this.engine.get("document").synth ?? DEFAULT_SYNTH);
+      }
+      return;
+    }
+    const values = instrumentValues(inst.kind, inst.values);
+    const key = JSON.stringify([inst.kind, values]);
+    if (key === this.liveSent) return;
+    this.liveSent = key;
+    send(node, { type: "live-instrument", kind: inst.kind === "subtractive" ? 1 : 2, values });
+  }
+
   private sendPatch(node: AudioWorkletNode, patch: SynthPatch): void {
+    if (this.liveSent) return;
     const p = cleanSynth(patch);
     const key = JSON.stringify(p);
     if (key === this.patchSent) return;
@@ -677,7 +706,10 @@ export class Player {
   /** The live instrument heard through a patch before it is committed (a knob being dragged); the session's own patch
    *  returns with the next document change or a call with it. */
   async setLivePatch(patch: SynthPatch): Promise<void> {
-    this.sendPatch(await this.ensure(), patch);
+    const node = await this.ensure();
+    this.liveWanted = undefined;
+    this.liveSent = "";
+    this.sendPatch(node, patch);
   }
 
   private lastIntegrated = Number.NEGATIVE_INFINITY;
@@ -938,6 +970,7 @@ export class Player {
   async liveNote(pitch: number, velocity: number): Promise<void> {
     const node = await this.ensure();
     await this.ctx?.resume();
+    this.sendLive(node);
     send(node, { type: "live-note", pitch: Math.max(0, Math.min(127, Math.round(pitch))), velocity: Math.max(0, Math.min(127, Math.round(velocity))) });
   }
 

@@ -42,6 +42,13 @@ class Sampler(BaseModel):
     root: int = Field(60, ge=0, le=127)
 
 
+class CoreInstrument(BaseModel):
+    """S14: the subtractive or drum synth and its values in the core's order (engine/instruments.ts)."""
+
+    kind: str
+    values: list[float] = []
+
+
 class RenderRequest(BaseModel):
     notes: list[Note]
     rate: int = Field(48000, ge=8000, le=192000)
@@ -52,6 +59,7 @@ class RenderRequest(BaseModel):
     plugin: str | None = None
     # S7: the rendering lasts at least this long (seconds), silent after its notes; with no notes, an empty note clip
     length: float = Field(0.0, ge=0, le=3600)
+    instrument: CoreInstrument | None = None
 
 
 @router.get("/devices")
@@ -109,7 +117,7 @@ def _padded(mono: np.ndarray, rate: int, length: float) -> np.ndarray:
     return np.concatenate([mono, np.zeros(want - len(mono), dtype=mono.dtype)]) if want > len(mono) else mono
 
 
-def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Sampler | None = None, plugin: str | None = None, length: float = 0.0) -> dict:
+def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Sampler | None = None, plugin: str | None = None, length: float = 0.0, instrument: CoreInstrument | None = None) -> dict:
     if patch.wave not in WAVES:
         raise HTTPException(status_code=422, detail=f"no waveform named {patch.wave} (one of {', '.join(WAVES)})")
     if not notes:
@@ -127,6 +135,12 @@ def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Samp
         except media.MediaError as err:
             raise HTTPException(status_code=422, detail=str(err)) from err
     core = media._require_core()
+    if instrument is not None:
+        if instrument.kind not in ("subtractive", "drums"):
+            raise HTTPException(status_code=422, detail=f"no instrument named {instrument.kind} (subtractive or drums)")
+        raw = core.render_instrument(frames, rate, instrument.kind, [float(v) for v in instrument.values])
+        out = _padded(np.frombuffer(raw, dtype="<f4").copy(), rate, length)
+        return media.import_wav(f"{name}.wav", _wav_bytes([out, out], rate))
     if sampler is not None:
         # PT-15: the sampler plays the media, mixed to mono, re-pitched from its root, through the patch's envelope
         from ..services import tools
@@ -191,4 +205,16 @@ def midi_from_audio(media_id: str, mode: str = "melodic", start: float = 0.0, le
 def render_notes(body: RenderRequest) -> dict:
     """Edited notes rendered again by the built-in instrument, as new media (S7: at least `length` seconds long, and
     silence of that length for no notes)."""
-    return _render([n.model_dump() for n in body.notes], body.rate, body.patch, body.name, body.sampler, body.plugin, body.length)
+    return _render([n.model_dump() for n in body.notes], body.rate, body.patch, body.name, body.sampler, body.plugin, body.length, body.instrument)
+
+
+@router.get("/instrument-params")
+def instrument_params(kind: str) -> list[dict]:
+    """S14: the core's parameters for the subtractive (`subtractive`) or drum (`drums`) synth, in the order it takes
+    their values."""
+    import json
+
+    try:
+        return json.loads(media._require_core().instrument_params(kind))
+    except ValueError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from err

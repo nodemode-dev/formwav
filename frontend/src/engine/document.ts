@@ -2,6 +2,7 @@ import { PROCESSOR_BY_ID, processorValues } from "./processors";
 import { FRAME_RATES, type FrameRateId } from "./timebase";
 import type { KeyChange, MeterChange, TempoChange } from "./tempo";
 import { clipPiece } from "./editing";
+import { cleanInstrumentValues, type InstrumentKind } from "./instruments";
 
 export interface MediaRef {
   id: string;
@@ -374,7 +375,7 @@ export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | 
 /** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
 /** PT-15: a note track's instrument beside the built-in synth. */
-export type Instrument = { kind: "sampler"; media: string; root: number } | { kind: "plugin"; id: string; name: string };
+export type Instrument = { kind: "sampler"; media: string; root: number } | { kind: "plugin"; id: string; name: string } | { kind: InstrumentKind; values: Record<string, number> };
 
 /** The built-in synth's patch: the oscillator's wave, the envelope in seconds (sustain 0 to 1) and the low-pass's
  *  cutoff in Hz (0 open) and resonance (a Q). */
@@ -1436,7 +1437,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-track-instrument": {
       // PT-15: the track's instrument; null returns it to the built-in synth
       const i = cmd.instrument;
-      const clean: Instrument | null = !i ? null : i.kind === "sampler" ? { kind: "sampler", media: String(i.media), root: Math.max(0, Math.min(127, Math.round(Number(i.root) || 60))) } : i.kind === "plugin" ? { kind: "plugin", id: String(i.id), name: String(i.name) } : null;
+      const clean: Instrument | null = !i ? null : i.kind === "sampler" ? { kind: "sampler", media: String(i.media), root: Math.max(0, Math.min(127, Math.round(Number(i.root) || 60))) } : i.kind === "plugin" ? { kind: "plugin", id: String(i.id), name: String(i.name) } : i.kind === "subtractive" || i.kind === "drums" ? { kind: i.kind, values: cleanInstrumentValues(i.kind, i.values) } : null;
       return mapTrack(doc, cmd.trackId, (t) => {
         if (JSON.stringify(t.instrument ?? null) === JSON.stringify(clean)) return t;
         const { instrument: _old, ...rest } = t;

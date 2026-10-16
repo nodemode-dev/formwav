@@ -6,10 +6,21 @@ import { formatClock, parseTimecodeSeconds, timecodeRate } from "./shell";
 import { PALETTE } from "../engine/document";
 import { fitToRange } from "../engine/editing";
 import { PROCESSOR_BY_ID, PROCESSORS, processorValues } from "../engine/processors";
+import { INSTRUMENT_PARAMS, instrumentValues, isInstrumentKind, WAVE_NAMES, type InstrumentKind } from "../engine/instruments";
 
 const COLOURS = PALETTE.map((k) => `<option value="${k}">${k[0].toUpperCase()}${k.slice(1)}</option>`).join("");
 const PROCESSOR_OPTIONS = `<optgroup label="Studio processors">${PROCESSORS.map((p) => `<option value="processor:${p.id}">${p.name}</option>`).join("")}</optgroup>`;
 const rtKey = (f: TrackFx) => (f.kind === "processor" ? `rt:processor:${f.id}` : `rt:${f.kind}`);
+const INSTRUMENT_FIELDS = (Object.keys(INSTRUMENT_PARAMS) as InstrumentKind[])
+  .map((kind) => {
+    const fields = INSTRUMENT_PARAMS[kind].map((q) => {
+      if (q.unit === "wave") return `<label class="fw-q-field">${q.name} <select data-inst-param="${q.id}" aria-label="${q.name}">${WAVE_NAMES.map((w, i) => `<option value="${i}">${w}</option>`).join("")}</select></label>`;
+      const step = q.max - q.min > 100 ? 1 : q.unit === "s" ? 0.001 : 0.01;
+      return `<label class="fw-q-field">${q.name} <input type="number" min="${q.min}" max="${q.max}" step="${step}" value="${q.default}" data-inst-param="${q.id}" aria-label="${q.name}"></label>`;
+    });
+    return `<div data-inst-params="${kind}" hidden><div class="fw-analyze-buttons">${fields.join("")}</div></div>`;
+  })
+  .join("");
 import { loadPresets, savePresets, type Preset } from "../io/presets-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { inputDevices, inputSignature, onInputsChanged, refreshInputs, setTrackChannels, setTrackInput, setTrackMonitor, trackChannels, trackInput, trackMonitor } from "./inputs";
@@ -126,7 +137,8 @@ const BODY = `
   <div class="fw-rtfx-list" data-scope="track" data-empty="No realtime effects yet"></div>
   <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument (Pro Tools' MIDI effect plugins): its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option><option value="duration">Duration</option><option value="delay">Delay</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
   <div data-midifx-list></div>
-  <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
+  <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="subtractive">Subtractive synth</option><option value="drums">Drum synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
+  ${INSTRUMENT_FIELDS}
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fill-gaps title="Fill every gap between this track's clips with room tone (RX's Ambience Match under every edit): learned from half a second at each side, moving from the one background to the other across the gap">Fill gaps with room tone</button></div>
   <div data-stems></div>
   <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="voice">Dialogue isolate</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option>${PROCESSOR_OPTIONS}</select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
@@ -1239,7 +1251,22 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   instrumentRef = (track) => {
     const doc = engine.get("document");
     const inst = track.instrument;
-    const value = inst?.kind === "sampler" ? "sampler" : inst?.kind === "plugin" ? inst.id : "synth";
+    const value = inst?.kind === "sampler" ? "sampler" : inst?.kind === "plugin" ? inst.id : inst && isInstrumentKind(inst.kind) ? inst.kind : "synth";
+    for (const group of body.querySelectorAll<HTMLElement>("[data-inst-params]")) {
+      const kind = group.dataset.instParams as InstrumentKind;
+      const on = inst?.kind === kind;
+      if (group.hidden === on) group.hidden = !on;
+      if (!on) continue;
+      const values = instrumentValues(kind, (inst as { values?: Record<string, number> }).values);
+      INSTRUMENT_PARAMS[kind].forEach((q, i) => {
+        const el = group.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-inst-param="${q.id}"]`);
+        const text = String(Number(values[i].toFixed(4)));
+        if (el && document.activeElement !== el && el.dataset.shown !== text) {
+          el.value = text;
+          el.dataset.shown = text;
+        }
+      });
+    }
     if (instSel && document.activeElement !== instSel && instSel.value !== value) instSel.value = value;
     const sig = Object.values(doc.media).map((m) => `${m.id}:${m.name}`).join("|");
     if (sampleSel && sig !== mediaSig) {
@@ -1257,7 +1284,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (!hit || !instSel) return;
     const v = instSel.value;
     const label = instSel.selectedOptions[0]?.textContent ?? v;
-    const next: Instrument | null = v === "synth" ? null : v === "sampler" ? { kind: "sampler", media: sampleSel?.value ?? "", root: Number(rootField?.value ?? 60) } : { kind: "plugin", id: v, name: label.replace(/ \(CLAP\)$/, "") };
+    const had = hit.track.instrument;
+    const next: Instrument | null = v === "synth" ? null : v === "sampler" ? { kind: "sampler", media: sampleSel?.value ?? "", root: Number(rootField?.value ?? 60) } : isInstrumentKind(v) ? { kind: v, values: had?.kind === v ? (had as { values: Record<string, number> }).values : {} } : { kind: "plugin", id: v, name: label.replace(/ \(CLAP\)$/, "") };
     if (next?.kind === "sampler" && !next.media) {
       setText(notice, "Choose a clip to sample first");
       return;
@@ -1270,6 +1298,21 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     })();
   };
   instSel?.addEventListener("change", setInstrument);
+  // S14: a value of the subtractive or drum synth: kept by name on the track, the track's note clips played again
+  body.addEventListener("change", (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLInputElement | HTMLSelectElement>("[data-inst-param]");
+    const hit = el ? find(engine.get("document")) : null;
+    const inst = hit?.track.instrument;
+    if (!el || !hit || !inst || !isInstrumentKind(inst.kind)) return;
+    const n = Number(el.value);
+    if (!Number.isFinite(n)) return;
+    const values = { ...(inst as { values: Record<string, number> }).values, [el.dataset.instParam ?? ""]: n };
+    engine.dispatch({ type: "set-track-instrument", trackId: hit.track.id, instrument: { kind: inst.kind, values } });
+    const clips = (engine.get("document").tracks.find((t) => t.id === hit.track.id)?.clips ?? []).filter((c) => c.notes?.length);
+    void (async () => {
+      for (const c of clips) await renderNotes(engine, hit.track.id, c.id, c.notes ?? []).catch((err) => setText(notice, `Could not play the notes: ${err instanceof Error ? err.message : String(err)}`));
+    })();
+  });
   sampleSel?.addEventListener("change", setInstrument);
   rootField?.addEventListener("change", setInstrument);
 
