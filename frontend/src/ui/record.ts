@@ -44,6 +44,24 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
   } catch {
     prerollField?.setAttribute("data-storage", "none");
   }
+  // PLAN_v13 S13, post-roll: a punch keeps rolling this long after its out point (the take is cut at the out point)
+  const postrollField = host.querySelector<HTMLInputElement>("[data-postroll]");
+  const POSTROLL_KEY = "formwav.postrollSeconds";
+  const postrollSeconds = (): number => Math.min(10, Math.max(0, Number(postrollField?.value) || 0));
+  try {
+    const saved = localStorage.getItem(POSTROLL_KEY);
+    if (postrollField && saved !== null && postrollField.value !== saved) postrollField.value = saved;
+  } catch {
+    postrollField?.setAttribute("data-storage", "none");
+  }
+  postrollField?.addEventListener("change", () => {
+    if (postrollField.value !== String(postrollSeconds())) postrollField.value = String(postrollSeconds());
+    try {
+      localStorage.setItem(POSTROLL_KEY, postrollField.value);
+    } catch {
+      postrollField.setAttribute("data-storage", "none");
+    }
+  });
   prerollField?.addEventListener("change", () => {
     if (prerollField.value !== String(prerollSeconds())) prerollField.value = String(prerollSeconds());
     try {
@@ -366,7 +384,7 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
     if (!active || busy || !range) return;
     const wrapped = t.positionSamples < lastPosition;
     lastPosition = t.positionSamples;
-    if (t.positionSamples >= range.end || wrapped) void finish();
+    if (t.positionSamples >= range.end + Math.round(postrollSeconds() * engine.get("document").sampleRate) || wrapped) void finish();
   });
   renderRecording(engine.get("transport"));
 }
