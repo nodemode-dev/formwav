@@ -39,7 +39,7 @@ const SEPARATORS = [" · ", ": ", "; ", " (", ", "];
 const LETTERS = /\p{L}{2}/u;
 const PATH = /^\S*[/\\]\S*$/;
 const tables = import.meta.glob<Table>("../i18n/*.json", { import: "default" });
-const added = import.meta.glob<Table>("../i18n/added/*.json", { import: "default" });
+const added = import.meta.glob<Table>("../i18n/added/**/*.json", { import: "default" });
 
 let lang = "en";
 let table: Table = {};
@@ -181,8 +181,8 @@ export function onLanguage(fn: (code: string) => void): () => void {
 export async function setLanguage(code: string): Promise<void> {
   const next = LANGUAGES.some(([c]) => c === code) ? code : "en";
   const load = tables[`../i18n/${next}.json`];
-  const more = added[`../i18n/added/${next}.json`];
-  table = next === "en" || !load ? {} : { ...(await load()), ...(more ? await more() : {}) };
+  const more = Object.entries(added).filter(([path]) => path.endsWith(`/${next}.json`)).sort(([a], [b]) => a.localeCompare(b));
+  table = next === "en" || !load ? {} : Object.assign({}, await load(), ...(await Promise.all(more.map(([, read]) => read()))));
   lang = next;
   plural = new Intl.PluralRules(next);
   seen.clear();

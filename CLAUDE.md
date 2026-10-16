@@ -47,8 +47,9 @@ order of steps and how to recover; load it before driving formwav, and update it
 The interface is in 26 languages (PLAN_v14 W7): code writes English everywhere, and `frontend/src/ui/i18n.ts` translates
 text, title, aria-label, placeholder, data-empty and data-label in place from `frontend/src/i18n/<code>.json`, tables
 keyed by the English with numbers as {0}, {1} and the session's names and file names as {a}, {b}. A new or changed
-interface string needs an entry in all 25 languages, in a new file under `frontend/src/i18n/added/<code>.json`
-(merged over the base table; the base tables are left as generated): the interface test
+interface string needs an entry in all 25 languages, in new files `frontend/src/i18n/added/<topic>/<code>.json`
+(every added file for a language is merged over its base table; files once written are left as they are): the
+interface test
 `test_every_string_on_screen_has_a_translation_in_all_twenty_five_languages...` lists what is missing. Never find an
 element by its visible words or its aria-label in code (they are translated); use a data attribute. User content
 (names, transcripts, the agent's messages) is never translated; mark any new such container `translate="no"`.

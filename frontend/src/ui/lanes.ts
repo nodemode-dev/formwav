@@ -563,6 +563,7 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
   if (autoRows) {
     if (autoRows.hidden === autoOpen) autoRows.hidden = !autoOpen;
     if (autoOpen) {
+      laneDoc = doc;
       syncFxRow(node, track);
       for (const row of autoRows.querySelectorAll<HTMLElement>(".fw-auto-row")) if (!row.hidden) drawAutoLane(row, track, rowScale(row), spp);
     }
@@ -636,8 +637,13 @@ const AUTO_ROW_H = 48;
 const AUTO_INSET = 5;
 
 type AutoParam = "volume" | "pan";
-/** A row's scale: volume, pan, or a filter parameter (PT-19): frequency and Q logarithmic, as they are heard. */
-type AutoScale = AutoParam | "freq" | "gain" | "q";
+/** A row's scale: volume, pan, or a filter parameter (PT-19): frequency and Q logarithmic, as they are heard; S9's mute
+ *  (stepped, on at the top) and trim (as a gain). */
+type AutoScale = AutoParam | "freq" | "gain" | "q" | "mute" | "trim";
+/** S9: the lanes the third row offers beside the filters' parameters, by its data-fx. */
+const MORE_LANES = new Set(["mute", "trim", "vca", "send", "master"]);
+/** The session the lanes last drew, for rows whose points live outside the track (its VCA, a send's bus, the master). */
+let laneDoc: SessionDoc | null = null;
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
@@ -652,9 +658,12 @@ function autoFraction(param: AutoScale, value: number): number {
     case "freq":
       return clamp01(1 - Math.log(Math.max(20, value) / 20) / Math.log(1000));
     case "gain":
+    case "trim":
       return clamp01((24 - value) / 48);
     case "q":
       return clamp01(1 - Math.log(Math.max(0.1, value) / 0.1) / Math.log(180));
+    case "mute":
+      return value >= 0.5 ? 0.15 : 0.85;
   }
 }
 
@@ -668,9 +677,12 @@ function autoValue(param: AutoScale, frac: number): number {
     case "freq":
       return Math.round(20 * 1000 ** (1 - frac));
     case "gain":
+    case "trim":
       return Math.round((24 - 48 * frac) * 10) / 10;
     case "q":
       return Math.round(0.1 * 180 ** (1 - frac) * 100) / 100;
+    case "mute":
+      return frac < 0.5 ? 1 : 0;
   }
 }
 
@@ -678,7 +690,25 @@ function autoValue(param: AutoScale, frac: number): number {
 function rowScale(row: HTMLElement): AutoScale {
   const p = row.dataset.param;
   if (p === "volume" || p === "pan") return p;
+  const more = row.dataset.fx ?? "";
+  if (MORE_LANES.has(more)) return more === "mute" || more === "trim" ? more : "volume";
   return row.dataset.key === "gain" || row.dataset.key === "q" ? row.dataset.key : "freq";
+}
+
+/** S9: the points and the static value of a row for one of MORE_LANES. */
+function moreLane(row: HTMLElement, track: Track): { points: AutoPoint[]; fallback: number } | null {
+  const more = row.dataset.fx ?? "";
+  if (row.dataset.param !== "fx" || !MORE_LANES.has(more)) return null;
+  const doc = laneDoc;
+  if (more === "mute") return { points: track.automation?.mute ?? [], fallback: 0 };
+  if (more === "trim") return { points: track.automation?.trim ?? [], fallback: 0 };
+  if (more === "master") return { points: doc?.masterAutomation ?? [], fallback: doc?.masterGainDb ?? 0 };
+  if (more === "vca") {
+    const vca = (doc?.vcas ?? []).find((v) => v.id === track.vcaId);
+    return { points: vca?.automation ?? [], fallback: vca?.gainDb ?? 0 };
+  }
+  const send = (track.sends ?? []).find((s) => s.busId === row.dataset.key);
+  return { points: send?.automation ?? [], fallback: send?.gainDb ?? -12 };
 }
 
 /** The filter an effect row automates (its data-fx), or nothing when the track has no such filter. */
@@ -691,6 +721,8 @@ function rowFilter(row: HTMLElement, track: Track) {
 function rowPoints(row: HTMLElement, track: Track): AutoPoint[] {
   const p = row.dataset.param;
   if (p === "volume" || p === "pan") return track.automation?.[p] ?? [];
+  const more = moreLane(row, track);
+  if (more) return more.points;
   const key = rowScale(row);
   return key === "freq" || key === "gain" || key === "q" ? (rowFilter(row, track)?.automation?.[key] ?? []) : [];
 }
@@ -700,6 +732,8 @@ function rowStatic(row: HTMLElement, track: Track): number {
   const p = row.dataset.param;
   if (p === "volume") return track.gainDb;
   if (p === "pan") return track.pan ?? 0;
+  const more = moreLane(row, track);
+  if (more) return more.fallback;
   const f = rowFilter(row, track);
   const key = rowScale(row);
   return !f ? 0 : key === "gain" ? f.gainDb : key === "q" ? f.q : f.freq;
@@ -720,6 +754,14 @@ function syncFxRow(node: HTMLElement, track: Track): void {
     const keys: [string, string][] = f.kind === "highpass" || f.kind === "lowpass" ? [["freq", "Frequency"], ["q", "Q"]] : [["freq", "Frequency"], ["gain", "Gain"], ["q", "Q"]];
     for (const [key, label] of keys) options.push([`${i}:${key}`, `${i + 1} ${FILTER_NAMES[f.kind] ?? f.kind} · ${label}${f.automation?.[key as "freq"] ? " (automated)" : ""}`]);
   });
+  // S9: the track's mute and trim lanes, its VCA's, each send's and the master's
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  const doc = laneDoc;
+  const vca = (doc?.vcas ?? []).find((v) => v.id === track.vcaId);
+  options.push(["mute:", "Mute"], ["trim:", "Trim"]);
+  if (vca) options.push(["vca:", `VCA · ${esc(vca.name)}`]);
+  for (const s of track.sends ?? []) options.push([`send:${s.busId}`, `Send · ${esc((doc?.buses ?? []).find((b) => b.id === s.busId)?.name ?? "bus")}`]);
+  options.push(["master:", "Master volume"]);
   const none = options.length === 0;
   if (head.hidden !== none) head.hidden = none;
   if (row.hidden !== none) row.hidden = none;
@@ -733,7 +775,9 @@ function syncFxRow(node: HTMLElement, track: Track): void {
   if (value && select.value !== value) select.value = value;
   const [fx, key] = value.split(":");
   if (fx !== undefined && row.dataset.fx !== fx) row.dataset.fx = fx;
-  if (key && row.dataset.key !== key) row.dataset.key = key;
+  if (key !== undefined && row.dataset.key !== key) row.dataset.key = key;
+  const label = MORE_LANES.has(fx ?? "") ? "Automation of the lane chosen above" : "Effect parameter automation";
+  if (row.getAttribute("aria-label") !== label) row.setAttribute("aria-label", label);
 }
 
 /** Draws one automation row: the line through the points (held before the first and after the last), a circle per point; with no automation a dashed line shows the static fader or pan. */
@@ -746,7 +790,10 @@ function drawAutoLane(row: HTMLElement, track: Track, param: AutoScale, spp: num
   const x = (time: number) => (time / spp).toFixed(1);
   const fallback = rowStatic(row, track);
   const last = points[points.length - 1];
-  const coords = points.length
+  const steps = param === "mute" ? points.flatMap((p, i) => (i === 0 ? [`${x(p.time)},${y(p.value)}`] : [`${x(p.time)},${y(points[i - 1].value)}`, `${x(p.time)},${y(p.value)}`])) : null;
+  const coords = steps && last
+    ? [`0,${y(points[0].value)}`, ...steps, `${(last.time / spp + 100000).toFixed(1)},${y(last.value)}`]
+    : points.length
     ? [`0,${y(points[0].value)}`, ...points.map((p) => `${x(p.time)},${y(p.value)}`), `${(last.time / spp + 100000).toFixed(1)},${y(last.value)}`]
     : [`0,${y(fallback)}`, `100000,${y(fallback)}`];
   const attr = coords.join(" ");
@@ -996,7 +1043,14 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   /** A row's edit: volume and pan are the track's automation; the effect row is its chosen filter parameter's. */
   const commitAuto = (row: HTMLElement, trackId: string, points: AutoPoint[]) => {
     const key = rowScale(row);
-    if (row.dataset.param === "fx" && (key === "freq" || key === "gain" || key === "q")) engine.dispatch({ type: "set-fx-automation", trackId, fxIndex: Number(row.dataset.fx), param: key, points });
+    const more = row.dataset.param === "fx" ? row.dataset.fx ?? "" : "";
+    if (more === "mute" || more === "trim") engine.dispatch({ type: "set-automation", trackId, param: more, points });
+    else if (more === "master") engine.dispatch({ type: "set-master-automation", points });
+    else if (more === "send") engine.dispatch({ type: "set-send-automation", trackId, busId: row.dataset.key ?? "", points });
+    else if (more === "vca") {
+      const vcaId = engine.get("document").tracks.find((t) => t.id === trackId)?.vcaId;
+      if (vcaId) engine.dispatch({ type: "set-vca-automation", vcaId, points });
+    } else if (row.dataset.param === "fx" && (key === "freq" || key === "gain" || key === "q")) engine.dispatch({ type: "set-fx-automation", trackId, fxIndex: Number(row.dataset.fx), param: key, points });
     else engine.dispatch({ type: "set-automation", trackId, param: row.dataset.param === "pan" ? "pan" : "volume", points });
   };
   const autoPointAt = (row: HTMLElement, param: AutoScale, e: PointerEvent): AutoPoint => {

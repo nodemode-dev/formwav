@@ -29,6 +29,7 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
     `<select class="fw-strip-auto" aria-label="Automation mode" title="Read plays the automation; Write, Touch, Latch and Trim record the fader into it while playing; Off plays the fader, pan and filters as set and keeps the lanes"${kind !== "track" ? " hidden" : ""}><option value="off">Off</option><option value="read" selected>Read</option><option value="write">Write</option><option value="touch">Touch</option><option value="latch">Latch</option><option value="trim">Trim</option></select>` +
     `<label class="fw-strip-trim-row"${kind !== "track" ? " hidden" : ""}><span>Trim</span><input class="fw-strip-trim" type="range" min="-24" max="24" step="0.5" value="0" data-default="0" aria-label="Input trim" title="Input trim, dB, ahead of the inserts"></label>` +
     `<button type="button" class="fw-ibtn fw-strip-invert" aria-pressed="false" aria-label="Invert polarity" title="Invert the polarity, ahead of the inserts"${kind !== "track" ? " hidden" : ""}>Invert</button>` +
+    `<button type="button" class="fw-ibtn fw-strip-coalesce"${kind === "vca" ? "" : " hidden"} title="Write this VCA's level, its lane or its fader, into each of its tracks' volume and set the VCA back to 0 dB; the mix does not change">Coalesce</button>` +
     `<button type="button" class="fw-ibtn fw-strip-remove"${kind === "bus" || kind === "vca" ? "" : " hidden"} title="Remove; its tracks go back to the master or leave the VCA">Remove</button>` +
     `</div></details>`;
   return node;
@@ -406,6 +407,10 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     }
     const on = button.getAttribute("aria-pressed") !== "true";
     const vca = s.node.dataset.kind === "vca";
+    if (button.classList.contains("fw-strip-coalesce")) {
+      if (vca) engine.dispatch({ type: "coalesce-vca", vcaId: s.id });
+      return;
+    }
     if (button.classList.contains("fw-strip-remove")) {
       if (vca) engine.dispatch({ type: "remove-vca", vcaId: s.id });
       else if (s.bus) engine.dispatch({ type: "remove-bus", busId: s.id });

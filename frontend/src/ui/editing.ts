@@ -7,7 +7,8 @@
  */
 import type { Command, Engine } from "../engine";
 import type { Player } from "../audio/player";
-import { FADE_SHAPES, nextMemoryNumber, type FadeShape, type MediaRef, type Track } from "../engine/document";
+import { FADE_SHAPES, laneAt, nextMemoryNumber, type FadeShape, type MediaRef, type Track } from "../engine/document";
+import { clipGainToVolume, glideLane, thinLane, volumeToClipGain, writeLane } from "../engine/automation";
 import { clipTransients, consolidate, createFades, deleteFades, editSpan, fadeToPlayhead, findMemory, healSeparations, insertSilence, lockClips, muteClips, nextMemory, nextStop, nudgeClips, repeatSpan, separateOnGrid, shiftClips, snapClips, spaceClips, stripGaps, timeOperation, trimToFile, trimToFill, trimToPlayhead, trimToRange, type EditRange, type EditTarget, type MemoryLocation } from "../engine/editing";
 import { gridStepOf, NUDGE_DEFAULT, parseGrid } from "../engine/grid";
 import { setText } from "../vendor/nodemode/dom-stable";
@@ -502,6 +503,36 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     engine.dispatch({ type: "batch", commands, label: `Committed ${commands.length} track${commands.length === 1 ? "" : "s"}` });
     say(`Committed ${commands.length} track${commands.length === 1 ? "" : "s"}: one Undo takes them all back`);
   };
+  // S9: automation edits, each one undo step in its own words
+  const autoBatch = (track: Track, commands: Command[], label: string, none: string) => {
+    if (!commands.length) return say(none);
+    engine.dispatch({ type: "batch", commands, label: `${label} on ${track.name}` });
+    say(`${label} on ${track.name}`);
+  };
+  const thin = onTrack((track) => {
+    const commands: Command[] = [];
+    for (const [param, tol] of [["volume", 0.5], ["pan", 0.02], ["trim", 0.5]] as const) {
+      const lane = track.automation?.[param] ?? [];
+      const thinned = thinLane(lane, tol);
+      if (thinned.length < lane.length) commands.push({ type: "set-automation", trackId: track.id, param, points: thinned });
+    }
+    autoBatch(track, commands, "Thinned automation", `${track.name}'s automation has no point to spare`);
+  });
+  const rangeOn = (track: Track) => (range && range.trackId === track.id ? range : null);
+  const glide = onTrack((track) => {
+    const r = rangeOn(track);
+    if (!r) return say("Select a range on the track first: drag in a clip's upper half");
+    autoBatch(track, [{ type: "set-automation", trackId: track.id, param: "volume", points: glideLane(track.automation?.volume ?? [], r.start, r.end, track.gainDb) }], "Glided the volume", "");
+  });
+  const writeFader = onTrack((track) => {
+    const r = rangeOn(track);
+    if (!r) return say("Select a range on the track first: drag in a clip's upper half");
+    const lane = track.automation?.volume ?? [];
+    const value = laneAt(lane, engine.get("transport").positionSamples, track.gainDb);
+    autoBatch(track, [{ type: "set-automation", trackId: track.id, param: "volume", points: writeLane(lane, r.start, r.end, value, track.gainDb) }], "Wrote the volume", "");
+  });
+  const toClipGain = onTrack((track) => autoBatch(track, volumeToClipGain(track), "Moved the volume into clip gain", `${track.name} has no volume to move`));
+  const toVolume = onTrack((track) => autoBatch(track, clipGainToVolume(track), "Moved clip gain into the volume", `${track.name} has no clips`));
   const trackPop = host.querySelector(".fw-track-pop");
   trackPop?.append(
     item("New track", "", "Add an empty stereo track at the bottom", () => engine.dispatch({ type: "add-track" })),
@@ -536,6 +567,12 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     ),
     item("Commit", "⌥⇧C", "Render the track through its fader and effects onto a new track below it, and make the original inactive and hidden", () => void commitTrack()),
     item("Commit selected tracks", "", "Commit every track with a selected clip, or every track in the clicked track's folder, as one step", () => void commitTracks()),
+    sep(),
+    item("Thin automation", "", "Remove the volume, pan and trim points the lines can do without (within 0.5 dB)", thin),
+    item("Glide the volume across the selection", "", "A straight line across the selected range from the volume at its start to the volume at its end", glide),
+    item("Write the volume across the selection", "", "The volume at the playhead written across the selected range", writeFader),
+    item("Volume automation to clip gain", "", "Write the track's volume (its lane or its fader) into each clip's gain line and set the fader to 0 dB", toClipGain),
+    item("Clip gain to volume automation", "", "Write each clip's gain and gain line into the track's volume lane and set the clips to 0 dB", toVolume),
     sep(),
     Object.assign(document.createElement("span"), { className: "fw-menu-label", textContent: "Height" }),
     ...heights.map((h) =>
