@@ -107,6 +107,22 @@ def _cases() -> dict:
     )
     # PLAN_v13 S6: an inactive track left out of both plans, and its solo silencing nothing
     cases["inactive tracks"] = _doc([_track("t1", [_clip("c1", "a")]), _track("t2", [_clip("c2", "b")], inactive=True), _track("t3", [_clip("c3", "b")], inactive=True, solo=True)])
+    # PLAN_v13 S9: mute and trim lanes, a VCA lane, send lanes, a master lane, each folded into the one volume lane
+    ramp = [{"time": 0, "value": 0}, {"time": 48000, "value": -12}]
+    cases["automation depth"] = _doc(
+        [
+            _track("t1", [_clip("c1", "a", envelope=[{"at": 0, "db": 0}, {"at": 24000, "db": -6}])], gainDb=-3, vcaId="v1",
+                   automation={"volume": [{"time": 0, "value": -6}, {"time": 30000, "value": 0}], "mute": [{"time": 0, "value": 0}, {"time": 12000, "value": 1}, {"time": 20000, "value": 0}], "trim": [{"time": 6000, "value": 3}]},
+                   sends=[{"busId": "b1", "gainDb": -9, "automation": [{"time": 0, "value": -60}, {"time": 48000, "value": 0}]}]),
+            _track("t2", [_clip("c2", "a")], gainDb=2, vcaId="v1", sends=[{"busId": "b1", "gainDb": -6}]),
+            _track("t3", [_clip("c3", "a")], automation={"mute": [{"time": 24000, "value": 1}]}),
+            _track("t4", [_clip("c4", "a")], autoOff=True, automation={"trim": ramp}, sends=[{"busId": "b1", "gainDb": -3, "automation": ramp}]),
+        ],
+        buses=[{"id": "b1", "name": "b", "gainDb": 0, "pan": 0, "fx": []}],
+        vcas=[{"id": "v1", "name": "v", "gainDb": -4, "automation": [{"time": 0, "value": -4}, {"time": 96000, "value": 2}]}],
+        masterGainDb=-2,
+        masterAutomation=ramp,
+    )
     return cases
 
 
@@ -151,6 +167,8 @@ def _export_plan(doc: dict) -> dict:
         ],
         "master": [list(s) for s in (render._stage(f) for f in (doc.get("masterFx") or [])) if s],
         "panLaw": render.PAN_LAWS.get(doc.get("panLaw"), 0),
+        "masterDb": render.master_lane(doc)[0],
+        "masterPoints": [[t, v] for t, v in render.master_lane(doc)[1] or []] or None,
     }
 
 

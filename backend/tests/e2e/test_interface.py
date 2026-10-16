@@ -1061,3 +1061,56 @@ def test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_
     rows = page.evaluate(ROWS)
     assert [(r[0], r[1]) for r in rows[4:]] == [("1| 2| 240", "G4"), ("1| 2| 240", "B4")]
     assert _clean(page)["errors"] == []
+
+
+def test_the_more_lanes_row_draws_mute_trim_vca_send_and_master_lanes_coalesces_a_vca_and_the_track_menu_moves_volume_each_in_one_step(page, app_url):
+    import json
+
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
+    frames = int(ref["frames"])
+    doc = {"sampleRate": ref["sampleRate"], "media": {ref["id"]: ref}, "markers": [], "tracks": [
+        {"id": "t1", "name": "Voice", "channels": ref["channels"], "gainDb": -2, "mute": False, "solo": False, "vcaId": "v1", "sends": [{"busId": "b1", "gainDb": -9}], "clips": [{"id": "c1", "mediaId": ref["id"], "start": 0, "length": frames, "sourceIn": 0, "gainDb": 0}]},
+    ], "buses": [{"id": "b1", "name": "Verb", "gainDb": 0, "pan": 0}], "vcas": [{"id": "v1", "name": "Dialogue", "gainDb": -4}]}
+    _engine(app_url, "PUT", "/api/autosave", {"name": "Lanes", "document": doc})
+    try:
+        _open(page, app_url)
+        page.wait_for_selector("dialog.fw-ask-dialog[open]")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1")
+    finally:
+        _engine(app_url, "DELETE", "/api/autosave")
+    page.click('[data-agent-tab="history"]')
+    page.click(".fw-lane .fw-auto-toggle")
+    select = ".fw-lane select.fw-auto-fx"
+    options = page.evaluate(f"[...document.querySelector('{select}').options].map((o) => [o.value, o.textContent])")
+    assert options == [["mute:", "Mute"], ["trim:", "Trim"], ["vca:", "VCA · Dialogue"], ["send:b1", "Send · Verb"], ["master:", "Master volume"]]
+    row = '.fw-lane .fw-auto-row[data-param="fx"]'
+    for value, label in [("mute:", "Drew automation on Voice"), ("trim:", "Drew automation on Voice"), ("vca:", "Drew VCA automation"), ("send:b1", "Drew send automation on Voice"), ("master:", "Drew master automation")]:
+        page.select_option(select, value)
+        box = page.locator(row).bounding_box()
+        page.mouse.click(box["x"] + 150, box["y"] + box["height"] * 0.2)
+        _step(page, label)
+        assert page.locator(f"{row} circle").count() == 1
+    page.select_option(select, "mute:")
+    assert page.get_attribute(f"{row} circle", "cy") == f"{5 + 0.15 * (48 - 10):.1f}"
+    if page.locator(".fw-dock").is_hidden():
+        page.click('.fw-panel-toggle[data-pane="editor"]')
+    page.click('.fw-dock-tab[data-panel="mixer"]')
+    vca = '.fw-strip[data-kind="vca"]'
+    page.click(f"{vca} details.fw-strip-route > summary")
+    page.click(f"{vca} .fw-strip-coalesce")
+    _step(page, "Coalesced a VCA into its tracks")
+    _range(page, 2, 5)
+    _menu(page, "Track", "Write the volume across the selection")
+    _step(page, "Wrote the volume on Voice")
+    _range(page, 1, 6)
+    _menu(page, "Track", "Glide the volume across the selection")
+    _step(page, "Glided the volume on Voice")
+    _menu(page, "Track", "Volume automation to clip gain")
+    _step(page, "Moved the volume into clip gain on Voice")
+    _menu(page, "Track", "Clip gain to volume automation")
+    _step(page, "Moved clip gain into the volume on Voice")
+    page.select_option(select, "vca:")
+    assert page.locator(f"{row} circle").count() == 0
+    assert _clean(page)["errors"] == []
