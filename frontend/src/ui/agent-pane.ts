@@ -1,7 +1,11 @@
 import { rangesOf, sessionWords, type MediaWord, type SessionWord } from "./transcript-pane";
 import { commands, type CommandParam } from "./commands";
 import type { Engine, HistoryEntry, MediaRef, Track } from "../engine";
-import type { TrackFx } from "../engine/document";
+import type { Command, TrackFx } from "../engine/document";
+import { commandCatalogue, isCommandType } from "../engine/catalogue";
+import { describeCommand } from "../engine/describe";
+import { inspectSession } from "../engine/inspect";
+import { savedSessionName } from "./projects";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 import { KINDS } from "./editor-tabs";
 import { PANEL_ICONS } from "./shell";
@@ -504,6 +508,48 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
         const { c } = clipOf(i.track_id, i.clip_id);
         const out = await postJson("/api/providers/elevenlabs/transcribe", { media_id: c.mediaId, speakers: i.speakers || undefined });
         return { language: out.language, words: out.words };
+      },
+    },
+    // PLAN_v13 S12: the reducer's own commands for anything the tools above do not cover, and the whole session
+    {
+      name: "get_session_state",
+      description: "Everything in the open session: tracks (routing, sends, effects, automation, clips), buses and where each plays, VCAs, groups, the master, markers, regions, the loop, the tempo, meter and key maps, the playhead, the undo and redo steps and whether there are unsaved changes. Times in seconds.",
+      input_schema: obj({}),
+      run: () => {
+        const { done, undone } = engine.historyEntries();
+        const doc = engine.get("document");
+        return inspectSession(doc, {
+          playhead_s: sec(engine.get("transport").positionSamples),
+          undo: done.length ? done[done.length - 1].label : null,
+          redo: undone.length ? undone[undone.length - 1].label : null,
+          steps: done.length,
+          saved_as: savedSessionName(),
+          unsaved: savedSessionName() === null && doc.tracks.length > 0,
+        });
+      },
+    },
+    {
+      name: "list_document_commands",
+      description: "Every command the session's engine applies (engine/document.ts): its type, the History words it makes and its parameters with their types. Positions and lengths are in samples at the session's rate (sample_rate from get_session_state), levels in dB, ticks at 960 a quarter. Filter by words.",
+      input_schema: obj({ text: { type: "string", description: "Words to look for in the type, the words or the parameters" } }),
+      run: (i) => {
+        const text = String(i.text ?? "").toLowerCase();
+        return commandCatalogue(engine.get("document")).filter((c) => !text || `${c.type} ${c.label} ${c.params}`.toLowerCase().includes(text));
+      },
+    },
+    {
+      name: "apply_document_commands",
+      description: "Applies engine commands (each {type, ...parameters} as list_document_commands gives them) in order as one undoable step; answers whether the session changed and the History step it made. A command the session refuses leaves it as it was.",
+      input_schema: obj({ commands: { type: "array", description: "[{type, ...parameters}] in order" }, label: { type: "string", description: "The History step's words for several commands" } }, ["commands"]),
+      run: (i) => {
+        const list = (Array.isArray(i.commands) ? i.commands : []) as Json[];
+        const bad = list.find((c) => !isCommandType(c?.type));
+        if (!list.length || bad) throw new Error(bad ? `There is no engine command ${String(bad.type)}; call list_document_commands.` : "Give at least one command.");
+        const doc = engine.get("document");
+        const cmds = list as unknown as Command[];
+        const one = cmds.length === 1 ? cmds[0] : ({ type: "batch", commands: cmds, ...(i.label ? { label: String(i.label) } : {}) } as Command);
+        const changed = engine.dispatch(one) !== false && engine.get("document") !== doc;
+        return { changed, step: changed ? describeCommand(one, doc) : null };
       },
     },
   ];
