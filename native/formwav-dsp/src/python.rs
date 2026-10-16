@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0, processors = Vec::new(), bus_auto = Vec::new(), pan_law = 0))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0, processors = Vec::new(), bus_auto = Vec::new(), pan_law = 0, master_env = 0))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -33,6 +33,7 @@ fn render<'py>(
     processors: Vec<String>,
     bus_auto: Vec<(usize, usize, u8, u32)>,
     pan_law: u8,
+    master_env: u32,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let spec = |a: f32| processors.get(a as usize).map(String::as_str).unwrap_or("");
     let n_clips = clips.len();
@@ -50,6 +51,7 @@ fn render<'py>(
     for (points, db) in &envelopes {
         player.add_envelope(points, *db);
     }
+    player.set_master_envelope(master_env);
     for (index, (source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, gain_env, pan_env)) in clips.into_iter().enumerate() {
         player.add_clip(PlayClip { source, start, source_in, length, gain, pan, fade_in, fade_out, fade_shape, bus, track: 0, gain_env, pan_env });
         // PT-33: the clip's own compressor, if any, after `at` of its filters (its own EQ, ahead of its track's)

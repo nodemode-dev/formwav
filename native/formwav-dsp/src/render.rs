@@ -127,6 +127,8 @@ pub struct Player {
     loudness: Option<crate::loudness::LiveLoudness>,
     envelopes: Vec<Envelope>,
     master_gain: Option<f32>,
+    /// The master's volume automation (an envelope id, 0 for none), applied after the master chain.
+    master_env: u32,
     bus_peaks: Vec<(f32, f32)>,
     /// The session's sample rate, for designing filters (48 kHz when unset).
     rate: f32,
@@ -468,6 +470,20 @@ impl Player {
         self.master_gain = if db == 0.0 { None } else { Some(10f64.powf(db / 20.0) as f32) };
     }
 
+    /// The master's volume automation: an envelope from add_envelope (dB points), 0 for none. It plays after the
+    /// master chain and with the master fader, on the session's own time.
+    pub fn set_master_envelope(&mut self, id: u32) {
+        self.master_env = id;
+    }
+
+    fn master_ramp(&self, from: u64, out: &mut [f32]) {
+        if let Some(env) = self.envelope(self.master_env) {
+            for (j, v) in out.iter_mut().enumerate() {
+                *v *= env.value_at(from + j as u64);
+            }
+        }
+    }
+
     /// Adds an envelope from (time, value) points and returns its 1-based index. With `db`, values are dB
     /// and are converted to linear gain here, once, so every caller gets the same gains.
     pub fn add_envelope(&mut self, points: &[(u64, f64)], db: bool) -> u32 {
@@ -534,6 +550,10 @@ impl Player {
             }
             for s in self.master_fx.iter_mut() {
                 s.process_block(&mut left[done..done + len], &mut right[done..done + len]);
+            }
+            if self.master_env != 0 {
+                self.master_ramp(from, &mut left[done..done + len]);
+                self.master_ramp(from, &mut right[done..done + len]);
             }
             self.meter_tracks(from, len);
             done += len;
@@ -675,6 +695,11 @@ impl Player {
                         out[pair.0][j] = l;
                         out[pair.1][j] = r;
                     }
+                }
+            }
+            if self.master_env != 0 {
+                for c in out.iter_mut() {
+                    self.master_ramp(from, &mut c[done..done + len]);
                 }
             }
             self.meter_tracks(from, len); // the mixer's track meters keep moving while the 5.1 bus plays

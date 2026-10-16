@@ -390,6 +390,12 @@ pub unsafe extern "C" fn fw_set_master_db(player: *mut Player, db: f64) {
     (*player).set_master_db(db);
 }
 
+/// Sets the master's volume automation to an envelope from fw_add_envelope (0 for none).
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_master_envelope(player: *mut Player, id: u32) {
+    (*player).set_master_envelope(id);
+}
+
 /// Adds an envelope from `count` (time, value) f64 pairs at `points`; `db` != 0 means dB values. Returns its 1-based index.
 #[no_mangle]
 pub unsafe extern "C" fn fw_add_envelope(player: *mut Player, points: *const f64, count: u32, db: u32) -> u32 {
