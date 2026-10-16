@@ -188,6 +188,33 @@ export interface AutoPoint {
   value: number;
 }
 
+/** A lane as the document keeps it: whole sample times, one point a time (the last given wins), values held to the
+ *  range and to hundredths, or to 0 and 1 for a stepped lane, in time order. */
+export function cleanLane(points: readonly AutoPoint[], lo: number, hi: number, stepped = false): AutoPoint[] {
+  const byTime = new Map<number, number>();
+  for (const p of points) {
+    if (!Number.isFinite(p.time) || !Number.isFinite(p.value)) continue;
+    byTime.set(Math.max(0, Math.round(p.time)), stepped ? (p.value >= 0.5 ? 1 : 0) : Math.min(hi, Math.max(lo, Math.round(p.value * 100) / 100)));
+  }
+  return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
+}
+
+export function sameLane(a: readonly AutoPoint[], b: readonly AutoPoint[]): boolean {
+  return a.length === b.length && a.every((p, i) => p.time === b[i].time && p.value === b[i].value);
+}
+
+/** A lane's value at a time, linear between points and held before the first and after the last; `fallback` with none. */
+export function laneAt(points: readonly AutoPoint[], time: number, fallback: number): number {
+  if (!points.length) return fallback;
+  if (time <= points[0].time) return points[0].value;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (time <= b.time) return b.time === a.time ? b.value : a.value + ((b.value - a.value) * (time - a.time)) / (b.time - a.time);
+  }
+  return points[points.length - 1].value;
+}
+
 /** A realtime filter the audio core runs live in playback and export alike. */
 export interface FilterFx {
   kind: "highpass" | "lowpass" | "peak" | "lowshelf" | "highshelf";
@@ -465,8 +492,9 @@ export interface Track {
   /** PT-15: what plays a note track's clips: the built-in synth when absent, a sampler (a session media re-pitched
    *  from its root note) or a CLAP instrument from the plugin folder. */
   instrument?: Instrument;
-  /** Volume (dB) and pan automation; when present each replaces the track's static fader or pan. */
-  automation?: { volume?: AutoPoint[]; pan?: AutoPoint[] };
+  /** Volume (dB) and pan automation; when present each replaces the track's static fader or pan. S9: mute (1 muted,
+   *  0 not, held from each point to the next) and trim (dB, added to the volume, its own lane or the fader). */
+  automation?: { volume?: AutoPoint[]; pan?: AutoPoint[]; mute?: AutoPoint[]; trim?: AutoPoint[] };
   id: string;
   name: string;
   channels: number;
@@ -487,7 +515,7 @@ export interface Track {
   /** AU-30's per-track view: this track shown as a spectrogram whatever the session-wide view is. */
   view?: "spectrogram";
   /** PT-18: post-fader sends, this track's signal (after its inserts and fader) also fed to a bus at a level. */
-  sends?: { busId: string; gainDb: number }[];
+  sends?: { busId: string; gainDb: number; automation?: AutoPoint[] }[];
   /** PT-14, Pro Tools' playlists: the active playlist's name (its clips are `clips`, which play and export) and the
    *  other playlists, stashed with their clips until switched in. */
   playlist?: string;
@@ -605,6 +633,8 @@ export interface SessionDoc {
   view?: SessionView;
   /** Master fader in dB, applied after the buses; absent means 0 dB. */
   masterGainDb?: number;
+  /** S9: the master's volume automation (dB), after the master effects; replaces the master fader while present. */
+  masterAutomation?: AutoPoint[];
   /** The pan law for a mono source: -3, -4.5 or -6 dB at the centre; absent is the balance every session had (0 dB). */
   panLaw?: "-3" | "-4.5" | "-6";
   /** Media folders in the media pane: a media id to its folder's name; media absent here is in no folder. */
@@ -648,6 +678,8 @@ export interface Vca {
   name: string;
   gainDb: number;
   mute?: boolean;
+  /** S9: the VCA's volume automation (dB), replacing its fader for every member while present. */
+  automation?: AutoPoint[];
 }
 
 export interface Bus {
@@ -687,7 +719,11 @@ export type Command =
   | { type: "set-synth"; patch: Partial<SynthPatch> }
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
   | { type: "comp-range"; trackId: string; clipId: string; from: number; to: number; take: number }
-  | { type: "set-automation"; trackId: string; param: "volume" | "pan"; points: AutoPoint[] }
+  | { type: "set-automation"; trackId: string; param: "volume" | "pan" | "mute" | "trim"; points: AutoPoint[] }
+  | { type: "set-vca-automation"; vcaId: string; points: AutoPoint[] }
+  | { type: "set-master-automation"; points: AutoPoint[] }
+  | { type: "set-send-automation"; trackId: string; busId: string; points: AutoPoint[] }
+  | { type: "coalesce-vca"; vcaId: string }
   | { type: "set-clip-group"; clipIds: string[]; groupId: string | null }
   | { type: "set-track-fx"; trackId: string; fx: TrackFx[] }
   /** One filter's parameter automation (PT-19); empty points remove it. */
@@ -1027,13 +1063,20 @@ export function mapLanes(track: Track, fn: (points: readonly AutoPoint[], gain: 
     changed = true;
     return next as unknown as T;
   };
-  const automation = track.automation ? { ...track.automation, volume: lane(track.automation.volume, true), pan: lane(track.automation.pan, false) } : undefined;
+  const stepped = (points: AutoPoint[] | undefined) => points?.map((p) => (p.value === 0 || p.value === 1 ? p : { ...p, value: p.value >= 0.5 ? 1 : 0 }));
+  const automation = track.automation
+    ? { ...track.automation, volume: lane(track.automation.volume, true), pan: lane(track.automation.pan, false), mute: stepped(lane(track.automation.mute, false)), trim: lane(track.automation.trim, false) }
+    : undefined;
+  const sends = track.sends?.map((s) => {
+    const next = lane(s.automation, true);
+    return next === s.automation ? s : { ...s, automation: next };
+  });
   const fx = track.fx?.map((f) => {
     if (!("automation" in f) || !f.automation) return f;
     const auto = { ...f.automation, freq: lane(f.automation.freq, false), gain: lane(f.automation.gain, false), q: lane(f.automation.q, false) };
     return auto.freq === f.automation.freq && auto.gain === f.automation.gain && auto.q === f.automation.q ? f : { ...f, automation: auto };
   });
-  return changed ? { ...track, ...(automation ? { automation } : {}), ...(fx ? { fx } : {}) } : track;
+  return changed ? { ...track, ...(automation ? { automation } : {}), ...(fx ? { fx } : {}), ...(sends ? { sends } : {}) } : track;
 }
 
 /** Markers (but those on a clip, which follow it), regions and the loop with `length` samples opened at `at`. */
@@ -1226,15 +1269,20 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
               automation: {
                 volume: t.automation.volume?.map((p) => ({ ...p, time: at(p.time) })),
                 pan: t.automation.pan?.map((p) => ({ ...p, time: at(p.time) })),
+                mute: t.automation.mute?.map((p) => ({ ...p, time: at(p.time) })),
+                trim: t.automation.trim?.map((p) => ({ ...p, time: at(p.time) })),
               },
             }
           : {}),
+        ...(t.sends ? { sends: t.sends.map((s) => (s.automation ? { ...s, automation: s.automation.map((p) => ({ ...p, time: at(p.time) })) } : s)) } : {}),
       }));
       return {
         ...doc,
         sampleRate: cmd.sampleRate,
         media,
         tracks,
+        ...(doc.vcas ? { vcas: doc.vcas.map((v) => (v.automation ? { ...v, automation: v.automation.map((p) => ({ ...p, time: at(p.time) })) } : v)) } : {}),
+        ...(doc.masterAutomation ? { masterAutomation: doc.masterAutomation.map((p) => ({ ...p, time: at(p.time) })) } : {}),
         markers: doc.markers.map((m) => ({ ...m, at: at(m.at) })),
         ...(doc.regions ? { regions: doc.regions.map((g) => ({ ...g, start: at(g.start), end: at(g.end) })) } : {}),
         ...(doc.loop ? { loop: { ...doc.loop, start: at(doc.loop.start), end: at(doc.loop.end) } } : {}),
@@ -1520,18 +1568,66 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "set-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
-        const [lo, hi] = cmd.param === "volume" ? [-60, 12] : [-1, 1];
-        const byTime = new Map<number, number>();
-        for (const p of cmd.points) {
-          if (!Number.isFinite(p.time) || !Number.isFinite(p.value)) continue;
-          byTime.set(Math.max(0, Math.round(p.time)), Math.min(hi, Math.max(lo, Math.round(p.value * 100) / 100)));
-        }
-        const points = [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
+        const [lo, hi] = cmd.param === "volume" ? [-60, 12] : cmd.param === "trim" ? [-24, 24] : cmd.param === "mute" ? [0, 1] : [-1, 1];
+        const points = cleanLane(cmd.points, lo, hi, cmd.param === "mute");
         const current = t.automation?.[cmd.param] ?? [];
-        if (points.length === current.length && points.every((p, i) => p.time === current[i].time && p.value === current[i].value)) return t;
+        if (sameLane(points, current)) return t;
         const automation = { ...t.automation, [cmd.param]: points.length ? points : undefined };
         return { ...t, automation };
       });
+    case "set-vca-automation": {
+      const points = cleanLane(cmd.points, -60, 12);
+      let changed = false;
+      const vcas = (doc.vcas ?? []).map((v) => {
+        if (v.id !== cmd.vcaId || sameLane(points, v.automation ?? [])) return v;
+        changed = true;
+        const { automation: _old, ...rest } = v;
+        return points.length ? { ...rest, automation: points } : rest;
+      });
+      return changed ? { ...doc, vcas } : doc;
+    }
+    case "set-master-automation": {
+      const points = cleanLane(cmd.points, -60, 12);
+      if (sameLane(points, doc.masterAutomation ?? [])) return doc;
+      const { masterAutomation: _old, ...rest } = doc;
+      return points.length ? { ...rest, masterAutomation: points } : rest;
+    }
+    case "set-send-automation": {
+      const points = cleanLane(cmd.points, -60, 12);
+      return mapTrack(doc, cmd.trackId, (t) => {
+        const send = (t.sends ?? []).find((s) => s.busId === cmd.busId);
+        if (!send || sameLane(points, send.automation ?? [])) return t;
+        return { ...t, sends: (t.sends ?? []).map((s) => (s.busId !== cmd.busId ? s : points.length ? { ...s, automation: points } : { busId: s.busId, gainDb: s.gainDb })) };
+      });
+    }
+    case "coalesce-vca": {
+      // S9 (Pro Tools' Coalesce VCA): the VCA's level, its lane or its fader, written into each member's volume
+      // (its lane, or one made from its fader), and the VCA back to 0 dB with no lane; the mix is unchanged
+      const vca = (doc.vcas ?? []).find((v) => v.id === cmd.vcaId);
+      if (!vca) return doc;
+      const lane = vca.automation ?? [];
+      if (!lane.length && vca.gainDb === 0) return doc;
+      const tracks = doc.tracks.map((t) => {
+        if (t.vcaId !== vca.id) return t;
+        const own = t.automation?.volume ?? [];
+        // sampled as the player combines lanes (each linear in gain, eight steps a span), so the mix does not move
+        const base = [...new Set([...own.map((p) => p.time), ...lane.map((p) => p.time)])].sort((a, b) => a - b);
+        const times = new Set(base);
+        for (let i = 0; i + 1 < base.length && own.length && lane.length; i++) for (let k = 1; k < 8; k++) times.add(Math.round(base[i] + ((base[i + 1] - base[i]) * k) / 8));
+        const at = (pts: readonly AutoPoint[], time: number, fallback: number) => (pts.length ? laneValue(pts, time, true) : fallback);
+        const volume = times.size
+          ? cleanLane([...times].sort((a, b) => a - b).map((time) => ({ time, value: at(own, time, t.gainDb) + at(lane, time, vca.gainDb) })), -60, 12)
+          : [];
+        if (!volume.length) return { ...t, gainDb: Math.max(-60, Math.min(12, Math.round((t.gainDb + vca.gainDb) * 100) / 100)) };
+        return { ...t, automation: { ...t.automation, volume } };
+      });
+      const vcas = (doc.vcas ?? []).map((v) => {
+        if (v.id !== vca.id) return v;
+        const { automation: _old, ...rest } = v;
+        return { ...rest, gainDb: 0 };
+      });
+      return { ...doc, tracks, vcas };
+    }
     case "comp-range":
       return mapTrack(doc, cmd.trackId, (t) => {
         const index = t.clips.findIndex((c) => c.id === cmd.clipId);
