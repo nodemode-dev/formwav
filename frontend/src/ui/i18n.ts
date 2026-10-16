@@ -37,6 +37,7 @@ const NUM = /-?\d+(?:[.,]\d+)?/g;
 const FILE = /[^\s"'()]+\.(?:wav|mp3|flac|aiff?|ogg|opus|m4a|mp4|mov|webm|fmw|otioz|aaf|json|mid|midi|txt|srt|vtt)\b/gi;
 const SEPARATORS = [" · ", ": ", "; ", " (", ", "];
 const LETTERS = /\p{L}{2}/u;
+const PATH = /^\S*[/\\]\S*$/;
 const tables = import.meta.glob<Table>("../i18n/*.json", { import: "default" });
 
 let lang = "en";
@@ -80,7 +81,7 @@ export function keyOf(text: string): { key: string; nums: string[]; named: strin
 }
 
 function lookup(norm: string, depth = 0): string | null {
-  if (!LETTERS.test(norm)) return norm;
+  if (!LETTERS.test(norm) || PATH.test(norm)) return norm;
   const exact = pick(table[norm], undefined);
   if (exact !== undefined) return exact;
   const { key, nums, named } = keyOf(norm);
@@ -232,7 +233,7 @@ function keys(): string[] {
   const out = new Set<string>();
   const add = (s: string | null) => {
     const { key } = keyOf(s ?? "");
-    if (LETTERS.test(key.replace(/\{[0-9a-z]\}/g, ""))) out.add(key);
+    if (LETTERS.test(key.replace(/\{[0-9a-z]\}/g, "")) && !PATH.test(key)) out.add(key);
   };
   const texts = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = texts.nextNode(); n; n = texts.nextNode()) if (!skipped(n.parentElement)) add(english.get(n as Text) ?? (n as Text).data);
