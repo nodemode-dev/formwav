@@ -1,5 +1,5 @@
 import type { Clip, Engine, MediaRef, SessionDoc, Track } from "../engine";
-import { documentLength, fadeCurve, nextFadeShape, sessionLength, type AutoPoint, type SessionView } from "../engine/document";
+import { documentLength, fadeCurve, groupPeers, nextFadeShape, sessionLength, type AutoPoint, type SessionView } from "../engine/document";
 import { copyRange, pasteRange, type RangeClip } from "../engine/editing";
 import { icon as fcIcon } from "../vendor/formcut/icons";
 import { fetchPeaks, type PeakData } from "../io/media-client";
@@ -1119,7 +1119,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   });
 
   /** Smart Tool range (interface state): a time range on one track, made by dragging in a clip's upper half. */
-  let range: { trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number }; mask?: { from: number; to: number; low: number; high: number }[] } | null = null;
+  let range: { trackId: string; start: number; end: number; more?: string[]; band?:{ lowHz: number; highHz: number }; mask?: { from: number; to: number; low: number; high: number }[] } | null = null;
   let rangeBand: { top: number; height: number } | null = null;
   let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean; y0: number; clipTop: number; clipHeight: number; bodyTop: number; nyquist: number; spectral: boolean; dabs?: { at: number; hz: number; low: number; high: number; x: number; y: number }[] } | null = null;
   // AA-06: with the heal brush on (the Inspector sets body[data-heal-brush]), a drag in the spectrogram view paints dabs
@@ -1144,6 +1144,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const body = range ? lanes.querySelector<HTMLElement>(`.fw-lane[data-key="${range.trackId}"] .fw-lane-body`) : null;
     if (!range || !body) {
       if (!rangeBox.hidden) rangeBox.hidden = true;
+      for (const box of moreBoxes) if (!box.hidden) box.hidden = true;
       return;
     }
     if (rangeBox.parentElement !== body) body.append(rangeBox);
@@ -1159,7 +1160,22 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (rangeBox.style.height !== height) rangeBox.style.height = height;
     if (rangeBox.style.bottom !== bottom) rangeBox.style.bottom = bottom;
     if (rangeBox.hidden) rangeBox.hidden = false;
+    // S10: the range's other tracks (an edit group's, or Shift-clicked names) each show the same span
+    const more = range.more ?? [];
+    while (moreBoxes.length < more.length) moreBoxes.push(Object.assign(document.createElement("div"), { className: "fw-range" }));
+    moreBoxes.forEach((box, i) => {
+      const at = i < more.length ? lanes.querySelector<HTMLElement>(`.fw-lane[data-key="${more[i]}"] .fw-lane-body`) : null;
+      if (!at) {
+        if (!box.hidden) box.hidden = true;
+        return;
+      }
+      if (box.parentElement !== at) at.append(box);
+      if (box.style.transform !== transform) box.style.transform = transform;
+      if (box.style.width !== width) box.style.width = width;
+      if (box.hidden) box.hidden = false;
+    });
   };
+  const moreBoxes: HTMLElement[] = [];
   const clearRange = () => {
     for (const dot of brushDots.splice(0)) dot.remove();
     if (!range) return;
@@ -1169,7 +1185,23 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     drawRange();
   };
   lanes.addEventListener("fw-lanes-rendered", drawRange);
-  lanes.addEventListener("pointerdown", () => clearRange(), true);
+  lanes.addEventListener(
+    "pointerdown",
+    (e) => {
+      // S10: Shift on a track's name adds that track to the range, or takes it out
+      const head = e.shiftKey && range && !range.mask ? (e.target as HTMLElement).closest<HTMLElement>(".fw-lane-head") : null;
+      const id = head?.closest<HTMLElement>(".fw-lane")?.dataset.key;
+      if (!range || !id || (e.target as HTMLElement).closest("button, input, select")) return clearRange();
+      if (id === range.trackId) return;
+      const more = range.more?.includes(id) ? range.more.filter((x) => x !== id) : [...(range.more ?? []), id];
+      const { more: _old, ...rest } = range;
+      range = more.length ? { ...rest, more } : rest;
+      e.stopPropagation();
+      lanes.dispatchEvent(new CustomEvent("fw-range", { bubbles: true, detail: range }));
+      drawRange();
+    },
+    true,
+  );
   // PT-09: warp markers. Dragging one re-times the audio on either side of it, each side kept within half to twice its
   // speed (as the engine allows); on release the clip is rendered again from its original and the new media and
   // markers land as one undo step. Double-clicking one removes it; removing the last restores the original.
@@ -1338,7 +1370,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       d.moved = true;
       const a = rangeAt(d.body, d.x0);
       const b = rangeAt(d.body, e.clientX);
-      range = { trackId: d.trackId, start: Math.min(a, b), end: Math.max(a, b) };
+      const peers = groupPeers(engine.get("document"), d.trackId, "edit");
+      range = { trackId: d.trackId, start: Math.min(a, b), end: Math.max(a, b), ...(peers.size && !d.spectral ? { more: engine.get("document").tracks.filter((t) => peers.has(t.id)).map((t) => t.id) } : {}) };
       rangeBand = null;
       if (d.spectral && Math.abs(e.clientY - d.y0) >= 4) {
         const clampY = (y: number) => Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, y));
@@ -2201,13 +2234,15 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     else if (range && (e.key === "Delete" || e.key === "Backspace")) {
       const r = range;
       clearRange();
-      engine.dispatch({ type: "clear-range", trackId: r.trackId, start: r.start, end: r.end, ripple: shuffleEnabled(), follow: "tracks" });
+      const ids = [r.trackId, ...(r.more ?? [])];
+      const cleared = ids.map((trackId) => ({ type: "clear-range" as const, trackId, start: r.start, end: r.end, ripple: shuffleEnabled(), follow: "tracks" as const }));
+      engine.dispatch(cleared.length > 1 ? { type: "batch", commands: cleared } : cleared[0]);
     } else if (range && e.key.toLowerCase() === "s") {
       const r = range;
-      const clips = engine.get("document").tracks.find((t) => t.id === r.trackId)?.clips ?? [];
+      const ids = [r.trackId, ...(r.more ?? [])];
       // End first: a split keeps the left piece's id, so the start split still finds the same clip.
-      const commands = clips.flatMap((c) =>
-        [r.end, r.start].filter((at) => at > c.start && at < c.start + c.length).map((at) => ({ type: "split-clip" as const, trackId: r.trackId, clipId: c.id, at })),
+      const commands = engine.get("document").tracks.filter((t) => ids.includes(t.id)).flatMap((t) =>
+        t.clips.flatMap((c) => [r.end, r.start].filter((at) => at > c.start && at < c.start + c.length).map((at) => ({ type: "split-clip" as const, trackId: t.id, clipId: c.id, at }))),
       );
       if (commands.length) engine.dispatch({ type: "batch", commands });
     } else if (range && e.key === "Escape") clearRange();

@@ -8,6 +8,8 @@ export interface EditRange {
   trackId: string;
   start: number;
   end: number;
+  /** S10: the range's other tracks (an edit group's, or ones Shift-clicked in) */
+  more?: readonly string[];
 }
 
 /** What an edit acts on, as the lanes hold it: a range on one track, or selected clips. */
@@ -48,10 +50,11 @@ export function clipPiece(doc: SessionDoc, c: Clip, a: number, b: number): Omit<
 export function editSpan(doc: SessionDoc, target: EditTarget): { trackIds: string[]; start: number; end: number; pieces: Piece[] } | null {
   const r = target.range;
   if (r && r.end > r.start) {
-    const track = doc.tracks.find((t) => t.id === r.trackId);
-    if (!track) return null;
-    const pieces = track.clips.filter((c) => c.start < r.end && c.start + c.length > r.start).map((c) => ({ trackId: track.id, clip: clipPiece(doc, c, r.start, r.end) }));
-    return { trackIds: [track.id], start: r.start, end: r.end, pieces };
+    const ids = [r.trackId, ...(r.more ?? [])];
+    const tracks = doc.tracks.filter((t) => ids.includes(t.id));
+    if (!tracks.some((t) => t.id === r.trackId)) return null;
+    const pieces = tracks.flatMap((track) => track.clips.filter((c) => c.start < r.end && c.start + c.length > r.start).map((c) => ({ trackId: track.id, clip: clipPiece(doc, c, r.start, r.end) })));
+    return { trackIds: tracks.map((t) => t.id), start: r.start, end: r.end, pieces };
   }
   const ids = new Set(target.clipIds);
   const chosen = doc.tracks.flatMap((t) => t.clips.filter((c) => ids.has(c.id)).map((clip) => ({ trackId: t.id, clip })));

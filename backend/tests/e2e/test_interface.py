@@ -1116,3 +1116,63 @@ def test_the_more_lanes_row_draws_mute_trim_vca_send_and_master_lanes_coalesces_
     page.select_option(select, "vca:")
     assert page.locator(f"{row} circle").count() == 0
     assert _clean(page)["errors"] == []
+
+
+def test_every_send_shows_on_the_strip_with_pre_mute_and_pan_a_bus_plays_into_a_bus_and_groups_link_faders_and_ranges(page, app_url):
+    import json
+
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
+    frames = int(ref["frames"])
+    track = lambda tid, name, gain: {"id": tid, "name": name, "channels": ref["channels"], "gainDb": gain, "mute": False, "solo": False, "clips": [{"id": f"c{tid}", "mediaId": ref["id"], "start": 0, "length": frames, "sourceIn": 0, "gainDb": 0}]}
+    doc = {"sampleRate": ref["sampleRate"], "media": {ref["id"]: ref}, "markers": [], "tracks": [track("t1", "Voice", 0), track("t2", "Room", -6)],
+           "buses": [{"id": "b1", "name": "Verb", "gainDb": 0, "pan": 0}, {"id": "b2", "name": "Stem", "gainDb": 0, "pan": 0}]}
+    _engine(app_url, "PUT", "/api/autosave", {"name": "Routing", "document": doc})
+    try:
+        _open(page, app_url)
+        page.wait_for_selector("dialog.fw-ask-dialog[open]")
+        page.keyboard.press("Enter")
+        page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
+    finally:
+        _engine(app_url, "DELETE", "/api/autosave")
+    page.click('[data-agent-tab="history"]')
+    _range(page, 1, 3)
+    page.click('.fw-lane[data-key="t2"] .fw-lane-head', modifiers=["Shift"], position={"x": 40, "y": 8})
+    page.wait_for_function("[...document.querySelectorAll('.fw-range')].filter((r) => !r.hidden).length === 2")
+    _menu(page, "Track", "Group selected tracks...")
+    page.wait_for_selector("dialog.fw-ask-dialog[open]")
+    page.keyboard.press("Enter")
+    _step(page, "Grouped tracks")
+    page.keyboard.press("Escape")
+    _range(page, 1, 3)
+    page.wait_for_function("[...document.querySelectorAll('.fw-range')].filter((r) => !r.hidden).length === 2")
+    page.keyboard.press("s")
+    page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 6")
+    if page.locator(".fw-dock").is_hidden():
+        page.click('.fw-panel-toggle[data-pane="editor"]')
+    page.click('.fw-dock-tab[data-panel="mixer"]')
+    t1, t2 = '.fw-strip[data-key="t1"]', '.fw-strip[data-key="t2"]'
+    page.evaluate(f"(() => {{ const f = document.querySelector('{t1} .fw-strip-fader'); f.value = '-3'; f.dispatchEvent(new Event('change', {{ bubbles: true }})); }})()")
+    _step(page, "Changed the volume of Voice")
+    page.wait_for_function(f"document.querySelector('{t2} .fw-strip-fader').value === '-9'")
+    page.click(f"{t1} details.fw-strip-route > summary")
+    page.select_option(f"{t1} .fw-strip-send", "b1")
+    _step(page, "Changed a send on Voice")
+    row = f'{t1} .fw-send-row[data-key="b1"]'
+    assert page.text_content(f"{row} .fw-send-name") == "Verb"
+    assert page.evaluate(f"[...document.querySelector('{t1} .fw-strip-send').options].map((o) => o.value)") == ["", "b2"]
+    page.click(f"{row} .fw-send-pre")
+    page.wait_for_function(f"document.querySelector('{row} .fw-send-pre').getAttribute('aria-pressed') === 'true'")
+    page.click(f"{row} .fw-send-mute")
+    page.wait_for_function(f"document.querySelector('{row} .fw-send-mute').getAttribute('aria-pressed') === 'true'")
+    page.click(f"{row} .fw-send-remove")
+    page.wait_for_function(f"!document.querySelector('{row}')")
+    page.click(f"{t1} details.fw-strip-route > summary")
+    b1, b2 = '.fw-strip[data-key="b1"]', '.fw-strip[data-key="b2"]'
+    page.click(f"{b1} details.fw-strip-route > summary")
+    page.select_option(f"{b1} .fw-strip-bus-out", "b2")
+    _step(page, "Routed a bus")
+    assert page.evaluate(f"[...document.querySelector('{b2} .fw-strip-bus-out').options].map((o) => o.value)") == [""]
+    _menu(page, "Track", "Ungroup")
+    _step(page, "Ungrouped tracks")
+    assert _clean(page)["errors"] == []

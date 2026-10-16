@@ -33,7 +33,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
   let clipIds: readonly string[] = [];
   host.addEventListener("fw-range", (e) => {
     const d = (e as CustomEvent<EditRange | null>).detail;
-    range = d && d.end > d.start ? { trackId: d.trackId, start: d.start, end: d.end } : null;
+    range = d && d.end > d.start ? { trackId: d.trackId, start: d.start, end: d.end, ...(d.more?.length ? { more: [...d.more] } : {}) } : null;
   });
   host.addEventListener("fw-selection", (e) => {
     clipIds = (e as CustomEvent<string[]>).detail ?? [];
@@ -482,6 +482,22 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       say(`Could not commit: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
+  const groupOf = (track: Track) => (engine.get("document").groups ?? []).find((g) => g.trackIds.includes(track.id));
+  const groupTracks = async () => {
+    const doc = engine.get("document");
+    const ids = target().clipIds;
+    const picked = new Set([...doc.tracks.filter((t) => t.clips.some((c) => ids.includes(c.id))).map((t) => t.id), ...(range ? [range.trackId, ...(range.more ?? [])] : [])]);
+    if (picked.size < 2) return say("Select clips or a range on two tracks or more to group them");
+    const v = await ask("Group tracks", `${picked.size} tracks move together as the group links them; Track > Group active suspends it.`, [
+      { key: "name", label: "Name", value: `Group ${(doc.groups?.length ?? 0) + 1}`, text: true },
+      { key: "links", label: "Links", value: "all", options: [["all", "Volume, mute, solo and editing"], ["mix", "Volume, mute and solo"], ["volume", "Volume only"], ["edit", "Editing only"]] },
+    ], "Group");
+    if (!v) return;
+    const links = String(v.links);
+    const mix = links === "all" || links === "mix";
+    engine.dispatch({ type: "set-group", group: { id: `g${Date.now().toString(36)}`, name: str(v, "name"), trackIds: [...picked], volume: mix || links === "volume", mute: mix, solo: mix, edit: links === "all" || links === "edit", active: true } });
+    say(`Grouped ${picked.size} tracks`);
+  };
   const commitTracks = async () => {
     const doc = engine.get("document");
     const ids = target().clipIds;
@@ -567,6 +583,27 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     ),
     item("Commit", "⌥⇧C", "Render the track through its fader and effects onto a new track below it, and make the original inactive and hidden", () => void commitTrack()),
     item("Commit selected tracks", "", "Commit every track with a selected clip, or every track in the clicked track's folder, as one step", () => void commitTracks()),
+    sep(),
+    item("Group selected tracks...", "", "Link the tracks with a selected clip or range: their faders, mutes and solos move together, and an edit on one edits them all", () => void groupTracks()),
+    item("Ungroup", "", "Take the clicked track's group apart", onTrack((track) => {
+      const g = groupOf(track);
+      if (!g) return say(`${track.name} is in no group`);
+      engine.dispatch({ type: "remove-group", groupId: g.id });
+      say(`Ungrouped ${g.name}`);
+    })),
+    item(
+      "Group active",
+      "",
+      "Suspend or resume the clicked track's group, keeping its tracks",
+      onTrack((track) => {
+        const g = groupOf(track);
+        if (!g) return say(`${track.name} is in no group`);
+        engine.dispatch({ type: "set-group", group: { ...g, active: !g.active } });
+        say(g.active ? `Suspended ${g.name}` : `Resumed ${g.name}`);
+      }),
+      () => { const t = trackNow(); return !!t && !!groupOf(t)?.active; },
+      (sync) => trackListeners.add(sync),
+    ),
     sep(),
     item("Thin automation", "", "Remove the volume, pan and trim points the lines can do without (within 0.5 dB)", thin),
     item("Glide the volume across the selection", "", "A straight line across the selected range from the volume at its start to the volume at its end", glide),
