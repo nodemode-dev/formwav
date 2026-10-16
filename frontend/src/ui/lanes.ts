@@ -2079,6 +2079,29 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
   };
 
+  // PLAN_v13 S13, Paste Special > Repeat to fill selection: the copied clips (as one block) laid end to end across the
+  // range on its track from its start, the last copy cut at the range's end
+  host.addEventListener("fw-paste-repeat", () => {
+    const doc = engine.get("document");
+    const r = range;
+    const say = (s: string) => setText(host.querySelector<HTMLElement>(".fw-notice"), s);
+    if (!clipboard.length) return say("Copy clips first (Cmd or Ctrl C)");
+    if (!r || r.end <= r.start || !doc.tracks.some((t) => t.id === r.trackId)) return say("Draw a range to fill");
+    const origin = Math.min(...clipboard.map((c) => c.clip.start));
+    const span = Math.max(...clipboard.map((c) => c.clip.start + c.clip.length)) - origin;
+    if (span <= 0) return;
+    const commands: Dispatchable[] = [{ type: "clear-range", trackId: r.trackId, start: r.start, end: r.end, ripple: false }];
+    for (let at = r.start; at < r.end; at += span) {
+      for (const { clip } of clipboard) {
+        const start = at + clip.start - origin;
+        if (start >= r.end) continue;
+        const length = Math.min(clip.length, r.end - start);
+        commands.push({ type: "paste-clip", trackId: r.trackId, clip: { mediaId: clip.mediaId, start, length, sourceIn: clip.sourceIn, gainDb: clip.gainDb, fadeIn: Math.min(clip.fadeIn ?? 0, length), fadeOut: length < clip.length ? 0 : clip.fadeOut, fadeShape: clip.fadeShape } });
+      }
+    }
+    engine.dispatch({ type: "batch", commands, label: "Repeated to fill the selection" });
+    say(`Filled ${((r.end - r.start) / doc.sampleRate).toFixed(2)} s with ${commands.length - 1} copies`);
+  });
   const paste = () => {
     const doc = engine.get("document");
     const targets = clipboard.filter((c) => doc.tracks.some((t) => t.id === c.trackId));

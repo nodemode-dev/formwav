@@ -13,6 +13,7 @@ import { clipTransients, consolidate, createFades, deleteFades, editSpan, fadeTo
 import { gridStepOf, NUDGE_DEFAULT, parseGrid } from "../engine/grid";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { mountBigCounter } from "./big-counter";
+import { commands } from "./commands";
 import { frameRate, gridCuts, shuffleEnabled } from "./grid";
 import { getZoom, samplesPerPixel, setZoom, zoomToSpan } from "./lanes";
 
@@ -342,6 +343,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     sep(),
     item("Duplicate", "⌘D", "Copy the selected clips or range right after themselves (over what lies there; with Shuffle, opening time for the copy)", duplicate),
     item("Repeat...", "⌥R", "Copy the selection end to end a number of times", () => void repeat()),
+    item("Paste special: repeat to fill selection", "", "Lay the copied clips end to end across the range from its start, the last copy cut at its end", () => host.dispatchEvent(new CustomEvent("fw-paste-repeat"))),
     item("Shift...", "⌥H", "Move the selected clips later or earlier by an amount", () => void shift()),
     item("Insert silence", "", "Open the range's length of silence at its start on its track, moving what follows later", () => run(insertSilence(engine.get("document"), target()), "Inserted silence", "Select a range or clips for the silence's place and length")),
     sep(),
@@ -383,6 +385,89 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     presetRow,
     item("Big counter", "", "The playhead's position in large figures on a panel of its own", counter.toggle, counter.isOpen, (sync) => counter.onChange(sync)),
     item("Counters and rulers...", "", "The main and sub counters' timebases, the session's timecode rate and the rulers shown", () => host.dispatchEvent(new CustomEvent("fw-counters"))),
+  );
+  // PLAN_v13 S13, Commands Focus: single keys for the editing commands (Pro Tools' a-z button): A and S trim the start
+  // and end to the playhead, D and G fade in to and out from it, F makes fades, B separates at it, P and ; move the
+  // range up and down a track, L and ' tab back and on to clip edges; kept on this machine
+  const FOCUS_KEY = "formwav.commandsFocus";
+  let focusKeys = false;
+  try {
+    focusKeys = localStorage.getItem(FOCUS_KEY) === "1";
+  } catch {
+    focusKeys = false;
+  }
+  const focusListeners = new Set<() => void>();
+  const runLabel = (label: string) => {
+    const c = commands.all().find((x) => x.label === label);
+    if (c) void commands.call(c.id);
+  };
+  const separateAtPlayhead = () => {
+    const doc = engine.get("document");
+    const at = playhead();
+    const ids = target().clipIds;
+    const track = trackNow();
+    const list = doc.tracks.flatMap((t) => t.clips.filter((c) => (ids.length ? ids.includes(c.id) : t.id === track?.id) && at > c.start && at < c.start + c.length).map((c) => ({ type: "split-clip" as const, trackId: t.id, clipId: c.id, at })));
+    if (!list.length) return say("No clip under the playhead to separate");
+    engine.dispatch(list.length > 1 ? { type: "batch", commands: list } : list[0]);
+  };
+  const moveRange = (by: 1 | -1) => {
+    if (!range) return say("Draw a range first: P and ; move it up and down a track");
+    const shown = engine.get("document").tracks.filter((t) => !t.hidden);
+    const next = shown[shown.findIndex((t) => t.id === range?.trackId) + by];
+    if (next) setRange({ trackId: next.id, start: range.start, end: range.end });
+  };
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.key === "?" && !dialog.open) {
+        e.preventDefault();
+        host.dispatchEvent(new CustomEvent("fw-shortcuts"));
+        return;
+      }
+      if (!focusKeys) return;
+      if (dialog.open || !engine.get("document").tracks.length) return;
+      const act: Record<string, () => void> = {
+        a: () => runLabel("Trim start to playhead"),
+        s: () => runLabel("Trim end to playhead"),
+        d: () => runLabel("Fade in to playhead"),
+        g: () => runLabel("Fade out from playhead"),
+        f: () => runLabel("Create fades"),
+        b: separateAtPlayhead,
+        p: () => moveRange(-1),
+        ";": () => moveRange(1),
+        l: () => void tabTo(-1),
+        "'": () => void tabTo(1),
+      };
+      const fn = act[e.key.toLowerCase()];
+      if (!fn) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      fn();
+    },
+    true,
+  );
+  proxied(".fw-view-pop", "agent")?.after(
+    item(
+      "Commands Focus",
+      "",
+      "Single keys for editing: A and S trim to the playhead, D and G fade to it, F makes fades, B separates, P and ; move the range a track, L and ' tab to clip edges",
+      () => {
+        focusKeys = !focusKeys;
+        try {
+          localStorage.setItem(FOCUS_KEY, focusKeys ? "1" : "0");
+        } catch {
+          say("Commands Focus stays on until the page closes: this browser does not store it");
+        }
+        say(focusKeys ? "Commands Focus on: single keys edit (A S D G F B P ; L ')" : "Commands Focus off");
+        for (const fn of focusListeners) fn();
+      },
+      () => focusKeys,
+      (sync) => focusListeners.add(sync),
+    ),
+    item("Keyboard shortcuts", "?", "Every command with a key, by menu, and the Commands Focus keys", () => host.dispatchEvent(new CustomEvent("fw-shortcuts"))),
   );
   const tabListeners = new Set<() => void>();
   host.querySelector(".fw-transport-pop")?.append(
@@ -684,12 +769,67 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     if (!v || !range) return;
     run(createFades(engine.get("document"), range, (str(v, "shape") || "equal-power") as FadeShape), "Created fades", "The range crosses no clip's edge or join");
   };
+  // PLAN_v13 S13: clip gain bypassed, copied and pasted, or rendered into the audio
+  const chosen = () => {
+    const ids = new Set(clipsNow());
+    return engine.get("document").tracks.flatMap((t) => t.clips.filter((c) => ids.has(c.id)).map((clip) => ({ trackId: t.id, clip })));
+  };
+  let gainCopy: { gainDb: number; envelope: { at: number; db: number }[] } | null = null;
+  const bypassGain = () => {
+    const picked = chosen();
+    if (!picked.length) return say("Select the clips whose clip gain to bypass");
+    const bypass = !picked[0].clip.gainBypass;
+    engine.dispatch({ type: "set-clips-gain-bypass", clipIds: picked.map((p) => p.clip.id), bypass });
+    say(bypass ? `Bypassed the clip gain of ${picked.length} clip${picked.length === 1 ? "" : "s"}` : "Clip gain back on");
+  };
+  const copyGain = () => {
+    const first = chosen()[0];
+    if (!first) return say("Select the clip whose clip gain to copy");
+    const c = first.clip;
+    gainCopy = { gainDb: c.gainDb, envelope: (c.envelope ?? []).map((p) => ({ at: p.at - c.sourceIn, db: p.db })) };
+    say(`Copied the clip gain: ${c.gainDb > 0 ? "+" : ""}${c.gainDb.toFixed(1)} dB${gainCopy.envelope.length ? ` and ${gainCopy.envelope.length} points` : ""}`);
+  };
+  const pasteGain = () => {
+    const picked = chosen();
+    if (!gainCopy) return say("Copy a clip's gain first (Clip > Copy clip gain)");
+    if (!picked.length) return say("Select the clips to paste the clip gain onto");
+    const copy = gainCopy;
+    const list: Command[] = picked.flatMap(({ trackId, clip }) => [
+      { type: "set-clip-gain", trackId, clipId: clip.id, gainDb: copy.gainDb },
+      { type: "set-clip-envelope", trackId, clipId: clip.id, points: copy.envelope.filter((p) => p.at <= clip.length).map((p) => ({ at: p.at + clip.sourceIn, db: p.db })) },
+    ]);
+    engine.dispatch({ type: "batch", commands: list, label: `Pasted clip gain onto ${picked.length} clip${picked.length === 1 ? "" : "s"}` });
+  };
+  const renderGain = async () => {
+    const picked = chosen().filter(({ clip }) => clip.gainDb !== 0 || clip.envelope?.length);
+    if (!picked.length) return say("Select clips with clip gain or a gain line to render");
+    say(`Rendering the clip gain of ${picked.length} clip${picked.length === 1 ? "" : "s"}...`);
+    const list: Command[] = [];
+    try {
+      for (const { trackId, clip } of picked) {
+        const res = await fetch(`/api/media/${encodeURIComponent(clip.mediaId)}/clip-gain`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ gainDb: clip.gainBypass ? 0 : clip.gainDb, envelope: clip.gainBypass ? [] : clip.envelope ?? [] }) });
+        if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { detail?: string }).detail ?? `the engine answered ${res.status}`);
+        const media = (await res.json()) as MediaRef;
+        list.push({ type: "set-clip-media", trackId, clipId: clip.id, media }, { type: "set-clip-gain", trackId, clipId: clip.id, gainDb: 0 }, { type: "set-clip-envelope", trackId, clipId: clip.id, points: [] });
+        if (clip.gainBypass) list.push({ type: "set-clips-gain-bypass", clipIds: [clip.id], bypass: false });
+      }
+    } catch (err) {
+      return say(`Could not render the clip gain: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    engine.dispatch({ type: "batch", commands: list, label: `Rendered clip gain on ${picked.length} clip${picked.length === 1 ? "" : "s"}` });
+    say(`Rendered the clip gain of ${picked.length} clip${picked.length === 1 ? "" : "s"}: the audio now carries it, at 0 dB`);
+  };
   const clipPop = host.querySelector(".fw-clip-pop");
   clipPop?.append(
     item("Mute or unmute", "", "Silence the selected clips in playback and export, keeping them in place (again to unmute)", () => run(muteClips(engine.get("document"), clipsNow()), "Muted or unmuted the clips", "Select the clips to mute")),
     item("Edit lock", "", "Keep the selected clips from any edit but their gain (again to unlock)", () => run(lockClips(engine.get("document"), clipsNow(), "edit"), "Changed the clips' edit lock", "Select the clips to lock")),
     item("Time lock", "", "Keep the selected clips where they are in time; they can still be trimmed (again to unlock)", () => run(lockClips(engine.get("document"), clipsNow(), "time"), "Changed the clips' time lock", "Select the clips to lock")),
     item("Rename...", "", "A name for the selected clip alone", () => void rename()),
+    sep(),
+    item("Bypass clip gain", "", "Play the selected clips at 0 dB with no gain line, keeping both (again to bring them back)", bypassGain),
+    item("Copy clip gain", "", "Keep the first selected clip's gain and gain line to paste onto others", copyGain),
+    item("Paste clip gain", "", "Give the selected clips the copied gain and gain line, from each clip's start", pasteGain),
+    item("Render clip gain", "", "Write the selected clips' gain and gain line into their audio, as new media; they then play the same at 0 dB", () => void renderGain()),
     sep(),
     item("Space clips...", "", "Set the selected clips one after another, a gap apart", () => void space()),
     item("Snap to previous", "", "Move each selected clip so its start meets the end of the clip before it", () => run(snapClips(engine.get("document"), clipsNow(), "previous"), "Snapped to the previous clip", "No clip before to snap to (or the clips are locked)")),

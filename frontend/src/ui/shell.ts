@@ -37,6 +37,8 @@ function shellHtml(): string {
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">File</button>
           <div class="cv-menu fw-menu-pop" role="menu" aria-label="File" hidden>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="save" title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span><kbd>⌘S</kbd></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="save-template" title="Save the tracks, buses, routing, effects and automation without the audio, to start new sessions from"><span>Save as template…</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="revert" title="Open the last saved version again, leaving the changes since"><span>Revert to saved</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="open" aria-haspopup="dialog" title="Open (Cmd or Ctrl O)">${icon("folderOpen", ICON_SIZE.control)}<span>Open…</span><kbd>⌘O</kbd></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="demo" title="A sixteen-bar session made in code: drums, bass, pad and keys with a reverb bus"><span>Open the demo session</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="cloud" aria-haspopup="dialog" title="Open from or save to Google Drive or Dropbox"><span>Cloud…</span></button>
@@ -166,7 +168,8 @@ function shellHtml(): string {
       <div id="fw-speed-pop" class="fw-rec-pop" popover><label class="fw-speed" title="Play at speed: 0.25 to 4 times, pitch following (playback only); double-click for 1×">Speed <input type="range" data-speed min="-2" max="2" step="0.01" value="0" data-default="0" aria-label="Playback speed, as a power of two"></label></div>
       <button type="button" class="fw-ibtn fw-rec-btn" popovertarget="fw-rec-pop" title="Recording settings: latency compensation, Measure, pre-roll" aria-label="Recording settings">Rec</button>
       <div id="fw-rec-pop" class="fw-rec-pop" popover><label class="fw-speed" title="Recording latency compensation: each take lands this many milliseconds earlier, undoing the round trip from playback to your microphone. Measure it once with a loopback cable (the Measure button beside this field) and type it here; 0 leaves takes where they were recorded">Latency <input type="number" data-latency min="0" max="500" step="1" value="0" aria-label="Recording latency compensation in milliseconds"> ms</label>
-      <label class="fw-speed" title="Pre-roll: recording rolls this long before the punch point (or the playhead) so you hear the lead-in; only what follows that point is kept">Pre-roll <input type="number" data-preroll min="0" max="10" step="0.5" value="0" aria-label="Pre-roll in seconds"> s</label></div>
+      <label class="fw-speed" title="Pre-roll: recording rolls this long before the punch point (or the playhead) so you hear the lead-in; only what follows that point is kept">Pre-roll <input type="number" data-preroll min="0" max="10" step="0.5" value="0" aria-label="Pre-roll in seconds"> s</label>
+      <label class="fw-speed" title="Post-roll: a punch keeps playing this long after the punch out point so the performer hears the tail; the take still ends at the out point">Post-roll <input type="number" data-postroll min="0" max="10" step="0.5" value="0" aria-label="Post-roll in seconds"> s</label></div>
     </div>
     <div class="fw-st-info">
       <span class="fw-notice" role="status" aria-live="polite"></span>
