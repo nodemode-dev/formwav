@@ -151,6 +151,7 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
   let punchRange: { start: number; end: number } | null = null;
   /** With a pre-roll and no punch or loop range: the frame where the kept take begins (the playhead at Record). */
   let leadIn: number | null = null;
+  let onTheFly = false;
   let loopRange: { start: number; end: number } | null = null;
   let lastPosition = 0;
 
@@ -185,11 +186,14 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       const armed = doc.tracks.find((t) => t.id === armedTrack());
       setRecordingTrack(armed?.id ?? null);
       const position = engine.get("transport").positionSamples;
-      punchRange = punchEnabled() && armed && doc.loop && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
-      loopRange = !punchRange && doc.loop?.enabled && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
+      // PLAN_v13 S13: Record pressed while playing punches in on the fly: playback goes on untouched (no seek, no
+      // pre-roll, no punch range) and the take starts where the playhead is when capture actually begins
+      onTheFly = engine.get("transport").playing;
+      punchRange = !onTheFly && punchEnabled() && armed && doc.loop && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
+      loopRange = !onTheFly && !punchRange && doc.loop?.enabled && doc.loop.end > Math.max(doc.loop.start, position) ? { start: doc.loop.start, end: doc.loop.end } : null;
       // the roll: playback and capture start the pre-roll before the punch point (or the playhead); the take keeps
       // only the punch range, or with no punch range only what follows the playhead (lead-in recording)
-      const roll = Math.round(prerollSeconds() * doc.sampleRate);
+      const roll = onTheFly ? 0 : Math.round(prerollSeconds() * doc.sampleRate);
       const recordAt = punchRange ? punchRange.start : position;
       const rollFrom = roll > 0 ? Math.max(0, recordAt - roll) : position;
       leadIn = roll > 0 && !punchRange && !loopRange ? recordAt : null;
@@ -214,7 +218,8 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
           )
         : new Map<string, Recording>();
       const primaryNative = armed ? nativeRecs.get(armed.id) : undefined;
-      active = primaryNative ?? await startRecording(player, rollFrom, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false, true, armed ? trackChannels(armed.id) : null);
+      active = primaryNative ?? await startRecording(player, rollFrom, showLevel, armed ? trackInput(armed.id) : "", armed ? trackMonitor(armed.id) : false, !onTheFly, armed ? trackChannels(armed.id) : null);
+      if (onTheFly && !primaryNative) active = { ...active, startPosition: engine.get("transport").positionSamples };
       const missed: string[] = [];
       for (const id of armedTracks().slice(1)) {
         const track = doc.tracks.find((t) => t.id === id);
@@ -247,6 +252,7 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
       for (const x of extras) void x.rec.stop();
       extras = [];
       punchRange = null;
+      onTheFly = false;
       setRecordingTrack(null);
       const refused = err instanceof DOMException && err.name === "NotAllowedError";
       setText(notice, refused ? "Microphone access was refused" : `Could not start recording: ${reason(err)}`);
@@ -263,7 +269,9 @@ export function mountRecord(host: HTMLElement, engine: Engine, player: Player): 
     extras = [];
     busy = true;
     engine.setTransport({ recording: false });
-    player.stop();
+    // a punch made on the fly ends on the fly: playback goes on
+    if (!onTheFly) player.stop();
+    onTheFly = false;
     try {
       setText(notice, others.length ? `Saving ${others.length + 1} takes` : "Saving take");
       const take = await current.stop();
