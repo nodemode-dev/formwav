@@ -39,10 +39,11 @@ body.theme-light { --cv-chip-bg: color-mix(in srgb, var(--bg-secondary) 80%, tra
 .fw-topbar .fw-menu-btn { block-size: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-13); }
 .fw-topbar .fw-menu-btn:hover,
 .fw-topbar .fw-menu-btn[aria-expanded="true"] { background: var(--bg-tertiary); color: var(--text-primary); }
-.fw-doc { display: flex; flex-direction: column; justify-content: center; min-inline-size: 0; }
+.fw-doc { display: flex; flex: 0 1 220px; flex-direction: column; justify-content: center; min-inline-size: 96px; }
 .fw-topbar .fw-doc .fw-session-name {
   flex: none;
-  inline-size: 220px;
+  inline-size: 100%;
+  max-inline-size: 220px;
   min-inline-size: 0;
   block-size: 20px;
   padding: 0 4px;
@@ -91,12 +92,12 @@ body.theme-light { --cv-chip-bg: color-mix(in srgb, var(--bg-secondary) 80%, tra
 .fw-topbar-actions > [data-action="terminal"] { display: none; }
 @media (max-width: 1399px) {
   .fw-theme-pick.fw-head-theme { gap: 0; font-size: 0; }
-  .fw-topbar .fw-doc .fw-session-name { inline-size: 180px; }
+  .fw-topbar .fw-doc .fw-session-name { max-inline-size: 180px; }
 }
-@media (max-width: 1199px) {
+@media (max-width: 1399px) {
   .fw-head-swatches { display: none; }
 }
-@media (min-width: 1200px) {
+@media (min-width: 1400px) {
   .fw-settings-pop .fw-menu-accent { display: none; }
 }
 
