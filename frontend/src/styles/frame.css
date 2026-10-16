@@ -583,10 +583,20 @@
    than clipping them out of reach */
 .fw-mixer .fw-strip { overflow-y: auto; overflow-x: hidden; }
 .fw-mixer .fw-strip-send, .fw-mixer .fw-strip-auto { inline-size: 100%; max-inline-size: 100%; font-size: 11px; }
-.fw-mixer .fw-strip-send-level { inline-size: 100%; }
+.fw-strip-sends { display: flex; flex-direction: column; gap: 6px; }
+.fw-strip-sends:empty { display: none; }
+.fw-send-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 4px; padding-block-end: 6px; border-block-end: 1px solid var(--border-color); }
+.fw-send-name { grid-column: 1 / 3; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-primary); }
+.fw-send-remove { grid-column: 3; inline-size: 20px; block-size: 20px; }
+.fw-send-level, .fw-send-pan { grid-column: 1 / -1; inline-size: 100%; min-inline-size: 0; }
+.fw-send-pre, .fw-send-mute { font-size: var(--fs-11); padding: 1px 6px; }
+.fw-send-pre { grid-column: 1; justify-self: start; }
+.fw-send-mute { grid-column: 2 / -1; }
+.fw-send-pre[aria-pressed="true"], .fw-send-mute[aria-pressed="true"] { color: var(--bg-primary); background: var(--accent-color); border-color: var(--accent-color); }
+.fw-strip-bus-out { inline-size: 100%; font-size: var(--fs-11); color: var(--text-primary); background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); }
 /* the strip is a named-area grid; its send and automation controls take full-width rows of their own (auto-placed they
    fell into one column's leftover cells, the send level 6 px wide) */
-.fw-strip-send, .fw-strip-send-level, .fw-strip-auto { grid-column: 1 / -1; }
+.fw-strip-send, .fw-strip-sends, .fw-strip-auto { grid-column: 1 / -1; }
 
 /* AA-06: the heal brush's dabs while a stroke is painted (cleared on release) */
 .fw-brush-dot { position: absolute; inline-size: 16px; block-size: 16px; border-radius: 50%; pointer-events: none; background: color-mix(in srgb, var(--accent-color) 35%, transparent); }

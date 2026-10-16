@@ -24,8 +24,9 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
     `<details class="fw-strip-route"${kind === "master" ? " hidden" : ""}><summary>${kind === "track" ? "Route" : "More"}</summary><div class="fw-route-box">` +
     `<select class="fw-strip-out" aria-label="Output"${kind !== "track" ? " hidden" : ""}></select>` +
     `<select class="fw-strip-vca" aria-label="VCA"${kind !== "track" ? " hidden" : ""}></select>` +
-    `<select class="fw-strip-send" aria-label="Send to bus" title="Send this track, after its inserts and fader, to a bus as well"${kind !== "track" ? " hidden" : ""}></select>` +
-    `<input class="fw-strip-send-level" type="range" min="-60" max="12" step="0.5" value="-12" data-default="-12" aria-label="Send level" title="Send level, dB"${kind !== "track" ? " hidden" : ""}>` +
+    `<select class="fw-strip-bus-out" aria-label="Output" title="Where this bus plays: the master, or another bus"${kind !== "bus" ? " hidden" : ""}></select>` +
+    `<div class="fw-strip-sends"${kind !== "track" ? " hidden" : ""}></div>` +
+    `<select class="fw-strip-send" aria-label="Add a send" title="Send this track to a bus as well, after its inserts and fader (Pre takes it before the fader)"${kind !== "track" ? " hidden" : ""}></select>` +
     `<select class="fw-strip-auto" aria-label="Automation mode" title="Read plays the automation; Write, Touch, Latch and Trim record the fader into it while playing; Off plays the fader, pan and filters as set and keeps the lanes"${kind !== "track" ? " hidden" : ""}><option value="off">Off</option><option value="read" selected>Read</option><option value="write">Write</option><option value="touch">Touch</option><option value="latch">Latch</option><option value="trim">Trim</option></select>` +
     `<label class="fw-strip-trim-row"${kind !== "track" ? " hidden" : ""}><span>Trim</span><input class="fw-strip-trim" type="range" min="-24" max="24" step="0.5" value="0" data-default="0" aria-label="Input trim" title="Input trim, dB, ahead of the inserts"></label>` +
     `<button type="button" class="fw-ibtn fw-strip-invert" aria-pressed="false" aria-label="Invert polarity" title="Invert the polarity, ahead of the inserts"${kind !== "track" ? " hidden" : ""}>Invert</button>` +
@@ -36,6 +37,19 @@ function stripNode(kind: Strip["kind"]): HTMLElement {
 }
 
 const dbText = (db: number) => `${db > 0 ? "+" : ""}${db.toFixed(1)} dB`;
+
+function sendRow(): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "fw-send-row";
+  row.innerHTML =
+    `<span class="fw-send-name" translate="no"></span>` +
+    `<button type="button" class="fw-send-remove fw-icon-btn" aria-label="Remove this send" title="Remove this send">&#215;</button>` +
+    `<input class="fw-send-level" type="range" min="-60" max="12" step="0.5" data-default="-12" aria-label="Send level">` +
+    `<button type="button" class="fw-send-pre fw-ibtn" aria-pressed="false" title="Pre-fader: send before the track's fader and volume lane, so the fader does not move it">Pre</button>` +
+    `<button type="button" class="fw-send-mute fw-ibtn" aria-pressed="false" title="Mute this send">M</button>` +
+    `<input class="fw-send-pan" type="range" min="-1" max="1" step="0.01" aria-label="Send pan">`;
+  return row;
+}
 
 function setAttr(el: Element | null, name: string, value: string): void {
   if (el && el.getAttribute(name) !== value) el.setAttribute(name, value);
@@ -84,6 +98,21 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
     syncKnob(pan);
   }
   setAttr(node.querySelector(".fw-strip-mute"), "aria-pressed", String(!!strip.item.mute));
+  const busOut = strip.kind === "bus" ? node.querySelector<HTMLSelectElement>(".fw-strip-bus-out") : null;
+  if (busOut && strip.kind === "bus") {
+    const buses = doc.buses ?? [];
+    const feeds = (b: Bus) => {
+      for (let at: string | undefined = b.id; at; at = buses.find((x) => x.id === at)?.out) if (at === strip.item.id) return true;
+      return false;
+    };
+    const options = [["", "Master"], ...buses.filter((b) => !feeds(b)).map((b) => [b.id, b.name])];
+    const signature = JSON.stringify(options);
+    if (busOut.dataset.options !== signature) {
+      busOut.dataset.options = signature;
+      busOut.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
+    }
+    if (busOut.value !== (strip.item.out ?? "")) busOut.value = strip.item.out ?? "";
+  }
   if (strip.kind === "track") {
     if ((node.dataset.inactive !== undefined) !== !!strip.item.inactive) {
       if (strip.item.inactive) node.dataset.inactive = "";
@@ -112,19 +141,33 @@ function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
       const value = strip.item.busId ?? "";
       if (out.value !== value) out.value = value;
     }
-    // PT-18: the strip shows the track's first send (the document allows several)
+    const sends = strip.item.sends ?? [];
     const send = node.querySelector<HTMLSelectElement>(".fw-strip-send");
     if (send) {
-      const options = [["", "No send"], ...(doc.buses ?? []).map((b) => [b.id, `Send: ${b.name}`])];
+      const options = [["", "Add a send"], ...(doc.buses ?? []).filter((b) => !sends.some((x) => x.busId === b.id)).map((b) => [b.id, b.name])];
       const signature = JSON.stringify(options);
       if (send.dataset.options !== signature) {
         send.dataset.options = signature;
         send.replaceChildren(...options.map(([v, label]) => new Option(label, v)));
       }
-      const first = strip.item.sends?.[0];
-      if (send.value !== (first?.busId ?? "")) send.value = first?.busId ?? "";
-      const level = node.querySelector<HTMLInputElement>(".fw-strip-send-level");
-      if (level && first && Number(level.value) !== first.gainDb) level.value = String(first.gainDb);
+      if (send.value !== "") send.value = "";
+    }
+    const rows = node.querySelector<HTMLElement>(".fw-strip-sends");
+    if (rows) {
+      patchList(rows, [...sends], { key: (x) => x.busId, create: sendRow, update: () => undefined });
+      for (const row of rows.children as HTMLCollectionOf<HTMLElement>) {
+        const x = sends.find((y) => y.busId === row.dataset.key);
+        if (!x) continue;
+        setText(row.querySelector(".fw-send-name"), doc.buses?.find((b) => b.id === x.busId)?.name ?? "");
+        const level = row.querySelector<HTMLInputElement>(".fw-send-level");
+        if (level && node.dataset.dragging !== `send-${x.busId}` && Number(level.value) !== x.gainDb) level.value = String(x.gainDb);
+        setAttr(level, "title", `Send level ${dbText(x.gainDb)}${x.automation?.length ? ", follows its lane" : ""}`);
+        const sendPan = row.querySelector<HTMLInputElement>(".fw-send-pan");
+        if (sendPan && Number(sendPan.value) !== (x.pan ?? strip.item.pan ?? 0)) sendPan.value = String(x.pan ?? strip.item.pan ?? 0);
+        setAttr(sendPan, "title", x.pan === undefined ? "Send pan follows the track (double-click to set it back)" : `Send pan ${x.pan.toFixed(2)} (double-click to follow the track)`);
+        setAttr(row.querySelector(".fw-send-pre"), "aria-pressed", String(!!x.pre));
+        setAttr(row.querySelector(".fw-send-mute"), "aria-pressed", String(!!x.mute));
+      }
     }
     const vcaSel = node.querySelector<HTMLSelectElement>(".fw-strip-vca");
     if (vcaSel) {
@@ -283,9 +326,16 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     const value = p.mode === "trim" ? valueAt(p.base, at, p.staticDb) + (fader - p.trimFrom) : fader;
     p.points.push({ time: Math.round(at), value: Math.round(value * 100) / 100 });
   };
+  panel.addEventListener("dblclick", (e) => {
+    const s = stripOf(e.target);
+    const busId = (e.target as HTMLElement).closest<HTMLElement>(".fw-send-row")?.dataset.key;
+    if (s && busId && (e.target as HTMLElement).classList.contains("fw-send-pan")) engine.dispatch({ type: "set-send-options", trackId: s.id, busId, pan: null });
+  });
   panel.addEventListener("input", (e) => {
     const s = stripOf(e.target);
     if (s && (e.target as HTMLElement).classList.contains("fw-strip-trim")) s.node.dataset.dragging = "trim";
+    const sendKey = (e.target as HTMLElement).closest<HTMLElement>(".fw-send-row")?.dataset.key;
+    if (s && sendKey && (e.target as HTMLElement).classList.contains("fw-send-level")) s.node.dataset.dragging = `send-${sendKey}`;
     if (!s || !(e.target as HTMLElement).classList.contains("fw-strip-fader")) return;
     s.node.dataset.dragging = "fader";
     const now = Number((e.target as HTMLInputElement).value);
@@ -371,16 +421,16 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     } else if (el.classList.contains("fw-strip-pan")) {
       const pan = Number(el.value);
       engine.dispatch(s.bus ? { type: "set-bus-pan", busId: s.id, pan } : { type: "set-track-pan", trackId: s.id, pan });
-    } else if (el.classList.contains("fw-strip-send") || el.classList.contains("fw-strip-send-level")) {
-      // PT-18: one send per strip here: choosing a bus replaces the old send, No send removes it, the level updates it
-      const track = engine.get("document").tracks.find((t) => t.id === s.id);
-      const busId = s.node.querySelector<HTMLSelectElement>(".fw-strip-send")?.value ?? "";
-      const gainDb = Number(s.node.querySelector<HTMLInputElement>(".fw-strip-send-level")?.value ?? -12);
-      const commands: { type: "set-track-send"; trackId: string; busId: string; gainDb: number | null }[] = (track?.sends ?? [])
-        .filter((x) => x.busId !== busId)
-        .map((x) => ({ type: "set-track-send", trackId: s.id, busId: x.busId, gainDb: null }));
-      if (busId) commands.push({ type: "set-track-send", trackId: s.id, busId, gainDb });
-      if (commands.length) engine.dispatch({ type: "batch", commands });
+    } else if (el.classList.contains("fw-strip-send")) {
+      if (el.value) engine.dispatch({ type: "set-track-send", trackId: s.id, busId: el.value, gainDb: -12 });
+    } else if (el.classList.contains("fw-send-level") || el.classList.contains("fw-send-pan")) {
+      const busId = el.closest<HTMLElement>(".fw-send-row")?.dataset.key;
+      if (!busId) return;
+      delete s.node.dataset.dragging;
+      if (el.classList.contains("fw-send-level")) engine.dispatch({ type: "set-track-send", trackId: s.id, busId, gainDb: Number(el.value) });
+      else engine.dispatch({ type: "set-send-options", trackId: s.id, busId, pan: Number(el.value) });
+    } else if (el.classList.contains("fw-strip-bus-out")) {
+      engine.dispatch({ type: "route-bus", busId: s.id, to: el.value || null });
     } else if (el.classList.contains("fw-strip-trim")) {
       delete s.node.dataset.dragging;
       engine.dispatch({ type: "set-track-trim", trackId: s.id, trimDb: Number(el.value) });
@@ -407,6 +457,13 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
     }
     const on = button.getAttribute("aria-pressed") !== "true";
     const vca = s.node.dataset.kind === "vca";
+    const sendKey = button.closest<HTMLElement>(".fw-send-row")?.dataset.key;
+    if (sendKey) {
+      if (button.classList.contains("fw-send-remove")) engine.dispatch({ type: "set-track-send", trackId: s.id, busId: sendKey, gainDb: null });
+      else if (button.classList.contains("fw-send-pre")) engine.dispatch({ type: "set-send-options", trackId: s.id, busId: sendKey, pre: on });
+      else if (button.classList.contains("fw-send-mute")) engine.dispatch({ type: "set-send-options", trackId: s.id, busId: sendKey, mute: on });
+      return;
+    }
     if (button.classList.contains("fw-strip-coalesce")) {
       if (vca) engine.dispatch({ type: "coalesce-vca", vcaId: s.id });
       return;
