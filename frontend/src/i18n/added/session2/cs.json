@@ -1,0 +1,36 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Přidat noty zkopírovaného notového klipu do notového klipu pod přehrávacím kurzorem a zachovat ty, které už v něm jsou",
+"Added tracks for the clips": "Přidány stopy pro klipy",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Vložit soubor .fwclips na přehrávací kurzor, od aktuální stopy dolů, jako jednu skupinu",
+"Brought in {0} clips at the playhead as a group": {
+"one": "Vložen {0} klip na přehrávací kurzor jako skupina",
+"few": "Vloženy {0} klipy na přehrávací kurzor jako skupina",
+"many": "Vloženo {0} klipu na přehrávací kurzor jako skupina",
+"other": "Vloženo {0} klipů na přehrávací kurzor jako skupina"
+},
+"Comped from a playlist": "Comp vytvořen z playlistu",
+"Comped from a playlist on {a}": "Comp vytvořen z playlistu na stopě {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Nejprve zkopírujte notový klip (Cmd nebo Ctrl C)",
+"Could not bring the clips in": "Klipy se nepodařilo importovat",
+"Could not keep the clips": "Klipy se nepodařilo uložit",
+"Could not merge": "Sloučení se nezdařilo",
+"Export clips as a file...": "Exportovat klipy do souboru...",
+"Import a clips file...": "Importovat soubor klipů...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Uložit vybrané klipy (celou skupinu, pokud je vybrán jeden z jejích klipů) a jejich zvuk jako soubor .fwclips",
+"Kept {0} clips from {1} track as a file": "Uloženo do souboru: klipů {0}, stop {1}",
+"Kept {0} clips from {1} tracks as a file": "Uloženo do souboru: klipů {0}, stop {1}",
+"Merged {0} notes into the clip": {
+"one": "Do klipu sloučena {0} nota",
+"few": "Do klipu sloučeny {0} noty",
+"many": "Do klipu sloučeno {0} noty",
+"other": "Do klipu sloučeno {0} not"
+},
+"Merging the notes...": "Slučování not...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Není co slučovat: zkopírované noty tam už jsou nebo leží mimo klip",
+"Paste special: merge notes": "Vložit jinak: sloučit noty",
+"Playlist {a}": "Playlist {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Umístěte přehrávací kurzor dovnitř notového klipu na stopě zkopírovaného klipu",
+"Select the clips (or one clip of a group) to keep as a file": "Vyberte klipy (nebo jeden klip skupiny), které se mají uložit do souboru",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Zobrazit každý take a každý další playlist jako pruh; tažením přes jeden z nich vytvoříte comp z tohoto rozsahu (kliknutí na klip playlistu vytvoří comp z celého klipu)",
+"Takes and playlists": "Take a playlisty"
+}

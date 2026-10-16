@@ -1,0 +1,36 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Dodaj nuty skopiowanego klipu nutowego do klipu nutowego pod kursorem odtwarzania, zachowując te, które już w nim są",
+"Added tracks for the clips": "Dodano ścieżki dla klipów",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Wstaw plik .fwclips w miejscu kursora odtwarzania, od bieżącej ścieżki w dół, jako jedną grupę",
+"Brought in {0} clips at the playhead as a group": {
+"one": "Wstawiono {0} klip w miejscu kursora odtwarzania jako grupę",
+"few": "Wstawiono {0} klipy w miejscu kursora odtwarzania jako grupę",
+"many": "Wstawiono {0} klipów w miejscu kursora odtwarzania jako grupę",
+"other": "Wstawiono {0} klipu w miejscu kursora odtwarzania jako grupę"
+},
+"Comped from a playlist": "Comp z playlisty",
+"Comped from a playlist on {a}": "Comp z playlisty na ścieżce {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Najpierw skopiuj klip nutowy (Cmd lub Ctrl C)",
+"Could not bring the clips in": "Nie udało się zaimportować klipów",
+"Could not keep the clips": "Nie udało się zapisać klipów",
+"Could not merge": "Nie udało się scalić",
+"Export clips as a file...": "Eksportuj klipy do pliku...",
+"Import a clips file...": "Importuj plik klipów...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Zapisz zaznaczone klipy (całą grupę, gdy zaznaczono jeden z jej klipów) i ich dźwięk jako plik .fwclips",
+"Kept {0} clips from {1} track as a file": "Zapisano w pliku: klipów {0}, ścieżek {1}",
+"Kept {0} clips from {1} tracks as a file": "Zapisano w pliku: klipów {0}, ścieżek {1}",
+"Merged {0} notes into the clip": {
+"one": "Scalono {0} nutę w klipie",
+"few": "Scalono {0} nuty w klipie",
+"many": "Scalono {0} nut w klipie",
+"other": "Scalono {0} nuty w klipie"
+},
+"Merging the notes...": "Scalanie nut...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Nie ma czego scalać: skopiowane nuty już tam są albo wypadają poza klipem",
+"Paste special: merge notes": "Wklej specjalnie: scal nuty",
+"Playlist {a}": "Playlista {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Umieść kursor odtwarzania wewnątrz klipu nutowego na ścieżce skopiowanego klipu",
+"Select the clips (or one clip of a group) to keep as a file": "Zaznacz klipy (lub jeden klip grupy), które mają trafić do pliku",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Pokaż każdy take i każdą inną playlistę jako pas; przeciągnij po jednym z nich, aby zrobić comp z tego zakresu (kliknięcie klipu playlisty robi comp z całego klipu)",
+"Takes and playlists": "Take'i i playlisty"
+}

@@ -1,0 +1,32 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Aggiungi le note del clip di note copiato al clip di note sotto il cursore di riproduzione, mantenendo quelle presenti",
+"Added tracks for the clips": "Tracce aggiunte per i clip",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Porta un file .fwclips al cursore di riproduzione, dalla traccia corrente in giù, come un unico gruppo",
+"Brought in {0} clips at the playhead as a group": {
+"one": "{0} clip importato al cursore di riproduzione come gruppo",
+"other": "{0} clip importati al cursore di riproduzione come gruppo"
+},
+"Comped from a playlist": "Comp da una playlist",
+"Comped from a playlist on {a}": "Comp da una playlist su {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Copia prima un clip di note (Cmd o Ctrl C)",
+"Could not bring the clips in": "Impossibile importare i clip",
+"Could not keep the clips": "Impossibile conservare i clip",
+"Could not merge": "Impossibile unire",
+"Export clips as a file...": "Esporta clip come file...",
+"Import a clips file...": "Importa un file di clip...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Conserva i clip selezionati (un intero gruppo se ne è selezionato uno) e il loro audio come file .fwclips",
+"Kept {0} clips from {1} track as a file": "{0} clip da {1} traccia conservati come file",
+"Kept {0} clips from {1} tracks as a file": "{0} clip da {1} tracce conservati come file",
+"Merged {0} notes into the clip": {
+"one": "{0} nota unita al clip",
+"other": "{0} note unite al clip"
+},
+"Merging the notes...": "Unione delle note in corso...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Niente da unire: le note copiate sono già presenti o cadono fuori dal clip",
+"Paste special: merge notes": "Incolla speciale: unisci note",
+"Playlist {a}": "Playlist {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Porta il cursore di riproduzione dentro un clip di note sulla traccia del clip copiato",
+"Select the clips (or one clip of a group) to keep as a file": "Seleziona i clip (o un clip di un gruppo) da conservare come file",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Mostra ogni take e ogni altra playlist come corsia; trascina su una corsia per fare il comp di quell'intervallo (un clic sul clip di una playlist fa il comp dell'intero clip)",
+"Takes and playlists": "Take e playlist"
+}

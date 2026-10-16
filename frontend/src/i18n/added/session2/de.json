@@ -1,0 +1,32 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Die Noten des kopierten Noten-Clips in den Noten-Clip unter dem Wiedergabecursor einfügen, vorhandene Noten bleiben erhalten",
+"Added tracks for the clips": "Spuren für die Clips hinzugefügt",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Eine .fwclips-Datei an der Wiedergabeposition ab der aktuellen Spur abwärts als eine Gruppe einfügen",
+"Brought in {0} clips at the playhead as a group": {
+"one": "{0} Clip an der Wiedergabeposition als Gruppe importiert",
+"other": "{0} Clips an der Wiedergabeposition als Gruppe importiert"
+},
+"Comped from a playlist": "Aus einer Playlist gecompt",
+"Comped from a playlist on {a}": "Aus einer Playlist auf {a} gecompt",
+"Copy a note clip first (Cmd or Ctrl C)": "Zuerst einen Noten-Clip kopieren (Cmd oder Ctrl C)",
+"Could not bring the clips in": "Clips konnten nicht importiert werden",
+"Could not keep the clips": "Clips konnten nicht gesichert werden",
+"Could not merge": "Zusammenführen nicht möglich",
+"Export clips as a file...": "Clips als Datei exportieren...",
+"Import a clips file...": "Clips-Datei importieren...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Die ausgewählten Clips (die ganze Gruppe, wenn einer ihrer Clips ausgewählt ist) samt Audio als .fwclips-Datei sichern",
+"Kept {0} clips from {1} track as a file": "{0} Clips von {1} Spur als Datei gesichert",
+"Kept {0} clips from {1} tracks as a file": "{0} Clips von {1} Spuren als Datei gesichert",
+"Merged {0} notes into the clip": {
+"one": "{0} Note in den Clip übernommen",
+"other": "{0} Noten in den Clip übernommen"
+},
+"Merging the notes...": "Noten werden zusammengeführt...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Nichts zusammenzuführen: Die kopierten Noten sind schon vorhanden oder liegen außerhalb des Clips",
+"Paste special: merge notes": "Spezial einfügen: Noten zusammenführen",
+"Playlist {a}": "Playlist {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Den Wiedergabecursor in einen Noten-Clip auf der Spur des kopierten Clips setzen",
+"Select the clips (or one clip of a group) to keep as a file": "Die Clips (oder einen Clip einer Gruppe) zum Sichern als Datei auswählen",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Alle Takes und alle anderen Playlists als Lanes anzeigen; über einen Bereich ziehen, um ihn zu comp'en (ein Klick auf den Clip einer Playlist übernimmt den ganzen Clip)",
+"Takes and playlists": "Takes und Playlists"
+}

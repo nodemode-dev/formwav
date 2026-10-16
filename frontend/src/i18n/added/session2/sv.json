@@ -1,0 +1,32 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Lägg till det kopierade notklippets noter i notklippet under spelhuvudet och behåll det som redan finns",
+"Added tracks for the clips": "Spår tillagda för klippen",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Hämta in en .fwclips-fil vid spelhuvudet, från det aktuella spåret och nedåt, som en grupp",
+"Brought in {0} clips at the playhead as a group": {
+"one": "{0} klipp inhämtat vid spelhuvudet som en grupp",
+"other": "{0} klipp inhämtade vid spelhuvudet som en grupp"
+},
+"Comped from a playlist": "Comp:ad från en spellista",
+"Comped from a playlist on {a}": "Comp:ad från en spellista på {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Kopiera ett notklipp först (Cmd eller Ctrl C)",
+"Could not bring the clips in": "Det gick inte att hämta in klippen",
+"Could not keep the clips": "Det gick inte att spara klippen",
+"Could not merge": "Det gick inte att sammanfoga",
+"Export clips as a file...": "Exportera klipp som fil...",
+"Import a clips file...": "Importera en klippfil...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Spara de markerade klippen (en hel grupp om ett av dess klipp är markerat) och deras ljud som en .fwclips-fil",
+"Kept {0} clips from {1} track as a file": "{0} klipp från {1} spår sparade som fil",
+"Kept {0} clips from {1} tracks as a file": "{0} klipp från {1} spår sparade som fil",
+"Merged {0} notes into the clip": {
+"one": "{0} not sammanfogad med klippet",
+"other": "{0} noter sammanfogade med klippet"
+},
+"Merging the notes...": "Sammanfogar noterna...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Inget att sammanfoga: de kopierade noterna finns redan eller ligger utanför klippet",
+"Paste special: merge notes": "Klistra in special: sammanfoga noter",
+"Playlist {a}": "Spellista {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Placera spelhuvudet i ett notklipp på det kopierade klippets spår",
+"Select the clips (or one clip of a group) to keep as a file": "Markera klippen (eller ett klipp i en grupp) som ska sparas som fil",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Visa varje tagning och varje annan spellista som en lane; dra över en lane för att comp:a det området (ett klick på en spellistas klipp comp:ar hela klippet)",
+"Takes and playlists": "Tagningar och spellistor"
+}

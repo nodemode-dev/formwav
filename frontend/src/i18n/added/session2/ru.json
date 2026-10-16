@@ -1,0 +1,36 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Добавить ноты скопированного нотного клипа в нотный клип под курсором воспроизведения, сохранив имеющиеся",
+"Added tracks for the clips": "Для клипов добавлены дорожки",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Вставить файл .fwclips в позицию курсора воспроизведения, начиная с текущей дорожки и ниже, одной группой",
+"Brought in {0} clips at the playhead as a group": {
+"one": "Вставлен {0} клип в позицию курсора воспроизведения одной группой",
+"few": "Вставлено {0} клипа в позицию курсора воспроизведения одной группой",
+"many": "Вставлено {0} клипов в позицию курсора воспроизведения одной группой",
+"other": "Вставлено {0} клипа в позицию курсора воспроизведения одной группой"
+},
+"Comped from a playlist": "Комп собран из плейлиста",
+"Comped from a playlist on {a}": "Комп собран из плейлиста на {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Сначала скопируйте нотный клип (Cmd или Ctrl C)",
+"Could not bring the clips in": "Не удалось импортировать клипы",
+"Could not keep the clips": "Не удалось сохранить клипы",
+"Could not merge": "Не удалось объединить",
+"Export clips as a file...": "Экспортировать клипы в файл...",
+"Import a clips file...": "Импортировать файл клипов...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Сохранить выделенные клипы (всю группу, если выделен один из её клипов) и их звук как файл .fwclips",
+"Kept {0} clips from {1} track as a file": "Сохранено в файл: клипов {0}, дорожек {1}",
+"Kept {0} clips from {1} tracks as a file": "Сохранено в файл: клипов {0}, дорожек {1}",
+"Merged {0} notes into the clip": {
+"one": "В клип объединена {0} нота",
+"few": "В клип объединены {0} ноты",
+"many": "В клип объединено {0} нот",
+"other": "В клип объединено {0} ноты"
+},
+"Merging the notes...": "Объединение нот...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Нечего объединять: скопированные ноты уже есть или выходят за пределы клипа",
+"Paste special: merge notes": "Специальная вставка: объединить ноты",
+"Playlist {a}": "Плейлист {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Поставьте курсор воспроизведения внутрь нотного клипа на дорожке скопированного клипа",
+"Select the clips (or one clip of a group) to keep as a file": "Выделите клипы (или один клип группы), чтобы сохранить их в файл",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Показать каждый дубль и каждый другой плейлист в виде полосы; протяните по полосе, чтобы собрать комп из этого диапазона (щелчок по клипу плейлиста собирает комп из всего клипа)",
+"Takes and playlists": "Дубли и плейлисты"
+}

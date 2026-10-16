@@ -1,0 +1,29 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Legg notene fra det kopierte noteklippet inn i noteklippet under avspillingsmarkøren, og behold det som allerede er der",
+"Added tracks for the clips": "La til spor for klippene",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Hent inn en .fwclips-fil ved avspillingsmarkøren, fra det aktive sporet og nedover, som én gruppe",
+"Brought in {0} clips at the playhead as a group": "Hentet inn {0} klipp ved avspillingsmarkøren som en gruppe",
+"Comped from a playlist": "Comp'et fra en playliste",
+"Comped from a playlist on {a}": "Comp'et fra en playliste på {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Kopier et noteklipp først (Cmd eller Ctrl C)",
+"Could not bring the clips in": "Kunne ikke hente inn klippene",
+"Could not keep the clips": "Kunne ikke lagre klippene",
+"Could not merge": "Kunne ikke slå sammen",
+"Export clips as a file...": "Eksporter klipp som fil...",
+"Import a clips file...": "Importer en klippfil...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Lagre de valgte klippene (en hel gruppe når ett av klippene i den er valgt) og lyden deres som en .fwclips-fil",
+"Kept {0} clips from {1} track as a file": "Lagret {0} klipp fra {1} spor som en fil",
+"Kept {0} clips from {1} tracks as a file": "Lagret {0} klipp fra {1} spor som en fil",
+"Merged {0} notes into the clip": {
+"one": "Slo sammen {0} note i klippet",
+"other": "Slo sammen {0} noter i klippet"
+},
+"Merging the notes...": "Slår sammen notene...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Ingenting å slå sammen: de kopierte notene finnes allerede eller ligger utenfor klippet",
+"Paste special: merge notes": "Lim inn spesial: slå sammen noter",
+"Playlist {a}": "Playliste {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Plasser avspillingsmarkøren inne i et noteklipp på sporet til det kopierte klippet",
+"Select the clips (or one clip of a group) to keep as a file": "Velg klippene (eller ett klipp i en gruppe) som skal lagres som fil",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Vis hver take og hver annen playliste som en bane; dra over en for å comp'e området (et klikk på et klipp i en playliste comper hele klippet)",
+"Takes and playlists": "Takes og playlister"
+}

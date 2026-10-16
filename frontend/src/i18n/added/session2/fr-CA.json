@@ -1,0 +1,32 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Ajouter les notes du clip de notes copié au clip de notes sous la tête de lecture, en conservant ce qui s'y trouve",
+"Added tracks for the clips": "Pistes ajoutées pour les clips",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Importer un fichier .fwclips à la tête de lecture, à partir de la piste courante vers le bas, en un seul groupe",
+"Brought in {0} clips at the playhead as a group": {
+"one": "{0} clip importé à la tête de lecture en un groupe",
+"other": "{0} clips importés à la tête de lecture en un groupe"
+},
+"Comped from a playlist": "Compilé à partir d'une liste de lecture",
+"Comped from a playlist on {a}": "Compilé à partir d'une liste de lecture sur {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Copiez d'abord un clip de notes (Cmd ou Ctrl C)",
+"Could not bring the clips in": "Impossible d'importer les clips",
+"Could not keep the clips": "Impossible de conserver les clips",
+"Could not merge": "Fusion impossible",
+"Export clips as a file...": "Exporter les clips dans un fichier...",
+"Import a clips file...": "Importer un fichier de clips...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Conserver les clips sélectionnés (tout le groupe si l'un de ses clips est sélectionné) et leur audio dans un fichier .fwclips",
+"Kept {0} clips from {1} track as a file": "{0} clips de {1} piste conservés dans un fichier",
+"Kept {0} clips from {1} tracks as a file": "{0} clips de {1} pistes conservés dans un fichier",
+"Merged {0} notes into the clip": {
+"one": "{0} note fusionnée dans le clip",
+"other": "{0} notes fusionnées dans le clip"
+},
+"Merging the notes...": "Fusion des notes...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Rien à fusionner : les notes copiées y sont déjà ou se trouvent hors du clip",
+"Paste special: merge notes": "Collage spécial : fusionner les notes",
+"Playlist {a}": "Liste de lecture {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Placez la tête de lecture dans un clip de notes sur la piste du clip copié",
+"Select the clips (or one clip of a group) to keep as a file": "Sélectionnez les clips (ou un clip d'un groupe) à conserver dans un fichier",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Afficher chaque prise et chaque autre liste de lecture sous forme de couloir; faites glisser sur un couloir pour compiler cette plage (un clic sur le clip d'une liste de lecture compile le clip entier)",
+"Takes and playlists": "Prises et listes de lecture"
+}

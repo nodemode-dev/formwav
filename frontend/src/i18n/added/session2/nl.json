@@ -1,0 +1,32 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Voeg de noten van de gekopieerde notenclip toe aan de notenclip onder de afspeelkop en behoud wat er al staat",
+"Added tracks for the clips": "Tracks toegevoegd voor de clips",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Haal een .fwclips-bestand binnen op de afspeelkop, vanaf de huidige track naar beneden, als één groep",
+"Brought in {0} clips at the playhead as a group": {
+"one": "{0} clip binnengehaald op de afspeelkop als groep",
+"other": "{0} clips binnengehaald op de afspeelkop als groep"
+},
+"Comped from a playlist": "Gecomped uit een playlist",
+"Comped from a playlist on {a}": "Gecomped uit een playlist op {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Kopieer eerst een notenclip (Cmd of Ctrl C)",
+"Could not bring the clips in": "Kon de clips niet binnenhalen",
+"Could not keep the clips": "Kon de clips niet bewaren",
+"Could not merge": "Samenvoegen mislukt",
+"Export clips as a file...": "Clips exporteren als bestand...",
+"Import a clips file...": "Clipbestand importeren...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Bewaar de geselecteerde clips (een hele groep als een van de clips is geselecteerd) en hun audio als .fwclips-bestand",
+"Kept {0} clips from {1} track as a file": "{0} clips van {1} track als bestand bewaard",
+"Kept {0} clips from {1} tracks as a file": "{0} clips van {1} tracks als bestand bewaard",
+"Merged {0} notes into the clip": {
+"one": "{0} noot samengevoegd in de clip",
+"other": "{0} noten samengevoegd in de clip"
+},
+"Merging the notes...": "Noten samenvoegen...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Niets samen te voegen: de gekopieerde noten staan er al of vallen buiten de clip",
+"Paste special: merge notes": "Plakken speciaal: noten samenvoegen",
+"Playlist {a}": "Playlist {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Zet de afspeelkop in een notenclip op de track van de gekopieerde clip",
+"Select the clips (or one clip of a group) to keep as a file": "Selecteer de clips (of één clip van een groep) om als bestand te bewaren",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Toon elke take en elke andere playlist als lane; sleep over een lane om dat bereik te comppen (een klik op de clip van een playlist compt de hele clip)",
+"Takes and playlists": "Takes en playlists"
+}

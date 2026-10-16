@@ -1,0 +1,29 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Føj det kopierede noteklips noter til noteklippet under afspilningsmarkøren, og behold det, der allerede er der",
+"Added tracks for the clips": "Spor tilføjet til klippene",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Hent en .fwclips-fil ind ved afspilningsmarkøren, fra det aktuelle spor og nedefter, som én gruppe",
+"Brought in {0} clips at the playhead as a group": "Hentede {0} klip ind ved afspilningsmarkøren som en gruppe",
+"Comped from a playlist": "Comp'et fra en playliste",
+"Comped from a playlist on {a}": "Comp'et fra en playliste på {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Kopiér først et noteklip (Cmd eller Ctrl C)",
+"Could not bring the clips in": "Kunne ikke hente klippene ind",
+"Could not keep the clips": "Kunne ikke gemme klippene",
+"Could not merge": "Kunne ikke flette",
+"Export clips as a file...": "Eksportér klip som fil...",
+"Import a clips file...": "Importér en klipfil...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Gem de markerede klip (en hel gruppe, når et af dens klip er markeret) og deres lyd som en .fwclips-fil",
+"Kept {0} clips from {1} track as a file": "Gemte {0} klip fra {1} spor som en fil",
+"Kept {0} clips from {1} tracks as a file": "Gemte {0} klip fra {1} spor som en fil",
+"Merged {0} notes into the clip": {
+"one": "Flettede {0} node ind i klippet",
+"other": "Flettede {0} noter ind i klippet"
+},
+"Merging the notes...": "Fletter noterne...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Intet at flette: de kopierede noter er der allerede eller ligger uden for klippet",
+"Paste special: merge notes": "Indsæt special: flet noter",
+"Playlist {a}": "Playliste {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Placér afspilningsmarkøren inde i et noteklip på det kopierede klips spor",
+"Select the clips (or one clip of a group) to keep as a file": "Markér de klip (eller ét klip i en gruppe), der skal gemmes som fil",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Vis hver take og hver anden playliste som en bane; træk hen over en for at comp'e det område (et klik på et klip i en playliste comper hele klippet)",
+"Takes and playlists": "Takes og playlister"
+}

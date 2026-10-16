@@ -1,0 +1,32 @@
+{
+"Add the copied note clip's notes into the note clip under the playhead, keeping what is there": "Lisää kopioidun nuottiklipin nuotit toistokohdan alla olevaan nuottiklippiin säilyttäen siinä jo olevat",
+"Added tracks for the clips": "Klipeille lisättiin raidat",
+"Bring in a .fwclips file at the playhead, from the current track down, as one group": "Tuo .fwclips-tiedosto toistokohtaan, nykyisestä raidasta alaspäin, yhtenä ryhmänä",
+"Brought in {0} clips at the playhead as a group": {
+"one": "Tuotiin {0} klippi toistokohtaan ryhmänä",
+"other": "Tuotiin {0} klipiä toistokohtaan ryhmänä"
+},
+"Comped from a playlist": "Koostettu playlististä",
+"Comped from a playlist on {a}": "Koostettu playlististä kohteessa {a}",
+"Copy a note clip first (Cmd or Ctrl C)": "Kopioi ensin nuottiklippi (Cmd tai Ctrl C)",
+"Could not bring the clips in": "Klipien tuonti epäonnistui",
+"Could not keep the clips": "Klipien tallennus epäonnistui",
+"Could not merge": "Yhdistäminen epäonnistui",
+"Export clips as a file...": "Vie klipit tiedostoksi...",
+"Import a clips file...": "Tuo klipitiedosto...",
+"Keep the selected clips (a whole group when one of its clips is selected) and their audio as a .fwclips file": "Tallenna valitut klipit (koko ryhmä, kun yksi sen klipeistä on valittu) ja niiden ääni .fwclips-tiedostoksi",
+"Kept {0} clips from {1} track as a file": "Tallennettiin tiedostoon klipit: {0}, raita: {1}",
+"Kept {0} clips from {1} tracks as a file": "Tallennettiin tiedostoon klipit: {0}, raidat: {1}",
+"Merged {0} notes into the clip": {
+"one": "Yhdistettiin {0} nuotti klippiin",
+"other": "Yhdistettiin {0} nuottia klippiin"
+},
+"Merging the notes...": "Yhdistetään nuotteja...",
+"Nothing to merge: the copied notes are there already or fall outside the clip": "Ei mitään yhdistettävää: kopioidut nuotit ovat jo siinä tai jäävät klipin ulkopuolelle",
+"Paste special: merge notes": "Liitä erikoisesti: yhdistä nuotit",
+"Playlist {a}": "Playlist {a}",
+"Put the playhead inside a note clip on the copied clip's track": "Aseta toistokohta nuottiklipin sisään kopioidun klipin raidalla",
+"Select the clips (or one clip of a group) to keep as a file": "Valitse tiedostoon tallennettavat klipit (tai yksi ryhmän klipeistä)",
+"Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)": "Näytä jokainen take ja jokainen muu playlist kaistana; vedä yhden poikki koostaaksesi sen alueen (playlistin klipin napsautus koostaa koko klipin)",
+"Takes and playlists": "Takeet ja playlistit"
+}
