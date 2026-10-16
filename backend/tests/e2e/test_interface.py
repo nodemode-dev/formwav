@@ -682,6 +682,61 @@ def test_the_models_section_says_where_the_chosen_model_runs_and_lists_every_mod
     assert _clean(page)["errors"] == []
 
 
+LANGUAGES = ["es", "es-MX", "pt-BR", "fr", "fr-CA", "de", "it", "nl", "da", "fi", "nb", "sv", "ru", "pl", "cs", "hu", "uk", "tr", "zh-CN", "zh-TW", "ja", "ko", "id", "th", "vi"]
+
+
+def test_every_string_on_screen_has_a_translation_in_all_twenty_five_languages_and_english_comes_back_whole(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    page.click('.fw-pane-media .fw-pane-tab[data-tab="sounds"]')
+    page.wait_for_timeout(2500)
+    if page.locator(".fw-dock").is_hidden():
+        page.click('.fw-panel-toggle[data-pane="editor"]')
+    page.click('.fw-dock-tab[data-panel="mixer"]')
+    page.click('[data-mix="add-bus"]')
+    page.click('[data-agent-tab="history"]')
+    english = page.evaluate("window.__fwI18n.keys()")
+    text = page.evaluate("document.body.innerText")
+    gaps = {}
+    for code in LANGUAGES:
+        page.evaluate("(c) => window.__fwI18n.setLanguage(c)", code)
+        missing = page.evaluate("window.__fwI18n.missing()")
+        if missing:
+            gaps[code] = missing[:5] + ([f"... {len(missing)} in all"] if len(missing) > 5 else [])
+        fits = page.evaluate("""(() => {
+          const r = (s) => document.querySelector(s).getBoundingClientRect();
+          const tabs = [...document.querySelectorAll('.fw-menu-btn, .fw-dock-tab, .fw-agent-tab, .fw-pane-tab')].filter((e) => e.offsetParent);
+          return r('.fw-session-name').right <= r('.fw-topbar-actions').left && document.documentElement.scrollWidth <= innerWidth && tabs.every((e) => e.scrollWidth <= e.clientWidth + 1);
+        })()""")
+        if not fits:
+            gaps[f"{code} layout"] = "a header label overlaps or is cut"
+    assert gaps == {}
+    page.evaluate("window.__fwI18n.setLanguage('de')")
+    assert page.text_content(".fw-menu-btn") != "File" and page.evaluate("document.documentElement.lang") == "de"
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight")
+    page.evaluate("window.__fwI18n.setLanguage('en')")
+    assert page.evaluate("window.__fwI18n.keys()") == english and page.evaluate("document.body.innerText") == text
+    assert _clean(page)["errors"] == []
+
+
+def test_a_chosen_language_holds_after_a_reload_and_shows_from_the_first_frame(page, app_url):
+    _open(page, app_url)
+    page.click(".fw-menu-btn:has-text('Settings')")
+    page.select_option(".fw-lang-pick select", "ja")
+    page.keyboard.press("Escape")
+    page.wait_for_function("document.documentElement.lang === 'ja'")
+    assert page.evaluate("document.querySelector('.fw-menu-btn').textContent") != "File"
+    page.context.new_cdp_session(page).send("Emulation.setCPUThrottlingRate", {"rate": 4})
+    page.reload()
+    page.wait_for_function("document.body.classList.contains('app-ready')")
+    first = page.evaluate("[...document.querySelectorAll('.fw-menu-btn')].map((b) => b.textContent)")
+    assert "File" not in first and "Settings" not in first and page.evaluate("document.documentElement.lang") == "ja"
+    page.wait_for_timeout(1500)
+    assert _clean(page)["shift"] == 0
+    page.evaluate("window.__fwI18n.setLanguage('en')")
+    assert _clean(page)["errors"] == []
+
+
 ROWS ="[...document.querySelectorAll('.fw-piano-list tbody tr')].map((r) => [...r.querySelectorAll('input')].map((i) => i.value))"
 NOTES_STATE = "document.querySelector('.fw-piano .fw-piano-state').textContent"
 
