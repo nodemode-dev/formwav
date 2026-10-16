@@ -1,0 +1,10 @@
+{
+"A sixteen-bar session made in code: drums, bass, pad and keys with a reverb bus": "Tizenhat ütemes, kóddal készített munkamenet: dob, basszus, pad és billentyűk reverb busszal",
+"Could not make the demo session": "A bemutató munkamenet létrehozása nem sikerült",
+"Making the demo session": "Bemutató munkamenet létrehozása",
+"Open the demo session": "Bemutató munkamenet megnyitása",
+"Opened the demo session: {0} bars at {1} BPM; save it to keep it": {
+"one": "Bemutató munkamenet megnyitva: {0} ütem, {1} BPM; mentse el, hogy megmaradjon",
+"other": "Bemutató munkamenet megnyitva: {0} ütem, {1} BPM; mentse el, hogy megmaradjon"
+}
+}

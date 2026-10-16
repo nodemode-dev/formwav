@@ -1,0 +1,12 @@
+{
+"A sixteen-bar session made in code: drums, bass, pad and keys with a reverb bus": "Šestnáctitaktová relace vytvořená kódem: bicí, basa, pad a klávesy se sběrnicí reverbu",
+"Could not make the demo session": "Ukázkovou relaci se nepodařilo vytvořit",
+"Making the demo session": "Vytváření ukázkové relace",
+"Open the demo session": "Otevřít ukázkovou relaci",
+"Opened the demo session: {0} bars at {1} BPM; save it to keep it": {
+"one": "Ukázková relace otevřena: {0} takt, tempo {1} BPM; uložte ji, pokud ji chcete zachovat",
+"few": "Ukázková relace otevřena: {0} takty, tempo {1} BPM; uložte ji, pokud ji chcete zachovat",
+"many": "Ukázková relace otevřena: {0} taktu, tempo {1} BPM; uložte ji, pokud ji chcete zachovat",
+"other": "Ukázková relace otevřena: {0} taktů, tempo {1} BPM; uložte ji, pokud ji chcete zachovat"
+}
+}

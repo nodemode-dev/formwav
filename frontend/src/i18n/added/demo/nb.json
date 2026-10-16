@@ -1,0 +1,10 @@
+{
+"A sixteen-bar session made in code: drums, bass, pad and keys with a reverb bus": "En sesjon på seksten takter laget med kode: trommer, bass, pad og keys med en reverb-buss",
+"Could not make the demo session": "Kunne ikke lage demosesjonen",
+"Making the demo session": "Lager demosesjonen",
+"Open the demo session": "Åpne demosesjonen",
+"Opened the demo session: {0} bars at {1} BPM; save it to keep it": {
+"one": "Åpnet demosesjonen: {0} takt på {1} BPM; lagre den for å beholde den",
+"other": "Åpnet demosesjonen: {0} takter på {1} BPM; lagre den for å beholde den"
+}
+}

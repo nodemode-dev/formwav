@@ -1,0 +1,10 @@
+{
+"A sixteen-bar session made in code: drums, bass, pad and keys with a reverb bus": "Kodla oluşturulmuş on altı ölçülük bir oturum: davul, bas, pad ve klavye, bir reverb bus'ı ile",
+"Could not make the demo session": "Demo oturumu oluşturulamadı",
+"Making the demo session": "Demo oturumu oluşturuluyor",
+"Open the demo session": "Demo oturumunu aç",
+"Opened the demo session: {0} bars at {1} BPM; save it to keep it": {
+"one": "Demo oturumu açıldı: {0} ölçü, {1} BPM; saklamak için kaydedin",
+"other": "Demo oturumu açıldı: {0} ölçü, {1} BPM; saklamak için kaydedin"
+}
+}

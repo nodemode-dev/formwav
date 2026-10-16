@@ -1,0 +1,10 @@
+{
+"A sixteen-bar session made in code: drums, bass, pad and keys with a reverb bus": "Koodilla tehty kuusitoistatahtinen sessio: rummut, basso, pad ja koskettimet sekä kaikuväylä",
+"Could not make the demo session": "Demosession luominen epäonnistui",
+"Making the demo session": "Luodaan demosessiota",
+"Open the demo session": "Avaa demosessio",
+"Opened the demo session: {0} bars at {1} BPM; save it to keep it": {
+"one": "Demosessio avattu: {0} tahti tempolla {1} BPM; tallenna se säilyttääksesi sen",
+"other": "Demosessio avattu: {0} tahtia tempolla {1} BPM; tallenna se säilyttääksesi sen"
+}
+}
