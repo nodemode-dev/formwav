@@ -117,7 +117,7 @@ fn poly_blep(t: f64, dt: f64) -> f64 {
     }
 }
 
-fn oscillator(wave: Wave, phase: f64, dt: f64) -> f64 {
+pub(crate) fn oscillator(wave: Wave, phase: f64, dt: f64) -> f64 {
     match wave {
         Wave::Sine => (std::f64::consts::TAU * phase).sin(),
         Wave::Triangle => 1.0 - 4.0 * (phase - 0.5).abs(),

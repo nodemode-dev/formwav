@@ -1,5 +1,6 @@
 pub mod fx;
 pub mod graph;
+pub mod instruments;
 pub mod loudness;
 pub mod onsets;
 pub mod peaks;

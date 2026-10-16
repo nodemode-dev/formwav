@@ -303,6 +303,19 @@ pub unsafe extern "C" fn fw_live_patch(player: *mut Player, wave: u32, attack: f
     (*player).set_live_patch(crate::synth::Patch { wave, attack, decay, sustain, release, gain, cutoff, resonance });
 }
 
+/// S14: the live instrument as the subtractive synth (kind 1) or the drum synth (2), `count` values in the core's
+/// order for it.
+///
+/// # Safety
+/// `player` must come from `fw_player_new`; `values` must hold `count` floats.
+#[no_mangle]
+pub unsafe extern "C" fn fw_live_instrument(player: *mut Player, kind: u32, values: *const f32, count: usize) {
+    if let Some(kind) = crate::instruments::Kind::from_code(kind) {
+        let values = if count == 0 { &[][..] } else { slice::from_raw_parts(values, count) };
+        (*player).set_live_instrument(kind, values);
+    }
+}
+
 /// Releases every live note.
 ///
 /// # Safety

@@ -435,9 +435,75 @@ fn processors() -> String {
     crate::fx::processors_json()
 }
 
+/// S14: notes played by the subtractive (`subtractive`) or drum (`drums`) synth with `values` in the core's order for
+/// it; mono 32-bit float samples until the last voice ends.
+#[pyfunction]
+fn render_instrument<'py>(py: Python<'py>, notes: Vec<(u64, u64, u8, u8)>, rate: u32, kind: &str, values: Vec<f32>) -> PyResult<Bound<'py, PyBytes>> {
+    let kind = crate::instruments::Kind::parse(kind).ok_or_else(|| PyValueError::new_err(format!("no instrument named {kind}")))?;
+    let notes: Vec<crate::synth::Note> = notes.into_iter().map(|(start, length, pitch, velocity)| crate::synth::Note { start, length, pitch, velocity }).collect();
+    let samples = crate::instruments::render(kind, &values, &notes, rate);
+    let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+    Ok(PyBytes::new(py, &bytes))
+}
+
+/// S14: the instrument's parameters as JSON (id, name, min, max, default, unit), in the order its values take.
+#[pyfunction]
+fn instrument_params(kind: &str) -> PyResult<String> {
+    let kind = crate::instruments::Kind::parse(kind).ok_or_else(|| PyValueError::new_err(format!("no instrument named {kind}")))?;
+    Ok(crate::instruments::params_json(kind))
+}
+
+/// S14: a realtime chain run over audio as an export runs a bus's chain: stages (kind, a to e; a processor's a is its
+/// place in `processors`) designed at `rate`, first the chain's latency read ahead, then the rest in the render's
+/// blocks, so the output lines up with the input and is as long; stereo, interleaved 32-bit float (a mono source
+/// feeds both sides, as a centred mono clip plays).
+#[pyfunction]
+#[pyo3(signature = (interleaved, channels, rate, chain, processors = Vec::new()))]
+fn process_chain<'py>(py: Python<'py>, interleaved: &[u8], channels: usize, rate: f32, chain: Vec<(u8, f32, f32, f32, f32, f32)>, processors: Vec<String>) -> PyResult<Bound<'py, PyBytes>> {
+    if channels == 0 || interleaved.len() % (4 * channels) != 0 {
+        return Err(PyValueError::new_err("the sample data does not divide into whole frames"));
+    }
+    let frames = interleaved.len() / (4 * channels);
+    let mut stages = Vec::with_capacity(chain.len());
+    for (kind, a, b, c, d, e) in chain {
+        let stage = if kind == crate::fx::PROCESSOR { processors.get(a as usize).and_then(|s| crate::fx::Stage::processor(s, rate)) } else { crate::fx::Stage::design(kind, a, b, c, d, e, rate) };
+        stages.push(stage.ok_or_else(|| PyValueError::new_err(format!("the core cannot make a stage of kind {kind}")))?);
+    }
+    let ahead: usize = stages.iter().map(|s| s.latency()).sum();
+    let at = |i: usize, ch: usize| -> f32 {
+        if i >= frames {
+            return 0.0;
+        }
+        let k = (i * channels + ch.min(channels - 1)) * 4;
+        f32::from_le_bytes([interleaved[k], interleaved[k + 1], interleaved[k + 2], interleaved[k + 3]])
+    };
+    let mut left: Vec<f32> = (0..frames + ahead).map(|i| at(i, 0)).collect();
+    let mut right: Vec<f32> = (0..frames + ahead).map(|i| at(i, 1)).collect();
+    for s in stages.iter_mut() {
+        s.process_block(&mut left[..ahead], &mut right[..ahead]);
+    }
+    let mut i = ahead;
+    while i < frames + ahead {
+        let end = (i + RENDER_BLOCK).min(frames + ahead);
+        for s in stages.iter_mut() {
+            s.process_block(&mut left[i..end], &mut right[i..end]);
+        }
+        i = end;
+    }
+    let mut out = Vec::with_capacity(frames * 8);
+    for k in ahead..frames + ahead {
+        out.extend_from_slice(&left[k].to_le_bytes());
+        out.extend_from_slice(&right[k].to_le_bytes());
+    }
+    Ok(PyBytes::new(py, &out))
+}
+
 #[pymodule]
 fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(processors, m)?)?;
+    m.add_function(wrap_pyfunction!(render_instrument, m)?)?;
+    m.add_function(wrap_pyfunction!(instrument_params, m)?)?;
+    m.add_function(wrap_pyfunction!(process_chain, m)?)?;
     #[cfg(feature = "native")]
     m.add_class::<PyNativeOutput>()?;
     #[cfg(feature = "native")]

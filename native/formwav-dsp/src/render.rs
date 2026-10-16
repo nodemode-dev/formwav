@@ -175,7 +175,7 @@ pub struct Player {
     /// the window's length, and the contiguous range of frames it holds now.
     windows: HashMap<u32, SourceWindow>,
     /// AU-37: the instrument played live (a MIDI input, the on-screen keys), made on its first note.
-    live: Option<crate::synth::Synth>,
+    live: Option<crate::instruments::Live>,
     /// Its block's scratch, kept between calls so a warm player renders without allocating.
     live_scratch: Vec<f32>,
     /// PT-42: the bus's format: SURROUND_51, or SURROUND_FOA (first-order ambisonics in the first four slots, AmbiX:
@@ -747,15 +747,24 @@ impl Player {
     /// built-in patch at the player's rate if it has not played yet.
     pub fn live_note(&mut self, pitch: u8, velocity: u8) {
         let rate = self.rate.max(1.0) as u32;
-        self.live.get_or_insert_with(|| crate::synth::Synth::new(crate::synth::Patch::default(), rate)).note_on(pitch, velocity);
+        self.live.get_or_insert_with(|| crate::instruments::Live::Synth(crate::synth::Synth::new(crate::synth::Patch::default(), rate))).note_on(pitch, velocity);
     }
 
     /// The live instrument's patch (a note track's own, so what is played sounds as what is recorded will).
     pub fn set_live_patch(&mut self, patch: crate::synth::Patch) {
         let rate = self.rate.max(1.0) as u32;
         match self.live.as_mut() {
-            Some(live) => live.set_patch(patch),
-            None => self.live = Some(crate::synth::Synth::new(patch, rate)),
+            Some(crate::instruments::Live::Synth(live)) => live.set_patch(patch),
+            _ => self.live = Some(crate::instruments::Live::Synth(crate::synth::Synth::new(patch, rate))),
+        }
+    }
+
+    /// S14: the live instrument as a note track's subtractive or drum synth; the same kind keeps its sounding voices.
+    pub fn set_live_instrument(&mut self, kind: crate::instruments::Kind, values: &[f32]) {
+        let rate = self.rate.max(1.0) as u32;
+        match self.live.as_mut() {
+            Some(crate::instruments::Live::Other(live)) if live.kind() == kind => live.set_values(values),
+            _ => self.live = Some(crate::instruments::Live::Other(crate::instruments::Instrument::new(kind, values, rate))),
         }
     }
 
