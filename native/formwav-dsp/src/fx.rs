@@ -1,5 +1,5 @@
 //! Realtime track effects: biquad filters from Robert Bristow-Johnson's Audio EQ Cookbook (the published formulas;
-//! no code taken), for Audacity's realtime effect stacks and Pro Tools' insert EQs as references.
+//! no code taken).
 //!
 //! A track's chain runs on each of its clips before gain, pan and fades. The filters are linear and time-invariant,
 //! so filtering each clip and summing equals filtering the track's sum. Coefficients are designed in f64 and run in

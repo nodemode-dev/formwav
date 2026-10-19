@@ -1,13 +1,13 @@
 #!/bin/sh
-# Builds fwnyq (AU-28): libnyquist (Audacity 2.4.2's Nyquist 3.15, vendored in libnyquist/) compiled from sources.txt
-# with Audacity's defines (CMTSTUFF, EXT), then the driver linked against it, libsndfile and portaudio.
+# Builds fwnyq (AU-28): libnyquist (the upstream Nyquist 3.15 sources as vendored in libnyquist/) compiled from sources.txt
+# with the upstream build's defines (CMTSTUFF, EXT), then the driver linked against it, libsndfile and portaudio.
 # Needs a C and C++ compiler and libsndfile's and portaudio's development files. Output: ./fwnyq
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 L="$here/libnyquist/nyquist"
 build="$here/build"
 mkdir -p "$build"
-# the platform's system headers: sys/unix, or on Windows (MSYS2) Audacity 2.4.2's sys/win/msvc (switches.h defines
+# the platform's system headers: sys/unix, or on Windows (MSYS2) the upstream 2.4.2 release's sys/win/msvc (switches.h defines
 # WINDOWS for the shared headers); with them every source compiles under MinGW-w64, as checked by cross-compiling
 case "$(uname -s)" in
   MINGW*|MSYS*) SYS="$L/sys/win/msvc $(pkg-config --cflags sndfile portaudio-2.0)" ;;
@@ -15,7 +15,7 @@ case "$(uname -s)" in
 esac
 INC="-I$here/libnyquist -I$L/cmt -I$L/cmupv/src -I$L/ffts/src -I$L/nyqsrc -I$L/nyqstk -I$L/nyqstk/include -I$L/tran -I$L/xlisp -I$SYS"
 LIBS=""
-# macOS: libsndfile and portaudio from Homebrew, and -fno-common as Audacity's build uses on Darwin
+# macOS: libsndfile and portaudio from Homebrew, and -fno-common as the upstream build uses on Darwin
 if command -v brew >/dev/null 2>&1; then
   INC="$INC -I$(brew --prefix)/include"
   LIBS="-L$(brew --prefix)/lib"

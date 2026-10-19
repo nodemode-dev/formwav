@@ -1,4 +1,4 @@
-//! Transient detection (Pro Tools' transient detection for groove and timing edits, as a reference; no code taken).
+//! Transient detection (for groove and timing edits; no code taken).
 //!
 //! The signal is first-differenced, which emphasises attacks over sustained tones, and cut into short frames whose
 //! energy is taken in dB. An onset is a frame whose energy rises from the previous frame by more than a threshold

@@ -1,4 +1,4 @@
-# libnyquist's sources for Unix, as Audacity 2.4.2's build file lists them (cmake-proxies/libnyquist)
+# libnyquist's sources for Unix, as the upstream build file (cmake-proxies/libnyquist) of the 2.4.2 release lists them
 nyx.c
 nyquist/cmt/cext.c
 nyquist/cmt/cleanup.c

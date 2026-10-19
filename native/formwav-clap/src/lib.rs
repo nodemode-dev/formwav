@@ -1,4 +1,4 @@
-//! RX-67: formwav's realtime repair tools as CLAP plugins for other hosts (Bitwig, Reaper and any CLAP host), one
+//! RX-67: formwav's realtime repair tools as CLAP plugins for any CLAP host, one
 //! bundle holding two: De-noise, the core's adaptive de-noiser (fx.rs Denoiser), and De-hum, a run of narrow cuts at
 //! the mains frequency and its harmonics. Each instance keeps its parameters in atomics (the host reads them on its
 //! main thread while audio runs), applies parameter events at the start of each block, saves and loads its state, and

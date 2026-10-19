@@ -65,7 +65,7 @@ echo "sidecar: src-tauri/binaries/formwav-engine-$TRIPLE"
 cargo build --release --manifest-path native/formwav-host/Cargo.toml
 cp native/formwav-host/target/release/fwhost "src-tauri/binaries/fwhost-$TRIPLE"
 echo "sidecar: src-tauri/binaries/fwhost-$TRIPLE"
-# AU-28: Nyquist's runner (Audacity's libnyquist, vendored); it needs libsndfile and portaudio (brew install libsndfile
+# AU-28: Nyquist's runner (libnyquist, vendored); it needs libsndfile and portaudio (brew install libsndfile
 # portaudio), linked from Homebrew, so this app runs on Macs that have them
 native/formwav-nyquist/build_fwnyq
 cp native/formwav-nyquist/fwnyq "src-tauri/binaries/fwnyq-$TRIPLE"

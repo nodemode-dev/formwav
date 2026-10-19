@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 publish = false
-description = "RX-67: formwav's realtime repair tools (De-noise, De-hum) as CLAP plugins for other hosts"
+description = "RX-67: formwav's realtime repair tools (De-noise, De-hum) as CLAP plugins for any CLAP host"
 
 [lib]
 crate-type = ["cdylib"]

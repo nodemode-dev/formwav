@@ -1,7 +1,7 @@
 /*
- * fwnyq: formwav's Nyquist runner (AU-28). Audacity's own Nyquist (libnyquist with its nyx embedding API, BSD-style
- * licence) runs a script on a clip: the audio goes in as *TRACK* (as Audacity gives version 4 plug-ins their
- * selection), the script (a preamble of settings and controls, then the plug-in's or prompt's code) is evaluated
+ * fwnyq: formwav's Nyquist runner (AU-28). The upstream Nyquist 3.15 sources as vendored in libnyquist/ (with the nyx
+ * embedding API, BSD-style licence) run a script on a clip: the audio goes in as *TRACK* (as version 4 plug-ins get
+ * their selection), the script (a preamble of settings and controls, then the plug-in's or prompt's code) is evaluated
  * form by form, and the last value comes back: a sound is written as a 32-bit float WAV, anything else is printed as
  * one line of JSON. What Nyquist prints goes to stderr.
  *
