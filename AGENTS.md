@@ -14,6 +14,12 @@ Conventions this repository is built under:
   in the engine), so what plays is what exports
 - No claim that was not run; if it was measured, give the number. No em dashes in Markdown
 - Versions are v(major).(middle 0 to 99).(minor 0 to 9); a release moves every version site together
+- No other product or company competing with formwav is named anywhere in the repository (code, comments, interface
+  strings in every language, logs, docs, commit messages): describe a feature by what it does, and a file format by
+  its extension. Licence and copyright notices of vendored code and the model providers the engine calls are kept
+- Declined for patent risk, never to be added: content-aware scale (seam carving or any resize that removes or
+  inserts low-energy paths) and skin protection (skin-tone detection that shields regions from an edit), in any form,
+  under any name; see NOTICE
 
 Invariants worth repeating, because breaking them is silent:
 
