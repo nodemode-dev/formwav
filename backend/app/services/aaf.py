@@ -1,4 +1,4 @@
-"""AAF interchange (PT-30, Pro Tools' and Avid's exchange format) through pyaaf2 (MIT, pure Python): a session's timeline
+"""AAF interchange (PT-30, an exchange format between editors) through pyaaf2 (MIT, pure Python): a session's timeline
 written as an AAF, each track a sound slot of clips and fillers with its audio embedded, and an AAF's timeline read back
 as tracks of clips, its embedded audio imported as media. Clip gain, fades and effects are not carried, only where each
 clip sits and what part of its audio it plays. Audio an AAF only links to (a file outside it) cannot be resolved here and
@@ -12,7 +12,7 @@ import numpy as np
 
 from ..core.paths import media_dir
 from . import media
-from .audacity import _wav_bytes
+from .aup_project import _wav_bytes
 
 
 def export_aaf(doc: dict) -> bytes:
@@ -144,7 +144,7 @@ def import_aaf(data: bytes) -> dict:
             found = {i["id"]: i for i in imported.values() if i}
             if not found:
                 raise media.MediaError("the AAF's audio is linked to files outside it, which cannot be reached here" if missing else "the AAF holds no audio clips")
-            # a whole session, as the Audacity import gives one: ids for tracks and clips, the usual track fields
+            # a whole session, as the .aup import gives one: ids for tracks and clips, the usual track fields
             counter = 0
             session_tracks = []
             for n, t in enumerate(tracks, 1):

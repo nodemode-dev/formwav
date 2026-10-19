@@ -1,8 +1,8 @@
-"""Speech, music and ambience as three faders (the v11 comparison's Adobe row, PLAN_v11 2.M4): a clip's range split into
+"""Speech, music and ambience as three faders (PLAN_v11 2.M4): a clip's range split into
 three parts that sum back to it exactly, each placed on its own track so the session's own faders set the balance.
 
 Speech is DeepFilterNet3's dialogue (services/deepfilter.py, RX-16's model, run through its own command-line build). What
-is left, the clip less the speech, is split as separate.deconstruct splits a range (iZotope RX's Deconstruct, harmonic and
+is left, the clip less the speech, is split as separate.deconstruct splits a range (harmonic and
 percussive separation with a margin: a 2048-point STFT, medians over 17 frames and 17 bins), in numpy so that it runs
 where PyTorch is not installed, with soft masks: its tonal and transient parts are the music, and the ambience is the rest, defined as the
 remainder less the music. So speech, music and ambience add up to the clip sample for sample, and faders left at 0 dB
@@ -19,7 +19,7 @@ import subprocess
 import numpy as np
 
 from . import deepfilter, media, tiger_dnr
-from .audacity import _wav_bytes
+from .aup_project import _wav_bytes
 
 N_FFT, HOP, KERNEL, MARGIN = 2048, 512, 17, 2.0
 TRAINED_HOP = 4.0

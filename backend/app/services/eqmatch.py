@@ -1,4 +1,4 @@
-"""EQ match (iZotope RX's EQ Match, as a reference): give a clip the tonal balance of a reference selection. Both are
+"""EQ match: give a clip the tonal balance of a reference selection. Both are
 measured as average power spectra in 30 third-octave bands from 25 Hz; the curve is the reference minus the target per
 band, centred on its median so the balance moves and the loudness does not, clamped to 18 dB either way, and left at 0
 where either side has nothing (or the band is past either file's Nyquist). The curve is rendered with firequalizer,

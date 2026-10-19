@@ -1,4 +1,4 @@
-"""Effect presets (Audacity's one preset system across built-in, destructive and realtime effects, as a reference):
+"""Effect presets (one preset system across built-in, destructive and realtime effects):
 named settings for an effect, rendered or realtime, kept in one JSON file in the data folder so they outlive a
 browser and a session. The app reads the whole list and writes it back whole; entries are validated, and the file
 is replaced atomically."""

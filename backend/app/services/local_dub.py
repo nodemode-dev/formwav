@@ -21,7 +21,7 @@ import numpy as np
 
 from ..core.version import VERSION
 from . import local_speech, media, transcript
-from .audacity import _wav_bytes
+from .aup_project import _wav_bytes
 from .providers import ProviderError
 
 LANGS = {"es": ("Spanish", "es", "e", "https://argos-net.com/v1/translate-en_es-1_0.argosmodel"),

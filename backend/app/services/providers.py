@@ -190,7 +190,7 @@ def _splice(media_id: str, a: int, b: int, spoken_id: str) -> dict:
     crossfades: a new media, the source kept, and how many frames longer or shorter it is (so the caller can ripple)."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .tools import _wav_view
 
     view, rate = _wav_view(media_id)
@@ -221,7 +221,7 @@ def elevenlabs_regenerate(media_id: str, start_s: float, end_s: float, text: str
     with the voice used and how many source frames longer (or shorter) it is, so the caller can ripple what follows."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .tools import _wav_view
 
     if not text.strip():

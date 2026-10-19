@@ -1,12 +1,12 @@
-"""Audacity 2.x projects: the .aup XML and its _data folder of .au block files, zipped together, become a session document.
+""".aup (2.x) projects: the .aup XML and its _data folder of .au block files, zipped together, become a session document.
 
 The .aup root is <project projname="X_data" rate="44100"> with <wavetrack name channel linked mute solo gain pan rate>
 holding <waveclip offset="seconds"> holding <sequence sampleformat numsamples> holding <waveblock start="samples">
 with one <simpleblockfile filename="e0000abcd.au" len="samples"/> or <silentblockfile len="samples"/>; <labeltrack> holds
-<label t t1 title/>. Each .au block is a Sun audio file whose 24-byte header Audacity writes in the machine's own byte
+<label t t1 title/>. Each .au block is a Sun audio file whose 24-byte header is written in the machine's own byte
 order (little-endian on every machine that mattered, so the magic reads "dns." rather than ".snd"), with the samples at
 the header's data offset, float32 for sampleformat 262159 and int16 for 131073 (the summary data sits between).
-A linked pair of wavetracks (channel 0 with a non-zero linked: "1" in older projects, a link type in Audacity 3's;
+A linked pair of wavetracks (channel 0 with a non-zero linked: "1" in older projects, a link type in .aup3's;
 then channel 1) becomes one stereo track when their clips line up.
 """
 
@@ -39,10 +39,10 @@ def _read_au(data: bytes, count: int) -> np.ndarray:
     elif magic == b"dns.":
         order = "<"
     else:
-        raise media.MediaError("a block file is not an Audacity .au block")
+        raise media.MediaError("a block file is not an .aup .au block")
     offset, _size, encoding, _rate, channels = struct.unpack(order + "IIIII", data[4:24])
     if channels != 1:
-        raise media.MediaError("a block file holds more than one channel, which Audacity never writes")
+        raise media.MediaError("a block file holds more than one channel, which an .aup project never writes")
     if encoding == AU_FLOAT:
         samples = np.frombuffer(data, dtype=order + "f4", offset=offset, count=min(count, (len(data) - offset) // 4)).astype(np.float32)
     elif encoding == AU_INT16:
@@ -62,7 +62,7 @@ def _wav_bytes(channels: list[np.ndarray], rate: int) -> bytes:
 
 
 class _Aliases:
-    """AU-34: the files uploaded beside an .aup, read as Audacity reads an aliased block: each file decoded once (its own
+    """AU-34: the files uploaded beside an .aup, read as an aliased block: each file decoded once (its own
     channels and rate) and sliced by frame and channel; a file the project needs and the upload lacks is named."""
 
     def __init__(self, files: dict[str, bytes]):
@@ -116,13 +116,13 @@ def _clip_samples(clip: ElementTree.Element, blocks: dict[str, bytes], aliases: 
                 elif kind == "silentblockfile":
                     parts.append(np.zeros(count, dtype=np.float32))
                 elif kind in ("pcmaliasblockfile", "odpcmaliasblockfile") and aliases is not None:
-                    # AU-34: Audacity 2.3.2 and earlier could read a WAV in place rather than copy it: the block names
+                    # AU-34: .aup projects of 2.3.2 and earlier could read a WAV in place rather than copy it: the block names
                     # the file, the first frame, the length and the channel. The file comes in the upload beside the .aup,
                     # matched by its name (the path recorded is the machine's that made the project)
                     length = int(part.get("aliaslen", part.get("len", "0")))  # an alias block has aliaslen, not len
                     parts.append(aliases.read(part.get("aliasfile", ""), int(part.get("aliasstart", "0")), length, int(part.get("aliaschannel", "0"))))
                 elif kind in ("pcmaliasblockfile", "odpcmaliasblockfile", "oddecodeblockfile"):
-                    raise media.MediaError("this project references audio outside its _data folder (an aliased file); open it in Audacity and save a copy that embeds its audio first")
+                    raise media.MediaError("this project references audio outside its _data folder (an aliased file); re-save the .aup project as a copy that embeds its audio, then import that")
     return np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
 
 
@@ -149,7 +149,7 @@ def import_aup_zip(data: bytes) -> dict:
 
 
 def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: str, aliases: _Aliases | None = None) -> dict:
-    """An Audacity project's <project> element as a session document with its media stored, shared by .aup (block
+    """An .aup project's <project> element as a session document with its media stored, shared by .aup (block
     files by name) and .aup3 (sample blocks by id)."""
     if _tag(root) != "project":
         raise media.MediaError("the .aup does not start with a <project> element")
@@ -162,7 +162,7 @@ def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: st
     counter = 0
     while i < len(wave_tracks):
         t = wave_tracks[i]
-        # a stereo pair: older Audacity wrote linked="1", Audacity 3 a link type (2 grouped, 3 aligned; 3.4.2 wrote 3)
+        # a stereo pair: older .aup files wrote linked="1", .aup3 a link type (2 grouped, 3 aligned; 3.4.2 wrote 3)
         partner = wave_tracks[i + 1] if t.get("linked", "0") not in ("0", "") and i + 1 < len(wave_tracks) else None
         clips_a = [c for c in t if _tag(c) == "waveclip"]
         clips_b = [c for c in partner if _tag(c) == "waveclip"] if partner is not None else []
@@ -177,7 +177,7 @@ def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: st
             ref = media.import_wav(name, _wav_bytes(channels, track_rate))
             start = int(round(float(clip.get("offset", "0")) * rate))
             frames = int(ref["frames"])
-            # AU-34: the clip's volume envelope, its control points timed from the clip's start (Audacity 2.4.2 stores a
+            # AU-34: the clip's volume envelope, its control points timed from the clip's start (2.4.2 stores a
             # point set at 2.5 s on a clip at 2 s as t="0.5") and linear in gain between points, as formwav's are; a
             # gain below formwav's -60 dB floor is held there
             points = [(float(p.get("t", "0")), float(p.get("val", "1"))) for e in clip if _tag(e) == "envelope" for p in e if _tag(p) == "controlpoint"]
@@ -207,7 +207,7 @@ def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: st
                 markers.append({"id": f"aup-marker-{len(markers) + 1}", "at": int(round(a * rate)), "label": title})
     media_refs = {c["mediaId"]: media.media_info(c["mediaId"]) for t in tracks for c in t["clips"]}
     doc = {"sampleRate": rate, "tracks": tracks, "media": media_refs, "markers": markers, **({"regions": regions} if regions else {})}
-    # AU-34: the view the project was left in: Audacity's zoom in pixels a second over formwav's 100 at zoom 1 (held to
+    # AU-34: the view the project was left in: its zoom in pixels a second over formwav's 100 at zoom 1 (held to
     # its 0.25 to 16), its left edge h in seconds, its selection sel0 to sel1 (the same attributes in .aup and .aup3)
     view: dict = {}
     try:
@@ -226,15 +226,15 @@ def _session_from_root(root: ElementTree.Element, blocks: dict, project_name: st
     return {"name": project_name, "document": doc, "tracks": len(tracks), "clips": sum(len(t["clips"]) for t in tracks), "labels": len(markers) + len(regions)}
 
 
-# AU-33: Audacity 3's .aup3 is one SQLite file: the project as Audacity's binary serialisation (a name dictionary and a
+# AU-33: an .aup3 is one SQLite file: the project as a binary serialisation (a name dictionary and a
 # document of tokens) in its project table, the audio in its sampleblocks table. The file is only ever read from a
-# temporary copy, so the original is never changed (opening it in place would replay or take Audacity's log and lock).
+# temporary copy, so the original is never changed (opening it in place would replay or take its log and lock).
 _SAMPLE_FORMATS = {0x0004000F: "<f4", 0x00020001: "<i2", 0x00040001: "<i4"}  # float, 16-bit, 24-bit held in 32
 
 
 def _decode_aup3(dict_blob: bytes, doc_blob: bytes) -> str:
-    """Audacity's ProjectSerializer tokens back into the project's XML, strictly: an unknown token, an attribute outside
-    a tag or a mismatched end tag fails loudly rather than reading on misaligned. Widths as Audacity 3.4.2 writes them
+    """The .aup3 serializer's tokens back into the project's XML, strictly: an unknown token, an attribute outside
+    a tag or a mismatched end tag fails loudly rather than reading on misaligned. Widths as .aup3 files of 3.4.2 write them
     (attribute and tag names as 16-bit ids; int, long and size_t 32-bit; long long 64-bit; characters as the file's
     char-size token says)."""
     names: dict[int, str] = {}
@@ -322,16 +322,16 @@ def _decode_aup3(dict_blob: bytes, doc_blob: bytes) -> str:
     return "".join(out)
 
 
-def import_aup3(data: bytes, project_name: str = "Audacity project") -> dict:
-    """An Audacity 3 .aup3 project as a session document with its media stored, through the builder .aup uses: each
+def import_aup3(data: bytes, project_name: str = "Imported project") -> dict:
+    """An .aup3 project as a session document with its media stored, through the builder .aup uses: each
     clip's sample blocks joined (silent blocks, negative ids, as silence) and its trims applied, its offset moved by
-    the left trim. Clips stretched by Audacity 3.4's clip stretching are refused rather than read wrong."""
+    the left trim. Clips stretched by the 3.4 clip stretching are refused rather than read wrong."""
     import sqlite3
     import tempfile
     from pathlib import Path
 
     if not data.startswith(b"SQLite format 3\x00"):
-        raise media.MediaError("this is not an Audacity 3 project (.aup3 files are SQLite databases)")
+        raise media.MediaError("this is not an .aup3 project (.aup3 files are SQLite databases)")
     with tempfile.TemporaryDirectory(prefix="formwav-aup3-") as tmp:
         copy = Path(tmp) / "project.aup3"
         copy.write_bytes(data)
@@ -366,7 +366,7 @@ def import_aup3(data: bytes, project_name: str = "Audacity project") -> dict:
                 rate = float(track.get("rate", root.get("rate", "44100")))
                 for clip in (c for c in track if _tag(c) == "waveclip"):
                     if abs(float(clip.get("clipStretchRatio", "1")) - 1) > 1e-9:
-                        raise media.MediaError("this project stretches a clip (Audacity 3.4's clip stretching), which formwav does not read yet; render the stretch in Audacity first")
+                        raise media.MediaError("this .aup3 project stretches a clip (the 3.4 clip stretching), which formwav does not read yet; render the stretch and save the .aup3 again first")
                     for sequence in (s for s in clip if _tag(s) == "sequence"):
                         wave_blocks = sorted((b for b in sequence if _tag(b) == "waveblock"), key=lambda b: int(b.get("start", "0")))
                         samples = np.concatenate([block(int(b.get("blockid", "0"))) for b in wave_blocks]) if wave_blocks else np.zeros(0, dtype=np.float32)

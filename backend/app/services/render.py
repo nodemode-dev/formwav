@@ -96,7 +96,7 @@ def _env_gain(points: list[tuple[int, float]], t: float) -> float:
 
 
 def _clip_env_gain(points: list[tuple[int, float]], t: float) -> float:
-    """AU-34: a clip envelope's gain at t, interpolated in dB between points (Audacity 2's clip envelopes are exponential:
+    """AU-34: a clip envelope's gain at t, interpolated in dB between points (a 2.x .aup project's clip envelopes are exponential:
     halfway between gains of 1 and 0.25 its own render measures 0.5004) and held outside them."""
     if t <= points[0][0]:
         return 10 ** (points[0][1] / 20)
@@ -232,7 +232,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     muted_buses.update(b["id"] for b in doc.get("buses") or [] if isinstance(b, dict) and isinstance(b.get("id"), str) and b not in live)
     for bus in live:
         buses[bus["id"]] = (len(buses) + 1, math.pow(10, float(bus.get("gainDb", 0)) / 20), float(bus.get("pan") or 0))
-        # A bus's own effects (Pro Tools' routing folders process the summed stem) run on its sum, in order.
+        # A bus's own effects (a routing folder processes the summed stem) run on its sum, in order.
         bus_chains.extend((1, len(buses) - 1, *s) for s in (_stage(f) for f in (bus.get("fx") or [])) if s)
     sources: dict[str, int] = {}
     clips: list[tuple] = []
@@ -247,7 +247,7 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
     skipped = 0
     vcas = {v["id"]: v for v in (doc.get("vcas") or []) if isinstance(v, dict) and isinstance(v.get("id"), str)}
     for track in tracks:
-        # A VCA (Pro Tools' VCA masters) scales and mutes its members without carrying their audio.
+        # A VCA master scales and mutes its members without carrying their audio.
         vca = vcas.get(track.get("vcaId"))
         if track.get("inactive") or track.get("mute") or (vca and vca.get("mute")) or (soloed and not track.get("solo") and not track.get("soloSafe")) or track.get("busId") in muted_buses:
             continue

@@ -270,7 +270,7 @@ def media_excerpt(media_id: str, start: float, end: float) -> dict:
 
 @router.get("/media/{media_id}/transients")
 def media_transients(media_id: str, sensitivity: float = 0.5) -> dict:
-    """Transients (Pro Tools' transient detection, as a reference) in the file's own seconds, from the core."""
+    """Transients in the file's own seconds, from the core."""
     try:
         media._check_id(media_id)
         path = media_dir() / f"{media_id}.wav"
@@ -386,8 +386,8 @@ def media_vamp(media_id: str, payload: dict) -> dict:
 
 @router.post("/media/{media_id}/nyquist", status_code=201)
 def media_nyquist(media_id: str, payload: dict) -> dict:
-    """AU-28: {"code"} (a Nyquist Prompt) or {"plugin", "values"} (one of Audacity's bundled Nyquist plug-ins and its
-    controls) run on the clip by Audacity's own Nyquist (services/nyquist.py); a sound comes back as new media."""
+    """AU-28: {"code"} (a Nyquist Prompt) or {"plugin", "values"} (one of the bundled Nyquist plug-ins and its
+    controls) run on the clip by the Nyquist interpreter (services/nyquist.py); a sound comes back as new media."""
     from ..services import nyquist
 
     try:
@@ -400,7 +400,7 @@ def media_nyquist(media_id: str, payload: dict) -> dict:
 
 @router.get("/nyquist/plugins")
 def nyquist_plugins() -> list[dict]:
-    """AU-28: Audacity's bundled Nyquist plug-ins that process audio, with their controls."""
+    """AU-28: the bundled Nyquist plug-ins that process audio, with their controls."""
     from ..services import nyquist
 
     return nyquist.list_plugins()
@@ -773,7 +773,7 @@ def media_tempo(media_id: str, start: float | None = None, end: float | None = N
 @router.post("/media/{media_id}/eq-match", status_code=201)
 def eq_match(media_id: str, reference: str, start: float | None = None, end: float | None = None,
              tstart: float | None = None, tend: float | None = None) -> dict:
-    """iZotope RX's EQ Match: new media with the reference region's tonal balance, measured against the target region
+    """EQ match: new media with the reference region's tonal balance, measured against the target region
     when one is given (see services/eqmatch.py)."""
     from ..services import eqmatch
     from ..services.media import MediaError

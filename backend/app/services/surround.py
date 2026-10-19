@@ -87,7 +87,7 @@ def wav_51(channels: np.ndarray, rate: int) -> bytes:
 
 def wav_foa(channels: np.ndarray, rate: int) -> bytes:
     """PT-42: four channels (frames by W Y Z X) as an AmbiX file: ACN order, SN3D gains, no speaker mask (the
-    channels are a sound field, not speaker feeds), as Pro Tools, Reaper and YouTube's 360 audio read it."""
+    channels are a sound field, not speaker feeds), as other editors and YouTube's 360 audio read it."""
     return wav_float(channels, rate, 0)
 
 

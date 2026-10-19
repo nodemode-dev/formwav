@@ -1,4 +1,4 @@
-"""The comparison page's Automatic diagnosis row, after RX's Repair Assistant (see HASHOUT_LOG)."""
+"""The comparison page's Automatic diagnosis row (see HASHOUT_LOG)."""
 
 import numpy as np
 

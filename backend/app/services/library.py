@@ -9,7 +9,7 @@ import zlib
 import numpy as np
 
 from . import media
-from .audacity import _wav_bytes
+from .aup_project import _wav_bytes
 
 ITEMS: dict[str, tuple[str, str, float]] = {
     "reference-tone": ("Reference tone, 1 kHz at -18 dBFS", "Line-up and timing", 10.0),

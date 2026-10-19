@@ -75,7 +75,7 @@ def render_chain(media_id: str, chain: list[dict], label: str) -> dict:
     the same length, the chain's latency taken out."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .tools import _wav_view
 
     stages, processors = [], []

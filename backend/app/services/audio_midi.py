@@ -1,4 +1,4 @@
-"""PT-13, audio to MIDI (Pro Tools' melodic, polyphonic and rhythmic conversions): a clip's audio as MIDI notes, in
+"""PT-13, audio to MIDI (melodic, polyphonic and rhythmic conversions): a clip's audio as MIDI notes, in
 seconds from the start of the clip's span, ready for the note clip MIDI import makes.
 
 Melodic takes the single line the note editor finds (PT-10's pitch tracking); polyphonic takes every note inside played

@@ -67,8 +67,8 @@ AUDIO_CHAINS = {
     "deep-denoise": "afftdn=nf=-35:nr=20:tn=1",
 }
 
-#: formwav's own chains, written against the behaviour of Audacity's built-in effects, iZotope RX's modules and
-#: Audition's processes (references only; no code taken). "peak-normalize" is measured first, so its chain is built in apply().
+#: formwav's own chains, written against the behaviour of standard editing effects and restoration modules
+#: (references only; no code taken). "peak-normalize" is measured first, so its chain is built in apply().
 FORMWAV_CHAINS = {
     "amplify-up": "volume=6dB",
     "amplify-down": "volume=-6dB",
@@ -146,7 +146,7 @@ GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Character", [("radio", "Radio"), ("telephone", "Telephone"), ("bullhorn", "Bullhorn"), ("two-way-radio", "Two-way radio"), ("lofi-band", "Lo-fi band"), ("tape-warmth", "Tape warmth"), ("bit-crush", "Bit crush"), ("distortion", "Distortion"), ("robot", "Robot")]),
     ("Modulation", [("tremolo", "Tremolo"), ("vibrato", "Vibrato"), ("double-voice", "Double voice"), ("jet-flange", "Jet flange"), ("swirl-phase", "Swirl phase")]),
     ("Pitch", [("pitch_up", "Pitch up"), ("pitch_down", "Pitch down"), ("octave-up", "Octave up"), ("octave-down", "Octave down")]),
-    ("Audacity effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("paulstretch", "Paulstretch..."), ("ramp", "Ramp tempo and pitch...")]),
+    ("Classic effects", [("amplify-up", "Amplify..."), ("amplify-down", "Amplify -6 dB"), ("invert", "Invert"), ("reverse", "Reverse"), ("dc-offset", "Remove DC offset"), ("click-removal", "Click removal"), ("gap-repair", "Repair short gaps"), ("truncate-silence", "Truncate silence"), ("graphic-eq-voice", "Graphic EQ: voice"), ("filter-curve-lowcut", "Filter curve: low cut"), ("tempo-faster", "Change tempo..."), ("stretch-rhythmic", "Change tempo, rhythmic..."), ("tempo-slower", "Change tempo -10%"), ("pitch-up-semitone", "Change pitch..."), ("pitch-down-semitone", "Change pitch -1 semitone"), ("speed-faster", "Change speed..."), ("extreme-stretch", "Extreme stretch..."), ("paulstretch", "Paulstretch..."), ("ramp", "Ramp tempo and pitch...")]),
     ("Repair", [("de-clip", "De-clip"), ("de-crackle", "De-crackle"), ("mouth-declick", "Mouth de-click"), ("de-plosive", "De-plosive"), ("de-wind", "De-wind"), ("voice-denoise", "Voice de-noise"), ("guitar-denoise", "Guitar de-noise"), ("de-ess-strong", "De-ess, strong"), ("leveler", "Leveler"), ("dither", "Dither to 16-bit (noise shaped)"), ("phase-rotate", "Phase rotation"), ("azimuth", "Azimuth: right 1 ms"), ("band-gain", "Band gain (spectral)..."), ("dereverb", "De-reverb..."), ("dereverb-restore", "De-reverb: restore dry..."), ("derustle", "De-rustle..."), ("spot-heal", "Spot heal (spectral)..."), ("wow-flutter", "Wow and flutter..."), ("pitch-correct", "Pitch correction..."), ("dialogue-contour", "Dialogue contour..."), ("azimuth-measured", "Azimuth (measured)"), ("dc-measured", "DC offset (measured)"), ("breath-control", "Breath control..."), ("de-hum-adaptive", "De-hum (adaptive)..."), ("de-ess-spectral", "De-ess (spectral)..."), ("spectral-recovery", "Spectral recovery..."), ("spectral-repair", "Spectral repair..."), ("dialogue-leveler", "Leveler (dialogue)...")]),
     ("Channels", [("center-extract", "Center extract"), ("center-remove", "Center remove"), ("swap-channels", "Swap channels"), ("downmix-mono", "Downmix to mono"), ("mid-side-encode", "Mid-side encode"), ("mid-side-decode", "Mid-side decode")]),
     ("Mastering", [("peak-normalize", "Peak normalize..."), ("loudness-streaming", "Loudness to a target..."), ("loudness-broadcast", "Loudness: broadcast -23 LUFS"), ("exciter", "Exciter")]),
@@ -628,7 +628,7 @@ def _derustle(x, rate: int, v: dict):
 
 
 def _spot_heal(x, rate: int, v: dict):
-    """Spectral repair of a box (Audition's Spot Healing Brush, RX's Spectral Repair in its attenuate mode): inside the
+    """Spectral repair of a box (its attenuate mode): inside the
     box from `from` to `to` seconds and `low` to `high` Hz, each bin's magnitude is capped at the level the four frames
     before and after the box predict (interpolated between them in dB across the box), the phase kept; whatever stands
     above its surroundings (a whistle, a click) comes down to them, and material running through the box at its
@@ -744,7 +744,7 @@ def heal_painted(media_id: str, boxes: list) -> dict:
     """AA-06: the heal brush's stroke (its boxes in the media's seconds and Hz) healed in one pass, as new media."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .tools import _wav_view
 
     if not isinstance(boxes, list) or not 1 <= len(boxes) <= 2000 or not all(isinstance(b, dict) and {"from", "to", "low", "high"} <= set(b) for b in boxes):
@@ -872,7 +872,7 @@ def _speed_from_spectrum(mono, rate: int, hop: int):
 
 
 def _wow_flutter(x, rate: int, v: dict):
-    """Wow and flutter removal (RX's Wow & Flutter): the recording's speed is tracked every 5 ms, from a steady
+    """Wow and flutter removal: the recording's speed is tracked every 5 ms, from a steady
     component between Low and High Hz (mode 0, _speed_from_peak) or from the whole spectrum with no steady tone needed
     (mode 1, _speed_from_spectrum), for the mix or, with Per channel, for each channel apart (tracks of a tape can
     drift differently); resampling by the inverse of that speed curve (cubic interpolation) undoes it. Amount scales
@@ -973,7 +973,7 @@ def _f0_track(mono, rate: int):
 
 
 def _pitch_correct(x, rate: int, v: dict):
-    """Pitch correction (Pro Tools with Melodyne, Auto-Tune's correction): the pitch is tracked every 5 ms, each voiced
+    """Pitch correction: the pitch is tracked every 5 ms, each voiced
     frame's target is the nearest note of the key and scale (chromatic, major or minor), the correction glides to it
     with the Retune speed (0 ms snaps) and is scaled by Amount, and rubberband applies it over time from a command file
     every 10 ms; unvoiced frames glide back to no shift. The length is kept."""
@@ -982,7 +982,7 @@ def _pitch_correct(x, rate: int, v: dict):
     if v["amount"] <= 0:  # no correction asked: the input untouched (rubberband at a ratio of 1 still resynthesises)
         return x.astype(np.float32)
     step, f0 = _f0_track(x.mean(axis=1).astype(np.float64), rate)
-    # scales, and (3 to 7) the tones of a chord on the key (Auto-Tune's chord mode): major, minor, dominant seventh,
+    # scales, and (3 to 7) the tones of a chord on the key (a chord mode): major, minor, dominant seventh,
     # minor seventh, major seventh; a chord's tones lie up to 5 semitones apart, so the search reaches 6 either way
     scales = {0: range(12), 1: (0, 2, 4, 5, 7, 9, 11), 2: (0, 2, 3, 5, 7, 8, 10), 3: (0, 4, 7), 4: (0, 3, 7), 5: (0, 4, 7, 10), 6: (0, 3, 7, 10), 7: (0, 4, 7, 11)}
     allowed = sorted({(int(v["key"]) + d) % 12 for d in scales.get(int(v["scale"]), range(12))})
@@ -1050,7 +1050,7 @@ def retune_notes(media_id: str, notes: list, formants: bool = True, glide_ms: fl
     the length is kept. A new media."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .tools import _wav_view
 
     if not isinstance(notes, list) or not 1 <= len(notes) <= 2000:
@@ -1087,7 +1087,7 @@ def _rubberband_pitch(x, rate: int, ratio, step: float, label: str, formants: bo
 
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     with _tf.TemporaryDirectory() as tmp:
         src, cmd, dst = (os.path.join(tmp, n) for n in ("in.wav", "pitch.cmd", "out.wav"))
@@ -1115,7 +1115,7 @@ def _rubberband_pitch(x, rate: int, ratio, step: float, label: str, formants: bo
 
 
 def _dialogue_contour(x, rate: int, v: dict):
-    """RX's Dialogue Contour: a line's intonation reshaped. Between From and To (the whole clip when To is not after
+    """Dialogue contour: a line's intonation reshaped. Between From and To (the whole clip when To is not after
     From), the pitch is tracked every 5 ms, its slow contour (the voiced pitch smoothed over Smoothing ms, in octaves)
     is scaled about its median by Range (0% flat, 100% as it was, 200% twice the movement), and a ramp from Shift at
     start to Shift at end (semitones) is added; the small fast movements of the voice are kept, unvoiced moments follow
@@ -1201,7 +1201,7 @@ def warp(media_id: str, segments: list) -> dict:
     import numpy as np
 
     from . import tools
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     if not isinstance(segments, list) or not 1 <= len(segments) <= 256:
         raise media.MediaError("warp needs 1 to 256 segments")
@@ -1261,7 +1261,7 @@ def limit_to_band(dry_id: str, wet: dict, low: float, high: float) -> dict:
     changes timing cannot be limited to a band (its output no longer lines up)."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .tools import _wav_view
 
     lo, hi = sorted((max(0.0, low), max(0.0, high)))
@@ -1289,7 +1289,7 @@ def limit_to_boxes(dry_id: str, wet: dict, boxes: list) -> dict:
     selection the audio is the dry clip's exactly (at its edges the windows overlap by up to half a window)."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .tools import _wav_view
 
     if not isinstance(boxes, list) or not 1 <= len(boxes) <= 4000 or not all(isinstance(b, dict) and {"from", "to", "low", "high"} <= set(b) for b in boxes):
@@ -1602,7 +1602,7 @@ def _chain_array(x, rate: int, chain: str, label: str):
 
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     with _tf.TemporaryDirectory() as tmp:
         src, dst = os.path.join(tmp, "in.wav"), os.path.join(tmp, "out.wav")
@@ -1708,7 +1708,7 @@ def _downmix_mono(x, rate: int, v: dict):
 
 
 def _peak_normalize(x, rate: int, v: dict):
-    """Audacity's Normalize: each channel's DC offset removed first when asked (its mean subtracted), then the peak
+    """Peak normalize: each channel's DC offset removed first when asked (its mean subtracted), then the peak
     brought to the target, the channels together (their balance kept) or each to the target on its own."""
     import numpy as np
 
@@ -1742,7 +1742,7 @@ def _dialogue_isolate(x, rate: int, v: dict):
         import numpy as np
 
         from . import media
-        from .audacity import _wav_bytes
+        from .aup_project import _wav_bytes
 
         x = np.asarray(x, dtype=np.float32)
         quiet = [media._tool("ffmpeg"), "-hide_banner", "-nostdin", "-loglevel", "error", "-y"]
@@ -1766,7 +1766,7 @@ def _enhance_speech(x, rate: int, v: dict):
     import numpy as np
 
     from . import deepfilter, media
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     strength = float(v.get("strength", 50))
     x = np.asarray(x, dtype=np.float32)
@@ -1794,7 +1794,7 @@ def _enhance_speech(x, rate: int, v: dict):
 
 
 def _controlled(x, y, rate: int, v: dict):
-    """PLAN_v14 W3, the enhancers under control (the loudest complaint about Descript's Studio Sound, Adobe's Enhance
+    """PLAN_v14 W3, the enhancers under control (the loudest complaint about speech enhancers
     and ElevenLabs' dubbing: laughter, breaths and word endings taken out, and no way to dial it back). The original is
     first brought to the processed level (Enhance speech sets -16 LUFS). Keep laughter and breaths finds the moments
     the processing took down by more than 10 dB where the original stood more than 15 dB above its own noise floor (a
@@ -1881,7 +1881,7 @@ def debleed_clicks(media_id: str, amount: float = 100.0) -> dict:
     3 ms (the track drifting a little) and subtracted, `amount` per cent of it."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .tools import _wav_view
 
     view, rate = _wav_view(media_id)
@@ -1990,7 +1990,7 @@ def debleed_clicks(media_id: str, amount: float = 100.0) -> dict:
 
 
 def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 100.0, path_ms: float | None = None) -> dict:
-    """RX's De-bleed with a reference: what leaked into a recording from another source (headphone spill, a guitar
+    """De-bleed with a reference: what leaked into a recording from another source (headphone spill, a guitar
     amp in the vocal mic) is that source through a fixed path, so the path's transfer function per frequency bin is
     estimated from the cross-spectrum between the recording and the reference over the whole file (the wanted sound is
     unrelated to the reference and averages out), and the reference through that path is subtracted, `amount` of it.
@@ -1999,7 +1999,7 @@ def debleed(media_id: str, reference_id: str, offset: int = 0, amount: float = 1
     are only partly caught."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .tools import _wav_view
 
     info = media.media_info(media_id)
@@ -2128,7 +2128,7 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     if name in NUMPY_EFFECTS:
         import numpy as np
 
-        from .audacity import _wav_bytes
+        from .aup_project import _wav_bytes
         from .tools import _wav_view
 
         view, _ = _wav_view(media_id)
@@ -2140,7 +2140,7 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     if name in STEREO_ONLY and channels < 2:
         raise media.MediaError(f"{LABELS.get(name, name)} works between two channels and needs a stereo clip")
     if chain.startswith("loudnorm="):
-        # Measured, then an exact linear gain (Audition's Match Loudness, as a reference). Single-pass loudnorm runs
+        # Measured, then an exact linear gain. Single-pass loudnorm runs
         # dynamically and missed a -20 LUFS target by 0.9 LU on short clips; two-pass loudnorm still missed by 0.5 LU
         # against the ebur128 meter the app measures with. The gain is target minus ebur128's integrated loudness; a
         # limiter at -1 dBFS is added only when the gain would push the sample peak past it.

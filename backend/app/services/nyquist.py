@@ -1,8 +1,8 @@
-"""AU-28: Nyquist, by Audacity's own interpreter (native/formwav-nyquist/fwnyq, Audacity 2.4.2's libnyquist).
+"""AU-28: Nyquist, by its own interpreter (native/formwav-nyquist/fwnyq, the vendored 2.4.2 libnyquist).
 
-A Nyquist Prompt's code, or one of Audacity's bundled Nyquist plug-ins with its controls, runs on a clip: the clip goes
-in as *TRACK*, preceded by the settings Audacity 2.4.2 gives a version 4 plug-in (src/effects/nyquist/Nyquist.cpp: the
-*AUDACITY*, *SYSTEM-DIR*, *PROJECT*, *SELECTION* and *TRACK* properties, the latency, *tracenable*, and each control
+A Nyquist Prompt's code, or one of the bundled Nyquist plug-ins with its controls, runs on a clip: the clip goes
+in as *TRACK*, preceded by the settings a version 4 plug-in is given (the
+host version and language, *SYSTEM-DIR*, *PROJECT*, *SELECTION* and *TRACK* properties, the latency, *tracenable*, and each control
 as (setf var value), reals to 14 significant digits); a sound that comes back becomes new media, anything else is
 returned as it is.
 """
@@ -125,7 +125,7 @@ def _text(token: str) -> str:
 
 
 def parse_plugin(path: Path) -> dict:
-    """A .ny plug-in's header: its name, type and controls (as Audacity reads ;name, ;type and ;control lines)."""
+    """A .ny plug-in's header: its name, type and controls (read from its ;name, ;type and ;control lines)."""
     info: dict = {"id": path.stem, "name": path.stem, "type": "process", "controls": []}
     raw_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     joined, k = [], 0
@@ -186,7 +186,7 @@ def parse_plugin(path: Path) -> dict:
 
 
 def list_plugins() -> list[dict]:
-    """Audacity's bundled Nyquist plug-ins that process audio, with their controls."""
+    """The bundled Nyquist plug-ins that process audio, with their controls."""
     out = []
     for p in sorted(plugins_dir().glob("*.ny")):
         try:
@@ -199,7 +199,7 @@ def list_plugins() -> list[dict]:
 
 
 def _num(v: float) -> str:
-    """A real as Audacity gives it to Nyquist: up to 14 significant digits, a dot for the decimal separator."""
+    """A real as Nyquist takes it: up to 14 significant digits, a dot for the decimal separator."""
     s = f"{float(v):.14g}"
     return s if any(ch in s for ch in ".e") else s + ".0"
 
@@ -209,7 +209,7 @@ def _escape(s: str) -> str:
 
 
 def preamble(rate: int, channels: int, frames: int, name: str, peak: list[float], rms: list[float], controls: list[dict], values: dict) -> str:
-    """The settings Audacity 2.4.2 gives a version 4 plug-in before its code, for one whole clip on one track."""
+    """The settings a version 4 plug-in is given before its code, for one whole clip on one track."""
     dur = frames / rate
     vec = (lambda xs: f"(vector {' '.join(_num(x) for x in xs)})") if channels > 1 else (lambda xs: _num(xs[0]))
     clips = f"(list (list {_num(0)} {_num(dur)}))"
@@ -282,7 +282,7 @@ def run(media_id: str, code: str | None = None, plugin: str | None = None, value
             raise media.MediaError(f"no Nyquist plug-in named {plugin}")
         info = parse_plugin(path)
         # a version 4 header's lines start with $, which Lisp does not take as a comment: they would be evaluated
-        # (errors on $CONTROL and the like, as my first run found); Audacity leaves them out, here they become comments
+        # (errors on $CONTROL and the like, as my first run found); here they become comments
         # (with the lines a header's open brackets carry on to: a choice list's later items were evaluated otherwise)
         src_lines, kept, open_brackets, quoted = path.read_text(encoding="utf-8", errors="replace").splitlines(), [], 0, False
         for ln in src_lines:

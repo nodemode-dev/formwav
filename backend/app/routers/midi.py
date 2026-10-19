@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..services import media, midi
-from ..services.audacity import _wav_bytes
+from ..services.aup_project import _wav_bytes
 
 router = APIRouter(prefix="/api/midi", tags=["midi"])
 

@@ -1,5 +1,5 @@
-"""PT-10's polyphonic half: the notes inside played chords found, and one moved to a new pitch without the others, as
-Melodyne's Direct Note Access does, for harmonic instruments.
+"""PT-10's polyphonic half: the notes inside played chords found, and one moved to a new pitch without the others,
+for harmonic instruments.
 
 Finding: each frame's spectral peaks are scored for every candidate pitch (a tenth of a semitone apart, C2 to C7) by
 how strongly they line up as its harmonics, a candidate needing a peak at its own fundamental (which keeps the octave
@@ -274,6 +274,6 @@ def move_notes(media_id: str, edits: list[dict]) -> dict:
     peak = float(np.max(np.abs(out))) if out.size else 0.0
     if peak > 1.0:
         out /= peak
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     return media.import_wav("notes moved.wav", _wav_bytes([out[:, c].astype(np.float32) for c in range(out.shape[1])], rate))

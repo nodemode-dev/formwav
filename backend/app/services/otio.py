@@ -1,5 +1,5 @@
 """The session's timeline as OpenTimelineIO (PLAN_v14 W4; OpenTimelineIO is the Academy Software Foundation's open
-interchange, Apache-2.0, asked for in Audacity's issue tracker as #635): an .otioz bundle, a zip holding content.otio
+interchange, Apache-2.0): an .otioz bundle, a zip holding content.otio
 and the clips' audio under media/, so the timeline opens anywhere with its sound beside it.
 
 Written by hand to the published schema (Timeline.1, Stack.1, Track.1, Clip.2, Gap.1, Marker.2, ExternalReference.1,

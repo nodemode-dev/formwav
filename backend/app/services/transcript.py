@@ -1,4 +1,4 @@
-"""Word-level transcripts for Descript-style editing (Descript is a behavioural reference only; no code taken).
+"""Word-level transcripts for text-driven editing.
 
 A media file is decoded with ffmpeg to 16 kHz mono float samples (no PyAV) and transcribed by faster-whisper with word
 timestamps; a verbatim prompt keeps disfluencies, which Whisper otherwise drops. Words carry their times in the media

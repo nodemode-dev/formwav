@@ -1,5 +1,5 @@
-"""Generate and Analyze, after Audacity's generators and analyzers, iZotope RX's signal generator, waveform
-statistics and spectrogram, and Audition's amplitude statistics (behavioural references only; no code taken)."""
+"""Generate and Analyze: signal generators, waveform statistics, a spectrogram and amplitude statistics
+(behavioural references only; no code taken)."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def _tone(freq: float, seconds: float, rate: int, waveform: str, amplitude: floa
     """A tone as WAV bytes: sine exactly, the others band-limited, one cycle summed from the harmonics below Nyquist
     (square: odd at 1/n; sawtooth: all at 1/n; triangle: odd at 1/n squared, alternating), scaled to its peak and read
     by phase, so a high tone carries no aliases at any length."""
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     n = int(round(seconds * rate))
     phase = (np.arange(n, dtype=np.float64) * (freq / rate)) % 1.0
@@ -70,7 +70,7 @@ def generate(kind: str, seconds: float, rate: int, freq: float = 440.0, digits: 
     if kind == "chirp":
         # RX-39: a sweep from `freq` to `freq_end`, linear or logarithmic (equal time per octave, as acoustic
         # measurement uses), at `amplitude`; the phase in closed form, so the instantaneous frequency is exact
-        from .audacity import _wav_bytes
+        from .aup_project import _wav_bytes
 
         f0, f1 = float(freq), float(freq_end)
         if not (1 <= f0 < rate / 2 and 1 <= f1 < rate / 2):
@@ -152,7 +152,7 @@ def stats(media_id: str) -> dict:
     result["clipped"] = peak is not None and peak >= -0.01
     # Crest factor and dynamic range (RX-50): astats reports them per channel only, never in its overall block, so the
     # panel's rows stayed empty; they are measured here exactly: peak over RMS across every channel, and the loudest
-    # less the quietest non-silent 50 ms RMS window in dB (Audition's definition)
+    # less the quietest non-silent 50 ms RMS window in dB
     view, rate = _wav_view(media_id)
     x = np.asarray(view, dtype=np.float64)
     if x.size:
@@ -166,7 +166,7 @@ def stats(media_id: str) -> dict:
             live = levels[levels > -120]
             if live.size:
                 result["dynamicRangeDb"] = round(float(live.max() - live.min()), 2)
-                # AA-04, Audition's amplitude statistics: the loudest and quietest non-silent 50 ms RMS windows, and
+                # AA-04, amplitude statistics: the loudest and quietest non-silent 50 ms RMS windows, and
                 # how the windows spread across levels (3 dB bins from -60 to 0 dBFS, quieter ones in the first)
                 result["maxRmsDb"] = round(float(live.max()), 2)
                 result["minRmsDb"] = round(float(live.min()), 2)
@@ -289,7 +289,7 @@ def draw(media_id: str, start: int, values: list, channel: int | None = None) ->
     alone when given (AU-13); the rest byte-identical."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     view, rate = _wav_view(media_id)
     frames, channels = int(view.shape[0]), int(view.shape[1])
@@ -321,7 +321,7 @@ def room_tone(media_id: str, learn_media: str, learn_from: float, learn_to: floa
 
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     view, rate = _wav_view(media_id)
     src, src_rate = (view, rate) if learn_media == media_id else _wav_view(learn_media)
@@ -367,7 +367,7 @@ def gap_tone(left: tuple[str, float, float], right: tuple[str, float, float] | N
 
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     def profile(edge: tuple[str, float, float]) -> tuple[list, int, int]:
         view, rate = _wav_view(edge[0])
@@ -443,7 +443,7 @@ def _num(pattern: str, text: str) -> float | None:
 
 
 def mic_check(media_id: str) -> dict:
-    """Adobe Podcast's mic analysis and RX's Repair Assistant, as references: measurements of a recording and findings
+    """Mic analysis and repair advice: measurements of a recording and findings
     with the effect that addresses each. Loudness from ebur128, clipping from volumedetect's 0 dB bin, noise floor and
     DC offset from astats, mains hum from narrow 50 and 60 Hz bands against the whole signal."""
     info = media.media_info(media_id)
@@ -618,7 +618,7 @@ def spectrogram_png(media_id: str, width: int = 640, height: int = 240, legend: 
         out = Path(tmp) / "spectrogram.png"
         source = media_dir() / f"{media_id}.wav"
         if channel in ("mid", "side"):
-            from .audacity import _wav_bytes
+            from .aup_project import _wav_bytes
 
             x, rate = _view_channel(media_id, channel)
             source = Path(tmp) / "view.wav"
@@ -633,7 +633,7 @@ def clip_gain(media_id: str, gain_db: float, envelope: list[dict]) -> dict:
     the clip keeps its place in the file and plays the same at 0 dB with no line."""
     import numpy as np
 
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
     from .render import _clip_env_gain
 
     view, rate = _wav_view(media_id)

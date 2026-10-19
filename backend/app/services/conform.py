@@ -1,4 +1,4 @@
-"""PT-31, field recorder audio matched to picture edits (Pro Tools' Field Recorder workflow): a picture editor's CMX3600
+"""PT-31, field recorder audio matched to picture edits: a picture editor's CMX3600
 EDL conformed to the field recorder's own broadcast WAV files. Each audio event's source timecode is found in the
 recorder file whose timecode (its bext TimeReference) covers it, a file whose tape (iXML TAPE, or its name) matches the
 event's reel preferred; the clip is placed where the event sits on the record side, counted from the edit's first

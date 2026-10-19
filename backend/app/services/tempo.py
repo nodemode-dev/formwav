@@ -1,4 +1,4 @@
-"""Tempo detection that holds on real music (Audacity's tempo detection, as a reference). The audio becomes an
+"""Tempo detection that holds on real music. The audio becomes an
 onset-strength envelope (log-magnitude spectral flux at about 100 frames a second, its local mean removed), and each
 candidate tempo from 60 to 200 BPM in 0.1 steps is scored by the envelope's autocorrelation averaged over every multiple
 of its period within 12 s. Averaging over multiples sharpens the estimate and penalises a double tempo whose in-between

@@ -80,7 +80,7 @@ def isolate(x: np.ndarray, rate: int, strength: float = 100) -> np.ndarray:
     """Frames by channels in, the same out: through the model at 48 kHz (resampled there and back only when the clip
     is at another rate), its length kept."""
     from . import media
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     x = np.asarray(x, dtype=np.float32)
     frames, chans = x.shape

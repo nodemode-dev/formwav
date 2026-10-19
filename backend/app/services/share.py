@@ -1,4 +1,4 @@
-"""Shareable video of a session (DS-08, Descript's clips for social): the session's mix, or a span of it, as an MP4
+"""Shareable video of a session (DS-08, clips for social): the session's mix, or a span of it, as an MP4
 with its waveform drawn in formwav's orange, a title, and the transcript's words burned in as captions, in a square,
 portrait or landscape layout."""
 

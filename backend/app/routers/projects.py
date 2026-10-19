@@ -1,20 +1,20 @@
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
-from ..services import audacity, media, projects
+from ..services import aup_project, media, projects
 
 router = APIRouter()
 
 
-@router.post("/projects/import-audacity")
-async def import_audacity(request: Request) -> dict:
+@router.post("/projects/import-aup")
+async def import_aup(request: Request) -> dict:
     data = await request.body()
     if not data:
         raise HTTPException(400, "the request carried no file")
     try:
-        if data.startswith(b"SQLite format 3\x00"):  # AU-33: an Audacity 3 project
-            return audacity.import_aup3(data, request.headers.get("x-filename", "Audacity project.aup3").rsplit("/", 1)[-1].rsplit(".", 1)[0])
-        return audacity.import_aup_zip(data)
+        if data.startswith(b"SQLite format 3\x00"):  # AU-33: an .aup3 project
+            return aup_project.import_aup3(data, request.headers.get("x-filename", "Imported project.aup3").rsplit("/", 1)[-1].rsplit(".", 1)[0])
+        return aup_project.import_aup_zip(data)
     except media.MediaError as err:
         raise HTTPException(422, str(err)) from err
 

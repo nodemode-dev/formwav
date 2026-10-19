@@ -1,5 +1,4 @@
-"""Music source separation (Audacity's local AI music separation, iZotope RX's Music Rebalance and stems view, as
-references; no code taken): Demucs htdemucs splits a time range of a file into drums, bass, other and vocals.
+"""Music source separation (local AI music separation and a stems view; no code taken): Demucs htdemucs splits a time range of a file into drums, bass, other and vocals.
 
 The range is decoded by ffmpeg at the model's rate, separated on the CPU (or Apple's GPU through PyTorch on the Mac),
 and each stem is written back at the file's own rate, so the stems line up with the clip they came from. The runtime
@@ -53,7 +52,7 @@ def _median(s, k: int, dim: int):
 
 def deconstruct(media_id: str, start: float = 0.0, end: float | None = None, margin: float = 2.0, tonal_sens: float = 5.0,
                 transient_sens: float = 5.0, gains_db: tuple[float, float, float] | None = None) -> list[dict]:
-    """iZotope RX's Deconstruct, as a reference: harmonic-percussive separation of a time range into tonal (steady
+    """Deconstruct: harmonic-percussive separation of a time range into tonal (steady
     across time), transient (broad across frequency) and noisy (neither) parts. The three masks partition the
     spectrum, so the parts sum back to the range.
 

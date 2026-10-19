@@ -1,4 +1,4 @@
-"""Export formats (Audacity's and iZotope RX's export choices, as references only): the engine renders 32-bit float
+"""Export formats: the engine renders 32-bit float
 WAV; ffmpeg encodes it. Multichannel files put one track per channel, in track order, as WAV or FLAC."""
 
 from __future__ import annotations

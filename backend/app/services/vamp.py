@@ -1,4 +1,4 @@
-"""AU-40: Vamp analysis plugins (as Audacity's Analyze menu runs them), through native/formwav-vamp/fwvamp.
+"""AU-40: Vamp analysis plugins, through native/formwav-vamp/fwvamp.
 
 fwvamp follows the Vamp SDK's own reference host (sizes, adapters, processing, feature timing) and was compared with it
 output by output (sidecar verification/vamp_vs_reference). Plugins are found on the Vamp path: VAMP_PATH if set, else the

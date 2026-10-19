@@ -32,8 +32,8 @@ def track_activity(document: dict = Body(...), trackId: str = "", threshold: flo
     """Where a track is active: rendered alone (others muted, solos cleared), silences over `gap` seconds below the
     threshold found by ffmpeg's silencedetect and inverted. The threshold defaults to the track's loud level (the 90th
     percentile of 50 ms RMS windows) minus 20 dB, within -60 to -20 dBFS: a fixed -40 dBFS missed the JFK recording's
-    pause, whose background sits at -41 to -39 dB. For automatic ducking (Audacity's Auto Duck, Audition's
-    content-based ducking, as references)."""
+    pause, whose background sits at -41 to -39 dB. For automatic ducking
+    (content-based ducking)."""
     import re
     import subprocess
 
@@ -138,7 +138,7 @@ def _with_cues(wav: bytes, document: dict, start: int = 0, frames: int | None = 
 
 def _bext(document: dict, start: int, description: str) -> dict[str, str]:
     """BWF's bext fields (EBU Tech 3285) under ffmpeg's metadata names: the time reference is the session's timecode
-    start (PT-26) plus the range's start, in samples since midnight, as Pro Tools spots a file by it."""
+    start (PT-26) plus the range's start, in samples since midnight, as editors spot a file by it."""
     import datetime
 
     from ..core.version import VERSION
@@ -241,7 +241,7 @@ def render_session(document: dict = Body(...), format: str = "wav", what: str = 
             return Response(content=buffer.getvalue(), media_type="application/zip", headers={"X-Stems": str(len(stems)), "Content-Disposition": 'attachment; filename="stems.zip"'})
         result = render.render(document, a, end)
         if what == "preview":
-            # iZotope RX's streaming preview: the mix as it sounds after a lossy codec, decoded back into new media.
+            # The streaming preview: the mix as it sounds after a lossy codec, decoded back into new media.
             if format not in ("mp3", "mp3-192", "ogg", "m4a"):
                 raise render.RenderError("a streaming preview needs a lossy format: MP3, OGG or M4A")
             import subprocess

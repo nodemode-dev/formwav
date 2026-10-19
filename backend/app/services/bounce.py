@@ -1,5 +1,5 @@
 """PLAN_v13 S6: a track's audio rendered by the core into media of its own. Consolidate takes the clips in a range as they
-play before anything of the track touches them (Pro Tools' Consolidate); Commit takes what the track plays, through its
+play before anything of the track touches them; Commit takes what the track plays, through its
 trim, fader, pan, automation and effects, which the core runs before the track meets a bus, and keeps its tail for as
 long as it stays above a 24-bit file's least step (-144 dBFS), at most ten seconds past the last clip."""
 

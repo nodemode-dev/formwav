@@ -1,4 +1,4 @@
-"""Remix to a length (AA-09, Audition's Remix): a song shortened or lengthened by re-arranging it on its beats rather than
+"""Remix to a length (AA-09): a song shortened or lengthened by re-arranging it on its beats rather than
 stretching it. The beats come from the tempo service's onset envelope (the tempo, then the phase that lines the beats
 up with the onsets, each beat then moved to its nearest onset peak); each beat is described by its harmony (pitch-class
 energy, chroma); a jump from one beat to another that sounds alike over the next four beats, at the same place in the
@@ -9,7 +9,7 @@ whatever separates the result from the target (under a beat, as a rule) is close
 import numpy as np
 
 from . import media, tempo
-from .audacity import _wav_bytes
+from .aup_project import _wav_bytes
 from .tools import _wav_view
 
 LOOKAHEAD = 4  # beats compared after each side of a jump

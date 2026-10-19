@@ -1,4 +1,4 @@
-"""AA-12, automatic speech alignment of replacement dialogue (Audition's, VocAlign's): a re-recorded take re-timed to
+"""AA-12, automatic speech alignment of replacement dialogue: a re-recorded take re-timed to
 follow the guide it replaces, word for word.
 
 Both are described every 10 ms by 19 MFCCs, each recording's coefficients normalised over itself (a re-recorded take
@@ -117,7 +117,7 @@ def _wsola(x: np.ndarray, rate: int, out_len: int, source_at) -> np.ndarray:
 def align(guide_id: str, take_id: str, guide_in: float = 0.0, guide_len: float | None = None, take_in: float = 0.0, take_len: float | None = None, smooth_ms: float = 100.0) -> dict:
     """The take (its span from `take_in`, `take_len` seconds) re-timed to the guide's span; new media exactly as long as
     the guide's span, at the take's rate and channels."""
-    from .audacity import _wav_bytes
+    from .aup_project import _wav_bytes
 
     g_info, t_info = media.media_info(guide_id), media.media_info(take_id)
     guide_len = float(guide_len if guide_len is not None else g_info["frames"] / g_info["sampleRate"] - guide_in)
