@@ -212,7 +212,7 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
   engine.subscribe("document", writeState);
   writeState();
 
-  // Audacity's home screen of recent projects: the empty timeline lists the latest saved sessions.
+  // The home screen of recent projects: the empty timeline lists the latest saved sessions.
   const emptyStage = host.querySelector<HTMLElement>(".fw-empty");
   const recent = document.createElement("div");
   recent.className = "fw-recent";

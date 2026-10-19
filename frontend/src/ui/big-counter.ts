@@ -1,5 +1,5 @@
 /**
- * Pro Tools' Big Counter: the transport's position in large figures, in the footer clock's own format and timecode
+ * The Big Counter: the transport's position in large figures, in the footer clock's own format and timecode
  * start, on a panel that floats over the window; dragged by its head, closed by its button or from the View menu.
  */
 import type { Engine } from "../engine";

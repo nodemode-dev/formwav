@@ -134,12 +134,12 @@ class PlayerProcessor extends AudioWorkletProcessor {
   private right = 0;
   private playing = false;
   private end = 0;
-  // Play-at-speed (Audacity's varispeed, pitch following speed): a read buffer the core refills 128 samples at a
+  // Play-at-speed (varispeed, pitch following speed): a read buffer the core refills 128 samples at a
   // time, read at `speed` samples per output sample with linear interpolation; unused at 1x.
   private speed = 1;
   // AU-22: session samples per output sample when the output device runs at another rate
   private rateRatio = 1;
-  // Audacity's time track: [at, speed, at, speed, ...] in session samples, linear between points, held outside them.
+  // The time track: [at, speed, at, speed, ...] in session samples, linear between points, held outside them.
   private curve: number[] | null = null;
   // AU-36: between points the speed changes at a steady ratio (logarithmic) instead of a steady step (linear)
   private curveLog = false;

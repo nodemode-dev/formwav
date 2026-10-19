@@ -24,7 +24,7 @@ export function mountLoop(host: HTMLElement, engine: Engine): void {
   const toggle = () => {
     const doc = engine.get("document");
     if (!doc.tracks.length) return;
-    // Audacity's loop from a selection: a selected range becomes the loop, turned on.
+    // Loop from a selection: a selected range becomes the loop, turned on.
     if (range && !(doc.loop?.enabled && doc.loop.start === range.start && doc.loop.end === range.end)) {
       engine.dispatch({ type: "set-loop", start: range.start, end: range.end, enabled: true });
       return;

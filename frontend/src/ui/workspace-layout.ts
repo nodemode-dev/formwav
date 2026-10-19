@@ -131,7 +131,7 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
     apply();
     save();
   });
-  // Audacity's saved workspaces: preset layouts and named ones the owner saves, kept with the browser's storage.
+  // Saved workspaces: preset layouts and named ones the owner saves, kept with the browser's storage.
   const SAVED = "formwav.layouts";
   const PRESETS: Record<string, Partial<Layout>> = {
     Default: { ...DEFAULTS },

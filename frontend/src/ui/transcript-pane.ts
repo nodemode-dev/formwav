@@ -86,7 +86,7 @@ const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9']/g, "");
 
 /**
  * Retakes, lexically: a run of RETAKE_RUN words said again within RETAKE_WINDOW words means the first attempt was
- * abandoned, so it goes from its first word up to where the retake starts, keeping the last take as Descript does.
+ * abandoned, so it goes from its first word up to where the retake starts, keeping the last take.
  * Four words, not three: a single take can repeat three ("can do for you" ... "can do for your").
  */
 /** DS-07: phrases are runs of words ended by a pause of RETAKE_PAUSE seconds (a restart leaves a gap; rhetoric that
@@ -124,7 +124,7 @@ function overlap(a: string[], b: string[]): { ofLonger: number; ofShorter: numbe
  * Retakes (DS-07). Phrases within three of each other are takes of one another when they share 70% of their words
  * (repeated, or reworded) or the shorter, of four words or more, is 90% inside the longer (a take abandoned partway).
  * In each group the best take stays: the most complete (its distinct words against the group's most), less a point
- * for each filler, a quarter more for ending a sentence, the last take winning a tie as Descript keeps it. Each other take goes from its first word to the next word kept. Then, as
+ * for each filler, a quarter more for ending a sentence, the last take winning a tie. Each other take goes from its first word to the next word kept. Then, as
  * before, a run of RETAKE_RUN words said again within RETAKE_WINDOW words drops the earlier attempt (a restart inside
  * one phrase); four words, not three, as a single take can repeat three ("can do for you" ... "can do for your").
  */

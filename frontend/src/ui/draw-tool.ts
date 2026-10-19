@@ -7,7 +7,7 @@ import { repaintMedia, sampleAt, setDrawPreview } from "./lanes";
 const PENCIL = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.5-5.5L15 5l4 4-9.5 9.5L4 20z"/><path d="M13 7l4 4"/></svg>`;
 
 /**
- * AU-13: Audacity's Draw tool in the lanes. With Draw on and a clip zoomed in until single samples show (at most one of
+ * AU-13: the Draw tool in the lanes. With Draw on and a clip zoomed in until single samples show (at most one of
  * its frames a pixel), a press draws on the channel row under it: every sample between one pointer position and the
  * next takes the value under the pointer (a fast stroke leaves no gap), shown as it is drawn, and letting go writes the
  * stroke into that channel alone (the others, and every sample outside the stroke, untouched) as one undo step. Zoomed
@@ -23,7 +23,7 @@ export function mountDrawTool(host: HTMLElement, engine: Engine): void {
   button.className = "fw-mode";
   button.dataset.draw = "";
   button.setAttribute("aria-pressed", "false");
-  button.title = "Draw samples (Audacity's Draw tool): zoom in until single samples show, then drag on a clip; a stereo clip is drawn on the channel under the pointer";
+  button.title = "Draw samples: zoom in until single samples show, then drag on a clip; a stereo clip is drawn on the channel under the pointer";
   button.innerHTML = `${PENCIL}<span>Draw</span>`;
   tray.append(button);
   let on = false;

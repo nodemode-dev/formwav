@@ -11,7 +11,7 @@ import { fpsOf, INPUT_QUANTIZE_KEY, inputQuantize } from "./midi-input";
 import type { NoteEditor } from "./piano-roll";
 
 /**
- * PLAN_v13 S7: the Event menu (Pro Tools' MIDI operations) and the note editor's event list. Each operation works on
+ * PLAN_v13 S7: the Event menu (MIDI operations) and the note editor's event list. Each operation works on
  * the note editor's selected notes, or on all its notes when none is selected, through the editor (one re-render and
  * one undo step with its own words in History); the values an operation asks for come from the editing module's
  * small dialog (an fw-ask event), and each asks again with its last values.

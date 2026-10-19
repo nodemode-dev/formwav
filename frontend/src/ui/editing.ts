@@ -137,7 +137,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     const t = target();
     const before = allClipIds();
     if (!run(repeatSpan(doc, t, 1, shuffleEnabled()), t.range ? "Duplicated the range after itself" : "Duplicated the clips after themselves", "Select clips or a range to duplicate")) return;
-    // the selection moves onto the copy, as Pro Tools' does, so a second Duplicate carries on from it
+    // the selection moves onto the copy, so a second Duplicate carries on from it
     if (t.range) setRange({ trackId: t.range.trackId, start: t.range.end, end: 2 * t.range.end - t.range.start });
     else selectClips([...allClipIds()].filter((id) => !before.has(id)));
   };
@@ -216,7 +216,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       const gaps = stripGaps(out.regions, rate(), scope.start, scope.end, Math.max(0, num(v, "before") ?? 0) / 1000, Math.max(0, num(v, "after") ?? 0) / 1000);
       const command: Command | null = gaps.length ? { type: "batch", label: "Stripped silence", commands: [{ type: "clear-ranges", trackIds: [scope.trackId], ranges: gaps, ripple: false }] } : null;
       const stripped = run(command, `Stripped ${gaps.length} silent stretch${gaps.length === 1 ? "" : "es"}`, "No silence to strip at that threshold and length");
-      // what was selected stays selected as the pieces that remain of it, as Pro Tools leaves them
+      // what was selected stays selected as the pieces that remain of it
       if (stripped && !t.range) selectClips((engine.get("document").tracks.find((tr) => tr.id === scope.trackId)?.clips ?? []).filter((c) => c.start < scope.end && c.start + c.length > scope.start).map((c) => c.id));
     } catch (err) {
       say(`Could not strip: ${err instanceof Error ? err.message : String(err)}`);
@@ -279,7 +279,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     say(`Playhead at ${seconds(at)}`);
   };
 
-  // Zoom presets 1 to 5 (Pro Tools' zoom presets): a key or the View menu's button recalls one, with Shift stores the
+  // Zoom presets 1 to 5: a key or the View menu's button recalls one, with Shift stores the
   // zoom in view in it; kept on this machine
   let presets = [...DEFAULT_PRESETS];
   try {
@@ -387,7 +387,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     item("Big counter", "", "The playhead's position in large figures on a panel of its own", counter.toggle, counter.isOpen, (sync) => counter.onChange(sync)),
     item("Counters and rulers...", "", "The main and sub counters' timebases, the session's timecode rate and the rulers shown", () => host.dispatchEvent(new CustomEvent("fw-counters"))),
   );
-  // PLAN_v13 S13, Commands Focus: single keys for the editing commands (Pro Tools' a-z button): A and S trim the start
+  // PLAN_v13 S13, Commands Focus: single keys for the editing commands (the a-z button): A and S trim the start
   // and end to the playhead, D and G fade in to and out from it, F makes fades, B separates at it, P and ; move the
   // range up and down a track, L and ' tab back and on to clip edges; kept on this machine
   const FOCUS_KEY = "formwav.commandsFocus";
@@ -927,7 +927,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     item("Fade out from playhead", "", "Fade the clips under the playhead out from it to their end", () => run(fadeToPlayhead(engine.get("document"), target(), playhead(), "end"), "Faded out from the playhead", "Put the playhead inside a selected clip")),
   );
 
-  // Memory locations (Pro Tools' Memory Locations): Enter adds one at the playhead, playing or not; a number on the keypad
+  // Memory locations: Enter adds one at the playhead, playing or not; a number on the keypad
   // between two points recalls it; previous and next step through them; a selection location sets the range again
   const recall = (m: MemoryLocation | null, missing: string) => {
     if (!m) return say(missing);

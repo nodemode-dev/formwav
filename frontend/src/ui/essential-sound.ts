@@ -1,5 +1,5 @@
 /**
- * AA-07, Audition's Essential Sound: a clip typed as dialogue, music, sound effects or ambience, each type with its own
+ * AA-07, Essential Sound: a clip typed as dialogue, music, sound effects or ambience, each type with its own
  * tasks and presets (built in, or saved on this machine). Apply runs the ticked tasks as a chain of the engine's
  * effects on the clip's audio, loudness last so it measures the finished sound, and writes ducking into the clip's
  * gain envelope under the session's dialogue clips; all of it is one change.

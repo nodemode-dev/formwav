@@ -28,14 +28,14 @@ export function thinLane(points: readonly AutoPoint[], tolerance: number): AutoP
   return points.filter((_, i) => keep.has(i));
 }
 
-/** Pro Tools' Glide: a straight line across the range from the lane's value at its start to its value at its end. */
+/** Glide: a straight line across the range from the lane's value at its start to its value at its end. */
 export function glideLane(points: readonly AutoPoint[], start: number, end: number, fallback: number): AutoPoint[] {
   const a = laneAt(points, start, fallback);
   const b = laneAt(points, end, fallback);
   return [...points.filter((p) => p.time < start || p.time > end), { time: start, value: a }, { time: end, value: b }].sort((x, y) => x.time - y.time);
 }
 
-/** Write a value across the range (Pro Tools' Write to selection), the lane outside it as it was. */
+/** Write a value across the range, the lane outside it as it was. */
 export function writeLane(points: readonly AutoPoint[], start: number, end: number, value: number, fallback: number): AutoPoint[] {
   const outside = points.filter((p) => p.time < start || p.time > end);
   const edges = [
@@ -54,7 +54,7 @@ const clipDb = (env: readonly { at: number; db: number }[] | undefined, at: numb
   return env[env.length - 1].db;
 };
 
-/** Pro Tools' Coalesce Volume Automation to Clip Gain: the track's volume (its lane, or its fader) written into each
+/** Coalesce volume automation to clip gain: the track's volume (its lane, or its fader) written into each
  *  clip's gain line at the lane's points and the clip's edges, then the lane cleared and the fader at 0 dB. */
 export function volumeToClipGain(track: Track): Command[] {
   const lane = track.automation?.volume ?? [];
@@ -71,7 +71,7 @@ export function volumeToClipGain(track: Track): Command[] {
   return commands;
 }
 
-/** Pro Tools' Coalesce Clip Gain to Volume Automation: each clip's gain and gain line written into the track's volume
+/** Coalesce clip gain to volume automation: each clip's gain and gain line written into the track's volume
  *  lane over the clip (with the fader), then the clips at 0 dB with no line. */
 export function clipGainToVolume(track: Track): Command[] {
   const fader = (t: number) => (track.automation?.volume?.length ? laneValue(track.automation.volume, t, true) : track.gainDb);

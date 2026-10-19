@@ -168,7 +168,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
       // S6: the main ruler in the main counter's timebase, the markers over it as before
       drawRow(ctx, doc, mainFormat, rate, 0, height, left, view, spp);
     } else if (tempo) {
-      // Bars and beats (Audacity's beats and measures ruler): a line at each bar, numbered every 1, 2, 4... bars as
+      // Bars and beats (the beats and measures ruler): a line at each bar, numbered every 1, 2, 4... bars as
       // zoom allows; beat ticks from 6 px apart, labelled bar.beat from 48 px.
       // S11: bar by bar along the tempo and meter map, so a tempo or meter change moves every line after it
       const map = tempoMap(doc);
@@ -240,7 +240,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     const spp = samplesPerPixel(doc);
     return snapSamples(Math.max(0, x) * spp, doc.sampleRate, doc.sampleRate / spp);
   };
-  // Audacity 4's draggable playhead: a press within 6 px of it grabs it, and dragging seeks (once a frame) instead of
+  // The draggable playhead: a press within 6 px of it grabs it, and dragging seeks (once a frame) instead of
   // drawing a loop range; a press anywhere else keeps click-to-seek and drag-for-loop.
   let dragHead = false;
   let headRaf = 0;
@@ -256,7 +256,7 @@ export function mountRuler(host: HTMLElement, engine: Engine, player: Player): v
     });
   };
   // Scrubbing (AU-42): dragging the playhead plays what passes under it, at the drag's own speed (0.25 to 4 times);
-  // moving back seeks back and plays forward in short bursts (Audacity's seek-scrub); holding still goes quiet; the
+  // moving back seeks back and plays forward in short bursts (seek-scrub); holding still goes quiet; the
   // release restores the speed slider's value and keeps playing only if playback was running before the grab
   let scrub: { wasPlaying: boolean; x: number; t: number; idle: number } | null = null;
   const sliderSpeed = () => 2 ** (Number(host.querySelector<HTMLInputElement>("[data-speed]")?.value) || 0);

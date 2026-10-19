@@ -137,7 +137,7 @@ export interface Clip {
   /** PT-09, warp markers: the original the clip is rendered from (its media and the span it covered, in samples) and
    *  each marker as a source position in that span (src) and where it now sits in the clip (dst). */
   warp?: { source: string; sourceIn: number; sourceLength: number; markers: { src: number; dst: number }[] };
-  /** PT-33: the clip's own realtime effects (Pro Tools' clip effects), its EQ and a compressor, ahead of its track's
+  /** PT-33: the clip's own realtime effects, its EQ and a compressor, ahead of its track's
    *  inserts; the compressor sees the clip after its clip gain, not its track's fader. */
   fx?: TrackFx[];
   /** A note clip's notes, the truth its media renders (the built-in instrument); absent on audio clips. */
@@ -158,11 +158,11 @@ export interface Clip {
   length: number;
   sourceIn: number;
   gainDb: number;
-  /** Audacity's clip volume envelope: dB points at the media's frames (so they stay with the audio through trims and splits), linear in dB between points as Audacity 2's are (measured against its own render; until v1.75.0 linear in gain) and held outside them, multiplying the clip's gain. */
+  /** The clip volume envelope: dB points at the media's frames (so they stay with the audio through trims and splits), linear in dB between points (measured against a reference render; until v1.75.0 linear in gain) and held outside them, multiplying the clip's gain. */
   envelope?: readonly { at: number; db: number }[];
   /** S13: the clip gain and its line set aside (the clip plays at 0 dB), both kept for when it is back on */
   gainBypass?: boolean;
-  /** AA-07, Audition's Essential Sound: what the clip is, which decides its tasks and presets. */
+  /** AA-07, Essential Sound: what the clip is, which decides its tasks and presets. */
   soundType?: "dialogue" | "music" | "effects" | "ambience";
   fadeIn?: number;
   fadeOut?: number;
@@ -171,17 +171,17 @@ export interface Clip {
   fadeOutShape?: FadeShape;
   /** A name for this clip alone; absent, the clip shows its media's name. */
   name?: string;
-  /** Silent in playback and export, kept in place (Pro Tools' clip mute). */
+  /** Silent in playback and export, kept in place. */
   mute?: boolean;
-  /** Pro Tools' Time Lock ("time": the clip stays where it is in time) and Edit Lock ("edit": no edit of it at all). */
+  /** Time Lock ("time": the clip stays where it is in time) and Edit Lock ("edit": no edit of it at all). */
   lock?: "time" | "edit";
   /** Alternate takes from loop recording: source offsets into the same media, all `length` long. */
   takes?: number[];
   /** Index into `takes` of the take that plays. */
   take?: number;
-  /** Clips sharing a group id select, move and delete together (Audacity's clip groups). */
+  /** Clips sharing a group id select, move and delete together. */
   groupId?: string;
-  /** Non-destructive pitch shift in semitones (Audacity's clip pitch): `mediaId` stays the original, and playback and
+  /** Non-destructive pitch shift in semitones: `mediaId` stays the original, and playback and
    * export play `pitchMediaId`, a same-length render of the original at this pitch. */
   pitch?: number;
   pitchMediaId?: string;
@@ -431,7 +431,7 @@ export type MidiFx =
 
 const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice", "dehum", "declick", "dereverb", "processor"]);
 
-/** The bypass groups (Pro Tools' Track > Bypass Inserts): every insert, or those of one kind of processing. */
+/** The bypass groups (Track > Bypass Inserts): every insert, or those of one kind of processing. */
 export type FxCategory = "all" | "eq" | "dynamics" | "reverb" | "delay" | "modulation";
 const KIND_CATEGORY: Readonly<Record<string, FxCategory>> = { highpass: "eq", lowpass: "eq", peak: "eq", lowshelf: "eq", highshelf: "eq", compressor: "dynamics", limiter: "dynamics", gate: "dynamics", reverb: "reverb", echo: "delay", chorus: "modulation", flanger: "modulation", phaser: "modulation", tremolo: "modulation" };
 const PROCESSOR_CATEGORY: Readonly<Record<string, FxCategory>> = { Eq: "eq", Dynamics: "dynamics", Reverb: "reverb", Delay: "delay", Modulation: "modulation" };
@@ -514,7 +514,7 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
 export interface Track {
   /** A palette key (green, blue, amber, red, violet, cyan, pink, slate) for its header bar and clips; absent is green. */
   color?: string;
-  /** Realtime effects in order (Audacity's realtime stack); bypassed ones are skipped. */
+  /** Realtime effects in order; bypassed ones are skipped. */
   fx?: TrackFx[];
   /** Where this track records from; absent means the default input. */
   input?: TrackInput;
@@ -536,7 +536,7 @@ export interface Track {
   gainDb: number;
   mute: boolean;
   solo: boolean;
-  /** Not muted when other tracks are soloed (Pro Tools' solo safe). */
+  /** Not muted when other tracks are soloed (solo safe). */
   soloSafe?: boolean;
   /** Input trim in dB and polarity, ahead of the inserts. */
   trimDb?: number;
@@ -551,16 +551,16 @@ export interface Track {
   view?: "spectrogram";
   /** PT-18: post-fader sends, this track's signal (after its inserts and fader) also fed to a bus at a level. */
   sends?: { busId: string; gainDb: number; automation?: AutoPoint[]; pre?: boolean; mute?: boolean; pan?: number }[];
-  /** PT-14, Pro Tools' playlists: the active playlist's name (its clips are `clips`, which play and export) and the
+  /** PT-14, playlists: the active playlist's name (its clips are `clips`, which play and export) and the
    *  other playlists, stashed with their clips until switched in. */
   playlist?: string;
   playlists?: readonly { name: string; clips: readonly Clip[] }[];
-  /** Hidden from the lanes and the mixer, still playing (Pro Tools' Hide track); its height in the lanes (absent is
+  /** Hidden from the lanes and the mixer, still playing; its height in the lanes (absent is
    *  medium) and its comments. */
   hidden?: boolean;
   height?: "small" | "large" | "jumbo";
   comments?: string;
-  /** Neither played nor exported, kept as it is (Pro Tools' Make Inactive); a commit leaves its original so. */
+  /** Neither played nor exported, kept as it is; a commit leaves its original so. */
   inactive?: boolean;
   /** PT-38, AA-11: where the track sits in a 5.1 mix, x from -1 (left) to 1 (right) and y from -1 (behind) to 1 (in
    *  front), with a send to the LFE channel in dB; absent, its stereo image goes to L and R. */
@@ -589,7 +589,7 @@ export interface Marker {
   label: string;
   /** A clip marker (AA-13): it moves with this clip, and is left in place, unattached, if the clip goes. */
   clipId?: string;
-  /** Memory location fields (Pro Tools' Memory Locations): its number, a comment and a palette colour. */
+  /** Memory location fields: its number, a comment and a palette colour. */
   number?: number;
   comment?: string;
   color?: string;
@@ -674,7 +674,7 @@ export interface SessionDoc {
   panLaw?: "-3" | "-4.5" | "-6";
   /** Media folders in the media pane: a media id to its folder's name; media absent here is in no folder. */
   mediaFolders?: Record<string, string>;
-  /** Realtime effects on the summed mix, before the master fader (Audacity's master stack). */
+  /** Realtime effects on the summed mix, before the master fader. */
   masterFx?: TrackFx[];
   /** The session tempo, for the bars ruler, beat snapping and Quantize (set by hand or detected). */
   tempo?: { bpm: number; beatsPerBar: number; beatUnit?: number };
@@ -683,7 +683,7 @@ export interface SessionDoc {
   tempoChanges?: readonly TempoChange[];
   meterChanges?: readonly MeterChange[];
   keyChanges?: readonly KeyChange[];
-  /** PT-26: the timecode the session starts at, in seconds (Pro Tools' session start); timecode reads add it. */
+  /** PT-26: the timecode the session starts at, in seconds; timecode reads add it. */
   timecodeStart?: number;
   /** PLAN_v13 S15: the session's picture, kept by reference (its id is the movie's SHA-256, its name and size find it
    *  again), its first frame at `start` (session samples), with timecode burnt in over it when `burnIn`. */
@@ -698,7 +698,7 @@ export interface SessionDoc {
   /** The built-in synth's patch: what the live instrument plays and what renders every note track without an
    *  instrument of its own; absent is the core's default (a soft triangle, unfiltered). */
   synth?: SynthPatch;
-  /** Audacity's time track: playback speed over session time, linear between points, held outside them (sample position, factor 0.25 to 4). */
+  /** The time track: playback speed over session time, linear between points, held outside them (sample position, factor 0.25 to 4). */
   timeTrack?: readonly TimePoint[];
   /** AU-36: speed interpolated logarithmically between the time track's points (a steady ratio), not linearly. */
   timeTrackLog?: boolean;
@@ -714,11 +714,11 @@ export interface SessionDoc {
   buses?: readonly Bus[];
   /** S10: mix and edit groups. */
   groups?: readonly TrackGroup[];
-  /** VCA masters (Pro Tools' VCA mixing): group faders that scale their member tracks without carrying audio. */
+  /** VCA masters (VCA mixing): group faders that scale their member tracks without carrying audio. */
   vcas?: readonly Vca[];
 }
 
-/** A VCA (Pro Tools' VCA masters): a fader and mute for a group of tracks with no audio passing through it; a member
+/** A VCA master: a fader and mute for a group of tracks with no audio passing through it; a member
  * plays at its own fader plus the VCA's gain, and its own fader does not move. */
 export interface Vca {
   id: string;
@@ -735,13 +735,13 @@ export interface Bus {
   gainDb: number;
   pan?: number;
   mute?: boolean;
-  /** Effects on the bus's sum (Pro Tools' routing folders process the grouped stem), filters and compressors in order. */
+  /** Effects on the bus's sum (routing folders process the grouped stem), filters and compressors in order. */
   fx?: TrackFx[];
   /** S10: the bus this bus plays into (after its effects, fader and pan); absent is the master. Never a cycle. */
   out?: string;
 }
 
-/** S10: a mix and edit group (Pro Tools' groups): what it links among its tracks while active. */
+/** S10: a mix and edit group: what it links among its tracks while active. */
 export interface TrackGroup {
   id: string;
   name: string;
@@ -765,8 +765,8 @@ export interface Selection {
   band: FrequencyBand | null;
 }
 
-/** AU-34: where a session was being looked at, saved with it (or as an imported Audacity project left it) and restored
- *  when it opens, as Audacity reopens a project: the lanes' zoom factor, their left edge in seconds, and the time
+/** AU-34: where a session was being looked at, saved with it (or as an imported .aup project left it) and restored
+ *  when it opens: the lanes' zoom factor, their left edge in seconds, and the time
  *  selection in samples. Captured only when saving, so it is never part of undo or of a session's unsaved changes. */
 export interface SessionView {
   zoom?: number;
@@ -1022,7 +1022,7 @@ export function pasteLane(points: readonly AutoPoint[], flat: number, source: re
   ]);
 }
 
-/** Memory location numbers (Pro Tools' Memory Locations): a marker's or a region's own number; those made before
+/** Memory location numbers: a marker's or a region's own number; those made before
  *  numbers existed take the free numbers in time order. */
 export function memoryNumbers(doc: SessionDoc): Map<string, number> {
   const all = [...doc.markers.map((m) => ({ id: m.id, at: m.at, number: m.number })), ...(doc.regions ?? []).map((r) => ({ id: r.id, at: r.start, number: r.number }))].sort((a, b) => a.at - b.at);
@@ -1384,7 +1384,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       const clip = doc.tracks.find((t) => t.id === cmd.trackId)?.clips.find((c) => c.id === cmd.clipId);
       if (!clip || !doc.tracks.some((t) => t.id === cmd.toTrackId)) return doc;
       const start = Math.max(0, Math.round(cmd.start));
-      // Audacity's free placement: the clip leaves its track for another, mono or stereo, where overlap replaces what
+      // Free placement: the clip leaves its track for another, mono or stereo, where overlap replaces what
       // lay under it (the same trim clear-range makes, later clips unmoved).
       const without = mapTrack(doc, cmd.trackId, (t) => ({ ...t, clips: t.clips.filter((c) => c.id !== cmd.clipId) }));
       const cleared = applyCommand(without, { type: "clear-range", trackId: cmd.toTrackId, start, end: start + clip.length, ripple: false }, newId);
@@ -1550,7 +1550,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "new-playlist": {
       // PT-14: the active clips stashed under their playlist's name; the new playlist starts empty or as a copy (fresh
-      // clip ids, the same media and notes), named as Pro Tools names them, the track's name and the next number
+      // clip ids, the same media and notes), named by the track's name and the next number
       return mapTrack(doc, cmd.trackId, (t) => {
         const current = t.playlist ?? `${t.name}.01`;
         const taken = new Set([current, ...(t.playlists ?? []).map((p) => p.name)]);
@@ -1563,7 +1563,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     }
     case "comp-from-playlist": {
       // S13: comping: the span from start to end of another playlist replaces the same span of the active one (what
-      // lies there is cleared first, without closing the gap), as Pro Tools' Copy Selection to Main Playlist does
+      // lies there is cleared first, without closing the gap)
       const track = doc.tracks.find((t) => t.id === cmd.trackId);
       const source = track?.playlists?.find((p) => p.name === cmd.name);
       const start = Math.max(0, Math.round(cmd.start));
@@ -1635,7 +1635,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         const { timeTrack: _cleared, timeTrackLog: _log, ...rest } = doc;
         return rest;
       }
-      // AU-36: logarithmic interpolation between points (speed changing at a steady ratio, as Audacity offers)
+      // AU-36: logarithmic interpolation between points (speed changing at a steady ratio)
       const { timeTrackLog: _was, ...base } = doc;
       return cmd.log ? { ...base, timeTrack: points, timeTrackLog: true } : { ...base, timeTrack: points };
     }
@@ -1759,7 +1759,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       });
     }
     case "coalesce-vca": {
-      // S9 (Pro Tools' Coalesce VCA): the VCA's level, its lane or its fader, written into each member's volume
+      // S9 (Coalesce VCA): the VCA's level, its lane or its fader, written into each member's volume
       // (its lane, or one made from its fader), and the VCA back to 0 dB with no lane; the mix is unchanged
       const vca = (doc.vcas ?? []).find((v) => v.id === cmd.vcaId);
       if (!vca) return doc;
@@ -2194,7 +2194,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           tracks: next.tracks.map((t) => (!cmd.trackIds.includes(t.id) ? t : { ...t, clips: t.clips.map((c) => (c.start >= at ? { ...c, start: c.start + length } : c)) })),
         };
       if (!cmd.follow) return next;
-      // time operations (Pro Tools' Insert Time): the listed tracks' automation moves with their clips, and across the
+      // time operations (Insert Time): the listed tracks' automation moves with their clips, and across the
       // session the markers, regions and the loop as well
       let changed = false;
       const tracks = next.tracks.map((t) => {
@@ -2603,7 +2603,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       });
     }
     case "duplicate-track": {
-      // Pro Tools' Duplicate track: its clips (new ids, out of any group), playlists, effects, automation, sends and
+      // Duplicate track: its clips (new ids, out of any group), playlists, effects, automation, sends and
       // routing, named after it, right below it
       const index = doc.tracks.findIndex((t) => t.id === cmd.trackId);
       if (index < 0) return doc;
@@ -2672,7 +2672,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       return changed ? { ...doc, tracks } : doc;
     }
     case "commit-track": {
-      // Pro Tools' Commit: what the track plays, rendered by the engine through its fader and effects (the core runs
+      // Commit: what the track plays, rendered by the engine through its fader and effects (the core runs
       // both before the track meets a bus), on a new track right below it routed as it was; the original made inactive
       // and hidden
       const index = doc.tracks.findIndex((t) => t.id === cmd.trackId);

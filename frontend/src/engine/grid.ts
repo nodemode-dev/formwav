@@ -33,7 +33,7 @@ export const GRID_CHOICES: readonly GridChoice[] = [
   ...["1000", "100", "10", "1"].map((n) => ({ id: `${n}smp`, label: `${n} samples`, group: "Samples" })),
 ];
 
-/** The nudge when the session has not chosen one (a tenth of a second, as Pro Tools ships). */
+/** The nudge when the session has not chosen one (a tenth of a second). */
 export const NUDGE_DEFAULT = "0.1s";
 
 /** A short form of a value for the footer: 1/16, 1/8T, 1/4., 1 bar, 0.1 s, 1 fr, 100 smp. */

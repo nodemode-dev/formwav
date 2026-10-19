@@ -67,7 +67,7 @@ export function editSpan(doc: SessionDoc, target: EditTarget): { trackIds: strin
   };
 }
 
-/** Pro Tools' Duplicate (one copy) and Repeat: copies of the span end to end after it, its automation with them; over
+/** Duplicate (one copy) and Repeat: copies of the span end to end after it, its automation with them; over
  *  what lies there, or with Shuffle on opening time for them first. */
 export function repeatSpan(doc: SessionDoc, target: EditTarget, count: number, shuffle: boolean): Command | null {
   const span = editSpan(doc, target);
@@ -101,7 +101,7 @@ export function repeatSpan(doc: SessionDoc, target: EditTarget, count: number, s
   return batch(n === 1 ? (target.range ? "Duplicated a range" : "Duplicated clips") : `Repeated ${target.range ? "a range" : "clips"} ${n} times`, commands, true);
 }
 
-/** Pro Tools' Shift: the selected clips moved later by `by` samples (earlier when negative), stopped at the start. */
+/** Shift: the selected clips moved later by `by` samples (earlier when negative), stopped at the start. */
 export function shiftClips(doc: SessionDoc, clipIds: readonly string[], by: number): Command | null {
   const ids = new Set(clipIds);
   const chosen = doc.tracks.flatMap((t) => t.clips.filter((c) => ids.has(c.id)).map((clip) => ({ trackId: t.id, clip })));
@@ -359,7 +359,7 @@ export function nudgeClips(doc: SessionDoc, clipIds: readonly string[], by: numb
 const inShape = (c: Clip): FadeShape => c.fadeShape ?? "linear";
 const outShape = (c: Clip): FadeShape => c.fadeOutShape ?? inShape(c);
 
-/** Create Fades from a selection (Pro Tools' Cmd F): where the range crosses a butt splice, a crossfade over the whole
+/** Create Fades from a selection: where the range crosses a butt splice, a crossfade over the whole
  *  of the range around it, each clip lengthened past the splice by as much of the range as lies on the other side and
  *  its file still holds; where the range takes in a clip's start and ends inside it, a fade-in to the range's end; where
  *  it starts inside a clip and takes in its end, a fade-out from the range's start. */
@@ -432,7 +432,7 @@ export interface RangeClip {
   pan?: AutoPoint[];
 }
 
-/** Range copy (Pro Tools' Copy with an edit selection): what plays in the range, its automation with it. */
+/** Range copy: what plays in the range, its automation with it. */
 export function copyRange(doc: SessionDoc, range: EditRange): RangeClip | null {
   const span = editSpan(doc, { range, clipIds: [] });
   const track = doc.tracks.find((t) => t.id === range.trackId);
@@ -466,7 +466,7 @@ export function pasteRange(doc: SessionDoc, copied: RangeClip, trackId: string, 
   return batch("Pasted a range", commands, true);
 }
 
-/** S6, Consolidate (Pro Tools' Consolidate Clip): what plays from `start` to `end` on a track, rendered by the engine
+/** S6, Consolidate: what plays from `start` to `end` on a track, rendered by the engine
  *  into one file (`media`), set over that span as one clip; a whole batch, its clearing and its placing one edit. */
 export function consolidate(doc: SessionDoc, trackId: string, start: number, end: number, media: MediaRef): Command | null {
   const a = Math.max(0, Math.round(start));
@@ -487,7 +487,7 @@ const picked = (doc: SessionDoc, clipIds: readonly string[]) => {
   return doc.tracks.flatMap((t) => t.clips.filter((c) => ids.has(c.id)));
 };
 
-/** Clip mute (Pro Tools' Mute Clips): the selected clips muted, or unmuted when every one already is. */
+/** Clip mute: the selected clips muted, or unmuted when every one already is. */
 export function muteClips(doc: SessionDoc, clipIds: readonly string[]): Command | null {
   const chosen = picked(doc, clipIds);
   if (!chosen.length) return null;

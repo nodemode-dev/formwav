@@ -482,7 +482,7 @@ function updateClip(node: HTMLElement, clip: Clip, doc: SessionDoc, spp: number)
   schedulePaint(canvas, media.id);
 }
 
-/** A folder header (Pro Tools' folder tracks): one per bus, before the first track routed to it. */
+/** A folder header (folder tracks): one per bus, before the first track routed to it. */
 function folderNode(): HTMLElement {
   const row = document.createElement("div");
   row.className = "fw-folder";
@@ -898,7 +898,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       lanes.dataset.timeline = timeline;
       lanes.style.setProperty("--fw-timeline-w", timeline);
     }
-    // Folder view (Pro Tools' folder tracks): a header before the first track routed to each bus, and that bus's tracks
+    // Folder view (folder tracks): a header before the first track routed to each bus, and that bus's tracks
     // hidden while it is folded. Folding is view state kept here: not saved with the session and not an undo step.
     const buses = new Map((doc.buses ?? []).map((b) => [b.id, b]));
     type Row = { track: Track } | { bus: { id: string; name: string }; count: number };
@@ -1612,7 +1612,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (!marquee.hidden) marquee.hidden = true;
   };
 
-  // Audacity's clip groups: selecting any member selects the whole group, so the existing multi-clip move and delete
+  // Clip groups: selecting any member selects the whole group, so the existing multi-clip move and delete
   // carry the group; grouped clips carry data-group for their outline.
   const groupOf = () => {
     const map = new Map<string, string>();
@@ -1861,7 +1861,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
   };
 
-  /** Audacity's clip stretching: every clip in the gesture re-timed by `ratio` with the Fit to length render, each media once, one undo step. */
+  /** Clip stretching: every clip in the gesture re-timed by `ratio` with the Fit to length render, each media once, one undo step. */
   const stretchGroup = async (group: Member[], ratio: number) => {
     const notice = host.querySelector<HTMLElement>(".fw-notice");
     const percent = Math.round(ratio * 1000) / 10;
@@ -2019,7 +2019,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   };
   lanes.addEventListener("pointerup", () => showGuide(null, 1));
 
-  // Audacity's free clip placement: a single moved clip released over another lane goes to that track, mono or stereo,
+  // Free clip placement: a single moved clip released over another lane goes to that track, mono or stereo,
   // replacing what it overlaps there; the lane under the pointer is marked while dragging.
   let lastPointerY = 0;
   const laneAt = (y: number) =>
@@ -2102,7 +2102,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     return commands;
   };
 
-  // AU-06: a stereo clip that lands on a mono track, pasted or dragged there, is mixed down to mono, as Audacity does on
+  // AU-06: a stereo clip that lands on a mono track, pasted or dragged there, is mixed down to mono, as reference editors do on
   // paste (a mono clip on a stereo track already plays on both sides); the engine's Downmix makes the mono media, set as
   // the clip's media (a second undo step, after the paste or move)
   const adaptToTrack = async (trackId: string, clipIds: Iterable<string>) => {
@@ -2220,7 +2220,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       markSelected();
       return;
     }
-    // AU-05, Audacity's split variants on a range, each one undo step: Ctrl+Alt+X split-cut (the range to the clip
+    // AU-05, split variants on a range, each one undo step: Ctrl+Alt+X split-cut (the range to the clip
     // clipboard, a gap left), Ctrl+Alt+K split-delete (a gap left, whatever Shuffle says), Ctrl+Alt+I split to a new
     // track (the range's audio moved to a new track at the same time, a gap left)
     if ((e.metaKey || e.ctrlKey) && e.altKey && !e.shiftKey && range && ["x", "k", "i"].includes(e.key.toLowerCase())) {
@@ -2256,7 +2256,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
         markSelected();
         return;
       }
-      // S5, range copy and paste (Pro Tools' Copy and Cut with an edit selection): the range's audio and its track's
+      // S5, range copy and paste: the range's audio and its track's
       // automation, pasted over what lies at the destination; the last copy, of clips or a range, is what pastes
       if ((key === "c" || key === "x") && range) {
         const r = range;
@@ -2313,7 +2313,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const selection = selectedClips;
-    // the keypad's plus and minus nudge (ui/editing.ts), as Pro Tools' do
+    // the keypad's plus and minus nudge (ui/editing.ts)
     if ((e.key === "=" || e.key === "+") && e.code !== "NumpadAdd") setZoom(zoom * 2);
     else if (e.key === "-" && e.code !== "NumpadSubtract") setZoom(zoom / 2);
     else if (e.key === "0") setZoom(1);

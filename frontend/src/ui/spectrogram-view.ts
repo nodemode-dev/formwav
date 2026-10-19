@@ -1,7 +1,7 @@
 import type { Engine } from "../engine";
 
 /**
- * Audacity's spectrogram view, per session: with the toggle on, each clip shows its file's spectrogram (one bare image
+ * The spectrogram view, per session: with the toggle on, each clip shows its file's spectrogram (one bare image
  * of the whole file, cached per file) as its background, scaled so the file's length maps to the clip's width times
  * file-frames over clip-frames and offset by the clip's trim, so it follows splits and trims. The waveform is hidden.
  */

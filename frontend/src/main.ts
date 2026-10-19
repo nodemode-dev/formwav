@@ -108,7 +108,7 @@ if (host) {
   mountCounters(host, engine);
   mountSession(host, engine);
   mountTransport(host, engine, player);
-  // Double-click a slider to reset it to its default (Audacity's controls, as a reference): the same input and change
+  // Double-click a slider to reset it to its default: the same input and change
   // events a drag fires, so each slider's own handler records the change and undo works as usual. The double-click's
   // first press moves the thumb and can record a step of its own (volume went to its midpoint, -24 dB, and one undo
   // landed there); that step is undone before the reset, so one undo returns to the value before the double-click.

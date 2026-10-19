@@ -342,7 +342,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
         return { loop_s: [Number(i.start_s), Number(i.end_s)] };
       },
     },
-    // Editing by transcript (the comparison's Descript row): the words as the Transcript tab has them, cut and rewritten the same way
+    // Editing by transcript: the words as the Transcript tab has them, cut and rewritten the same way
     {
       name: "get_transcript",
       description: "Every transcribed word in the session in order: index, text, speaker, start_s, end_s, filler (um, uh and the like). Clips not yet transcribed are transcribed first on this machine, which takes a while for long audio. Use the indexes with delete_words and rewrite_words, from the latest call: indexes change after an edit.",

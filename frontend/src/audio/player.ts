@@ -144,8 +144,8 @@ function envGain(points: [number, number][], t: number): number {
   return 10 ** (points[points.length - 1][1] / 20);
 }
 
-/** AU-34: a clip envelope's gain at `t`, interpolated in dB between points (Audacity 2's clip envelopes are exponential:
- *  halfway between gains of 1 and 0.25 its own render measures 0.5004) and held outside them. */
+/** AU-34: a clip envelope's gain at `t`, interpolated in dB between points (exponential: halfway between
+ *  gains of 1 and 0.25 a reference render measures 0.5004) and held outside them. */
 function clipEnvGain(points: [number, number][], t: number): number {
   if (t <= points[0][0]) return 10 ** (points[0][1] / 20);
   for (let i = 1; i < points.length; i++) {
@@ -271,8 +271,8 @@ export function timeTrackLength(end: number, points: readonly { at: number; spee
   return total;
 }
 
-/** PT-33: a clip's chain in the core: its own filters, then its own compressor, then its track's filters (Pro Tools'
- *  clip effects ahead of the track's inserts). The core applies a clip's gain after its chain, so the compressor's
+/** PT-33: a clip's chain in the core: its own filters, then its own compressor, then its track's filters (clip
+ *  effects ahead of the track's inserts). The core applies a clip's gain after its chain, so the compressor's
  *  threshold is lowered by the clip gain: compressing the clip at its clip gain is the same as compressing the file at
  *  that threshold and applying the gain after. The track's automation stage numbers move past the clip's stages. */
 export function clipChain(
@@ -957,7 +957,7 @@ export class Player {
 
   private speed = 1;
 
-  /** Play-at-speed (Audacity's varispeed): 0.25 to 4 times, pitch following speed; playback only, exports unchanged. */
+  /** Play-at-speed (varispeed): 0.25 to 4 times, pitch following speed; playback only, exports unchanged. */
   setSpeed(value: number): void {
     this.speed = Math.min(4, Math.max(0.25, value));
     if (this.node) send(this.node, { type: "speed", value: this.speed });
@@ -993,7 +993,7 @@ export class Player {
     const doc = this.engine.get("document");
     await Promise.all(Object.keys(doc.media).map((id) => this.load(node, id)));
     this.sendPlan(node, this.engine.get("document"));
-    // Audacity's loop rule: with looping on, playback that starts outside the loop starts at its beginning (it had
+    // The loop rule: with looping on, playback that starts outside the loop starts at its beginning (it had
     // played straight past the loop from a playhead after its end). Recording's open playback keeps its pre-roll.
     let at = this.engine.get("transport").positionSamples;
     const loop = doc.loop;

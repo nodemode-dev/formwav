@@ -292,7 +292,7 @@ export function mountShell(host: HTMLElement, engine: Engine): void {
   } catch {
     clock?.setAttribute("data-storage", "none");
   }
-  // PT-26: timecode reads from the session's timecode start (Pro Tools' session start, 01:00:00:00 by habit)
+  // PT-26: timecode reads from the session's timecode start (01:00:00:00 by habit)
   const renderClock = (t: TransportState) => setText(clock, formatClock(t.positionSamples, engine.get("document"), currentMode));
   engine.subscribe("document", () => renderClock(engine.get("transport")));
   applyMode = (mode) => {

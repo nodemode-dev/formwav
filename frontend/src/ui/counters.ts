@@ -1,5 +1,5 @@
 /**
- * PLAN_v13 S6, the counters (Pro Tools' main and sub counters and edit selection): the main counter's timebase, a sub
+ * PLAN_v13 S6, the counters (main and sub counters and edit selection): the main counter's timebase, a sub
  * counter under it, the selection's Start, End and Length in the main counter's timebase, the session's timecode rate
  * and the rulers shown, chosen in a small dialog over the clock.
  */
@@ -9,7 +9,7 @@ import { FRAME_RATES, formatLength, formatPosition, TIME_FORMATS, type FrameRate
 import { setText } from "../vendor/nodemode/dom-stable";
 import { CLOCK_MODES, clockMode, setClockMode, timeOf, type ClockMode } from "./shell";
 
-/** The rulers that can show under the main one, in Pro Tools' order (Timecode 2 runs at 25, or 30 when the session
+/** The rulers that can show under the main one, in their usual order (Timecode 2 runs at 25, or 30 when the session
  *  is at 25); the main ruler carries the markers and follows the main counter. */
 export const RULERS: readonly { id: string; label: string }[] = [
   { id: "bars_beats", label: "Bars|Beats" },

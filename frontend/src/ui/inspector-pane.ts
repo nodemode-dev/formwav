@@ -36,7 +36,7 @@ const BODY = `
   <div class="fw-analyze-buttons" data-scope="master"><select data-rtfx="kind" aria-label="Realtime effect to add to the master"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option>${PROCESSOR_OPTIONS}</select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
   <div class="fw-insp-head">Time track</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Playback speed at the session's start, in percent"><span>Start</span><input type="number" data-tt="from" min="25" max="400" step="1" value="100" aria-label="Time track speed at the start in percent"> %</label><label class="fw-sam-opt" title="Playback speed at the end of the session's audio, in percent"><span>End</span><input type="number" data-tt="to" min="25" max="400" step="1" value="100" aria-label="Time track speed at the end in percent"> %</label></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-tt="apply" title="Playback speed moves from Start to End across the session's audio, pitch following speed (Audacity's time track), in playback and exports">Set time track</button>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-tt="apply" title="Playback speed moves from Start to End across the session's audio, pitch following speed, in playback and exports">Set time track</button>
   <div class="fw-tt-curve" data-tt-curve>${[1, 2, 3, 4, 5].map((k) => `<input type="range" hidden data-param="t${k}" min="0" max="100" step="0.5" value="${(k - 1) * 25}"><input type="range" hidden data-param="s${k}" min="25" max="400" step="1" value="100">`).join("")}</div>
   <label class="fw-sam-opt" title="Speed changes at a steady ratio between points instead of a steady step"><input type="checkbox" data-tt="log"> Logarithmic</label><button type="button" class="fw-ibtn" data-tt="apply-curve" title="Set the time track to the curve drawn above (place in the session across, speed up)">Apply curve</button><button type="button" class="fw-ibtn" data-tt="clear" title="Play at the transport's speed again">Clear</button></div>
 </div>
@@ -56,22 +56,22 @@ const BODY = `
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Point</span><input type="number" data-env="db" min="-60" max="12" step="0.5" value="-12" aria-label="Level of the envelope point in dB"> dB</label><button type="button" class="fw-ibtn" data-clip-act="env-add" title="Add a gain point at the playhead inside this clip; its level follows straight lines between points">Add point at playhead</button><button type="button" class="fw-ibtn" data-clip-act="env-clear">Clear envelope</button></div>
   <p class="fw-empty-note fw-env-readout" data-env-out>No gain envelope</p>
   <div class="fw-insp-head">De-bleed</div>
-  <div class="fw-analyze-buttons" title="Nyquist (Audacity's own interpreter): a Nyquist Prompt's code or one of Audacity's bundled Nyquist plug-ins, run on this clip"><label class="fw-sam-opt"><span>Nyquist</span><select data-nyq="plugin" aria-label="Nyquist plug-in or prompt"><option value="">Nyquist Prompt</option></select></label><button type="button" class="fw-ibtn" data-nyq="apply">Apply</button></div>
+  <div class="fw-analyze-buttons" title="Nyquist: a Nyquist Prompt's code or one of the bundled Nyquist plug-ins, run on this clip"><label class="fw-sam-opt"><span>Nyquist</span><select data-nyq="plugin" aria-label="Nyquist plug-in or prompt"><option value="">Nyquist Prompt</option></select></label><button type="button" class="fw-ibtn" data-nyq="apply">Apply</button></div>
   <div data-nyq="controls"></div>
   <textarea data-nyq="code" rows="3" spellcheck="false" aria-label="Nyquist code (the clip is *track*)" placeholder="(mult *track* 0.5)"></textarea>
-  <div class="fw-analyze-buttons" title="Vamp analysis plugins (as Audacity's Analyze menu runs them): the chosen output's features become markers, or regions where they have a duration, as one undo step"><label class="fw-sam-opt"><span>Vamp</span><select data-vamp="plugin" aria-label="Vamp plugin and output"></select></label><button type="button" class="fw-ibtn" data-vamp="run">Analyze</button></div>
+  <div class="fw-analyze-buttons" title="Vamp analysis plugins: the chosen output's features become markers, or regions where they have a duration, as one undo step"><label class="fw-sam-opt"><span>Vamp</span><select data-vamp="plugin" aria-label="Vamp plugin and output"></select></label><button type="button" class="fw-ibtn" data-vamp="run">Analyze</button></div>
   <div data-vamp="params"></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Leak from</span><select data-debleed="ref" aria-label="The clip that leaked into this one"><option value="">no other clip overlaps</option></select></label><label class="fw-sam-opt"><span>Amount</span><input type="number" data-debleed="amount" min="0" max="100" step="1" value="100" aria-label="How much of the leak to remove, in percent"> %</label><label class="fw-sam-opt" title="How long the leak's path rings after its delay: 0 for a direct leak (2.7 ms), up to 500 ms for a room between the source and the mic"><span>Path</span><input type="number" data-debleed="path" min="0" max="500" step="10" value="0" aria-label="The leak's path length, in milliseconds"> ms</label><button type="button" class="fw-ibtn" data-debleed="clicks" title="Remove a headphone click track that leaked into this clip, with no reference: found by its steady tempo, learned from its clicks in the pauses, taken out at every beat">Remove click bleed</button><button type="button" class="fw-ibtn" data-clip-act="debleed" title="Remove what leaked into this clip from the chosen one (headphone spill, an amp in the vocal mic)">De-bleed</button></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Guide</span><select data-align="guide" aria-label="The original line this replacement take should follow"><option value="">no other clip overlaps</option></select></label><button type="button" class="fw-ibtn" data-clip-act="align" title="Re-time this replacement take to follow the guide word for word, and set it in the guide's place (automatic speech alignment)">Align to guide</button></div>
-  <div class="fw-insp-head" title="Say what this clip is, then run its type's tasks or a preset (Audition's Essential Sound)">Essential sound</div>
+  <div class="fw-insp-head" title="Say what this clip is, then run its type's tasks or a preset">Essential sound</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Type</span><select data-es="type" aria-label="What this clip is"><option value="">Not set</option><option value="dialogue">Dialogue</option><option value="music">Music</option><option value="effects">Sound effects</option><option value="ambience">Ambience</option></select></label><label class="fw-sam-opt"><span>Preset</span><select data-es="preset" aria-label="A preset for this type"></select></label></div>
   <div class="fw-es-tasks" data-es="tasks"></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-es-act="apply" title="Run the ticked tasks on this clip as one change, loudness last">Apply tasks</button><button type="button" class="fw-ibtn" data-es-act="save" title="Keep these task settings as a preset for this type on this machine">Save preset</button></div>
-  <div class="fw-insp-head" title="The clip's sung or played notes; drag one up or down to retune it (Melodyne's note editing)">Notes</div>
+  <div class="fw-insp-head" title="The clip's sung or played notes; drag one up or down to retune it">Notes</div>
   <canvas class="fw-notes-canvas" data-notes width="512" height="160" aria-label="The clip's notes on a pitch grid; drag a note up or down to retune it a semitone at a time"></canvas>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-notes-act="find" title="Track the clip's pitch and show its notes">Find notes</button><label class="fw-sam-opt" title="Find every note inside played chords, so one can be moved without the others (Melodyne's Direct Note Access)"><input type="checkbox" data-notes-poly> In chords</label><button type="button" class="fw-ibtn" data-notes-act="apply" title="Retune the notes you moved, everything else left as it is, one undo step">Apply note changes</button><label class="fw-sam-opt" title="Keep the voice's character (its formants) where it was as the notes move"><input type="checkbox" data-notes-formants checked> Keep formants</label></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-notes-act="find" title="Track the clip's pitch and show its notes">Find notes</button><label class="fw-sam-opt" title="Find every note inside played chords, so one can be moved without the others"><input type="checkbox" data-notes-poly> In chords</label><button type="button" class="fw-ibtn" data-notes-act="apply" title="Retune the notes you moved, everything else left as it is, one undo step">Apply note changes</button><label class="fw-sam-opt" title="Keep the voice's character (its formants) where it was as the notes move"><input type="checkbox" data-notes-formants checked> Keep formants</label></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Audio to MIDI</span><select data-a2m="mode" aria-label="How to read the clip's notes"><option value="melodic">Melodic (one line)</option><option value="polyphonic">Polyphonic (chords)</option><option value="rhythmic">Rhythmic (drums)</option></select></label><button type="button" class="fw-ibtn" data-clip-act="to-midi" title="Read the clip's notes as MIDI onto a new note track at the clip's place">Convert to MIDI</button></div>
-  <div class="fw-insp-head" title="Pin a point in the clip's audio, then drag its marker on the clip to re-time the audio on either side (Pro Tools' warp markers)">Warp markers</div>
+  <div class="fw-insp-head" title="Pin a point in the clip's audio, then drag its marker on the clip to re-time the audio on either side">Warp markers</div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-warp="add" title="Put a warp marker on the selected clip at the playhead">Add warp marker at playhead</button><button type="button" class="fw-ibtn" data-warp="clear" title="Remove the clip's warp markers and play its original timing">Clear warp</button></div>
   <div class="fw-insp-head">Draw samples</div>
   <canvas class="fw-draw-canvas" data-draw width="512" height="128" aria-label="256 samples of the clip around the playhead, each a point; drag to redraw them"></canvas>
@@ -86,7 +86,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><select data-preset="fx" aria-label="Preset for this effect"><option value="">Presets</option></select><button type="button" class="fw-ibtn" data-preset="fx-save">Save preset</button><button type="button" class="fw-ibtn" data-preset="fx-delete">Delete</button></div>
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx-preview aria-pressed="false" title="Hear the picked effect or plugin at its current settings on 5 s of the clip from the playhead, looped, without changing the session; while it plays, a changed setting is heard again">Preview</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges (RX's ambience match)">Fill with room tone</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges">Fill with room tone</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="heal-brush" aria-pressed="false" title="Paint over a sound in the spectrogram view to heal it as you go: Spot heal under the stroke, one undo step per stroke">Heal brush</button><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select><button type="button" class="fw-ibtn" data-fx="chain-files" hidden title="Run this chain on audio files from the computer, outside the session, and download the results as a zip">Run chain on files...</button><input type="file" data-chain="files" accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff" multiple hidden><button type="button" class="fw-ibtn" data-fx="detect-silences" title="Mark this track's silences (over 0.3 s) as regions on the timeline, to see them before stripping or splitting">Detect silences</button><button type="button" class="fw-ibtn" data-fx="split-silences" title="Split this track's clips where sound starts and stops (silences over 0.3 s)">Split at silences</button><button type="button" class="fw-ibtn" data-fx="similar" title="Mark every event like the one in the selected range (draw a range over one event first)">Find similar</button><button type="button" class="fw-ibtn" data-fx="restore" title="Put the clip's original audio back in the selected range, or the whole clip without a range">Restore original</button><button type="button" class="fw-ibtn" data-video="write" title="For a clip imported from a video: the video with the session's mix as its sound, the picture copied untouched, downloaded as MP4">Write into its video</button></div>
   <ol class="fw-chain" hidden></ol>
   <details class="fw-macro"><summary title="Write a chain as text: one effect per line, its name (as in the Effects menu's ids) and any setting=value; # starts a comment">Macro script</summary>
@@ -94,7 +94,7 @@ const BODY = `
     <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-macro-act="load" title="Check the script and make it the chain, ready to apply to this clip, save, or run on files">Load into chain</button><button type="button" class="fw-ibtn" data-macro-act="from" title="Write the current chain as a script">Write chain as script</button><button type="button" class="fw-ibtn" data-macro-act="record" aria-pressed="false" title="While on, each effect you apply is written into the script with the settings you used, so doing a task once records it as a macro">Record</button></div>
   </details>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="separate" title="Split into vocals, drums, bass and other on new tracks (Demucs)">Separate into stems</button><button type="button" class="fw-ibtn" data-fx="deconstruct" title="Split into tonal, noisy and transient parts on new tracks">Deconstruct</button></div>
-  <div class="fw-analyze-buttons" title="Deconstruct's own settings (iZotope RX's module): how readily sound counts as tonal or transient, 0 to 10, and each part's gain; Rebalance renders the clip with those gains in place, one undo step"><label class="fw-sam-opt"><span>Tonal sens</span><input type="number" min="0" max="10" step="0.5" value="5" data-dc="tonalSens"></label><label class="fw-sam-opt"><span>Transient sens</span><input type="number" min="0" max="10" step="0.5" value="5" data-dc="transientSens"></label><label class="fw-sam-opt"><span>Tonal dB</span><input type="number" min="-60" max="12" step="1" value="0" data-dc="tonalDb"></label><label class="fw-sam-opt"><span>Noisy dB</span><input type="number" min="-60" max="12" step="1" value="0" data-dc="noisyDb"></label><label class="fw-sam-opt"><span>Transient dB</span><input type="number" min="-60" max="12" step="1" value="0" data-dc="transientDb"></label><button type="button" class="fw-ibtn" data-dc="rebalance">Rebalance</button></div>
+  <div class="fw-analyze-buttons" title="Deconstruct's own settings: how readily sound counts as tonal or transient, 0 to 10, and each part's gain; Rebalance renders the clip with those gains in place, one undo step"><label class="fw-sam-opt"><span>Tonal sens</span><input type="number" min="0" max="10" step="0.5" value="5" data-dc="tonalSens"></label><label class="fw-sam-opt"><span>Transient sens</span><input type="number" min="0" max="10" step="0.5" value="5" data-dc="transientSens"></label><label class="fw-sam-opt"><span>Tonal dB</span><input type="number" min="-60" max="12" step="1" value="0" data-dc="tonalDb"></label><label class="fw-sam-opt"><span>Noisy dB</span><input type="number" min="-60" max="12" step="1" value="0" data-dc="noisyDb"></label><label class="fw-sam-opt"><span>Transient dB</span><input type="number" min="-60" max="12" step="1" value="0" data-dc="transientDb"></label><button type="button" class="fw-ibtn" data-dc="rebalance">Rebalance</button></div>
   <div class="fw-analyze-buttons"><input type="text" class="fw-sam-desc" data-sam="desc" maxlength="80" placeholder="Describe a sound" title="What to isolate, for example: man speaking, car horn" aria-label="Sound to isolate"><button type="button" class="fw-ibtn" data-sam="go" title="Put the described sound and everything else on new tracks (SAM-Audio); a selected range marks where the sound occurs">Isolate sound</button></div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt" title="Let the model find where the described sound occurs from the text alone; a selected range is used instead when there is one"><input type="checkbox" data-sam="predict"> Find where it occurs</label><label class="fw-sam-opt" title="Separate this many candidates and keep the one the model's judge ranks best; slower with more"><span>Candidates</span><select data-sam="candidates" aria-label="Candidate separations to re-rank"><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option></select></label></div>
   <div class="fw-sam-status" data-sam-status></div>
@@ -111,7 +111,7 @@ const BODY = `
   <img class="fw-spectrogram" alt="Spectrogram of the selected clip" hidden>
 </div>
 <div class="fw-insp-section fw-insp-playlist" hidden>
-  <div class="fw-insp-head" data-pl="head" title="Alternate versions of a track's clips, one playing at a time (Pro Tools' playlists)">Playlists</div>
+  <div class="fw-insp-head" data-pl="head" title="Alternate versions of a track's clips, one playing at a time">Playlists</div>
   <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Playlist</span><select data-pl="pick" aria-label="The playlist this track plays"></select></label><button type="button" class="fw-ibtn" data-pl="new" title="Keep these clips as a playlist and start an empty one">New playlist</button><button type="button" class="fw-ibtn" data-pl="dup" title="Keep these clips as a playlist and carry on with a copy of them">Duplicate playlist</button></div>
 </div>
 <div class="fw-insp-section fw-insp-track" hidden>
@@ -135,11 +135,11 @@ const BODY = `
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-duck="go" title="Lower this track while the chosen track is active, as volume automation you can edit">Duck this track</button></div>
   <div class="fw-insp-head fw-rtfx-head">Realtime effects</div>
   <div class="fw-rtfx-list" data-scope="track" data-empty="No realtime effects yet"></div>
-  <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument (Pro Tools' MIDI effect plugins): its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option><option value="duration">Duration</option><option value="delay">Delay</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
+  <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument: its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option><option value="duration">Duration</option><option value="delay">Delay</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
   <div data-midifx-list></div>
   <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="subtractive">Subtractive synth</option><option value="drums">Drum synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
   ${INSTRUMENT_FIELDS}
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fill-gaps title="Fill every gap between this track's clips with room tone (RX's Ambience Match under every edit): learned from half a second at each side, moving from the one background to the other across the gap">Fill gaps with room tone</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fill-gaps title="Fill every gap between this track's clips with room tone: learned from half a second at each side, moving from the one background to the other across the gap">Fill gaps with room tone</button></div>
   <div data-stems></div>
   <div class="fw-analyze-buttons" data-scope="track"><select data-rtfx="kind" aria-label="Realtime effect to add to the track"><option value="highpass">High-pass</option><option value="lowpass">Low-pass</option><option value="peak">Peak EQ</option><option value="lowshelf">Low shelf</option><option value="highshelf">High shelf</option><option value="compressor">Compressor</option><option value="denoise">Denoise</option><option value="voice">Dialogue isolate</option><option value="reverb">Reverb</option><option value="echo">Echo</option><option value="chorus">Chorus</option><option value="limiter">Limiter</option><option value="tremolo">Tremolo</option><option value="gate">Gate</option><option value="phaser">Phaser</option><option value="flanger">Flanger</option><option value="dehum">De-hum</option><option value="declick">De-click</option><option value="dereverb">De-reverb</option>${PROCESSOR_OPTIONS}</select><button type="button" class="fw-ibtn" data-rtfx="add">Add</button></div>
 </div>
@@ -155,7 +155,7 @@ const BODY = `
 </div>
 <div class="fw-insp-section fw-insp-quantize" hidden>
   <div class="fw-insp-head">Quantize</div>
-  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><label class="fw-q-field" title="The timecode the session starts at (Pro Tools' session start), read at the session's timecode rate">TC start <input type="text" size="11" placeholder="00:00:00:00" data-tc-start aria-label="Session timecode start"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button><label class="fw-q-field">Length <input type="number" min="0.1" step="0.1" data-q="target" placeholder="s" aria-label="Target length in seconds"></label><button type="button" class="fw-ibtn" data-an="fit-length" title="Re-time this clip to the length typed, keeping pitch (half to double its length)">Fit to length</button><button type="button" class="fw-ibtn" data-an="fit-selection" title="Re-time this clip to fill the selected range, or the loop, keeping pitch, and set it at the range's start (Pro Tools' TCE to the timeline selection)">Fit to selection</button><button type="button" class="fw-ibtn" data-an="remix-length" title="Re-arrange this song on its beats to the length typed, cutting or repeating whole bars where they sound alike rather than stretching it (Audition's Remix)">Remix to length</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-q-field">BPM <input type="number" min="30" max="300" step="0.1" value="120" data-q="bpm"></label><button type="button" class="fw-ibtn" data-an="detect-bpm" title="Estimate the tempo from this clip's transients">Detect</button><label class="fw-q-field">Beats <input type="number" min="1" max="16" step="1" value="4" data-q="bpb" aria-label="Beats per bar"></label><label class="fw-q-field" title="The timecode the session starts at, read at the session's timecode rate">TC start <input type="text" size="11" placeholder="00:00:00:00" data-tc-start aria-label="Session timecode start"></label><select data-q="division" aria-label="Quantize division"><option value="4">1/4</option><option value="8" selected>1/8</option><option value="16">1/16</option></select><button type="button" class="fw-ibtn" data-an="quantize" title="Move the selected clips' starts to the nearest grid line">Quantize</button><button type="button" class="fw-ibtn" data-an="stretch-tempo" title="Re-time this clip from its detected tempo to the session tempo, keeping pitch">Stretch to tempo</button><label class="fw-q-field">Length <input type="number" min="0.1" step="0.1" data-q="target" placeholder="s" aria-label="Target length in seconds"></label><button type="button" class="fw-ibtn" data-an="fit-length" title="Re-time this clip to the length typed, keeping pitch (half to double its length)">Fit to length</button><button type="button" class="fw-ibtn" data-an="fit-selection" title="Re-time this clip to fill the selected range, or the loop, keeping pitch, and set it at the range's start">Fit to selection</button><button type="button" class="fw-ibtn" data-an="remix-length" title="Re-arrange this song on its beats to the length typed, cutting or repeating whole bars where they sound alike rather than stretching it">Remix to length</button></div>
   <div class="fw-analyze-buttons"><label class="fw-q-field">Stretch <input type="number" min="50" max="200" step="1" value="100" data-q="stretch" aria-label="New length of the selected clips as a percentage"> %</label><button type="button" class="fw-ibtn" data-an="stretch-group" title="Re-time every selected clip to this percentage of its length, keeping pitch, and scale their positions from the first one so the tracks stay in sync">Stretch selected clips</button><button type="button" class="fw-ibtn" data-an="stretch-playhead" title="Stretch the selected clips so the last of them ends at the playhead, keeping pitch, positions scaled from the first">Stretch to playhead</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-an="detect-key" title="Find this clip's musical key and its Camelot code">Detect key</button><span class="fw-key-readout" data-key-out>Key not set</span></div>
 </div>`;
@@ -758,7 +758,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       .catch(() => fetchedPlugins.delete(name));
   });
   pick?.addEventListener("change", syncBand);
-  // iZotope RX's module search: filter the Effects menu by name or group.
+  // Effect search: filter the Effects menu by name or group.
   const search = body.querySelector<HTMLInputElement>('[data-fx="search"]');
   search?.addEventListener("input", () => {
     if (!pick) return;
@@ -782,7 +782,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       showControls();
     }
   });
-  // Batch processing (Adobe Podcast's queue, RX's batch processor): the chosen effect on every clip, one undo step.
+  // Batch processing: the chosen effect on every clip, one undo step.
   body.addEventListener("click", async (e) => {
     if ((e.target as HTMLElement).closest<HTMLElement>("[data-fx]")?.dataset.fx !== "apply-all") return;
     const name = pick?.value;
@@ -975,7 +975,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // AU-28: Nyquist by Audacity's own interpreter: a Nyquist Prompt's code, or one of Audacity's bundled plug-ins with
+  // AU-28: Nyquist by its own interpreter: a Nyquist Prompt's code, or one of the bundled plug-ins with
   // its controls drawn from its header; Apply runs it on the selected clip and swaps the clip's audio (one undo step),
   // or tells a result that is not a sound (a number, a string, labels) on the notice line
   type NyqControl = { var: string; label: string; type: string; unit?: string; default?: number | string | null; min?: number | null; max?: number | null; choices?: string[] };
@@ -1412,7 +1412,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const label = action === "enhance" ? "Enhance speech" : pick?.selectedOptions[0]?.textContent ?? name;
     setText(notice, `Applying ${label}...`);
     try {
-      // While a Smart Tool range exists it is the target (as Audacity processes its selection): the clip it overlaps on
+      // While a Smart Tool range exists it is the target: the clip it overlaps on
       // its track, whichever piece is selected; otherwise the selected clip, whole.
       const r = range;
       const rangeTrack = r ? engine.get("document").tracks.find((t) => t.id === r.trackId) : undefined;
@@ -1521,7 +1521,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // Module chains (iZotope RX): effects with their controls run in order, each on the last one's output; the document
+  // Module chains: effects with their controls run in order, each on the last one's output; the document
   // changes once, so the whole chain is one undo step.
   type ChainStep = { name: string; label: string; params: Record<string, number> };
   let chain: ChainStep[] = [];
@@ -1888,7 +1888,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // Music separation (Audacity's AI separation, RX's Music Rebalance): the clip's trimmed range split into four stems on
+  // Music separation: the clip's trimmed range split into four stems on
   // new tracks at the clip's start, the original track muted, all one undo step.
   body.addEventListener("click", async (e) => {
     const kind = (e.target as HTMLElement).closest<HTMLElement>("[data-fx]")?.dataset.fx;
@@ -1920,7 +1920,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // RX-15: Deconstruct's own rebalance, as RX renders it in place: the clip's whole source (so its trim still holds)
+  // RX-15: Deconstruct's own rebalance, rendered in place: the clip's whole source (so its trim still holds)
   // with the tonal, noisy and transient parts at their gains, swapped into the clip as one undo step
   body.querySelector<HTMLButtonElement>('[data-dc="rebalance"]')?.addEventListener("click", async (e) => {
     const doc = engine.get("document");
@@ -1995,7 +1995,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // Automatic ducking (Audacity's Auto Duck, Audition's content-based ducking): this track's volume envelope lowered
+  // Automatic ducking: this track's volume envelope lowered
   // while another track is active, written as editable automation in one undo step.
   const duckControl = body.querySelector<HTMLSelectElement>('[data-duck="control"]');
   const duckAmount = body.querySelector<HTMLInputElement>('[data-duck="amount"]');
@@ -2278,7 +2278,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // Non-destructive clip pitch (Audacity's clip pitch shift): a render of the ORIGINAL media at the chosen pitch is
+  // Non-destructive clip pitch: a render of the ORIGINAL media at the chosen pitch is
   // what plays; the original is never altered, so pitches never compound, and 0 drops the render.
   const pitchInput = body.querySelector<HTMLInputElement>("[data-pitch]");
   const pitchOut = body.querySelector<HTMLElement>("[data-pitch-out]");
@@ -2317,10 +2317,10 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // EQ match (iZotope RX's EQ Match): the selected clip takes the tonal balance of another clip's visible region.
+  // EQ match: the selected clip takes the tonal balance of another clip's visible region.
   const eqmRef = body.querySelector<HTMLSelectElement>('[data-eqm="ref"]');
   const eqmGo = body.querySelector<HTMLButtonElement>('[data-eqm="go"]');
-  // A reference learned from a Smart Tool range (RX's Learn), kept as its media and media-seconds region.
+  // A reference learned from a Smart Tool range, kept as its media and media-seconds region.
   let learned: { mediaId: string; start: number; end: number; label: string } | null = null;
   /** The part of the current Smart Tool range that lies on a clip of its track, in session samples and media seconds. */
   const rangeOnClip = () => {
@@ -2450,7 +2450,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // Presets (Audacity's one preset system across built-in, destructive and realtime effects): one store in the engine,
+  // Presets (one preset system across built-in, destructive and realtime effects): one store in the engine,
   // rendered effects keyed "fx:<id>" and realtime ones "rt:<kind>", each preset the settings that effect's controls hold.
   let presets: Preset[] = [];
   const fillPresets = (select: HTMLSelectElement | null, effect: string) => {
@@ -2528,7 +2528,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // Realtime effects (Audacity's realtime stacks): filters the core runs live, in playback and export alike, on the
+  // Realtime effects (realtime stacks): filters the core runs live, in playback and export alike, on the
   // selected track (run per clip) or on the master (the summed mix, before the master fader); rows can be reordered.
   type FxScope = "track" | "master" | "bus" | "clip";
   const fxLists: { scope: FxScope; list: HTMLElement | null; sig: string }[] = [
@@ -2698,7 +2698,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     setText(notice, "Cleared the time track");
   });
   const busSection = body.querySelector<HTMLElement>(".fw-insp-bus");
-  /** The bus the selected clip's track is routed to (Pro Tools' routing folder), if any. */
+  /** The bus the selected clip's track is routed to, if any. */
   const currentBus = () => {
     const doc = engine.get("document");
     const busId = find(doc)?.track.busId;
@@ -2878,7 +2878,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     renderRtfx(true);
   });
 
-  // Transient detection (Pro Tools' groove and timing edits start from it): a marker at each onset inside the
+  // Transient detection (groove and timing edits start from it): a marker at each onset inside the
   // selected clip's visible span, file time mapped through the clip's start, trim and rates; one undo step.
   body.addEventListener("click", async (e) => {
     if ((e.target as HTMLElement).closest<HTMLElement>("[data-an]")?.dataset.an !== "transients") return;
@@ -2956,7 +2956,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   bpmField?.addEventListener("change", commitTempo);
   bpbField?.addEventListener("change", commitTempo);
 
-  // Timing edits on transients (Pro Tools' groove edits, as a reference): cut a clip at its transients, then quantize
+  // Timing edits on transients: cut a clip at its transients, then quantize
   // clip starts to a musical grid; each one undo step. After a split each piece starts on its transient.
   let selectedIds: string[] = [];
   host.addEventListener("fw-selection", (e) => {
@@ -3042,7 +3042,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         setText(notice, `Could not detect the tempo: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else if (action === "stretch-tempo") {
-      // Audacity's stretch to tempo: the clip's detected tempo against the session's gives the tempo factor for the
+      // Stretch to tempo: the clip's detected tempo against the session's gives the tempo factor for the
       // pitch-keeping tempo effect (0.5 to 2 times); the clip's placement scales with the new length.
       const doc = engine.get("document");
       const hit = find(doc);
@@ -3247,7 +3247,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // Mic check (Adobe Podcast's mic analysis, RX's Repair Assistant): findings with the effect that addresses each.
+  // Mic check: findings with the effect that addresses each.
   const findingsList = body.querySelector<HTMLElement>(".fw-mic-findings");
   const micPlaceholder = () => {
     const li = document.createElement("li");

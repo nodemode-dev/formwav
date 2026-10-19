@@ -135,7 +135,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-menu-zoom { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 0 10px 4px; }
 .fw-topbar .fw-menu-pop .fw-menu-zoom > .fw-ibtn { display: block; min-block-size: 26px; padding: 2px 0; border: 1px solid var(--border-color); font-family: var(--font-mono); font-size: var(--fs-12); text-align: center; }
 
-/* S4: Pro Tools' Big Counter, floating over the window from the View menu */
+/* S4: the Big Counter, floating over the window from the View menu */
 .fw-big-counter { position: fixed; inset-block-start: 96px; inset-inline-end: 24px; z-index: var(--z-companion); display: grid; gap: 4px; padding: 6px 14px 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--shadow-lg); }
 .fw-big-counter[hidden] { display: none; }
 .fw-big-counter-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-11); color: var(--text-muted); cursor: grab; user-select: none; touch-action: none; }

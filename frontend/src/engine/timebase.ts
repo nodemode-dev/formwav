@@ -206,7 +206,7 @@ function minSecs(samples: number, sampleRate: number): string {
 
 const barsText = (bar: number, beat: number, tick: number) => `${bar}| ${beat}| ${String(tick).padStart(3, "0")}`;
 
-/** A position in a timebase (Min:Secs as Pro Tools writes it, minutes first); timecode counts from the session's start,
+/** A position in a timebase (Min:Secs, minutes first); timecode counts from the session's start,
  *  `rate` overriding the session's (the second timecode ruler). */
 export function formatPosition(samples: number, fmt: TimeFormat, ctx: TimeContext, rate = ctx.rate): string {
   if (fmt === "samples") return String(Math.round(samples));
