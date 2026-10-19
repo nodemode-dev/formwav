@@ -20,6 +20,11 @@ It includes third-party components under their own licences:
   carries twelve icons copied byte for byte from the NodeMode icon module, with a
   formwav helper around them. The shell rules in frontend/src/styles/shell.css are
   formwav's own.
+- formlit (the form family's photo app) v0.45.3, Apache-2.0: the agent, chat,
+  terminal, plus, close, refresh and send icons, copied byte for byte into
+  frontend/src/ui/icons-agent.ts, so Claude Code looks the same in both apps.
+  The vendored formvis and formcut icon sets had their sparkle icons removed
+  (the sparkle is banned in formwav).
 - Inter and JetBrains Mono fonts, installed through @fontsource: SIL Open Font
   License 1.1 for the fonts, MIT for the packaging. Bundled into the built interface.
 - The formwav logomark and favicons in assets/ and frontend/public/ are the

@@ -10,6 +10,9 @@ Conventions this repository is built under:
   interface modules dispatch commands and subscribe to the engine
 - Stable mounted DOM: patch in place, no flash, no layout shift (each release measures it)
 - Every colour and size from a token (`frontend/src/styles/tokens.css`); inline currentColor SVG icons; no emoji
+- The sparkle icon (three four-pointed stars, or any star-burst standing for AI) is banned everywhere in the app:
+  agents are the robot (`agent`), chat the speech bubble (`agentChat`) and terminals the prompt (`terminal`) from
+  `frontend/src/ui/icons-agent.ts`, formlit's own icons
 - Preview and export run through the same audio core (`native/formwav-dsp`: WebAssembly in the browser, a Python module
   in the engine), so what plays is what exports
 - No claim that was not run; if it was measured, give the number. No em dashes in Markdown
