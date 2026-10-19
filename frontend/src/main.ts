@@ -11,6 +11,7 @@ import "./styles/frame.css";
 import "./styles/surfaces.css";
 import "./styles/canvas.css";
 import "./styles/scrollbars.css";
+import "./styles/terminal-dock.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
 import "./extensions/engine-link";
@@ -21,7 +22,7 @@ import { mountTransport } from "./ui/transport";
 import { mountLoop } from "./ui/loop";
 import { mountExport } from "./ui/export";
 import { mountNormalize } from "./ui/normalize";
-import { mountTerminal } from "./ui/terminal-pane";
+import { mountTerminalDock } from "./ui/terminal-dock";
 import { mountAgent } from "./ui/agent-pane";
 import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
@@ -137,7 +138,6 @@ if (host) {
   mountLoop(host, engine);
   mountExport(host, engine);
   mountNormalize(host, engine);
-  mountTerminal(host);
   mountAgent(host, engine);
   mountRuler(host, engine, player);
   mountPictureLane(host, engine, player); // PLAN_v13 S15: the picture's frames along the timeline
@@ -177,6 +177,7 @@ if (host) {
   mountBrowserEffects(host, engine);
   mountBrowser(host, engine);
   mountDock(host, engine);
+  mountTerminalDock(host, engine);
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();
   bindInputs(engine); // track inputs live in the session (Track.input)
   mountProjects(host, engine, player);

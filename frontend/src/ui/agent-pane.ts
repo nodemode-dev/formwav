@@ -9,6 +9,7 @@ import { savedSessionName } from "./projects";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
 import { KINDS } from "./editor-tabs";
 import { PANEL_ICONS } from "./shell";
+import { agentIcon } from "./icons-agent";
 import { PROCESSOR_BY_ID, PROCESSORS, processorValues } from "../engine/processors";
 
 /** The realtime effects a track's chain can hold, with each parameter's range, for the agent's tool description. */
@@ -66,7 +67,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   dock.className = "fw-term fw-agent";
   dock.hidden = !host.querySelector(".fw-agent-anchor");
   dock.setAttribute("aria-label", "Agent");
-  dock.innerHTML = `<div class="fw-term-head"><span class="fw-agent-tabs" role="tablist" aria-label="Agent and history"><button type="button" role="tab" class="fw-agent-tab" data-agent-tab="agent" data-label="Agent" aria-selected="true">Agent</button><button type="button" role="tab" class="fw-agent-tab" data-agent-tab="history" data-label="History" aria-selected="false" title="Every edit in this session, yours and the agent's; click one to go back to it">History</button></span><span class="fw-term-state" aria-live="polite"></span><select class="fw-agent-via" aria-label="How the agent runs" title="Claude Code runs with your own Claude login (the claude program on this computer); an API key bills per token"><option value="code">Claude Code</option><option value="api">API key</option></select><button type="button" class="fw-ibtn fw-agent-quiet" data-agent="term" aria-label="Claude Code in the terminal" title="Claude Code in a terminal, with formwav's tools (a real shell is one click further, in the terminal)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-5-6-5"></path><path d="M12 19h8"></path></svg></button><button type="button" class="fw-ibtn fw-agent-quiet" data-agent="undo" disabled title="Undo every change the last run made">Undo run</button><button type="button" class="fw-ibtn fw-agent-quiet" data-agent="new" title="Clear the conversation and start again">New</button></div><div class="fw-agent-body"><ol class="fw-agent-log" aria-live="polite" data-empty="Tell the agent what this session needs, in your own words: it reads the session, measures it, changes it, and says what it did."></ol><div class="fw-agent-foot"><div class="fw-agent-suggest" role="group" aria-label="Suggestions"><button type="button" class="fw-agent-chip" data-suggest="Clean up the dialogue on the selected track">Clean up the dialogue</button><button type="button" class="fw-agent-chip" data-suggest="Measure each track and set their gains so the voices sit evenly">Even out the voices</button><button type="button" class="fw-agent-chip" data-suggest="Make the session ready for a podcast at -16 LUFS">Podcast-ready loudness</button></div><span class="fw-agent-context" hidden></span><label class="fw-agent-ask"><textarea rows="2" placeholder="Ask, or describe how it should sound" aria-label="Message the agent"></textarea><button type="button" class="fw-ibtn fw-agent-run" data-agent="run">Send</button><button type="button" class="fw-ibtn fw-agent-stop" data-agent="stop" disabled>Stop</button></label><span class="fw-agent-keys" title="Enter sends, Shift Enter adds a line, Cmd or Ctrl / asks from anywhere">Enter sends. Cmd / asks from anywhere.</span></div></div><div class="fw-agent-history" hidden><ol class="fw-history-list" aria-label="Edits in this session"></ol><p class="fw-history-empty">Each edit, yours or the agent's, is listed here. Click one to go back to it.</p></div>`;
+  dock.innerHTML = `<div class="fw-term-head"><span class="fw-agent-tabs" role="tablist" aria-label="Agent and history"><button type="button" role="tab" class="fw-agent-tab" data-agent-tab="agent" data-label="Agent" aria-selected="true">Agent</button><button type="button" role="tab" class="fw-agent-tab" data-agent-tab="history" data-label="History" aria-selected="false" title="Every edit in this session, yours and the agent's; click one to go back to it">History</button></span><span class="fw-term-state" aria-live="polite"></span><select class="fw-agent-via" aria-label="How the agent runs" title="Claude Code runs with your own Claude login (the claude program on this computer); an API key bills per token"><option value="code">Claude Code</option><option value="api">API key</option></select><button type="button" class="fw-ibtn fw-agent-quiet" data-agent="term" aria-label="Claude Code" title="Claude Code">${agentIcon("agent", 15)}</button><button type="button" class="fw-ibtn fw-agent-quiet" data-agent="undo" disabled title="Undo every change the last run made">Undo run</button><button type="button" class="fw-ibtn fw-agent-quiet" data-agent="new" title="Clear the conversation and start again">New</button></div><div class="fw-agent-body"><p class="fw-agent-redirect" hidden>${agentIcon("agentChat", 14)}<span>Claude's replies are in the Chat tab below.</span></p><ol class="fw-agent-log" aria-live="polite" data-empty="Tell the agent what this session needs, in your own words: it reads the session, measures it, changes it, and says what it did."></ol><div class="fw-agent-foot"><div class="fw-agent-suggest" role="group" aria-label="Suggestions"><button type="button" class="fw-agent-chip" data-suggest="Clean up the dialogue on the selected track">Clean up the dialogue</button><button type="button" class="fw-agent-chip" data-suggest="Measure each track and set their gains so the voices sit evenly">Even out the voices</button><button type="button" class="fw-agent-chip" data-suggest="Make the session ready for a podcast at -16 LUFS">Podcast-ready loudness</button></div><span class="fw-agent-context" hidden></span><label class="fw-agent-ask"><textarea rows="2" placeholder="Ask, or describe how it should sound" aria-label="Message the agent"></textarea><button type="button" class="fw-ibtn fw-agent-run" data-agent="run">Send</button><button type="button" class="fw-ibtn fw-agent-stop" data-agent="stop" disabled>Stop</button></label><span class="fw-agent-keys" title="Enter sends, Shift Enter adds a line, Cmd or Ctrl / asks from anywhere">Enter sends. Cmd / asks from anywhere.</span></div></div><div class="fw-agent-history" hidden><ol class="fw-history-list" aria-label="Edits in this session"></ol><p class="fw-history-empty">Each edit, yours or the agent's, is listed here. Click one to go back to it.</p></div>`;
   const transport = host.querySelector<HTMLElement>(".fw-agent-anchor") ?? host.querySelector<HTMLElement>(".fw-dock-anchor");
   if (transport) transport.before(dock);
   else host.append(dock);
@@ -638,69 +639,18 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
       // not kept
     }
   });
-  let codeDepth = 0;
-  let saying: Text | null = null;
-  const toolRows = new Map<string, HTMLElement>();
-  const codeDone = (error: string | null, meta?: { seconds?: number; turns?: number }) => {
-    saying = null;
-    if (error) entry("failed", error);
-    else if (meta?.seconds !== undefined) setText(state, `${meta.seconds} s, ${meta.turns ?? 0} steps`);
-    engine.setAuthor("you");
-    runUndo = engine.get("history").undoDepth - codeDepth;
-    control("undo").disabled = runUndo <= 0;
-    control("run").disabled = false;
-    control("stop").disabled = true;
-    running = false;
+  const redirect = dock.querySelector<HTMLElement>(".fw-agent-redirect");
+  const showRedirect = () => {
+    const viaCode = viaSelect.value === "code";
+    dock.dataset.via = viaSelect.value;
+    if (redirect && redirect.hidden === viaCode) redirect.hidden = !viaCode;
   };
-  const events = new EventSource("/api/claude/events");
-  events.onmessage = (e) => {
-    let ev: { type: string; text?: string; id?: string; name?: string; input?: string; error?: string | null | boolean; meta?: { seconds?: number; turns?: number } };
-    try {
-      ev = JSON.parse(e.data);
-    } catch {
-      return;
-    }
-    if (!running || viaSelect.value !== "code") return;
-    if (ev.type === "start") setText(state, "Thinking...");
-    else if (ev.type === "delta" && ev.text) {
-      if (!saying) {
-        const li = document.createElement("li");
-        li.className = "fw-agent-says";
-        saying = document.createTextNode("");
-        li.append(saying);
-        log.append(li);
-      }
-      saying.appendData(ev.text);
-      (saying.parentElement as HTMLElement).scrollIntoView({ block: "nearest" });
-    } else if (ev.type === "tool") {
-      saying = null;
-      setText(state, `Running ${ev.name ?? ""}...`);
-      const li = document.createElement("li");
-      li.className = "fw-agent-did";
-      li.textContent = `${ev.name ?? ""} ${ev.input ?? ""}`;
-      log.append(li);
-      li.scrollIntoView({ block: "nearest" });
-      if (ev.id) toolRows.set(ev.id, li);
-    } else if (ev.type === "toolDone" && ev.error && ev.id) {
-      const li = toolRows.get(ev.id);
-      if (li && li.className !== "fw-agent-failed") li.className = "fw-agent-failed";
-    } else if (ev.type === "done") codeDone(typeof ev.error === "string" ? ev.error : null, ev.meta);
-  };
-  const runCode = async (instruction: string) => {
-    running = true;
-    control("run").disabled = true;
-    control("stop").disabled = false;
-    control("undo").disabled = true;
-    codeDepth = engine.get("history").undoDepth;
-    engine.setAuthor("agent");
-    entry("you", instruction);
+  showRedirect();
+  viaSelect.addEventListener("change", showRedirect);
+  const sendChat = (instruction: string) => {
+    const looked = describe(looking);
     ask.value = "";
-    setText(state, "Starting Claude Code...");
-    try {
-      await postJson("/api/claude/chat", { text: instruction, context: describe(looking) || undefined });
-    } catch (err) {
-      codeDone(err instanceof Error ? err.message : String(err));
-    }
+    window.dispatchEvent(new CustomEvent("fw-dock-chat", { detail: { text: instruction + (looked ? `\n\n(${looked})` : "") } }));
   };
   let posted = 0;
   const serve = async () => {
@@ -756,7 +706,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
   const run = async () => {
     const instruction = ask.value.trim();
     if (!instruction || running) return;
-    if (viaSelect.value === "code") return runCode(instruction);
+    if (viaSelect.value === "code") return sendChat(instruction);
     running = true;
     stopAsked = false;
     control("run").disabled = true;
@@ -831,7 +781,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
     else if (act === "stop") {
       stopAsked = true;
       if (viaSelect.value === "code") void postJson("/api/claude/cancel", {}).catch(() => undefined);
-    } else if (act === "term") host.dispatchEvent(new CustomEvent("fw-terminal", { detail: { claude: true } }));
+    } else if (act === "term") window.dispatchEvent(new CustomEvent("fw-dock-claude"));
     else if (act === "undo" && runUndo > 0) {
       for (let k = 0; k < runUndo; k++) engine.undo();
       entry("did", `Undid the run (${runUndo} change${runUndo === 1 ? "" : "s"})`);
