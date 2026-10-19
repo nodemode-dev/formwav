@@ -17,9 +17,11 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
+import os
 import subprocess
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -278,11 +280,23 @@ def claude_status() -> dict:
     return {**claude_code.info(), "window": BRIDGE.live(), "tools": len(BRIDGE.tools)}
 
 
+MAX_MESSAGES = 200
+HIDDEN = {"ToolSearch"}
+
+
+def _blank_usage() -> dict:
+    return {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0, "costUsd": 0.0, "context": 0, "window": 0, "model": ""}
+
+
 class Chat:
     def __init__(self) -> None:
         self.session: str | None = None
         self.proc: subprocess.Popen | None = None
         self.busy = False
+        self.cancelled = False
+        self.messages: list[dict] = []
+        self.usage: dict = _blank_usage()
+        self.lock = threading.Lock()
         self.listeners: set[asyncio.Queue] = set()
         self.loop: asyncio.AbstractEventLoop | None = None
 
@@ -302,64 +316,141 @@ def _brief(value: Any) -> str:
     return text if len(text) <= 160 else text[:157] + "..."
 
 
+def _usage_of(u: dict) -> tuple[int, int]:
+    context = int(u.get("input_tokens") or 0) + int(u.get("cache_creation_input_tokens") or 0) + int(u.get("cache_read_input_tokens") or 0)
+    return context, int(u.get("output_tokens") or 0)
+
+
+def _tool_name(name: str) -> str:
+    return name.replace("mcp__formwav__", "")
+
+
+def _consume(ev: dict, run: dict) -> None:
+    if ev.get("parent_tool_use_id"):
+        return
+    reply, usage, kind = run["reply"], CHAT.usage, ev.get("type")
+    if kind == "system" and ev.get("subtype") == "init":
+        CHAT.session = ev.get("session_id") or CHAT.session
+        usage["model"] = str(ev.get("model") or usage["model"])
+    elif kind == "stream_event":
+        inner = ev.get("event") or {}
+        delta = inner.get("delta") or {}
+        if inner.get("type") in ("message_start", "message_delta"):
+            u = (inner.get("message") or {}).get("usage") if inner.get("type") == "message_start" else inner.get("usage")
+            if isinstance(u, dict):
+                context, out = _usage_of(u)
+                if inner.get("type") == "message_start":
+                    run["done_out"] += run["call_out"]
+                    run["call_out"] = 0
+                    usage["context"] = context or usage["context"]
+                else:
+                    run["call_out"] = out
+                CHAT.publish("usage", context=usage["context"], window=usage["window"], model=usage["model"], output=run["done_out"] + run["call_out"])
+        elif inner.get("type") == "content_block_delta" and delta.get("type") == "text_delta" and delta.get("text"):
+            if not reply["parts"] or reply["parts"][-1]["kind"] != "text":
+                reply["parts"].append({"kind": "text", "text": ""})
+            reply["parts"][-1]["text"] += delta["text"]
+            CHAT.publish("delta", text=delta["text"])
+    elif kind == "assistant":
+        for block in (ev.get("message") or {}).get("content") or []:
+            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") not in HIDDEN:
+                part = {"kind": "tool", "id": block.get("id"), "name": _tool_name(str(block.get("name", ""))), "input": _brief(block.get("input") or {}), "status": "running"}
+                reply["parts"].append(part)
+                CHAT.publish("tool", id=part["id"], name=part["name"], input=part["input"])
+    elif kind == "user":
+        for block in (ev.get("message") or {}).get("content") or []:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                status = "error" if block.get("is_error") else "done"
+                for part in reply["parts"]:
+                    if part["kind"] == "tool" and part["id"] == block.get("tool_use_id"):
+                        part["status"] = status
+                CHAT.publish("toolDone", id=block.get("tool_use_id"), error=status == "error", status=status)
+    elif kind == "result":
+        run["result"] = ev
+        CHAT.session = ev.get("session_id") or CHAT.session
+        total = ev.get("usage") or {}
+        cache_read, cache_write = int(total.get("cache_read_input_tokens") or 0), int(total.get("cache_creation_input_tokens") or 0)
+        usage["input"] += int(total.get("input_tokens") or 0) + cache_write + cache_read
+        usage["output"] += int(total.get("output_tokens") or 0)
+        usage["cacheRead"] += cache_read
+        usage["cacheWrite"] += cache_write
+        usage["costUsd"] = round(usage["costUsd"] + float(ev.get("total_cost_usd") or 0), 6)
+        by_model = ev.get("modelUsage") or {}
+        per = by_model.get(usage["model"]) or next((v for v in by_model.values() if isinstance(v, dict) and v.get("contextWindow")), {})
+        usage["window"] = int(per.get("contextWindow") or usage["window"] or 0)
+
+
+def _finish(run: dict, started: float, tail: list[str]) -> None:
+    reply, result, usage = run["reply"], run["result"], CHAT.usage
+    if result is None and not reply["error"]:
+        if CHAT.cancelled:
+            reply["error"] = "Stopped"
+        elif tail:
+            reply["error"] = tail[-1]
+        else:
+            reply["error"] = f"Claude Code exited with {run['code']}" if run.get("code") else "Claude Code stopped before answering"
+    elif result is not None and result.get("is_error"):
+        reply["error"] = str(result.get("result") or "Claude Code stopped with an error")
+    tokens = (result or {}).get("usage") or {}
+    cost = (result or {}).get("total_cost_usd")
+    reply["meta"] = {"seconds": round(time.monotonic() - started, 1), "turns": (result or {}).get("num_turns"), "costUsd": cost, "cost": cost,
+                     "inputTokens": _usage_of(tokens)[0], "outputTokens": int(tokens.get("output_tokens") or 0)}
+    with CHAT.lock:
+        CHAT.messages.append(reply)
+        del CHAT.messages[:-MAX_MESSAGES]
+        CHAT.busy = False
+        CHAT.cancelled = False
+    CHAT.publish("done", error=reply["error"], meta=reply["meta"], usage=dict(usage))
+
+
 def _run_chat(argv: list[str], cwd: str) -> None:
     started = time.monotonic()
-    error = None
-    meta: dict = {}
+    tail: list[str] = []
+    run: dict = {"reply": {"role": "assistant", "parts": [], "error": "", "meta": {}}, "result": None, "done_out": 0, "call_out": 0, "code": None}
     try:
-        proc = subprocess.Popen(claude_code.shell_wrapped(argv), cwd=cwd, env=claude_code.child_env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
-        CHAT.proc = proc
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            line = line.strip()
-            if not line.startswith("{"):
-                continue
-            try:
-                ev = json.loads(line)
-            except ValueError:
-                continue
-            if ev.get("parent_tool_use_id"):
-                continue
-            kind = ev.get("type")
-            if kind == "system" and ev.get("subtype") == "init":
-                CHAT.session = ev.get("session_id") or CHAT.session
-                CHAT.publish("start", model=ev.get("model"))
-            elif kind == "stream_event":
-                inner = ev.get("event") or {}
-                delta = inner.get("delta") or {}
-                if inner.get("type") == "content_block_delta" and delta.get("type") == "text_delta":
-                    CHAT.publish("delta", text=delta.get("text", ""))
-            elif kind == "assistant":
-                for block in (ev.get("message") or {}).get("content") or []:
-                    if block.get("type") == "tool_use" and block.get("name") != "ToolSearch":
-                        name = str(block.get("name", "")).replace("mcp__formwav__", "")
-                        CHAT.publish("tool", id=block.get("id"), name=name, input=_brief(block.get("input") or {}))
-            elif kind == "user":
-                for block in (ev.get("message") or {}).get("content") or []:
-                    if isinstance(block, dict) and block.get("type") == "tool_result":
-                        CHAT.publish("toolDone", id=block.get("tool_use_id"), error=bool(block.get("is_error")))
-            elif kind == "result":
-                CHAT.session = ev.get("session_id") or CHAT.session
-                meta = {"seconds": round(time.monotonic() - started, 1), "turns": ev.get("num_turns"), "cost": ev.get("total_cost_usd")}
-                if ev.get("is_error"):
-                    error = str(ev.get("result") or "Claude Code stopped with an error")
-        proc.wait(timeout=30)
-        if proc.returncode and not error and not meta:
-            err = (proc.stderr.read() if proc.stderr else "").strip()
-            error = err.splitlines()[-1] if err else f"Claude Code exited with {proc.returncode}"
-    except FileNotFoundError:
-        error = claude_code.INSTALL
-    except (OSError, subprocess.SubprocessError) as err:
-        error = f"Claude Code could not run: {err}"
+        try:
+            proc = subprocess.Popen(claude_code.shell_wrapped(argv), cwd=cwd, env=claude_code.child_env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding="utf-8", errors="replace")
+            CHAT.proc = proc
+            assert proc.stdout is not None and proc.stderr is not None
+
+            def drain() -> None:
+                for row in proc.stderr:
+                    if row.strip():
+                        tail.append(row.rstrip())
+                        del tail[:-15]
+
+            threading.Thread(target=drain, daemon=True).start()
+            for line in proc.stdout:
+                line = line.strip()
+                if not line.startswith("{"):
+                    continue
+                try:
+                    ev = json.loads(line)
+                except ValueError:
+                    continue
+                _consume(ev, run)
+            proc.wait(timeout=30)
+            run["code"] = proc.returncode
+        except FileNotFoundError:
+            run["reply"]["error"] = claude_code.INSTALL
+        except (OSError, subprocess.SubprocessError) as err:
+            run["reply"]["error"] = f"Claude Code could not run: {err}"
+        finally:
+            CHAT.proc = None
     finally:
-        CHAT.proc = None
-        CHAT.busy = False
-        CHAT.publish("done", error=error, meta=meta)
+        _finish(run, started, tail)
 
 
 class Message(BaseModel):
     text: str
     context: str | None = None
+    note: str | None = None
+
+
+@router.get("/api/claude/state")
+def claude_state() -> dict:
+    with CHAT.lock:
+        return {"busy": CHAT.busy, "session": CHAT.session or "", "messages": list(CHAT.messages), "usage": dict(CHAT.usage)}
 
 
 @router.post("/api/claude/chat")
@@ -370,9 +461,16 @@ async def claude_chat(body: Message, request: Request) -> dict:
         raise HTTPException(status_code=424, detail=claude_code.INSTALL)
     CHAT.loop = asyncio.get_running_loop()
     base = f"http://{request.url.netloc}"
-    text = body.text.strip() + (f"\n\n({body.context})" if body.context else "")
+    shown = body.text.strip()
+    note = (body.note or "").strip()
+    text = shown + (f"\n\n({body.context})" if body.context else "")
     argv = claude_code.argv(base, text, CHAT.session, print_mode=True)
-    CHAT.busy = True
+    with CHAT.lock:
+        CHAT.busy = True
+        CHAT.cancelled = False
+        CHAT.messages.append({"role": "user", "text": shown, "note": note})
+        del CHAT.messages[:-MAX_MESSAGES]
+    CHAT.publish("start", text=shown, note=note)
     threading.Thread(target=_run_chat, args=(argv, str(claude_code.workdir())), daemon=True).start()
     return {"started": True, "session": CHAT.session}
 
@@ -380,6 +478,7 @@ async def claude_chat(body: Message, request: Request) -> dict:
 @router.post("/api/claude/cancel")
 def claude_cancel() -> dict:
     if CHAT.proc:
+        CHAT.cancelled = True
         CHAT.proc.terminate()
     return {"ok": True}
 
@@ -388,8 +487,86 @@ def claude_cancel() -> dict:
 def claude_reset() -> dict:
     if CHAT.busy:
         raise HTTPException(status_code=409, detail="Stop Claude Code first")
-    CHAT.session = None
+    with CHAT.lock:
+        CHAT.session = None
+        CHAT.messages = []
+        CHAT.usage = _blank_usage()
+    CHAT.publish("reset")
     return {"ok": True}
+
+
+def _project_dir(folder: str) -> Path:
+    root = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude").expanduser()
+    return root / "projects" / "".join(ch if ch.isalnum() else "-" for ch in folder)
+
+
+def _transcript(path: Path) -> list[dict]:
+    out: list[dict] = []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict) or ev.get("type") not in ("user", "assistant") or ev.get("isSidechain") or ev.get("isMeta"):
+            continue
+        content = (ev.get("message") or {}).get("content")
+        blocks = content if isinstance(content, list) else []
+        texts = [content] if isinstance(content, str) else [b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text"]
+        tools = [b for b in blocks if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") not in HIDDEN]
+        text = "\n\n".join(t for t in texts if t and not t.startswith("<"))
+        if ev["type"] == "user" and text:
+            out.append({"role": "user", "text": text, "note": ""})
+        elif ev["type"] == "assistant" and (text or tools):
+            parts = [{"kind": "tool", "id": b.get("id"), "name": _tool_name(str(b.get("name", ""))), "input": _brief(b.get("input") or {}), "status": "done"} for b in tools]
+            if text:
+                parts.append({"kind": "text", "text": text})
+            if out and out[-1]["role"] == "assistant":
+                out[-1]["parts"] += parts
+            else:
+                out.append({"role": "assistant", "parts": parts, "error": "", "meta": {}})
+    return out[-MAX_MESSAGES:]
+
+
+@router.get("/api/claude/sessions")
+def claude_sessions() -> dict:
+    folder = _project_dir(str(claude_code.workdir()))
+    found = []
+    for f in folder.glob("*.jsonl"):
+        try:
+            found.append((f.stat().st_mtime, f))
+        except OSError:
+            continue
+    found.sort(key=lambda item: item[0], reverse=True)
+    items = []
+    for modified, f in found[:20]:
+        first = next((m["text"] for m in _transcript(f) if m["role"] == "user"), "")
+        items.append({"id": f.stem, "title": first[:90], "modified": modified, "current": f.stem == CHAT.session})
+    return {"sessions": items}
+
+
+class Adopt(BaseModel):
+    session: str = ""
+
+
+@router.post("/api/claude/adopt")
+def claude_adopt(body: Adopt) -> dict:
+    if CHAT.busy:
+        raise HTTPException(status_code=409, detail="Claude Code is still answering; Stop it first")
+    listed = claude_sessions()["sessions"]
+    pick = next((s for s in listed if s["id"] == body.session), None) if body.session else (listed[0] if listed else None)
+    if pick is None:
+        raise HTTPException(status_code=404, detail="No Claude Code conversation was found in formwav's agent folder yet")
+    messages = _transcript(_project_dir(str(claude_code.workdir())) / f"{pick['id']}.jsonl")
+    with CHAT.lock:
+        CHAT.session = pick["id"]
+        CHAT.messages = messages
+        CHAT.usage = _blank_usage()
+    CHAT.publish("adopted", session=pick["id"], count=len(messages))
+    return {"session": pick["id"], "messages": len(messages)}
 
 
 @router.get("/api/claude/events")
