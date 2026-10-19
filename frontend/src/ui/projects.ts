@@ -2,6 +2,7 @@ import type { Engine, SessionDoc } from "../engine";
 import type { Player } from "../audio/player";
 import { listProjects, openDemo, openProject, RevisionConflict, saveProject, type ProjectSummary } from "../io/projects-client";
 import { templateOf } from "../engine/template";
+import { emptyDocument } from "../engine/document";
 import { delayedIndicator, patchList, setText } from "../vendor/nodemode/dom-stable";
 import { currentView } from "./lanes";
 
@@ -201,6 +202,18 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       return "Opened the demo session: 16 bars at 104 BPM; save it to keep it";
     });
   });
+  const startNew = () => {
+    if (unsaved() && !window.confirm("Start a new session? Unsaved changes to the current session will be lost.")) return;
+    player.stop();
+    engine.loadDocument(emptyDocument(engine.get("document").sampleRate));
+    lastSaved = engine.get("document");
+    known = null;
+    savedAt = null;
+    writeState();
+    if (nameField && nameField.value !== "Untitled session") nameField.value = "Untitled session";
+    setText(notice, "Started a new empty session");
+  };
+  host.querySelector('[data-action="new"]')?.addEventListener("click", startNew);
   savedSession = () => (known && !unsaved() ? known.name : null);
   const docState = host.querySelector<HTMLElement>(".fw-doc-state");
   let savedAt: Date | null = null;
@@ -323,6 +336,9 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
     } else if (key === "o") {
       e.preventDefault();
       void show();
+    } else if (key === "n" && !e.shiftKey) {
+      e.preventDefault();
+      startNew();
     }
   });
 

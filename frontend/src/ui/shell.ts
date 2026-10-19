@@ -36,6 +36,7 @@ function shellHtml(): string {
         <div class="fw-menu">
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">File</button>
           <div class="cv-menu fw-menu-pop" role="menu" aria-label="File" hidden>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="new" title="Start an empty session at this session's sample rate (Cmd or Ctrl N)"><span>New session</span><kbd>⌘N</kbd></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="save" title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span><kbd>⌘S</kbd></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="save-template" title="Save the tracks, buses, routing, effects and automation without the audio, to start new sessions from"><span>Save as template…</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="revert" title="Open the last saved version again, leaving the changes since"><span>Revert to saved</span></button>
@@ -94,8 +95,6 @@ function shellHtml(): string {
     </div>
     <div class="fw-topbar-mid"></div>
     <div class="fw-topbar-actions">
-      <label class="fw-theme-pick fw-head-theme">Theme <select data-theme-pick aria-label="Theme"></select></label>
-      <div class="fw-swatches fw-head-swatches" role="group" aria-label="Accent colour"></div>
       <span class="fw-history" role="group" aria-label="Undo and redo">
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="undo" aria-label="Undo" title="Undo (Cmd or Ctrl Z)" disabled>${icon("undo", ICON_SIZE.control)}</button>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="redo" aria-label="Redo" title="Redo (Cmd or Ctrl Shift Z)" disabled>${icon("redo", ICON_SIZE.control)}</button>
@@ -136,7 +135,7 @@ function shellHtml(): string {
           <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>
           <h1 class="fw-empty-title">No session open</h1>
           <p class="fw-empty-body">Import any audio or video file, drop one here, or press Record to start a session.</p>
-          <div class="fw-empty-actions"><button type="button" class="fw-ibtn fw-empty-import" data-empty-act="import">Import audio</button><button type="button" class="fw-ibtn" data-empty-act="open">Open a session</button></div>
+          <div class="fw-empty-actions"><button type="button" class="fw-ibtn fw-empty-import" data-empty-act="import">Import audio</button><button type="button" class="fw-ibtn" data-empty-act="open">Open a session</button><button type="button" class="fw-ibtn" data-empty-act="record" title="Start recording from the microphone into a new track">Record</button><button type="button" class="fw-ibtn" data-empty-act="demo" title="A sixteen-bar session made in code: drums, bass, pad and keys with a reverb bus">Try the demo</button></div>
         </section>
         <div class="fw-lanes"></div>
         <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi,.mxf,.aup,.aup3,.zip,.mid,.midi,.aaf,.edl" multiple hidden>
@@ -313,7 +312,21 @@ export function mountShell(host: HTMLElement, engine: Engine): void {
     const act = (e.target as HTMLElement).closest<HTMLElement>("[data-empty-act]")?.dataset.emptyAct;
     if (act === "import") host.querySelector<HTMLInputElement>(".fw-file")?.click();
     else if (act === "open") host.querySelector<HTMLButtonElement>('.fw-topbar [data-action="open"]')?.click();
+    else if (act === "record") host.querySelector<HTMLButtonElement>('.fw-status .fw-tbtn[data-action="record"]')?.click();
+    else if (act === "demo") host.querySelector<HTMLButtonElement>('.fw-topbar [data-action="demo"]')?.click();
   });
+
+  const notice = host.querySelector<HTMLElement>(".fw-status .fw-notice");
+  if (notice) {
+    const mirror = () => {
+      const full = notice.textContent ?? "";
+      if (full) {
+        if (notice.title !== full) notice.title = full;
+      } else if (notice.hasAttribute("title")) notice.removeAttribute("title");
+    };
+    new MutationObserver(mirror).observe(notice, { childList: true, characterData: true, subtree: true });
+    mirror();
+  }
 
   engine.subscribe("link", renderLink);
   engine.subscribe("transport", renderClock);

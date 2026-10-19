@@ -17,7 +17,7 @@ body.theme-light { --cv-chip-bg: color-mix(in srgb, var(--bg-secondary) 80%, tra
 .fw-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--cv-head-h) minmax(0, 1fr) var(--cv-foot-h); font-size: var(--fs-13); line-height: 1.35; }
 
 /* The empty session: what to do first, as two buttons */
-.fw-empty-actions { display: flex; justify-content: center; gap: 8px; margin-block-start: 4px; }
+.fw-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-block-start: 4px; }
 .fw-empty-actions .fw-ibtn { min-block-size: 34px; padding: 0 16px; border: 1px solid var(--border-light); border-radius: 9px; background: var(--bg-tertiary); color: var(--text-primary); font-size: var(--fs-13); white-space: nowrap; }
 .fw-empty-actions .fw-empty-import { border-color: transparent; background: var(--accent-color); color: var(--text-on-accent); font-weight: 700; }
 
@@ -62,10 +62,6 @@ body.theme-light { --cv-chip-bg: color-mix(in srgb, var(--bg-secondary) 80%, tra
 .fw-doc-state { block-size: 15px; font-size: var(--fs-11); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fw-topbar-mid { flex: 1 1 24px; display: flex; justify-content: center; min-inline-size: 0; }
 .fw-topbar-actions { flex: none; display: flex; align-items: center; gap: 14px; }
-.fw-theme-pick.fw-head-theme { display: flex; align-items: center; gap: 8px; font-size: var(--fs-12); color: var(--text-secondary); }
-.fw-head-theme select { min-block-size: 30px; padding: 0 8px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-tertiary); color: var(--text-primary); font: inherit; font-size: var(--fs-13); }
-.fw-head-swatches { display: flex; align-items: center; gap: 4px; }
-.fw-head-swatches .fw-swatch { inline-size: 24px; block-size: 24px; }
 .fw-history { display: flex; align-items: center; gap: 4px; }
 .fw-topbar .fw-history .fw-ibtn { inline-size: 32px; block-size: 32px; padding: 0; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--text-secondary); }
 .fw-topbar .fw-history .fw-ibtn:hover:not(:disabled) { background: var(--bg-tertiary); color: var(--text-primary); }
@@ -91,14 +87,7 @@ body.theme-light { --cv-chip-bg: color-mix(in srgb, var(--bg-secondary) 80%, tra
 .fw-topbar .fw-panel-toggles :is(.fw-panel-toggle, [data-action="agent"])[aria-pressed="true"] { color: var(--text-primary); background: transparent; border: 0; }
 .fw-topbar-actions > [data-action="terminal"] { display: none; }
 @media (max-width: 1399px) {
-  .fw-theme-pick.fw-head-theme { gap: 0; font-size: 0; }
   .fw-topbar .fw-doc .fw-session-name { max-inline-size: 180px; }
-}
-@media (max-width: 1399px) {
-  .fw-head-swatches { display: none; }
-}
-@media (min-width: 1400px) {
-  .fw-settings-pop .fw-menu-accent { display: none; }
 }
 
 /* Menus: glyph, label and shortcut each in their own column, the label never squeezed */
@@ -429,7 +418,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-status .fw-transport > .fw-meter-label, .fw-status .fw-transport > .fw-meter { display: none; }
 .fw-status.is-armed .fw-transport > .fw-meter-label, .fw-status.is-armed .fw-transport > .fw-meter { display: block; }
 .fw-status .fw-st-info { flex: 0 1 340px; display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; max-inline-size: 340px; padding: 0 0 0 16px; border-inline-start: 1px solid var(--border-light); }
-.fw-status .fw-notice { flex: none; min-block-size: 16px; font-size: var(--fs-12); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-status .fw-notice { flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-box-pack: end; -webkit-line-clamp: 2; line-clamp: 2; block-size: 2.5em; line-height: 1.25; font-size: var(--fs-12); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: normal; overflow-wrap: anywhere; }
 .fw-status .fw-st-line { display: flex; align-items: center; gap: 10px; min-inline-size: 0; overflow: hidden; font-size: var(--fs-11); color: var(--text-secondary); }
 .fw-status .fw-engine { flex: none; inline-size: 112px; min-inline-size: 0; display: inline-flex; align-items: center; gap: 5px; overflow: hidden; font-size: var(--fs-11); color: var(--text-secondary); }
 .fw-status .fw-engine-dot { flex: none; inline-size: 7px; block-size: 7px; }
@@ -695,6 +684,10 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-pane-agent .fw-agent-chip:hover { background: var(--bg-tertiary); }
 .fw-agent-context { align-self: flex-start; max-inline-size: 100%; padding: 3px 8px; border-radius: 6px; background: var(--bg-tertiary); font-size: var(--fs-11); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fw-agent-context[hidden] { display: none; }
+.fw-pane-agent .fw-agent-redirect { flex: none; display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-3) var(--space-4) 0; font-size: var(--fs-13); line-height: 1.5; color: var(--text-secondary); }
+.fw-pane-agent .fw-agent-redirect[hidden] { display: none; }
+.fw-pane-agent .fw-agent-redirect .icon { flex: none; color: var(--text-muted); }
+.fw-agent[data-via="code"] .fw-agent-log:empty::before { content: none; }
 .fw-pane-agent .fw-agent-ask { display: flex; flex-wrap: nowrap; align-items: flex-end; gap: 8px; padding: 8px; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-primary); }
 .fw-pane-agent .fw-agent-ask:focus-within { border-color: var(--accent-line); }
 .fw-pane-agent .fw-agent-ask textarea { flex: 1 1 auto; min-inline-size: 0; padding: 0; border: 0; outline: 0; resize: none; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-13); line-height: 1.4; }

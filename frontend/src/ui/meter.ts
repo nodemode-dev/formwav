@@ -15,6 +15,7 @@ export function mountOutputMeter(host: HTMLElement, player: Player): void {
   meter.className = "fw-out-meter";
   meter.setAttribute("role", "group");
   meter.setAttribute("aria-label", "Output level");
+  meter.title = "Output level: how loud the mix is at the speakers, left above and right below";
   meter.innerHTML =
     `<span class="fw-meter-label">Out</span>` +
     `<div class="fw-out-track"><div class="fw-out-bar"></div></div>` +

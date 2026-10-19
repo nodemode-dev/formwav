@@ -122,7 +122,9 @@
 .fw-theme-item { display: flex; align-items: center; gap: 8px; }
 .fw-check { flex: none; inline-size: 14px; block-size: 14px; display: grid; place-items: center; }
 .fw-theme-item[aria-checked="true"] .fw-check::before { content: ""; inline-size: 8px; block-size: 4px; border-inline-start: 2px solid var(--accent-color); border-block-end: 2px solid var(--accent-color); transform: rotate(-45deg) translateY(-1px); }
-.fw-settings-pop .fw-swatches { padding: 4px 8px 8px; }
+.fw-theme-panel { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); }
+.fw-theme-panel .fw-menu-label { padding: 0; }
+.fw-theme-panel .fw-swatches { gap: var(--space-1); }
 .fw-topbar-actions > [data-action="terminal"], .fw-topbar .fw-panel-toggle[data-pane="media"] { display: none; }
 .fw-theme-pick { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--fs-12); color: var(--text-secondary); }
 .fw-menu-pop .fw-lang-pick { padding: 6px 10px; }

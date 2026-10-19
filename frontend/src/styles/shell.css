@@ -162,6 +162,7 @@ html, body, #app { height: 100%; }
 }
 
 .fw-stage[data-view="session"] { place-items: stretch; align-content: start; overflow: auto; }
+.fw-stage[data-view="empty"] { place-items: safe center; overflow: auto; }
 .fw-stage[data-view="session"] .fw-empty,
 .fw-stage[data-view="empty"] .fw-lanes { display: none; }
 
