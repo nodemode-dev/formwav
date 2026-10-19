@@ -18,11 +18,27 @@ import os
 import signal
 import struct
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
 from ..core.config import cors_origins
+from ..services import claude_code, terminals
 
 router = APIRouter()
+
+
+class OpenBody(BaseModel):
+    cols: int = 100
+    rows: int = 30
+
+
+class ClaudeBody(OpenBody):
+    prompt: str | None = None
+    resume: str | None = None
+
+
+class IdBody(BaseModel):
+    id: str
 
 
 def _allowed(origin: str | None, host: str | None) -> bool:
@@ -147,3 +163,107 @@ async def terminal(ws: WebSocket) -> None:
             await ws.close()
         except RuntimeError:
             pass
+
+
+def _gate() -> None:
+    if os.environ.get("FORMWAV_TERMINAL", "1") == "0":
+        raise HTTPException(status_code=403, detail="The terminal is turned off (FORMWAV_TERMINAL=0)")
+    if not terminals.supported():
+        raise HTTPException(status_code=501, detail="The terminal is not available on this system")
+
+
+def _session(sid: str) -> terminals.Session:
+    try:
+        return terminals.get(sid)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"No terminal {sid}") from None
+
+
+@router.post("/terminal/open")
+async def terminal_open(body: OpenBody | None = None) -> dict:
+    _gate()
+    body = body or OpenBody()
+    try:
+        return terminals.open_shell(body.cols, body.rows).describe()
+    except terminals.Unavailable as err:
+        raise HTTPException(status_code=501, detail=str(err)) from None
+
+
+@router.get("/terminal/list")
+async def terminal_list() -> dict:
+    return {"terminals": [s.describe() for s in terminals.SESSIONS.values()]}
+
+
+@router.post("/terminal/restart")
+async def terminal_restart(body: IdBody) -> dict:
+    _gate()
+    try:
+        _session(body.id).restart()
+    except terminals.Unavailable as err:
+        raise HTTPException(status_code=501, detail=str(err)) from None
+    return {"ok": True}
+
+
+@router.post("/terminal/close")
+async def terminal_close(body: IdBody) -> dict:
+    _session(body.id)
+    terminals.close(body.id)
+    return {"ok": True}
+
+
+@router.post("/claudecode/open")
+async def claudecode_open(request: Request, body: ClaudeBody | None = None) -> dict:
+    _gate()
+    body = body or ClaudeBody()
+    if not claude_code.cli():
+        raise HTTPException(status_code=424, detail=claude_code.INSTALL)
+    try:
+        return terminals.open_claude(f"http://{request.headers.get('host')}", body.prompt, body.resume, body.cols, body.rows).describe()
+    except FileNotFoundError:
+        raise HTTPException(status_code=424, detail=claude_code.INSTALL) from None
+    except terminals.Unavailable as err:
+        raise HTTPException(status_code=501, detail=str(err)) from None
+
+
+@router.websocket("/terminal/{sid}")
+async def terminal_attach(ws: WebSocket, sid: str) -> None:
+    if os.environ.get("FORMWAV_TERMINAL", "1") == "0" or not _allowed(ws.headers.get("origin"), ws.headers.get("host")):
+        await ws.close(code=4403)
+        return
+    await ws.accept()
+    session = terminals.SESSIONS.get(sid)
+    if session is None:
+        await ws.close(code=4404)
+        return
+    backlog, queue = session.attach()
+
+    async def outbound() -> None:
+        if backlog:
+            await ws.send_text(backlog)
+        if not session.alive:
+            await ws.send_text(json.dumps({"type": "exit"}))
+        while True:
+            item = await queue.get()
+            await ws.send_text(json.dumps({"type": "exit"}) if item is None else item)
+
+    sender = asyncio.create_task(outbound())
+    try:
+        while True:
+            try:
+                msg = json.loads(await ws.receive_text())
+            except ValueError:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("type") == "input":
+                session.write(str(msg.get("data", "")))
+            elif msg.get("type") == "resize":
+                try:
+                    session.resize(int(msg.get("cols", 80)), int(msg.get("rows", 24)))
+                except (TypeError, ValueError):
+                    pass
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    finally:
+        sender.cancel()
+        session.subscribers.discard(queue)
