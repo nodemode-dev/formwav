@@ -179,3 +179,7 @@ dialog::backdrop { background: var(--bg-scrim); }
 .fw-devices-where.fw-devices-link { block-size: 3lh; }
 /* File > Open: a session on disk, under the saved ones */
 .fw-popover-file { inline-size: 100%; margin-block-start: var(--space-2); justify-content: center; }
+/* L1: a note's lyric typed in place, over the note, out of the panel's flow so nothing moves */
+.fw-piano { position: relative; }
+.fw-piano-lyric { position: absolute; box-sizing: border-box; margin: 0; padding: 0 var(--space-1); border: 1px solid var(--accent-color); border-radius: var(--radius-xs); background: var(--surface-0); color: var(--text-primary); font: inherit; font-size: var(--fs-12); }
+.fw-piano-lyric[hidden] { display: none; }

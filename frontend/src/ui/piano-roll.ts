@@ -2,6 +2,7 @@ import type { Engine } from "../engine";
 import type { Command, NoteEvent } from "../engine/document";
 import { gridStepOf, parseGrid, snapToGrid } from "../engine/grid";
 import { noteName } from "../engine/midi";
+import { DEFAULT_SYLLABLE, singingOrder } from "../engine/lyrics";
 import { midiFile, renderNoteMedia } from "../audio/notes";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { fpsOf } from "./midi-input";
@@ -19,6 +20,7 @@ import { fpsOf } from "./midi-input";
  */
 const KEY_W = 44;
 const VEL_H = 52;
+const LYR_H = 20;
 const MIN_ROWS = 24;
 const EDGE_PX = 6;
 const BAND_PX = 4;
@@ -39,6 +41,9 @@ export interface NoteEditor {
   panel: HTMLElement;
   setList(open: boolean): void;
   listOpen(): boolean;
+  /** L1: edit the lyric of the selected note in place, and move every lyric from it one note later or earlier. */
+  editLyric(): void;
+  shiftLyrics(by: 1 | -1): void;
 }
 
 export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | null {
@@ -59,7 +64,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
   panel.className = "fw-piano";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Note editor");
-  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="">Off</option><option value="1/4">1/4</option><option value="1/8">1/8</option><option value="1/16" selected>1/16</option><option value="1/32">1/32</option><option value="1/8t">1/8 T</option><option value="1/16t">1/16 T</option></select></label><button type="button" class="fw-ibtn" data-zoom="out" aria-label="Zoom out" title="Shorter rows (Ctrl or Cmd and the wheel)">−</button><button type="button" class="fw-ibtn" data-zoom="in" aria-label="Zoom in" title="Taller rows (Ctrl or Cmd and the wheel)">+</button><button type="button" class="fw-ibtn" data-zoom="fit" title="Fit the notes; the wheel scrolls pitch">Fit</button><button type="button" class="fw-ibtn" data-quantize aria-haspopup="dialog" title="Quantize the selected notes (all notes when none is selected) with a strength, swing and their ends; Q quantizes again as last set">Quantize…</button><button type="button" class="fw-ibtn" data-list aria-pressed="false" title="The notes as a list, each edited by its values (Event list)">List</button><button type="button" class="fw-ibtn" data-step aria-pressed="false" title="Step input: play notes on a MIDI keyboard or the computer keys (A W S E D F T G Y H U J K; Z and X change the octave); each lands at the step cursor, one grid step long, and the cursor moves on; Space adds a rest, Backspace takes the last step back">Step</button><button type="button" class="fw-ibtn" data-export-midi title="Save this note clip as a Standard MIDI File at the session's tempo and meter">Export MIDI</button><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag across to select, drag a note to move, drag an edge to resize, Delete to remove"></canvas><div class="fw-piano-list" role="region" aria-label="Event list" hidden><table><thead><tr><th scope="col">Start</th><th scope="col">Note</th><th scope="col">Length (ticks)</th><th scope="col">Velocity</th><th scope="col" aria-label="Remove"></th></tr></thead><tbody></tbody></table></div>`;
+  panel.innerHTML = `<div class="fw-piano-head"><label class="fw-piano-opt">Snap <select data-snap aria-label="Snap"><option value="">Off</option><option value="1/4">1/4</option><option value="1/8">1/8</option><option value="1/16" selected>1/16</option><option value="1/32">1/32</option><option value="1/8t">1/8 T</option><option value="1/16t">1/16 T</option></select></label><button type="button" class="fw-ibtn" data-zoom="out" aria-label="Zoom out" title="Shorter rows (Ctrl or Cmd and the wheel)">−</button><button type="button" class="fw-ibtn" data-zoom="in" aria-label="Zoom in" title="Taller rows (Ctrl or Cmd and the wheel)">+</button><button type="button" class="fw-ibtn" data-zoom="fit" title="Fit the notes; the wheel scrolls pitch">Fit</button><button type="button" class="fw-ibtn" data-quantize aria-haspopup="dialog" title="Quantize the selected notes (all notes when none is selected) with a strength, swing and their ends; Q quantizes again as last set">Quantize…</button><button type="button" class="fw-ibtn" data-list aria-pressed="false" title="The notes as a list, each edited by its values (Event list)">List</button><button type="button" class="fw-ibtn" data-step aria-pressed="false" title="Step input: play notes on a MIDI keyboard or the computer keys (A W S E D F T G Y H U J K; Z and X change the octave); each lands at the step cursor, one grid step long, and the cursor moves on; Space adds a rest, Backspace takes the last step back">Step</button><button type="button" class="fw-ibtn" data-export-midi title="Save this note clip as a Standard MIDI File at the session's tempo and meter">Export MIDI</button><span class="fw-piano-state" role="status"></span></div><canvas class="fw-piano-canvas" tabindex="0" aria-label="Notes: click to add, drag across to select, drag a note to move, drag an edge to resize, Delete to remove"></canvas><input class="fw-piano-lyric" data-lyric type="text" hidden spellcheck="false" autocomplete="off" aria-label="Lyric" title="Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it"><div class="fw-piano-list" role="region" aria-label="Event list" hidden><table><thead><tr><th scope="col">Start</th><th scope="col">Note</th><th scope="col">Length (ticks)</th><th scope="col">Velocity</th><th scope="col" aria-label="Remove"></th></tr></thead><tbody></tbody></table></div>`;
   transport.before(panel);
   const canvas = panel.querySelector("canvas") as HTMLCanvasElement;
   const state = panel.querySelector<HTMLElement>(".fw-piano-state");
@@ -89,6 +94,9 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
   let stepOctave = 60;
   let stepTimer = 0;
   let lastStep = { time: 0, at: 0 };
+  let editing = -1;
+  const lyricInput = panel.querySelector<HTMLInputElement>("[data-lyric]") as HTMLInputElement;
+  const syllable = () => engine.get("document").singSyllable ?? DEFAULT_SYLLABLE;
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((fn) => fn());
 
@@ -150,15 +158,16 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
       lo -= 1;
       if (hi - lo + 1 < MIN_ROWS) hi += 1;
     }
-    const avail = Math.max(1, h - VEL_H);
+    const avail = Math.max(1, h - VEL_H - LYR_H);
     // fit to the notes until the user zooms (Ctrl or Cmd and the wheel) or scrolls (the wheel); Fit returns to it
     rowH = userRowH > 0 ? userRowH : Math.max(4, avail / (hi - lo + 1));
     rows = Math.max(1, Math.min(128, Math.floor(avail / rowH)));
-    const top = Math.min(127, Math.max(rows - 1, topPitch ?? Math.min(127, Math.max(hi, lo + rows - 1))));
+    const fitTop = rows >= hi - lo + 1 ? Math.max(hi, lo + rows - 1) : Math.ceil((lo + hi) / 2 + (rows - 1) / 2);
+    const top = Math.min(127, Math.max(rows - 1, topPitch ?? Math.min(127, fitTop)));
     low = Math.max(0, top - rows + 1);
     const end = Math.max(rate, ...notes.map((n) => n.at + n.length - origin), ...targets.map((t) => t.start + t.length - origin)) + rate / 2;
     pxPerFrame = Math.max(1e-6, (w - KEY_W) / end);
-    Object.assign(canvas.dataset, { keyW: String(KEY_W), low: String(low), rows: String(rows), rowH: String(rowH), pxPerFrame: String(pxPerFrame), velH: String(VEL_H), origin: String(origin) });
+    Object.assign(canvas.dataset, { keyW: String(KEY_W), low: String(low), rows: String(rows), rowH: String(rowH), pxPerFrame: String(pxPerFrame), velH: String(VEL_H), lyrH: String(LYR_H), origin: String(origin) });
     return { w, h };
   };
   const yOf = (pitch: number) => (low + rows - 1 - pitch) * rowH;
@@ -193,24 +202,56 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
     const perBar = Math.max(1, engine.get("document").tempo?.beatsPerBar ?? 4);
     for (let b = Math.max(0, Math.floor(origin / beat)); xOf(b * beat) < w; b++) {
       ctx.fillStyle = b % perBar === 0 ? v("--line-2") : v("--line-0");
-      ctx.fillRect(Math.round(xOf(b * beat)), 0, 1, h - VEL_H);
+      ctx.fillRect(Math.round(xOf(b * beat)), 0, 1, h - VEL_H - LYR_H);
     }
     ctx.fillStyle = v("--surface-1");
-    ctx.fillRect(0, h - VEL_H, w, VEL_H);
+    ctx.fillRect(0, h - VEL_H - LYR_H, w, VEL_H + LYR_H);
     ctx.fillStyle = v("--line-1");
+    ctx.fillRect(0, h - VEL_H - LYR_H, w, 1);
     ctx.fillRect(0, h - VEL_H, w, 1);
+    // L1: the lyric lane, what each note sings at its start whatever the zoom (the higher note of a chord), the
+    // default syllable dimmed; the note being edited is left to the field over it
+    const laneY = h - VEL_H - LYR_H / 2;
+    ctx.font = `11px ${v("--font-sans") || "sans-serif"}`;
+    ctx.textBaseline = "middle";
+    let lastX = -Infinity;
+    for (const i of singingOrder(notes)) {
+      const n = notes[i];
+      const x = xOf(n.at) + 2;
+      if (x < KEY_W || x <= lastX || i === editing) continue;
+      lastX = x;
+      ctx.globalAlpha = n.lyric ? 1 : 0.45;
+      ctx.fillStyle = selected.has(i) ? v("--accent-color") : v("--text-primary");
+      ctx.fillText(n.lyric ?? syllable(), x, laneY, Math.max(8, n.length * pxPerFrame - 3));
+    }
+    ctx.globalAlpha = 1;
     notes.forEach((n, i) => {
       const on = selected.has(i);
       ctx.globalAlpha = 0.45 + 0.55 * (n.velocity / 127);
       ctx.fillStyle = on ? v("--accent-color") : v("--fw-audio");
       ctx.fillRect(xOf(n.at), yOf(n.pitch) + 1, Math.max(3, n.length * pxPerFrame), Math.max(2, rowH - 2));
       ctx.globalAlpha = 1;
+      // L1: what the note sings, the default syllable dimmed, clipped to the note; only where a row can hold text
+      const noteW = n.length * pxPerFrame;
+      if (rowH >= 12 && noteW >= 14 && i !== editing) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(xOf(n.at), yOf(n.pitch), noteW - 2, rowH);
+        ctx.clip();
+        ctx.globalAlpha = n.lyric ? 1 : 0.5;
+        ctx.fillStyle = v("--text-on-accent");
+        ctx.font = `${Math.min(12, Math.floor(rowH - 2))}px ${v("--font-sans") || "sans-serif"}`;
+        ctx.textBaseline = "middle";
+        ctx.fillText(n.lyric ?? syllable(), xOf(n.at) + 3, yOf(n.pitch) + rowH / 2);
+        ctx.restore();
+      }
+      ctx.fillStyle = on ? v("--accent-color") : v("--fw-audio");
       const barH = ((VEL_H - 8) * n.velocity) / 127;
       ctx.fillRect(xOf(n.at), h - 4 - barH, 3, barH);
     });
     if (stepping && target) {
       ctx.fillStyle = v("--accent-color");
-      ctx.fillRect(Math.round(xOf(stepAt)) - 1, 0, 2, h - VEL_H);
+      ctx.fillRect(Math.round(xOf(stepAt)) - 1, 0, 2, h - VEL_H - LYR_H);
     }
     if (band) {
       ctx.globalAlpha = 0.18;
@@ -218,6 +259,10 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
       ctx.fillRect(Math.min(band.x0, band.x1), Math.min(band.y0, band.y1), Math.abs(band.x1 - band.x0), Math.abs(band.y1 - band.y0));
       ctx.globalAlpha = 1;
     }
+    if (editing >= notes.length) {
+      editing = -1;
+      lyricInput.hidden = true;
+    } else if (editing >= 0) placeLyric();
   };
 
   /** The editor's notes back in each clip's media frames, every clip rendered again, then one batch: one undo step
@@ -266,6 +311,94 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
     return null;
   };
 
+  // L1: the lyric field sits over the note being edited, out of the panel's flow, so nothing around it moves; the
+  // canvas skips that note's text while it is open. A note's index here maps to its clip and its index in that clip.
+  const inClip = (i: number) => {
+    let k = 0;
+    for (let j = 0; j < i; j++) if (owner[j] === owner[i]) k++;
+    return { tg: targets[owner[i]], k };
+  };
+  const placeLyric = () => {
+    const n = notes[editing];
+    if (!n) return;
+    const width = Math.max(72, n.length * pxPerFrame);
+    const height = 24;
+    lyricInput.style.left = `${canvas.offsetLeft + Math.min(xOf(n.at), canvas.clientWidth - width)}px`;
+    lyricInput.style.top = `${canvas.offsetTop + canvas.clientHeight - VEL_H - LYR_H / 2 - height / 2}px`;
+    lyricInput.style.width = `${width}px`;
+    lyricInput.style.height = `${height}px`;
+  };
+  const openLyric = (i: number) => {
+    if (!target || !notes[i] || dragging) return;
+    editing = i;
+    selected = new Set([i]);
+    lyricInput.value = notes[i].lyric ?? "";
+    lyricInput.placeholder = syllable();
+    placeLyric();
+    lyricInput.hidden = false;
+    draw();
+    notify();
+    lyricInput.focus();
+    lyricInput.select();
+  };
+  const keepLyric = () => {
+    const n = notes[editing];
+    if (!n || !target) return;
+    const text = lyricInput.value.trim();
+    if (text === (n.lyric ?? "")) return;
+    const { tg, k } = inClip(editing);
+    if (tg) engine.dispatch({ type: "set-note-lyrics", trackId: tg.trackId, clipId: tg.clipId, from: k, text });
+  };
+  const closeLyric = (keep: boolean) => {
+    if (editing < 0) return;
+    if (keep) keepLyric();
+    editing = -1;
+    lyricInput.hidden = true;
+    draw();
+    canvas.focus();
+  };
+  const shiftFrom = (by: 1 | -1) => {
+    const order = singingOrder(notes);
+    const first = order.find((i) => selected.has(i));
+    if (first === undefined || !target || dragging) return;
+    const { tg, k } = inClip(first);
+    if (tg) engine.dispatch({ type: "shift-lyrics", trackId: tg.trackId, clipId: tg.clipId, from: k, by });
+  };
+  lyricInput.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      closeLyric(true);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      closeLyric(false);
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      const order = singingOrder(notes);
+      const next = order[order.indexOf(editing) + (e.shiftKey ? -1 : 1)];
+      keepLyric();
+      if (next === undefined) closeLyric(false);
+      else openLyric(next);
+    }
+  });
+  lyricInput.addEventListener("blur", () => {
+    if (editing >= 0 && document.activeElement !== lyricInput) closeLyric(true);
+  });
+  const laneNote = (x: number) => {
+    const order = singingOrder(notes);
+    let found = -1;
+    for (const i of order) if (xOf(notes[i].at) <= x && x <= xOf(notes[i].at) + Math.max(3, notes[i].length * pxPerFrame) && found < 0) found = i;
+    return found;
+  };
+  canvas.addEventListener("dblclick", (e) => {
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    const h = canvas.clientHeight;
+    const index = y > h - VEL_H - LYR_H && y <= h - VEL_H ? laneNote(x) : (hit(x, y)?.index ?? -1);
+    if (index >= 0) openLyric(index);
+  });
+
   canvas.addEventListener("pointerdown", (e) => {
     if (!target) return;
     canvas.focus();
@@ -274,6 +407,14 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
     const y = e.clientY - r.top;
     const h = canvas.clientHeight;
     if (x < KEY_W) return;
+    if (y > h - VEL_H - LYR_H && y <= h - VEL_H) {
+      // the lyric lane selects the note it names (a double-click edits it), it never adds one
+      const index = laneNote(x);
+      selected = index < 0 ? new Set() : new Set([index]);
+      draw();
+      notify();
+      return;
+    }
     canvas.setPointerCapture(e.pointerId);
     dragging = true;
     let changed = false;
@@ -300,7 +441,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
         const before = e.shiftKey ? new Set(selected) : new Set<number>();
         move = (ev) => {
           const bx = ev.clientX - r.left;
-          const by = Math.min(h - VEL_H, ev.clientY - r.top);
+          const by = Math.min(h - VEL_H - LYR_H, ev.clientY - r.top);
           if (!band && Math.hypot(bx - x, by - y) < BAND_PX) return;
           band = { x0: x, y0: y, x1: bx, y1: by };
           const [left, right, top, bottom] = [Math.min(x, bx), Math.max(x, bx), Math.min(y, by), Math.max(y, by)];
@@ -499,6 +640,19 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
   });
   canvas.addEventListener("keydown", (e) => {
     if (stepping && stepKey(e)) return;
+    if ((e.key === "e" || e.key === "E") && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const first = singingOrder(notes).find((i) => selected.has(i));
+      if (first !== undefined) openLyric(first);
+      return;
+    }
+    if (e.altKey && !e.metaKey && !e.ctrlKey && (e.code === "BracketRight" || e.code === "BracketLeft")) {
+      e.preventDefault();
+      e.stopPropagation();
+      shiftFrom(e.code === "BracketRight" ? 1 : -1);
+      return;
+    }
     if ((e.key === "a" || e.key === "A") && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       e.stopPropagation();
@@ -576,5 +730,10 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
     panel,
     setList,
     listOpen: () => !list.hidden,
+    editLyric: () => {
+      const first = singingOrder(notes).find((i) => selected.has(i)) ?? singingOrder(notes)[0];
+      if (first !== undefined) openLyric(first);
+    },
+    shiftLyrics: (by) => shiftFrom(by),
   };
 }

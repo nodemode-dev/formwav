@@ -5,6 +5,7 @@ import { parseGrid } from "../engine/grid";
 import { bpmAt, sampleToTick, scaleTempo, tempoCurve, tempoMap, type CurveShape } from "../engine/tempo";
 import { changeDuration, changeVelocity, chordsByBar, duplicateNotes, noteName, parseNoteName, quantizeNotes, splitNotes, type DurationOp, type QuantizeOptions, type SplitRule, type VelocityOp } from "../engine/midi";
 import { formatPosition, parsePosition, TICKS_PER_QUARTER, timeContext } from "../engine/timebase";
+import { DEFAULT_SYLLABLE, SING_SYLLABLES } from "../engine/lyrics";
 import { icon } from "../vendor/formvis/icons";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { fpsOf, INPUT_QUANTIZE_KEY, inputQuantize } from "./midi-input";
@@ -42,6 +43,9 @@ const ITEMS: [string, string, string?][] = [
   ["ramp", "Tempo ramp across the selection…"],
   ["scale", "Scale the tempo across the selection…"],
   ["stretch", "Stretch the selection's tempo…"],
+  ["lyric", "Edit lyric", "⌘E"],
+  ["lyrics-forward", "Move lyrics forward", "⌥]"],
+  ["lyrics-backward", "Move lyrics backward", "⌥["],
 ];
 
 export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteEditor | null): void {
@@ -51,8 +55,11 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
   const say = (text: string) => setText(notice, text);
   pop.innerHTML =
     ITEMS.map(([id, label, key]) => `<button class="fw-ibtn" type="button" role="menuitem" data-ev="${id}"><span>${label}</span>${key ? `<kbd>${key}</kbd>` : ""}</button>`).join("") +
-    `<span class="fw-menu-sep" role="separator"></span><button class="fw-ibtn" type="button" role="menuitemcheckbox" aria-checked="false" data-ev="list"><span class="fw-check" aria-hidden="true"></span><span>Event list</span></button>`;
+    `<span class="fw-menu-sep" role="separator"></span><button class="fw-ibtn" type="button" role="menuitemcheckbox" aria-checked="false" data-ev="list"><span class="fw-check" aria-hidden="true"></span><span>Event list</span></button>` +
+    `<span class="fw-menu-sep" role="separator"></span>` +
+    SING_SYLLABLES.map((s) => `<button class="fw-ibtn" type="button" role="menuitemradio" aria-checked="${s === DEFAULT_SYLLABLE}" data-ev="sing-${s}" title="What a note without a lyric sings"><span class="fw-check" aria-hidden="true"></span><span>Notes sing “${s}”</span></button>`).join("");
   const listItem = pop.querySelector<HTMLElement>('[data-ev="list"]');
+  const syllableItems = SING_SYLLABLES.map((s) => [s, pop.querySelector<HTMLElement>(`[data-ev="sing-${s}"]`)] as const);
 
   const ask = (title: string, note: string, fields: Field[], ok: string) =>
     new Promise<Values | null>((done) => host.dispatchEvent(new CustomEvent("fw-ask", { detail: { title, note, fields, ok, done } })));
@@ -350,6 +357,13 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
     else if (id === "ramp") void ramp();
     else if (id === "scale") void scale(false);
     else if (id === "stretch") void scale(true);
+    else if (id === "lyric") {
+      if (scope()) {
+        openEditor();
+        editor.editLyric();
+      }
+    } else if (id === "lyrics-forward" || id === "lyrics-backward") editor.shiftLyrics(id === "lyrics-forward" ? 1 : -1);
+    else if (id === "sing-da" || id === "sing-la") engine.dispatch({ type: "set-sing-syllable", syllable: id === "sing-da" ? "da" : "la" });
     else if (id === "list") {
       const open = !editor.listOpen();
       if (open) openEditor();
@@ -396,6 +410,8 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
   editor.onChange(() => {
     refresh();
     if (listItem && listItem.getAttribute("aria-checked") !== String(editor.listOpen())) listItem.setAttribute("aria-checked", String(editor.listOpen()));
+    const sung = engine.get("document").singSyllable ?? DEFAULT_SYLLABLE;
+    for (const [s, item] of syllableItems) if (item && item.getAttribute("aria-checked") !== String(s === sung)) item.setAttribute("aria-checked", String(s === sung));
   });
   body.addEventListener("change", (e) => {
     const input = e.target as HTMLInputElement;
