@@ -152,16 +152,27 @@ def acestep_generate(body: dict = Body(...)) -> dict:
 # Models on this machine, installed on request into their own runtime: Kokoro, Pocket TTS and Chatterbox (from formcut), and the trained speech, music and effects separator (TIGER)
 @router.get("/providers/local-speech")
 def local_speech_status() -> dict:
-    from ..services import local_speech, tiger_dnr
+    from ..services import local_sfx, local_speech, tiger_dnr
 
-    return {"engines": [*local_speech.status(), tiger_dnr.status()]}
+    return {"engines": [*local_speech.status(), tiger_dnr.status(), local_sfx.status()]}
 
 
 @router.post("/providers/local-speech/{engine}/install", status_code=202)
 def local_speech_install(engine: str) -> dict:
-    from ..services import local_speech, tiger_dnr
+    from ..services import local_sfx, local_speech, tiger_dnr
 
+    if engine == "ezaudio":
+        return _run(local_sfx.install)
     return _run(tiger_dnr.install) if engine == "tiger" else _run(local_speech.install, engine)
+
+
+@router.post("/providers/local-sfx/generate", status_code=201)
+def local_sfx_generate(body: dict = Body(...)) -> dict:
+    """PLAN_v12 R5: a sound effect from a description, made on this machine (EzAudio)."""
+    from ..services import local_sfx
+
+    rate = body.get("rate")
+    return _run(local_sfx.generate, str(body.get("text", "")), float(body.get("duration_s") or 5), int(body.get("seed") or 0), int(body.get("steps") or 50), float(body.get("guidance") or 5.0), int(rate) if rate else None)
 
 
 @router.get("/providers/local-speech/{engine}/voices")
