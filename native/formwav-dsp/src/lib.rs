@@ -12,6 +12,8 @@ mod python;
 pub mod native;
 #[cfg(feature = "native")]
 pub mod midi;
+#[cfg(feature = "native")]
+pub mod plugin;
 pub mod render;
 pub mod synth;
 pub mod wav;

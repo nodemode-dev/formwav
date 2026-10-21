@@ -436,6 +436,32 @@ impl Player {
         true
     }
 
+    /// S17: appends a hosted plug-in (made off the audio thread) to the most recently added bus's chain; false with no
+    /// bus. The fader and pan of a track's own bus come after it, as after every stage of the chain.
+    pub fn add_bus_insert(&mut self, insert: Box<dyn crate::fx::Insert>) -> bool {
+        let Some(chain) = self.bus_fx.last_mut() else { return false };
+        chain.push(crate::fx::Stage::Hosted(crate::fx::Hosted(Some(insert))));
+        if let Some(specs) = self.bus_fx_spec.last_mut() {
+            specs.push((crate::fx::HOSTED, 0.0, 0.0, 0.0));
+        }
+        self.primed = false;
+        true
+    }
+
+    /// S17: every hosted plug-in on the buses' chains, taken out (their stages left passing the signal through), so a
+    /// mix rebuilt by an edit can hand the same instances back instead of loading them again.
+    pub fn take_inserts(&mut self) -> Vec<Box<dyn crate::fx::Insert>> {
+        let mut out = Vec::new();
+        for s in self.bus_fx.iter_mut().flatten() {
+            if let crate::fx::Stage::Hosted(h) = s {
+                if let Some(i) = h.take() {
+                    out.push(i);
+                }
+            }
+        }
+        out
+    }
+
     /// Automates one parameter (0 frequency, 1 gain dB, 2 Q) of filter stage `stage` of the most recently added bus,
     /// as `add_clip_fx_auto` does for a clip; false with no such bus, filter stage, parameter or envelope.
     pub fn add_bus_fx_auto(&mut self, stage: usize, param: u8, envelope: u32) -> bool {

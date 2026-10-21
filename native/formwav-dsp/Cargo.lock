@@ -163,6 +163,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a76abbdb2907f6fd97fb6bc0b7be96b77d328f2dd9669d1075cc03369ed22154"
+
+[[package]]
 name = "combine"
 version = "4.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -315,8 +321,10 @@ checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 name = "formwav-dsp"
 version = "2.18.4"
 dependencies = [
+ "clap-sys",
  "cpal",
  "formwav-studio",
+ "libloading 0.8.9",
  "midir",
  "nnnoiseless",
  "pyo3",

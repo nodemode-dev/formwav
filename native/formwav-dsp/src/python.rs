@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0, processors = Vec::new(), bus_auto = Vec::new(), pan_law = 0, master_env = 0, bus_outs = Vec::new(), bus_places = Vec::new()))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0, processors = Vec::new(), bus_auto = Vec::new(), pan_law = 0, master_env = 0, bus_outs = Vec::new(), bus_places = Vec::new(), plugins = Vec::new()))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -36,6 +36,8 @@ fn render<'py>(
     master_env: u32,
     bus_outs: Vec<(u32, u32)>,
     bus_places: Vec<(u32, [f32; 6])>,
+    // S17: the hosted plug-ins a bus stage of kind 21 names by its first value (path, saved state, values by id)
+    plugins: Vec<(String, Option<Vec<u8>>, Vec<(u32, f64)>)>,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let spec = |a: f32| processors.get(a as usize).map(String::as_str).unwrap_or("");
     let n_clips = clips.len();
@@ -82,6 +84,19 @@ fn render<'py>(
         for &(_, _, kind, a, b, c, d, e) in chains.iter().filter(|s| s.0 == 1 && s.1 == index) {
             if kind == crate::fx::PROCESSOR {
                 player.add_bus_processor(spec(a));
+            } else if kind == crate::fx::HOSTED {
+                // S17: the plug-in live in this render as in native playback, so the export is what plays
+                let Some((path, state, values)) = plugins.get(a as usize) else { continue };
+                #[cfg(feature = "native")]
+                {
+                    let made = crate::plugin::ClapInsert::open(path, rate, state.as_deref(), values).map_err(|e| PyValueError::new_err(format!("{path}: {e}")))?;
+                    player.add_bus_insert(Box::new(made));
+                }
+                #[cfg(not(feature = "native"))]
+                {
+                    let _ = (state, values);
+                    return Err(PyValueError::new_err(format!("{path}: this core was built without plug-in hosting")));
+                }
             } else {
                 player.add_bus_stage(kind, a, b, c, d, e);
             }
@@ -366,8 +381,11 @@ impl PyNativeOutput {
         Ok(())
     }
 
-    fn set_mix(&self, json: &str) -> PyResult<()> {
-        self.out()?.set_mix(json).map_err(PyValueError::new_err)
+    /// The mix; returns the hosted plug-ins that could not be made, one line each (their buses play without them).
+    fn set_mix(&self, py: Python<'_>, json: &str) -> PyResult<Vec<String>> {
+        let out = self.out()?;
+        // a plug-in loading can take a while: other Python threads run meanwhile
+        py.detach(|| out.set_mix(json)).map_err(PyValueError::new_err)
     }
 
     fn seek(&self, position: u64) -> PyResult<()> {

@@ -12,7 +12,7 @@ crate-type = ["rlib", "cdylib"]
 [features]
 python = ["dep:pyo3"]
 # Native audio output (cpal) for the engine and the desktop app; never in the wasm build.
-native = ["dep:cpal", "dep:serde", "dep:serde_json", "dep:midir"]
+native = ["dep:cpal", "dep:serde", "dep:serde_json", "dep:midir", "dep:clap-sys", "dep:libloading"]
 # AU-23, opt-in: ASIO devices on Windows through cpal's ASIO host. Building with it needs Steinberg's ASIO SDK
 # (CPAL_ASIO_DIR pointing at it) and links it under its own licence (GPLv3 or Steinberg's); the default build leaves it
 # out and stays Apache-2.0.
@@ -29,6 +29,9 @@ cpal = { version = "0.18", optional = true }
 # AU-37: MIDI devices read by the engine itself (the macOS app's WebKit has no Web MIDI); MIT licence
 midir = { version = "0.11", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
+# S17: CLAP plug-ins hosted live as track inserts in the engine's own process (crate::plugin); MIT and ISC licences
+clap-sys = { version = "0.5", optional = true }
+libloading = { version = "0.8", optional = true }
 serde_json = { version = "1", optional = true }
 
 # Not stripped: on macOS 27 with Xcode 27, strip (which Cargo's default release profile runs, strip = "debuginfo") can

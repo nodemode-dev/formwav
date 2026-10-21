@@ -33,6 +33,8 @@ pub struct NativeOutput {
     thread: Option<JoinHandle<()>>,
     pub rate: u32,
     pub device: String,
+    /// S17: the keys of the hosted plug-ins on the player's chains now, so an edit loads only the ones it adds.
+    installed: Mutex<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -114,6 +116,18 @@ struct Mix {
     /// S16: placed tracks' own buses as records of seven (the bus id, then the place).
     #[serde(default)]
     bus_places: Option<Vec<f32>>,
+    /// S17: the hosted plug-ins a bus stage [21, k, ...] names by k (CLAP only; the engine checks each against its scan).
+    #[serde(default)]
+    plugins: Vec<MixPlugin>,
+}
+
+#[derive(Deserialize)]
+struct MixPlugin {
+    path: String,
+    #[serde(default)]
+    state: Option<Vec<u8>>,
+    #[serde(default)]
+    values: Vec<(u32, f64)>,
 }
 
 /// AU-23: the hosts devices are offered from, each with the prefix its devices' names carry: the platform's default
@@ -229,7 +243,7 @@ impl NativeOutput {
             })
             .map_err(|e| e.to_string())?;
         let device = ready_rx.recv().map_err(|_| "the output thread ended before opening".to_string())??;
-        Ok(NativeOutput { shared, stop: stop_tx, thread: Some(thread), rate, device })
+        Ok(NativeOutput { shared, stop: stop_tx, thread: Some(thread), rate, device, installed: Mutex::new(Vec::new()) })
     }
 
     fn with<R>(&self, f: impl FnOnce(&mut Shared) -> R) -> R {
@@ -242,10 +256,36 @@ impl NativeOutput {
     }
 
     /// The worklet's "clips" message: clips with their envelopes and effects, buses and their stages, master stages
-    /// and level, and the end.
-    pub fn set_mix(&self, json: &str) -> Result<(), String> {
+    /// and level, and the end. S17: hosted plug-ins on the buses' chains are made here, off the audio thread and
+    /// before the mixer is locked (only those the mix adds; the rest are taken back from the chains they were on);
+    /// those that could not be made are returned, one line each, and their buses play without them.
+    pub fn set_mix(&self, json: &str) -> Result<Vec<String>, String> {
         let mix: Mix = serde_json::from_str(json).map_err(|e| format!("not a mix: {e}"))?;
-        self.with(|s| {
+        let keys: Vec<String> = mix.plugins.iter().map(|p| crate::plugin::key(&p.path, p.state.as_deref(), &p.values)).collect();
+        let wanted: Vec<usize> = mix
+            .buses
+            .iter()
+            .flat_map(|b| b.stages.as_deref().unwrap_or(&[]).chunks_exact(6).filter(|st| st[0] as u8 == crate::fx::HOSTED).map(|st| st[1] as usize).collect::<Vec<_>>())
+            .filter(|&k| k < keys.len())
+            .collect();
+        let mut held = self.installed.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let mut fresh: Vec<Box<dyn crate::fx::Insert>> = Vec::new();
+        let mut errors = Vec::new();
+        for &k in &wanted {
+            if let Some(at) = held.iter().position(|h| h == &keys[k]) {
+                held.swap_remove(at);
+                continue;
+            }
+            let p = &mix.plugins[k];
+            match crate::plugin::ClapInsert::open(&p.path, self.rate as f32, p.state.as_deref(), &p.values) {
+                Ok(made) => fresh.push(Box::new(made)),
+                Err(e) => errors.push(format!("{}: {e}", p.path)),
+            }
+        }
+        let mut placed: Vec<String> = Vec::new();
+        let unused = self.with(|s| {
+            let mut pool = s.player.take_inserts();
+            pool.extend(fresh);
             let p = &mut s.player;
             p.clear_clips();
             p.clear_envelopes();
@@ -302,6 +342,13 @@ impl NativeOutput {
                 for st in b.stages.as_deref().unwrap_or(&[]).chunks_exact(6) {
                     if st[0] as u8 == crate::fx::PROCESSOR {
                         p.add_bus_processor(mix.processors.get(st[1] as usize).map(String::as_str).unwrap_or(""));
+                    } else if st[0] as u8 == crate::fx::HOSTED {
+                        let want = keys.get(st[1] as usize);
+                        if let Some(at) = want.and_then(|w| pool.iter().position(|i| i.key() == w)) {
+                            let insert = pool.swap_remove(at);
+                            placed.push(insert.key().to_string());
+                            p.add_bus_insert(insert);
+                        }
                     } else {
                         p.add_bus_stage(st[0] as u8, st[1], st[2], st[3], st[4], st[5]);
                     }
@@ -345,8 +392,12 @@ impl NativeOutput {
             p.set_bus_places(&bus_places);
             p.set_fold_51(!records.is_empty() || !bus_places.is_empty());
             s.end = mix.end.max(0.0) as u64;
+            pool
         });
-        Ok(())
+        *self.installed.lock().unwrap_or_else(|p| p.into_inner()) = placed;
+        // instances the new mix no longer holds are closed here, with the mixer unlocked
+        drop(unused);
+        Ok(errors)
     }
 
     pub fn seek(&self, position: u64) {

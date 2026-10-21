@@ -1182,6 +1182,48 @@ impl DeClick {
     }
 }
 
+/// S17: a hosted plug-in on a bus's chain (a track's insert), by its place in the mix's plug-in list. Only a build with
+/// the `native` feature hosts one (crate::plugin); elsewhere a stage of this kind is refused and the bus plays without it.
+pub const HOSTED: u8 = 21;
+
+/// S17: a stage run by something outside the core, a hosted plug-in, made off the audio thread and handed to a player.
+/// Block-based; `key` names what it was made from, so a player rebuilt by an edit can take the same instance back.
+pub trait Insert: Send {
+    fn process_block(&mut self, left: &mut [f32], right: &mut [f32]);
+    fn latency(&self) -> usize;
+    fn reset(&mut self);
+    fn key(&self) -> &str;
+}
+
+/// A stage holding an insert. A copy holds none and passes the signal through (the master chain's copies for the
+/// surround pairs), since a hosted instance cannot be duplicated; `take` gives the instance back.
+#[derive(Default)]
+pub struct Hosted(pub Option<Box<dyn Insert>>);
+
+impl Hosted {
+    pub fn take(&mut self) -> Option<Box<dyn Insert>> {
+        self.0.take()
+    }
+}
+
+impl Clone for Hosted {
+    fn clone(&self) -> Self {
+        Hosted(None)
+    }
+}
+
+impl PartialEq for Hosted {
+    fn eq(&self, _: &Self) -> bool {
+        false
+    }
+}
+
+impl std::fmt::Debug for Hosted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Hosted({})", self.0.as_ref().map_or("none", |i| i.key()))
+    }
+}
+
 /// One of formwav's studio processors (native/formwav-studio), made from a spec "id;param=value;...".
 pub const PROCESSOR: u8 = 20;
 
@@ -1328,6 +1370,7 @@ pub enum Stage {
     DeClick(Box<DeClick>),
     DeReverb(Box<DeReverb>),
     Processor(Box<Processor>),
+    Hosted(Hosted),
 }
 
 impl Stage {
@@ -1339,6 +1382,12 @@ impl Stage {
     pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32]) {
         if let Stage::Processor(x) = self {
             x.process_block(left, right);
+            return;
+        }
+        if let Stage::Hosted(h) = self {
+            if let Some(i) = h.0.as_mut() {
+                i.process_block(left, right);
+            }
             return;
         }
         for (l, r) in left.iter_mut().zip(right.iter_mut()) {
@@ -1354,6 +1403,7 @@ impl Stage {
             Stage::DeClick(x) => x.latency(),
             Stage::DeReverb(x) => x.latency(),
             Stage::Processor(x) => x.latency(),
+            Stage::Hosted(h) => h.0.as_ref().map_or(0, |i| i.latency()),
             _ => 0,
         }
     }
@@ -1414,6 +1464,15 @@ impl Stage {
             Stage::DeClick(x) => x.process(l, r),
             Stage::DeReverb(x) => x.process(l, r),
             Stage::Processor(x) => x.process(l, r),
+            // a block of one frame: a hosted plug-in plays in blocks, so chains holding one run process_block
+            Stage::Hosted(h) => match h.0.as_mut() {
+                Some(i) => {
+                    let (mut a, mut b) = ([l], [r]);
+                    i.process_block(&mut a, &mut b);
+                    (a[0], b[0])
+                }
+                None => (l, r),
+            },
         }
     }
 
@@ -1435,6 +1494,11 @@ impl Stage {
             Stage::DeClick(x) => x.reset(),
             Stage::DeReverb(x) => x.reset(),
             Stage::Processor(x) => x.reset(),
+            Stage::Hosted(h) => {
+                if let Some(i) = h.0.as_mut() {
+                    i.reset();
+                }
+            }
         }
     }
 }
