@@ -1,0 +1,15 @@
+{
+"Lyric": "Text",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "Skriv en stavelse eller klistra in en hel rad: härifrån hamnar en stavelse på varje not. Tabb och Skift Tabb flyttar mellan noter, Enter behåller, Escape avbryter",
+"Edit lyric": "Redigera text",
+"Move lyrics forward": "Flytta texten framåt",
+"Move lyrics backward": "Flytta texten bakåt",
+"Notes sing “da”": "Noter sjunger ”da”",
+"Notes sing “la”": "Noter sjunger ”la”",
+"What a note without a lyric sings": "Vad en not utan text sjunger",
+"Edited lyrics on {a}": "Redigerade text på {a}",
+"Edited lyrics": "Redigerade text",
+"Moved lyrics on {a}": "Flyttade text på {a}",
+"Moved lyrics": "Flyttade text",
+"Changed the sung syllable": "Ändrade den sjungna stavelsen"
+}

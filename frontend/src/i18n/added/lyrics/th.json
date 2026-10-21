@@ -1,0 +1,15 @@
+{
+"Lyric": "เนื้อร้อง",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "พิมพ์พยางค์ หรือวางทั้งบรรทัด: ตั้งแต่โน้ตนี้ไป แต่ละโน้ตจะได้หนึ่งพยางค์ Tab และ Shift Tab เลื่อนไปมาระหว่างโน้ต Enter เพื่อยืนยัน Escape เพื่อยกเลิก",
+"Edit lyric": "แก้ไขเนื้อร้อง",
+"Move lyrics forward": "เลื่อนเนื้อร้องไปข้างหน้า",
+"Move lyrics backward": "เลื่อนเนื้อร้องไปข้างหลัง",
+"Notes sing “da”": "โน้ตร้องว่า “da”",
+"Notes sing “la”": "โน้ตร้องว่า “la”",
+"What a note without a lyric sings": "สิ่งที่โน้ตที่ไม่มีเนื้อร้องร้อง",
+"Edited lyrics on {a}": "แก้ไขเนื้อร้องบน {a}",
+"Edited lyrics": "แก้ไขเนื้อร้อง",
+"Moved lyrics on {a}": "เลื่อนเนื้อร้องบน {a}",
+"Moved lyrics": "เลื่อนเนื้อร้อง",
+"Changed the sung syllable": "เปลี่ยนพยางค์ที่ร้อง"
+}

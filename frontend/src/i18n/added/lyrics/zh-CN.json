@@ -1,0 +1,15 @@
+{
+"Lyric": "歌词",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "输入一个音节，或粘贴一整行：从这里起每个音符得到一个音节。Tab 和 Shift Tab 在音符间移动，Enter 确认，Escape 取消",
+"Edit lyric": "编辑歌词",
+"Move lyrics forward": "歌词向后移",
+"Move lyrics backward": "歌词向前移",
+"Notes sing “da”": "音符唱“da”",
+"Notes sing “la”": "音符唱“la”",
+"What a note without a lyric sings": "没有歌词的音符唱什么",
+"Edited lyrics on {a}": "已编辑 {a} 的歌词",
+"Edited lyrics": "已编辑歌词",
+"Moved lyrics on {a}": "已移动 {a} 的歌词",
+"Moved lyrics": "已移动歌词",
+"Changed the sung syllable": "已更改演唱的音节"
+}

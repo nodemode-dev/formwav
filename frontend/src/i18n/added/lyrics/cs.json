@@ -1,0 +1,15 @@
+{
+"Lyric": "Text",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "Napište slabiku nebo vložte celý řádek: od této noty dál připadne na každou notu jedna slabika. Tab a Shift Tab přecházejí mezi notami, Enter potvrdí, Escape zruší",
+"Edit lyric": "Upravit text",
+"Move lyrics forward": "Posunout text dopředu",
+"Move lyrics backward": "Posunout text dozadu",
+"Notes sing “da”": "Noty zpívají „da“",
+"Notes sing “la”": "Noty zpívají „la“",
+"What a note without a lyric sings": "Co zpívá nota bez textu",
+"Edited lyrics on {a}": "Upraven text na {a}",
+"Edited lyrics": "Upraven text",
+"Moved lyrics on {a}": "Posunut text na {a}",
+"Moved lyrics": "Posunut text",
+"Changed the sung syllable": "Změněna zpívaná slabika"
+}

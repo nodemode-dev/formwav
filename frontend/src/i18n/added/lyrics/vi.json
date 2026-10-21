@@ -1,0 +1,15 @@
+{
+"Lyric": "Lời",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "Gõ một âm tiết, hoặc dán cả một dòng: từ nốt này trở đi, mỗi nốt nhận một âm tiết. Tab và Shift Tab chuyển giữa các nốt, Enter để giữ, Escape để bỏ",
+"Edit lyric": "Sửa lời",
+"Move lyrics forward": "Dời lời về sau",
+"Move lyrics backward": "Dời lời về trước",
+"Notes sing “da”": "Nốt hát “da”",
+"Notes sing “la”": "Nốt hát “la”",
+"What a note without a lyric sings": "Âm mà nốt không có lời sẽ hát",
+"Edited lyrics on {a}": "Đã sửa lời trên {a}",
+"Edited lyrics": "Đã sửa lời",
+"Moved lyrics on {a}": "Đã dời lời trên {a}",
+"Moved lyrics": "Đã dời lời",
+"Changed the sung syllable": "Đã đổi âm tiết được hát"
+}

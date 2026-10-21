@@ -1,0 +1,15 @@
+{
+"Lyric": "Şarkı sözü",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "Bir hece yazın ya da bütün bir satırı yapıştırın: buradan itibaren her notaya bir hece düşer. Tab ve Shift Tab notalar arasında gezinir, Enter korur, Escape vazgeçer",
+"Edit lyric": "Sözü düzenle",
+"Move lyrics forward": "Sözleri ileri kaydır",
+"Move lyrics backward": "Sözleri geri kaydır",
+"Notes sing “da”": "Notalar “da” söyler",
+"Notes sing “la”": "Notalar “la” söyler",
+"What a note without a lyric sings": "Sözü olmayan bir notanın söylediği",
+"Edited lyrics on {a}": "{a} üzerinde sözler düzenlendi",
+"Edited lyrics": "Sözler düzenlendi",
+"Moved lyrics on {a}": "{a} üzerinde sözler kaydırıldı",
+"Moved lyrics": "Sözler kaydırıldı",
+"Changed the sung syllable": "Söylenen hece değiştirildi"
+}

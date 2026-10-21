@@ -1,0 +1,15 @@
+{
+"Lyric": "Testo",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "Digita una sillaba o incolla un'intera riga: da qui in poi una sillaba va su ogni nota. Tab e Maiusc Tab passano da una nota all'altra, Invio conferma, Esc annulla",
+"Edit lyric": "Modifica testo",
+"Move lyrics forward": "Sposta il testo in avanti",
+"Move lyrics backward": "Sposta il testo indietro",
+"Notes sing “da”": "Le note cantano «da»",
+"Notes sing “la”": "Le note cantano «la»",
+"What a note without a lyric sings": "Cosa canta una nota senza testo",
+"Edited lyrics on {a}": "Testo modificato su {a}",
+"Edited lyrics": "Testo modificato",
+"Moved lyrics on {a}": "Testo spostato su {a}",
+"Moved lyrics": "Testo spostato",
+"Changed the sung syllable": "Sillaba cantata cambiata"
+}

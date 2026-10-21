@@ -1,0 +1,15 @@
+{
+"Lyric": "Songtekst",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "Typ een lettergreep of plak een hele regel: vanaf hier komt op elke noot één lettergreep. Tab en Shift Tab gaan van noot naar noot, Enter bewaart, Escape annuleert",
+"Edit lyric": "Songtekst bewerken",
+"Move lyrics forward": "Songtekst naar voren schuiven",
+"Move lyrics backward": "Songtekst naar achteren schuiven",
+"Notes sing “da”": "Noten zingen ‘da’",
+"Notes sing “la”": "Noten zingen ‘la’",
+"What a note without a lyric sings": "Wat een noot zonder tekst zingt",
+"Edited lyrics on {a}": "Songtekst bewerkt op {a}",
+"Edited lyrics": "Songtekst bewerkt",
+"Moved lyrics on {a}": "Songtekst verschoven op {a}",
+"Moved lyrics": "Songtekst verschoven",
+"Changed the sung syllable": "Gezongen lettergreep gewijzigd"
+}

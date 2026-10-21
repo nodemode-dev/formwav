@@ -1,0 +1,15 @@
+{
+"Lyric": "가사",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "음절을 입력하거나 한 줄 전체를 붙여 넣으세요. 여기서부터 각 노트에 한 음절씩 들어갑니다. Tab과 Shift Tab으로 노트 사이를 이동하고, Enter로 확정, Escape로 취소합니다",
+"Edit lyric": "가사 편집",
+"Move lyrics forward": "가사를 뒤로 밀기",
+"Move lyrics backward": "가사를 앞으로 당기기",
+"Notes sing “da”": "노트가 “da”로 노래함",
+"Notes sing “la”": "노트가 “la”로 노래함",
+"What a note without a lyric sings": "가사가 없는 노트가 부르는 소리",
+"Edited lyrics on {a}": "{a}의 가사를 편집함",
+"Edited lyrics": "가사를 편집함",
+"Moved lyrics on {a}": "{a}의 가사를 이동함",
+"Moved lyrics": "가사를 이동함",
+"Changed the sung syllable": "부르는 음절을 바꿈"
+}

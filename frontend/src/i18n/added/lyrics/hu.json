@@ -1,0 +1,15 @@
+{
+"Lyric": "Dalszöveg",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "Írjon be egy szótagot, vagy illesszen be egy teljes sort: innentől minden hangra egy szótag kerül. A Tab és a Shift Tab a hangok között lép, az Enter megtartja, az Escape elveti",
+"Edit lyric": "Dalszöveg szerkesztése",
+"Move lyrics forward": "Dalszöveg előre tolása",
+"Move lyrics backward": "Dalszöveg hátra tolása",
+"Notes sing “da”": "A hangok „da”-t énekelnek",
+"Notes sing “la”": "A hangok „la”-t énekelnek",
+"What a note without a lyric sings": "Mit énekel a szöveg nélküli hang",
+"Edited lyrics on {a}": "Dalszöveg szerkesztve: {a}",
+"Edited lyrics": "Dalszöveg szerkesztve",
+"Moved lyrics on {a}": "Dalszöveg eltolva: {a}",
+"Moved lyrics": "Dalszöveg eltolva",
+"Changed the sung syllable": "Énekelt szótag módosítva"
+}

@@ -1,0 +1,15 @@
+{
+"Lyric": "Sanat",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "Kirjoita tavu tai liitä koko rivi: tästä eteenpäin jokaiselle nuotille tulee yksi tavu. Sarkain ja Vaihto Sarkain siirtävät nuotista toiseen, Enter säilyttää, Esc peruu",
+"Edit lyric": "Muokkaa sanoja",
+"Move lyrics forward": "Siirrä sanoja eteenpäin",
+"Move lyrics backward": "Siirrä sanoja taaksepäin",
+"Notes sing “da”": "Nuotit laulavat ”da”",
+"Notes sing “la”": "Nuotit laulavat ”la”",
+"What a note without a lyric sings": "Mitä sanaton nuotti laulaa",
+"Edited lyrics on {a}": "Sanoja muokattu kohteessa {a}",
+"Edited lyrics": "Sanoja muokattu",
+"Moved lyrics on {a}": "Sanoja siirretty kohteessa {a}",
+"Moved lyrics": "Sanoja siirretty",
+"Changed the sung syllable": "Laulettu tavu vaihdettu"
+}

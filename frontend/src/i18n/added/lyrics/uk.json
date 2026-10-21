@@ -1,0 +1,15 @@
+{
+"Lyric": "Текст",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "Введіть склад або вставте цілий рядок: далі на кожну ноту ляже по одному складу. Tab і Shift Tab переходять між нотами, Enter зберігає, Escape скасовує",
+"Edit lyric": "Змінити текст",
+"Move lyrics forward": "Зсунути текст уперед",
+"Move lyrics backward": "Зсунути текст назад",
+"Notes sing “da”": "Ноти співають «da»",
+"Notes sing “la”": "Ноти співають «la»",
+"What a note without a lyric sings": "Що співає нота без тексту",
+"Edited lyrics on {a}": "Змінено текст на {a}",
+"Edited lyrics": "Змінено текст",
+"Moved lyrics on {a}": "Зсунуто текст на {a}",
+"Moved lyrics": "Зсунуто текст",
+"Changed the sung syllable": "Змінено співаний склад"
+}

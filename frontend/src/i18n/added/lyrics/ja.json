@@ -1,0 +1,15 @@
+{
+"Lyric": "歌詞",
+"Type a syllable, or paste a whole line: one syllable lands on each note from here on. Tab and Shift Tab move between notes, Enter keeps it, Escape leaves it": "音節を入力するか、1行まるごと貼り付けます。ここから先の各ノートに1音節ずつ入ります。Tab と Shift Tab でノート間を移動、Enter で確定、Escape で取り消し",
+"Edit lyric": "歌詞を編集",
+"Move lyrics forward": "歌詞を後ろへずらす",
+"Move lyrics backward": "歌詞を前へずらす",
+"Notes sing “da”": "ノートは「da」で歌う",
+"Notes sing “la”": "ノートは「la」で歌う",
+"What a note without a lyric sings": "歌詞のないノートが歌う音",
+"Edited lyrics on {a}": "{a} の歌詞を編集しました",
+"Edited lyrics": "歌詞を編集しました",
+"Moved lyrics on {a}": "{a} の歌詞をずらしました",
+"Moved lyrics": "歌詞をずらしました",
+"Changed the sung syllable": "歌う音節を変更しました"
+}
