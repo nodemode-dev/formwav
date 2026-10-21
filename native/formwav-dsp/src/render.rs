@@ -110,6 +110,24 @@ fn lfe_pair(rate: f32) -> [crate::fx::Biquad; 2] {
     [low(0.5412), low(1.3066)]
 }
 
+/// The samples a chain delays its signal by: its stages' latencies summed (RX-16).
+pub fn chain_latency(chain: &[crate::fx::Stage]) -> usize {
+    chain.iter().map(|s| s.latency()).sum()
+}
+
+/// S17: how far bus `k` reads its clips ahead: its own chain's latency, each bus's it plays into on the way to the
+/// master, and the master chain's (`lm`), so the bus's sound reaches the master's output on time. Buses play only into
+/// buses added after them, so the walk ends.
+fn bus_ahead(bus_fx: &[Vec<crate::fx::Stage>], outs: &[Option<usize>], k: usize, lm: usize) -> usize {
+    let mut ahead = lm;
+    let mut at = Some(k);
+    while let Some(j) = at {
+        ahead += bus_fx.get(j).map_or(0, |c| chain_latency(c));
+        at = outs.get(j).copied().flatten().filter(|&next| next > j);
+    }
+    ahead
+}
+
 #[derive(Debug, Default)]
 pub struct Player {
     sources: HashMap<u32, AudioBuffer>,
@@ -159,9 +177,10 @@ pub struct Player {
     bus_fx_auto: Vec<Vec<(usize, [u32; 3])>>,
     /// The law for a mono source's pan: 0 the balance every session had, 1 to 3 the -3, -4.5 and -6 dB laws.
     pan_law: u8,
-    /// RX-16: whether each bus's chain has heard the samples its latency reads ahead (cleared on a seek, a loop's wrap
-    /// and a new stage), and the scratch it is primed through, kept between calls.
-    bus_primed: Vec<bool>,
+    /// RX-16, S17: whether every chain has heard the samples its read-ahead skips (cleared on a seek, a loop's wrap and
+    /// a changed chain): the next block first plays the whole mix over the span before it into the pre-roll scratch,
+    /// kept between calls, and clip chains that delay prime themselves from where they start.
+    primed: bool,
     prime_scratch: [Vec<f32>; 2],
     /// PT-38, AA-11: the 5.1 render's groups, clips sharing a placement (a track) mixed together and then spread by
     /// their speaker gains in SMPTE order (L R C LFE Ls Rs), each with its LFE send's fourth-order 120 Hz low-pass.
@@ -269,6 +288,7 @@ impl Player {
         self.clip_fx_spec.clear();
         self.clip_fx_auto.clear();
         self.order_dirty = true;
+        self.primed = false;
     }
 
     pub fn add_clip(&mut self, clip: PlayClip) {
@@ -353,6 +373,7 @@ impl Player {
 
     pub fn clear_master_fx(&mut self) {
         self.master_fx.clear();
+        self.primed = false;
     }
 
     /// Appends a filter stage to the master chain; false when the filter is refused (an unknown kind).
@@ -383,7 +404,7 @@ impl Player {
             specs.push((kind, a, b, c));
         }
         // RX-16: a chain that changed hears its read-ahead again before it next plays
-        self.bus_primed.clear();
+        self.primed = false;
         true
     }
 
@@ -407,7 +428,7 @@ impl Player {
         if let Some(specs) = self.bus_fx_spec.last_mut() {
             specs.push((crate::fx::PROCESSOR, 0.0, 0.0, 0.0));
         }
-        self.bus_primed.clear();
+        self.primed = false;
         true
     }
 
@@ -460,7 +481,7 @@ impl Player {
     }
 
     fn reset_fx(&mut self) {
-        self.bus_primed.clear();
+        self.primed = false;
         for f in self.clip_fx.iter_mut().chain(self.meter_fx.iter_mut()).flatten() {
             f.reset();
         }
@@ -548,9 +569,13 @@ impl Player {
                 }
             }
             let len = span as usize;
+            // S17: delay compensation everywhere: the master chain's latency reads the whole mix that far ahead, and
+            // each bus reads its clips ahead by its own chain's and every chain's after it on the way to the master
+            let lm = chain_latency(&self.master_fx);
+            let prime = self.prime(from, lm);
             let mut fx = std::mem::take(&mut self.clip_fx);
-            self.mix(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from, |c| c.bus == 0);
-            self.mix_buses(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from, None);
+            self.mix(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from + lm as u64, |c| c.bus == 0, prime);
+            self.mix_buses(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from as i64, None, prime);
             self.clip_fx = fx;
             if let Some(live) = self.live.as_mut() {
                 // AU-37: the instrument played live, mono into both channels at unity as a note clip plays at pan 0,
@@ -693,14 +718,17 @@ impl Player {
                 }
             }
             let len = span as usize;
-            let to = from + span;
+            // S17: read ahead by the master chain's latency, as the stereo render does
+            let lm = chain_latency(&self.master_fx);
+            let prime = self.prime(from, lm);
+            let (at, to) = (from + lm as u64, from + lm as u64 + span);
             let mut fx = std::mem::take(&mut self.clip_fx);
             sl[..len].fill(0.0);
             sr[..len].fill(0.0);
             for &index in &self.surround_unplaced {
-                self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], from, to, index);
+                self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], at, to, index, prime);
             }
-            self.mix_buses(&mut fx, &mut sl[..len], &mut sr[..len], from, Some((&mut out[..nch], done)));
+            self.mix_buses(&mut fx, &mut sl[..len], &mut sr[..len], from as i64, Some((&mut out[..nch], done)), prime);
             if foa {
                 // PT-42: unplaced sound encoded straight ahead (W and X at its level, Y and Z silent)
                 for j in 0..len {
@@ -719,7 +747,7 @@ impl Player {
                 sl[..len].fill(0.0);
                 sr[..len].fill(0.0);
                 for &index in clips.iter() {
-                    self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], from, to, index);
+                    self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], at, to, index, prime);
                 }
                 for j in 0..len {
                     let m = 0.5 * (sl[j] + sr[j]);
@@ -952,6 +980,7 @@ impl Player {
         self.bus_outs.clear();
         self.bus_places.clear();
         self.bus_lfe.clear();
+        self.primed = false;
     }
 
     /// S10: bus `id` plays into bus `out` (0, or an id not added, for the master). Buses run in the order they were
@@ -1001,10 +1030,55 @@ impl Player {
         }
     }
 
-    fn mix_buses(&mut self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64, mut placed: Option<(&mut [&mut [f32]], usize)>) {
+    /// S17: before the first block after a seek, a loop's wrap or a changed chain, the whole mix over the span before
+    /// `from` that its longest read-ahead covers, played into the pre-roll scratch and dropped, so every chain that
+    /// delays has heard what it reads past (the span starting before 0 hears silence there). Returns whether the clip
+    /// chains that delay should still prime themselves this block (nothing ran before it).
+    fn prime(&mut self, from: u64, lm: usize) -> bool {
+        if self.primed {
+            return false;
+        }
+        self.primed = true;
+        let p = (0..self.buses.len()).map(|k| bus_ahead(&self.bus_fx, &self.bus_outs, k, lm)).max().unwrap_or(0).max(lm);
+        if p == 0 {
+            return true;
+        }
+        let mut buf = std::mem::take(&mut self.prime_scratch);
+        for ch in buf.iter_mut() {
+            ch.clear();
+            ch.resize(p, 0.0);
+        }
+        let start = from as i64 - p as i64;
+        let [l, r] = &mut buf;
+        let mut fx = std::mem::take(&mut self.clip_fx);
+        self.mix_signed(&mut fx, &mut l[..p], &mut r[..p], start + lm as i64, |c| c.bus == 0, true);
+        self.mix_buses(&mut fx, &mut l[..p], &mut r[..p], start, None, true);
+        self.clip_fx = fx;
+        for s in self.master_fx.iter_mut() {
+            s.process_block(&mut l[..p], &mut r[..p]);
+        }
+        self.prime_scratch = buf;
+        false
+    }
+
+    /// `mix` from a session time that may lie before 0 (a pre-roll at the start): silence until 0, then the clips.
+    fn mix_signed(&self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: i64, select: impl Fn(&PlayClip) -> bool, prime: bool) {
+        if from >= 0 {
+            self.mix(fx, left, right, from as u64, select, prime);
+            return;
+        }
+        let skip = from.unsigned_abs() as usize;
+        let n = left.len().min(right.len());
+        if skip < n {
+            self.mix(fx, &mut left[skip..n], &mut right[skip..n], 0, select, prime);
+        }
+    }
+
+    fn mix_buses(&mut self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: i64, mut placed: Option<(&mut [&mut [f32]], usize)>, prime: bool) {
         if self.buses.is_empty() {
             return;
         }
+        let lm = chain_latency(&self.master_fx);
         let lfe_ch = crate::layout::layout(self.surround_format).speakers.iter().position(|s| s.lfe);
         let mut bus_lfe = std::mem::take(&mut self.bus_lfe);
         let n = left.len().min(right.len());
@@ -1019,9 +1093,6 @@ impl Player {
             bus_peaks.resize(self.buses.len(), (0.0, 0.0));
         }
         let mut bus_fx = std::mem::take(&mut self.bus_fx);
-        let mut primed = std::mem::take(&mut self.bus_primed);
-        primed.resize(self.buses.len(), false);
-        let mut prime = std::mem::take(&mut self.prime_scratch);
         let mut bus_in = std::mem::take(&mut self.bus_in);
         let routed = self.bus_outs.iter().any(|o| o.is_some());
         if routed {
@@ -1035,24 +1106,11 @@ impl Player {
             scratch_left[..n].fill(0.0);
             scratch_right[..n].fill(0.0);
             let id = bus.id;
-            // RX-16: a chain that delays (the live dialogue isolate) reads its bus's clips that far ahead, so what it
-            // plays lands on time; after a seek, a loop's wrap or a new stage it first hears the samples it reads past
-            let ahead = bus_fx.get(k).map(|c| c.iter().map(|s| s.latency()).sum::<usize>()).unwrap_or(0);
-            if ahead > 0 && !primed[k] {
-                for ch in prime.iter_mut() {
-                    ch.clear();
-                    ch.resize(ahead, 0.0);
-                }
-                let [prime_left, prime_right] = &mut prime;
-                self.mix(fx, &mut prime_left[..ahead], &mut prime_right[..ahead], from, |c| c.bus == id);
-                if let Some(chain) = bus_fx.get_mut(k) {
-                    self.run_bus_chain(k, chain, &mut prime_left[..ahead], &mut prime_right[..ahead], from);
-                }
-            }
-            if ahead > 0 {
-                primed[k] = true;
-            }
-            self.mix(fx, &mut scratch_left[..n], &mut scratch_right[..n], from + ahead as u64, |c| c.bus == id);
+            // RX-16, S17: a chain that delays (the live dialogue isolate, a hosted plug-in) reads its bus's clips that
+            // far ahead, and every chain after it on the way to the master (the buses it plays into, the master's own)
+            // that much further, so what it plays lands on time; `prime` has played the span it reads past
+            let ahead = bus_ahead(&bus_fx, &self.bus_outs, k, lm) as i64;
+            self.mix_signed(fx, &mut scratch_left[..n], &mut scratch_right[..n], from + ahead, |c| c.bus == id, prime);
             if routed {
                 let [in_left, in_right] = &bus_in[k];
                 for i in 0..n {
@@ -1061,7 +1119,7 @@ impl Player {
                 }
             }
             if let Some(chain) = bus_fx.get_mut(k) {
-                self.run_bus_chain(k, chain, &mut scratch_left[..n], &mut scratch_right[..n], from + ahead as u64);
+                self.run_bus_chain(k, chain, &mut scratch_left[..n], &mut scratch_right[..n], (from + ahead).max(0) as u64);
             }
             let (pan_left, pan_right) = pan_gains(bus.pan);
             let gain_left = bus.gain * pan_left;
@@ -1099,26 +1157,28 @@ impl Player {
         }
         self.bus_in = bus_in;
         self.bus_fx = bus_fx;
-        self.bus_primed = primed;
-        self.prime_scratch = prime;
         self.bus_peaks = bus_peaks;
         self.bus_lfe = bus_lfe;
         self.scratch_left = scratch_left;
         self.scratch_right = scratch_right;
     }
 
-    fn mix(&self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64, select: impl Fn(&PlayClip) -> bool) {
+    fn mix(&self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64, select: impl Fn(&PlayClip) -> bool, prime: bool) {
         let n = left.len().min(right.len());
         let to = from + n as u64;
         for (index, clip) in self.clips.iter().enumerate() {
             if !select(clip) {
                 continue;
             }
-            self.mix_one(fx, left, right, from, to, index);
+            self.mix_one(fx, left, right, from, to, index, prime);
         }
     }
 
-    fn mix_one(&self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64, to: u64, index: usize) {
+    /// One clip into the block from `from` to `to`. S17: a clip chain that delays (a de-click, a de-reverb) reads the
+    /// clip that far ahead, silence past its end, and where it starts playing (its first sample, or with `prime` the
+    /// first block after a seek) first hears the samples it reads past, so what it plays lands on time.
+    #[allow(clippy::too_many_arguments)]
+    fn mix_one(&self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64, to: u64, index: usize, prime: bool) {
         let clip = &self.clips[index];
         if clip.start >= to || clip.start + clip.length <= from {
             return;
@@ -1143,10 +1203,35 @@ impl Player {
             let autos = self.clip_fx_auto.get(index).map_or(&[][..], |v| &v[..]);
             let specs = self.clip_fx_spec.get(index).map_or(&[][..], |v| &v[..]);
             let rate = if self.rate > 0.0 { self.rate } else { 48000.0 };
+            let sample = |s: usize| match window {
+                None => (l[s], r[s]),
+                Some(w) if s >= w.lo && s < w.hi => (l[s % w.len], r[s % w.len]),
+                Some(_) => (0.0, 0.0),
+            };
+            // the clip's sample `k` frames in, silence past its length or its source
+            let at = |k: u64| {
+                let s = (clip.source_in + k) as usize;
+                if k >= clip.length || s >= total {
+                    (0.0, 0.0)
+                } else {
+                    sample(s)
+                }
+            };
+            let lc = chain.as_deref().map_or(0, |c| chain_latency(c)) as u64;
+            if lc > 0 && (prime || a == clip.start) {
+                if let Some(stages) = chain.as_deref_mut() {
+                    for k in (a - clip.start)..(a - clip.start + lc) {
+                        let (mut xl, mut xr) = at(k);
+                        for f in stages.iter_mut() {
+                            (xl, xr) = f.process(xl, xr);
+                        }
+                    }
+                }
+            }
             for t in a..b {
                 let k = t - clip.start;
                 let s = (clip.source_in + k) as usize;
-                if s >= total {
+                if lc == 0 && s >= total {
                     break;
                 }
                 let mut fade = 1.0f32;
@@ -1169,11 +1254,7 @@ impl Player {
                         }
                     }
                 }
-                let (mut xl, mut xr) = match window {
-                    None => (l[s], r[s]),
-                    Some(w) if s >= w.lo && s < w.hi => (l[s % w.len], r[s % w.len]),
-                    Some(_) => (0.0, 0.0),
-                };
+                let (mut xl, mut xr) = if lc == 0 { sample(s) } else { at(k + lc) };
                 if let Some(stages) = chain.as_deref_mut() {
                     for f in stages.iter_mut() {
                         (xl, xr) = f.process(xl, xr);
@@ -1247,7 +1328,7 @@ impl Player {
                 meter_left[..n].fill(0.0);
                 meter_right[..n].fill(0.0);
                 for &k in run {
-                    self.mix_one(&mut meter_fx, &mut meter_left[..n], &mut meter_right[..n], from, to, k);
+                    self.mix_one(&mut meter_fx, &mut meter_left[..n], &mut meter_right[..n], from, to, k, false);
                 }
                 let peak = &mut self.track_peaks[track as usize];
                 for s in 0..n {

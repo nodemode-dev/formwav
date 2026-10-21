@@ -90,11 +90,11 @@ fn every_processor_on_the_master_and_on_a_bus_plays_what_it_makes_of_the_same_in
     let mut checked = 0;
     for info in catalog() {
         let (spec, values) = spec_and_values(info.id);
-        let (want_l, want_r) = direct(info.id, &values, &left, &right, 0);
-        let (master_l, master_r) = through_player(&spec, false, &left, &right);
-        assert!(master_l == want_l && master_r == want_r, "{}: the master chain differs from the processor on its own", info.id);
+        // S17: the master chain reads the mix ahead by its latency, as a bus chain reads its clips
         let latency = Processor::design(&spec, RATE).unwrap().latency();
         let (want_l, want_r) = direct(info.id, &values, &left, &right, latency);
+        let (master_l, master_r) = through_player(&spec, false, &left, &right);
+        assert!(master_l[..FRAMES - latency] == want_l[latency..] && master_r[..FRAMES - latency] == want_r[latency..], "{}: the master chain differs from the processor on its own, read {latency} ahead", info.id);
         let (bus_l, bus_r) = through_player(&spec, true, &left, &right);
         assert!(bus_l[..FRAMES - latency] == want_l[latency..] && bus_r[..FRAMES - latency] == want_r[latency..], "{}: the bus chain differs from the processor on its own, read {latency} ahead", info.id);
         checked += 1;

@@ -150,7 +150,6 @@ def test_a_stage_that_delays_its_signal_plays_on_time(speech, kind, place):
     ("place", "kind"),
     [("clip", "declick"), ("clip", "dereverb"), ("master", "declick"), ("master", "dereverb"), ("track on a bus", "declick"), ("track on a bus", "dereverb")],
 )
-@pytest.mark.xfail(strict=True, reason="the core reads a chain's input ahead only on a bus: a clip's chain, the master's and a track's routed to a user bus play late by the stage's latency")
 def test_a_stage_that_delays_its_signal_where_nothing_reads_ahead(speech, kind, place):
     _, media = speech
     assert _lag(_export(media, [WORKING[kind]], place), _export(media, [], place)) == 0
