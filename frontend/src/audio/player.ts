@@ -360,9 +360,12 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       // C7: a track routed to a user bus has one too, playing into that bus. S17: the bus plays at the track's fader,
       // so the fader comes after the inserts; a volume lane still rides the clips, ahead of them.
       const user = bus;
-      busFaderDb = faderDb;
-      faderDb = 0;
-      meterGains[doc.tracks.indexOf(track)] = dbToGain(busFaderDb);
+      // a session mixed before v2.18.5 keeps its faders on the clips, ahead of the inserts, as it was mixed
+      if (!doc.fadersBeforeInserts) {
+        busFaderDb = faderDb;
+        faderDb = 0;
+        meterGains[doc.tracks.indexOf(track)] = dbToGain(busFaderDb);
+      }
       bus = buses.length + 1;
       buses.push({ id: bus, gain: dbToGain(busFaderDb), pan: 0, stages: flatStages(track.fx, processors, plugins), ...(off ? {} : { fxAuto: flatStagesAuto(track.fx) }), ...(user ? { out: user } : {}) });
       if (!user && doc.surroundFold && track.surround) busPlaces.push(bus, ...placeRecord(track.surround));

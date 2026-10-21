@@ -298,7 +298,8 @@ def plan(doc: object, own_buses: list | None = None, routes: list | None = None)
             # playing into that bus. S17: the bus plays at the track's fader (and its VCA's), so the fader comes after
             # the inserts; a volume lane still rides the clips, ahead of them.
             user_bus = bus_index
-            fader_db, track_db = track_db, 0.0
+            if not doc.get("fadersBeforeInserts"):  # a session mixed before v2.18.5 keeps its faders on the clips
+                fader_db, track_db = track_db, 0.0
             buses[f"__track:{track.get('id')}"] = (len(buses) + 1, math.pow(10, fader_db / 20), 0.0)
             bus_index = len(buses)
             if user_bus:

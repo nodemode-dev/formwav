@@ -688,6 +688,9 @@ export interface LauncherState {
 
 export interface SessionDoc {
   sampleRate: number;
+  /** A session saved before v2.18.5 (marked by the engine as it opens it, services/projects.py): each track's fader
+   *  plays on its clips ahead of its effects, as it was mixed, instead of after them (S17), so it sounds as it did. */
+  fadersBeforeInserts?: boolean;
   /** PT-38, AA-11: hear the 5.1 placement as an ITU stereo fold-down, in playback and in the stereo mix export alike;
    *  off, a track's 5.1 position shapes only the 5.1 export. */
   surroundFold?: boolean;
