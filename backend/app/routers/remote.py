@@ -58,19 +58,49 @@ class PairInput(BaseModel):
 
 
 class Marked:
-    """The remote listener's app: the same app, with requests marked as having come from the network."""
+    """The remote listener's app: the same app, with requests marked as having come from the network (and, for the
+    guest listener, from a guest outside it)."""
 
-    def __init__(self, app):
+    def __init__(self, app, guest: bool = False):
         self.app = app
+        self.guest = guest
 
     async def __call__(self, scope, receive, send):
         if scope["type"] in ("http", "websocket"):
-            scope = {**scope, "formwav.remote": True}
+            scope = {**scope, "formwav.remote": True, **({"formwav.guest": True} if self.guest else {})}
         await self.app(scope, receive, send)
 
 
 def port() -> int:
     return int(os.environ.get("FORMWAV_REMOTE_PORT", "") or 8978)
+
+
+# PLAN_v12 R12: guests from anywhere. A third listener, on 127.0.0.1 only, that a tunnel (services/tunnel.py) points at:
+# it admits pairing and the recording room and nothing else, so a guest who comes in from the internet records and
+# sends takes but never reaches the rest of the engine, paired or not.
+GUEST_PATHS = {("GET", "/pair"), ("POST", "/api/remote/pair"), ("GET", "/room"), ("GET", "/api/room"), ("POST", "/api/room/take")}
+_guest_server = {"server": None}
+
+
+def guest_port() -> int:
+    return int(os.environ.get("FORMWAV_GUEST_PORT", "") or 8979)
+
+
+def start_guests(app) -> None:
+    if _guest_server["server"] is not None:
+        return
+    import uvicorn
+
+    server = uvicorn.Server(uvicorn.Config(Marked(app, guest=True), host="127.0.0.1", port=guest_port(), log_level="warning", lifespan="off"))
+    _guest_server["server"] = server
+    threading.Thread(target=server.run, name="formwav-guests", daemon=True).start()
+
+
+def stop_guests() -> None:
+    server = _guest_server["server"]
+    if server is not None:
+        server.should_exit = True
+    _guest_server["server"] = None
 
 
 def _store():
@@ -114,6 +144,8 @@ def _token(headers: dict) -> str:
 def admitted(scope: dict, headers: dict) -> bool:
     """Whether a request through the network listener may proceed."""
     path, method = scope.get("path", ""), scope.get("method", "GET")
+    if scope.get("formwav.guest") and (method, path) not in GUEST_PATHS:
+        return False
     if (method == "GET" and path == "/pair") or (method == "POST" and path == "/api/remote/pair"):
         return True
     token = _token(headers)
@@ -191,8 +223,10 @@ def enable(body: EnableInput, request: Request) -> dict:
 def new_code(request: Request) -> dict:
     """A six-digit code that pairs one device within five minutes."""
     _desktop(request)
-    if not _read().get("enabled"):
-        raise HTTPException(409, "turn on access from the network first")
+    from ..services import tunnel
+
+    if not _read().get("enabled") and not tunnel.status()["url"]:
+        raise HTTPException(409, "turn on access from the network, or the link for guests from anywhere, first")
     code = f"{secrets.randbelow(1_000_000):06d}"
     with _lock:
         _codes[code] = time.time() + CODE_FOR
@@ -209,6 +243,27 @@ def remove(device_id: str, request: Request) -> dict:
     data["devices"] = kept
     _write(data)
     return _public()
+
+
+@router.get("/api/remote/tunnel")
+def tunnel_state(request: Request) -> dict:
+    _desktop(request)
+    from ..services import tunnel
+
+    return tunnel.status()
+
+
+@router.put("/api/remote/tunnel")
+def tunnel_switch(body: EnableInput, request: Request) -> dict:
+    """PLAN_v12 R12: the link for guests from anywhere, on or off."""
+    _desktop(request)
+    from ..services import tunnel
+
+    if body.enabled:
+        return tunnel.start(lambda: start_guests(request.app), guest_port())
+    tunnel.stop()
+    stop_guests()
+    return tunnel.status()
 
 
 @router.post("/api/remote/pair")
