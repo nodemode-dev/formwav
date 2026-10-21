@@ -261,8 +261,8 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
 /// starts, and its state saved after it stops into `state_out` (CLAP only; other formats refuse either).
 #[allow(clippy::too_many_arguments)]
 pub fn process_with(format: &str, plugin: &Path, input: &Audio, tail_s: f64, values: &[(u32, f64)], automation: &[(u64, u32, f64)], state_in: Option<&[u8]>, state_out: Option<&mut Vec<u8>>) -> Result<Audio, String> {
-    if format != "clap" && (!automation.is_empty() || state_in.is_some() || state_out.is_some()) {
-        return Err(format!("automation and saved state are hosted for CLAP plugins only, not {format}"));
+    if format != "clap" && format != "vst3" && (!automation.is_empty() || state_in.is_some() || state_out.is_some()) {
+        return Err(format!("automation and saved state are hosted for CLAP and VST3 plugins only, not {format}"));
     }
     if format == "ladspa" {
         return crate::ladspa::process(plugin, input, tail_s, values);
@@ -280,7 +280,7 @@ pub fn process_with(format: &str, plugin: &Path, input: &Audio, tail_s: f64, val
     unsafe {
         match format {
             "clap" => clap_process(plugin, rate, &left, &right, &mut out, values, automation, state_in, state_out)?,
-            "vst3" => vst3_process(plugin, rate, &left, &right, &mut out, values)?,
+            "vst3" => vst3_process(plugin, rate, &left, &right, &mut out, values, automation, state_in, state_out)?,
             "au" => crate::au::process(&plugin.to_string_lossy(), rate, &left, &right, &mut out, values)?,
             other => return Err(format!("unknown plugin format {other}")),
         }
@@ -392,8 +392,9 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     Ok(())
 }
 
-unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out: &mut [Vec<f32>], values: &[(u32, f64)]) -> Result<(), String> {
-    let changes = ComWrapper::new(crate::params::Vst3Changes::new(values));
+#[allow(clippy::too_many_arguments)]
+unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out: &mut [Vec<f32>], values: &[(u32, f64)], automation: &[(u64, u32, f64)], state_in: Option<&[u8]>, state_out: Option<&mut Vec<u8>>) -> Result<(), String> {
+    let changes = ComWrapper::new(crate::params::Vst3Changes::new(values).with_automation(automation));
     let changes_ptr = changes.to_com_ptr::<vst3::Steinberg::Vst::IParameterChanges>().ok_or("parameter changes")?;
     let (lib, factory) = vst3_open(path)?;
     let (cid, _) = vst3_effects(&factory).into_iter().next().ok_or("the module holds no audio effect")?;
@@ -406,6 +407,13 @@ unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     let context = host.to_com_ptr::<IHostApplication>().ok_or("host context")?;
     if component.initialize(context.as_ptr() as *mut FUnknown) != kResultOk {
         return Err("the component would not initialise".into());
+    }
+    if let Some(bytes) = state_in {
+        let stream = ComWrapper::new(crate::params::MemStream::new(bytes.to_vec()));
+        let stream_ptr = stream.to_com_ptr::<vst3::Steinberg::IBStream>().ok_or("state stream")?;
+        if component.setState(stream_ptr.as_ptr()) != kResultOk {
+            return Err("the plugin refused the saved state".into());
+        }
     }
     let processor = component.cast::<IAudioProcessor>().ok_or("the component is not an audio processor")?;
     let (mut ins, mut outs) = ([SpeakerArr::kStereo], [SpeakerArr::kStereo]);
@@ -429,6 +437,7 @@ unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     let mut failed = None;
     while pos < left.len() {
         let n = BLOCK.min(left.len() - pos);
+        changes.block(pos as u64, n as u64);
         let mut in_ptrs = [left.as_ptr().add(pos) as *mut f32, right.as_ptr().add(pos) as *mut f32];
         let mut out_ptrs = [o0.add(pos), o1.add(pos)];
         let mut in_bus = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: AudioBusBuffers__type0 { channelBuffers32: in_ptrs.as_mut_ptr() } };
@@ -441,7 +450,7 @@ unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
             numOutputs: 1,
             inputs: &mut in_bus,
             outputs: &mut out_bus,
-            inputParameterChanges: if values.is_empty() || !changes.live.get() { ptr::null_mut() } else { changes_ptr.as_ptr() },
+            inputParameterChanges: if changes.any() { changes_ptr.as_ptr() } else { ptr::null_mut() },
             outputParameterChanges: ptr::null_mut(),
             inputEvents: ptr::null_mut(),
             outputEvents: ptr::null_mut(),
@@ -460,6 +469,14 @@ unsafe fn vst3_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     }
     processor.setProcessing(0);
     component.setActive(0);
+    if let Some(saved) = state_out {
+        let stream = ComWrapper::new(crate::params::MemStream::new(Vec::new()));
+        let stream_ptr = stream.to_com_ptr::<vst3::Steinberg::IBStream>().ok_or("state stream")?;
+        if component.getState(stream_ptr.as_ptr()) != kResultOk {
+            return Err("the plugin would not save its state".into());
+        }
+        *saved = stream.bytes.borrow().clone();
+    }
     component.terminate();
     drop(processor);
     drop(component);

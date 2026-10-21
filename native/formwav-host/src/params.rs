@@ -328,15 +328,159 @@ impl IParamValueQueueTrait for Vst3Queue {
     }
 }
 
+/// S17, VST3 state: an in-memory IBStream, written by getState and read by setState.
+pub struct MemStream {
+    pub bytes: std::cell::RefCell<Vec<u8>>,
+    at: Cell<usize>,
+}
+
+impl MemStream {
+    pub fn new(bytes: Vec<u8>) -> Self {
+        MemStream { bytes: std::cell::RefCell::new(bytes), at: Cell::new(0) }
+    }
+}
+
+impl Class for MemStream {
+    type Interfaces = (vst3::Steinberg::IBStream,);
+}
+
+impl vst3::Steinberg::IBStreamTrait for MemStream {
+    unsafe fn read(&self, buffer: *mut c_void, num: i32, read: *mut i32) -> tresult {
+        let bytes = self.bytes.borrow();
+        let at = self.at.get();
+        let n = (num.max(0) as usize).min(bytes.len().saturating_sub(at));
+        ptr::copy_nonoverlapping(bytes.as_ptr().add(at), buffer as *mut u8, n);
+        self.at.set(at + n);
+        if !read.is_null() {
+            *read = n as i32;
+        }
+        kResultOk
+    }
+
+    unsafe fn write(&self, buffer: *mut c_void, num: i32, written: *mut i32) -> tresult {
+        let mut bytes = self.bytes.borrow_mut();
+        let at = self.at.get();
+        let n = num.max(0) as usize;
+        if bytes.len() < at + n {
+            bytes.resize(at + n, 0);
+        }
+        ptr::copy_nonoverlapping(buffer as *const u8, bytes.as_mut_ptr().add(at), n);
+        self.at.set(at + n);
+        if !written.is_null() {
+            *written = n as i32;
+        }
+        kResultOk
+    }
+
+    unsafe fn seek(&self, pos: i64, mode: i32, result: *mut i64) -> tresult {
+        let len = self.bytes.borrow().len() as i64;
+        let base = match mode {
+            1 => self.at.get() as i64,
+            2 => len,
+            _ => 0,
+        };
+        let to = (base + pos).clamp(0, len);
+        self.at.set(to as usize);
+        if !result.is_null() {
+            *result = to;
+        }
+        kResultOk
+    }
+
+    unsafe fn tell(&self, pos: *mut i64) -> tresult {
+        if !pos.is_null() {
+            *pos = self.at.get() as i64;
+        }
+        kResultOk
+    }
+}
+
+/// S17, VST3 automation: one parameter's points, offered block by block as the points inside the block, each at its
+/// sample offset within it.
+pub struct Vst3Timed {
+    id: u32,
+    at: Vec<u64>,
+    values: Vec<f64>,
+    window: Cell<(usize, usize)>,
+    pos: Cell<u64>,
+}
+
+impl Class for Vst3Timed {
+    type Interfaces = (IParamValueQueue,);
+}
+
+impl IParamValueQueueTrait for Vst3Timed {
+    unsafe fn getParameterId(&self) -> u32 {
+        self.id
+    }
+
+    unsafe fn getPointCount(&self) -> i32 {
+        let (start, end) = self.window.get();
+        (end - start) as i32
+    }
+
+    unsafe fn getPoint(&self, index: i32, sample_offset: *mut i32, value: *mut f64) -> tresult {
+        let (start, end) = self.window.get();
+        let k = start + index.max(0) as usize;
+        if index < 0 || k >= end {
+            return kResultFalse;
+        }
+        *sample_offset = (self.at[k] - self.pos.get()) as i32;
+        *value = self.values[k];
+        kResultOk
+    }
+
+    unsafe fn addPoint(&self, _sample_offset: i32, _value: f64, _index: *mut i32) -> tresult {
+        kResultFalse
+    }
+}
+
 pub struct Vst3Changes {
     queues: Vec<ComPtr<IParamValueQueue>>,
     pub live: Cell<bool>,
+    timed: Vec<(ComWrapper<Vst3Timed>, ComPtr<IParamValueQueue>)>,
+    active: std::cell::RefCell<Vec<usize>>,
 }
 
 impl Vst3Changes {
     pub fn new(values: &[(u32, f64)]) -> Self {
         let queues = values.iter().filter_map(|(id, value)| ComWrapper::new(Vst3Queue { id: *id, value: *value }).to_com_ptr::<IParamValueQueue>()).collect();
-        Vst3Changes { queues, live: Cell::new(true) }
+        Vst3Changes { queues, live: Cell::new(true), timed: Vec::new(), active: std::cell::RefCell::new(Vec::new()) }
+    }
+
+    /// The automation (frame, id, value; sorted by frame) as one timed queue per parameter.
+    pub fn with_automation(mut self, points: &[(u64, u32, f64)]) -> Self {
+        let mut ids: Vec<u32> = points.iter().map(|p| p.1).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        for id in ids {
+            let mine: Vec<&(u64, u32, f64)> = points.iter().filter(|p| p.1 == id).collect();
+            let queue = ComWrapper::new(Vst3Timed { id, at: mine.iter().map(|p| p.0).collect(), values: mine.iter().map(|p| p.2).collect(), window: Cell::new((0, 0)), pos: Cell::new(0) });
+            if let Some(ptr) = queue.to_com_ptr::<IParamValueQueue>() {
+                self.timed.push((queue, ptr));
+            }
+        }
+        self
+    }
+
+    /// Chooses each parameter's points inside frames `pos` to `pos + n` for the next process call.
+    pub fn block(&self, pos: u64, n: u64) {
+        let mut active = self.active.borrow_mut();
+        active.clear();
+        for (k, (queue, _)) in self.timed.iter().enumerate() {
+            let start = queue.at.partition_point(|&t| t < pos);
+            let end = queue.at.partition_point(|&t| t < pos + n);
+            queue.window.set((start, end));
+            queue.pos.set(pos);
+            if end > start {
+                active.push(k);
+            }
+        }
+    }
+
+    /// Whether this block has any change to offer.
+    pub fn any(&self) -> bool {
+        (self.live.get() && !self.queues.is_empty()) || !self.active.borrow().is_empty()
     }
 }
 
@@ -346,14 +490,17 @@ impl Class for Vst3Changes {
 
 impl IParameterChangesTrait for Vst3Changes {
     unsafe fn getParameterCount(&self) -> i32 {
-        if self.live.get() { self.queues.len() as i32 } else { 0 }
+        (if self.live.get() { self.queues.len() } else { 0 } + self.active.borrow().len()) as i32
     }
 
     unsafe fn getParameterData(&self, index: i32) -> *mut IParamValueQueue {
-        if !self.live.get() {
-            return ptr::null_mut();
+        let first = if self.live.get() { self.queues.len() } else { 0 };
+        let index = index.max(0) as usize;
+        if index < first {
+            return self.queues.get(index).map_or(ptr::null_mut(), |q| q.as_ptr());
         }
-        self.queues.get(index as usize).map_or(ptr::null_mut(), |q| q.as_ptr())
+        let active = self.active.borrow();
+        active.get(index - first).and_then(|&k| self.timed.get(k)).map_or(ptr::null_mut(), |(_, p)| p.as_ptr())
     }
 
     unsafe fn addParameterData(&self, _id: *const u32, _index: *mut i32) -> *mut IParamValueQueue {
