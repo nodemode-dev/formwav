@@ -56,6 +56,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
   const importOne = async (file: File, at = 0) => {
     let final = "";
     let shown = false;
+    let openAfter = "";
     const dismiss = delayedIndicator(
       () => {
         shown = true;
@@ -67,7 +68,15 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
       const doc = engine.get("document");
       const lower = file.name.toLowerCase();
       if (lower.endsWith(".aup")) throw new Error("zip the .aup together with its _data folder and import the zip");
-      if (lower.endsWith(".edl")) {
+      if (lower.endsWith(".fmw")) {
+        // A formwav session picked or dropped here: the engine keeps it among the sessions, then it opens the way any
+        // saved session opens (ui/projects.ts, its unsaved-changes guard included)
+        const res = await fetch("/api/projects/upload", { method: "POST", body: file, headers: { "X-Filename": file.name } });
+        const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string };
+        if (!res.ok || !out.name) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        openAfter = out.name;
+        final = "Received the session; opening it";
+      } else if (lower.endsWith(".edl")) {
         // PT-31: the picture edit conformed to the field recorder's files already in the session (broadcast WAVs with
         // timecode); the session becomes the edit's timeline
         const answer = window.prompt(`Conform ${file.name} to the recorder files in this session? The session will be replaced by the edit. Frames per second of the edit (24, 25, 30, 48, 50 or 60):`, "25");
@@ -141,6 +150,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
     }
     dismiss();
     if (!shown) setText(notice, final);
+    if (openAfter) host.dispatchEvent(new CustomEvent("fw-open-project", { detail: openAfter }));
   };
 
   const importAll = (files: FileList, at = 0) => {
@@ -148,6 +158,8 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
   };
 
   button?.addEventListener("click", () => input?.click());
+  // File > Open's "Open a .fmw file" (ui/projects.ts) hands its pick to the same queue
+  host.addEventListener("fw-import-files", (e) => importAll((e as CustomEvent<FileList>).detail));
   input?.addEventListener("change", () => {
     if (input.files && input.files.length) importAll(input.files);
     input.value = "";

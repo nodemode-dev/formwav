@@ -31,10 +31,18 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
   popover.hidden = true;
   popover.setAttribute("role", "dialog");
   popover.setAttribute("aria-label", "Open a saved session");
-  popover.innerHTML = `<div class="fw-popover-title">Saved sessions</div><div class="fw-popover-list"></div><div class="fw-popover-empty" hidden>No saved sessions yet</div>`;
+  popover.innerHTML = `<div class="fw-popover-title">Saved sessions</div><div class="fw-popover-list"></div><div class="fw-popover-empty" hidden>No saved sessions yet</div><button type="button" class="fw-ibtn fw-popover-file" data-open-file>Open a .fmw file…</button><input type="file" accept=".fmw" hidden data-open-input>`;
   document.getElementById("overlay-root")?.append(popover);
   const list = popover.querySelector(".fw-popover-list") as HTMLElement;
   const empty = popover.querySelector(".fw-popover-empty") as HTMLElement;
+  // A session on disk (the browser cannot hand the engine a path): picked here, sent through ui/import.ts's .fmw path
+  const fileInput = popover.querySelector<HTMLInputElement>("[data-open-input]") as HTMLInputElement;
+  popover.querySelector("[data-open-file]")?.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files?.length) host.dispatchEvent(new CustomEvent("fw-import-files", { detail: fileInput.files }));
+    fileInput.value = "";
+    close();
+  });
 
   let lastSaved: SessionDoc = engine.get("document");
   let known: { name: string; revision: number } | null = null;

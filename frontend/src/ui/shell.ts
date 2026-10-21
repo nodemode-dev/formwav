@@ -138,7 +138,7 @@ function shellHtml(): string {
           <div class="fw-empty-actions"><button type="button" class="fw-ibtn fw-empty-import" data-empty-act="import">Import audio</button><button type="button" class="fw-ibtn" data-empty-act="open">Open a session</button><button type="button" class="fw-ibtn" data-empty-act="record" title="Start recording from the microphone into a new track">Record</button><button type="button" class="fw-ibtn" data-empty-act="demo" title="A sixteen-bar session made in code: drums, bass, pad and keys with a reverb bus">Try the demo</button></div>
         </section>
         <div class="fw-lanes"></div>
-        <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi,.mxf,.aup,.aup3,.zip,.mid,.midi,.aaf,.edl" multiple hidden>
+        <input class="fw-file" type="file" accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.aifc,.caf,.wma,.webm,.mp4,.mov,.mkv,.m4v,.avi,.mxf,.aup,.aup3,.zip,.mid,.midi,.aaf,.edl,.fmw" multiple hidden>
       </main>
       <section class="fw-pane fw-pane-inspector" aria-label="Inspector" hidden>
         <div class="fw-pane-header"><span class="fw-pane-title">Inspector</span><span class="fw-pane-meta"></span><span class="fw-pane-end"></span></div>

@@ -177,3 +177,5 @@ dialog::backdrop { background: var(--bg-scrim); }
    padding: two for where to pair, three for the guest link and its address. */
 .fw-devices-where { box-sizing: content-box; block-size: 2lh; }
 .fw-devices-where.fw-devices-link { block-size: 3lh; }
+/* File > Open: a session on disk, under the saved ones */
+.fw-popover-file { inline-size: 100%; margin-block-start: var(--space-2); justify-content: center; }
