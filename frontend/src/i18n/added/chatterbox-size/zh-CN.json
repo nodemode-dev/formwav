@@ -1,0 +1,6 @@
+{
+"Chatterbox: PyTorch's CPU build and its weights, 7.8 GB measured; MIT (Resemble AI); every output carries an inaudible watermark": "Chatterbox：PyTorch 的 CPU 版本及其权重，实测 7.8 GB；MIT（Resemble AI）；每个输出都带有不可闻水印",
+"Regenerate the selected words on this machine (Chatterbox): needs Chatterbox installed on this machine (PyTorch's CPU build and its weights, 7.8 GB measured): choose Install a model on this machine": "在本机重新生成所选字词（Chatterbox）：需要先在本机安装 Chatterbox（PyTorch 的 CPU 版本及其权重，实测 7.8 GB）：选择“在本机安装模型”",
+"Speech in a clip's voice on this machine (Chatterbox): needs Chatterbox installed on this machine (PyTorch's CPU build and its weights, 7.8 GB measured): choose Install a model on this machine": "在本机用片段的声音生成语音（Chatterbox）：需要先在本机安装 Chatterbox（PyTorch 的 CPU 版本及其权重，实测 7.8 GB）：选择“在本机安装模型”",
+"Change a clip's voice to another clip's on this machine (Chatterbox): needs Chatterbox installed on this machine (PyTorch's CPU build and its weights, 7.8 GB measured): choose Install a model on this machine": "在本机把片段的声音换成另一片段的声音（Chatterbox）：需要先在本机安装 Chatterbox（PyTorch 的 CPU 版本及其权重，实测 7.8 GB）：选择“在本机安装模型”"
+}

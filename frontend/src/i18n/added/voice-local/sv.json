@@ -1,0 +1,9 @@
+{
+"Voice of": "Röst från",
+"The clip whose voice the result takes": "Klippet vars röst resultatet tar",
+"In the speaker's own voice (Chatterbox)": "Med talarens egen röst (Chatterbox)",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "Byt ett klipps röst till ett annat klipps på den här datorn (Chatterbox)",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "Dubba ett klipp på den här datorn (Whisper, Argos Translate, Kokoro eller Chatterbox)",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "Kokoro eller Chatterbox installerat på den här datorn: välj Installera en modell på den här datorn",
+"Kokoro or Chatterbox installed first": "Installera Kokoro eller Chatterbox först"
+}

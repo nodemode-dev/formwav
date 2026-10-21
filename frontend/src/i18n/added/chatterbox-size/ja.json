@@ -1,0 +1,6 @@
+{
+"Chatterbox: PyTorch's CPU build and its weights, 7.8 GB measured; MIT (Resemble AI); every output carries an inaudible watermark": "Chatterbox：PyTorch の CPU 版とそのウェイト。計測値 7.8 GB。MIT（Resemble AI）。すべての出力に聞こえない透かしが入ります",
+"Regenerate the selected words on this machine (Chatterbox): needs Chatterbox installed on this machine (PyTorch's CPU build and its weights, 7.8 GB measured): choose Install a model on this machine": "このマシンで選択した単語を再生成（Chatterbox）：このマシンに Chatterbox のインストールが必要です（PyTorch の CPU 版とそのウェイト、計測値 7.8 GB）：「このマシンにモデルをインストール」を選んでください",
+"Speech in a clip's voice on this machine (Chatterbox): needs Chatterbox installed on this machine (PyTorch's CPU build and its weights, 7.8 GB measured): choose Install a model on this machine": "このマシンでクリップの声での音声（Chatterbox）：このマシンに Chatterbox のインストールが必要です（PyTorch の CPU 版とそのウェイト、計測値 7.8 GB）：「このマシンにモデルをインストール」を選んでください",
+"Change a clip's voice to another clip's on this machine (Chatterbox): needs Chatterbox installed on this machine (PyTorch's CPU build and its weights, 7.8 GB measured): choose Install a model on this machine": "このマシンでクリップの声を別のクリップの声に変える（Chatterbox）：このマシンに Chatterbox のインストールが必要です（PyTorch の CPU 版とそのウェイト、計測値 7.8 GB）：「このマシンにモデルをインストール」を選んでください"
+}

@@ -1,0 +1,9 @@
+{
+"Voice of": "เสียงจาก",
+"The clip whose voice the result takes": "คลิปที่ผลลัพธ์จะใช้เสียงของมัน",
+"In the speaker's own voice (Chatterbox)": "ด้วยเสียงของผู้พูดเอง (Chatterbox)",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "เปลี่ยนเสียงของคลิปเป็นเสียงของอีกคลิปบนเครื่องนี้ (Chatterbox)",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "พากย์คลิปบนเครื่องนี้ (Whisper, Argos Translate, Kokoro หรือ Chatterbox)",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "ติดตั้ง Kokoro หรือ Chatterbox บนเครื่องนี้: เลือก ติดตั้งโมเดลบนเครื่องนี้",
+"Kokoro or Chatterbox installed first": "ติดตั้ง Kokoro หรือ Chatterbox ก่อน"
+}

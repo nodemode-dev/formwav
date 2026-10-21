@@ -1,0 +1,9 @@
+{
+"Voice of": "Głos z",
+"The clip whose voice the result takes": "Klip, którego głos przejmie wynik",
+"In the speaker's own voice (Chatterbox)": "Własnym głosem mówcy (Chatterbox)",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "Zmień głos klipu na głos innego klipu na tym komputerze (Chatterbox)",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "Dubbing klipu na tym komputerze (Whisper, Argos Translate, Kokoro lub Chatterbox)",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "Kokoro lub Chatterbox zainstalowany na tym komputerze: wybierz Zainstaluj model na tym komputerze",
+"Kokoro or Chatterbox installed first": "Najpierw zainstaluj Kokoro lub Chatterbox"
+}

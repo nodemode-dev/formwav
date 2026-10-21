@@ -1,0 +1,9 @@
+{
+"Voice of": "声の元",
+"The clip whose voice the result takes": "結果がその声を使うクリップ",
+"In the speaker's own voice (Chatterbox)": "話者自身の声で (Chatterbox)",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "このマシンでクリップの声を別のクリップの声に変える (Chatterbox)",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "このマシンでクリップを吹き替える (Whisper、Argos Translate、Kokoro または Chatterbox)",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "このマシンに Kokoro か Chatterbox をインストール：「このマシンにモデルをインストール」を選んでください",
+"Kokoro or Chatterbox installed first": "先に Kokoro か Chatterbox をインストール"
+}

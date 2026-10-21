@@ -1,0 +1,9 @@
+{
+"Voice of": "Hang innen",
+"The clip whose voice the result takes": "A klip, amelynek a hangját az eredmény átveszi",
+"In the speaker's own voice (Chatterbox)": "A beszélő saját hangján (Chatterbox)",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "Egy klip hangjának cseréje egy másik klip hangjára ezen a gépen (Chatterbox)",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "Klip szinkronizálása ezen a gépen (Whisper, Argos Translate, Kokoro vagy Chatterbox)",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "Kokoro vagy Chatterbox telepítve ezen a gépen: válaszd a Modell telepítése erre a gépre lehetőséget",
+"Kokoro or Chatterbox installed first": "Előbb telepítsd a Kokorót vagy a Chatterboxot"
+}

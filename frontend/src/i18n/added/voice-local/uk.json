@@ -1,0 +1,9 @@
+{
+"Voice of": "Голос із",
+"The clip whose voice the result takes": "Кліп, голос якого перейме результат",
+"In the speaker's own voice (Chatterbox)": "Власним голосом мовця (Chatterbox)",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "Замінити голос кліпу голосом іншого кліпу на цьому комп'ютері (Chatterbox)",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "Дублювати кліп на цьому комп'ютері (Whisper, Argos Translate, Kokoro або Chatterbox)",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "Kokoro або Chatterbox встановлено на цьому комп'ютері: виберіть «Встановити модель на цей комп'ютер»",
+"Kokoro or Chatterbox installed first": "Спершу встановіть Kokoro або Chatterbox"
+}

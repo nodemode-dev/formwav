@@ -1,0 +1,6 @@
+{
+"Chatterbox: PyTorch's CPU build and its weights, 7.8 GB measured; MIT (Resemble AI); every output carries an inaudible watermark": "Chatterbox: PyTorch CPU 빌드와 그 가중치, 측정값 7.8 GB, MIT(Resemble AI), 모든 출력에 들리지 않는 워터마크가 들어갑니다",
+"Regenerate the selected words on this machine (Chatterbox): needs Chatterbox installed on this machine (PyTorch's CPU build and its weights, 7.8 GB measured): choose Install a model on this machine": "이 컴퓨터에서 선택한 단어 다시 생성(Chatterbox): 이 컴퓨터에 Chatterbox 설치가 필요합니다(PyTorch CPU 빌드와 그 가중치, 측정값 7.8 GB): '이 컴퓨터에 모델 설치'를 선택하세요",
+"Speech in a clip's voice on this machine (Chatterbox): needs Chatterbox installed on this machine (PyTorch's CPU build and its weights, 7.8 GB measured): choose Install a model on this machine": "이 컴퓨터에서 클립의 목소리로 음성 만들기(Chatterbox): 이 컴퓨터에 Chatterbox 설치가 필요합니다(PyTorch CPU 빌드와 그 가중치, 측정값 7.8 GB): '이 컴퓨터에 모델 설치'를 선택하세요",
+"Change a clip's voice to another clip's on this machine (Chatterbox): needs Chatterbox installed on this machine (PyTorch's CPU build and its weights, 7.8 GB measured): choose Install a model on this machine": "이 컴퓨터에서 클립의 목소리를 다른 클립의 목소리로 바꾸기 (Chatterbox): 이 컴퓨터에 Chatterbox 설치가 필요합니다(PyTorch CPU 빌드와 그 가중치, 측정값 7.8 GB): '이 컴퓨터에 모델 설치'를 선택하세요"
+}

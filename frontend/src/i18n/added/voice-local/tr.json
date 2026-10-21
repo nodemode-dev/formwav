@@ -1,0 +1,9 @@
+{
+"Voice of": "Ses kaynağı",
+"The clip whose voice the result takes": "Sonucun sesini alacağı klip",
+"In the speaker's own voice (Chatterbox)": "Konuşanın kendi sesiyle (Chatterbox)",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "Bir klibin sesini bu bilgisayarda başka bir klibin sesiyle değiştir (Chatterbox)",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "Bir klibi bu bilgisayarda dublajla (Whisper, Argos Translate, Kokoro veya Chatterbox)",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "Bu bilgisayarda Kokoro veya Chatterbox kurulu: Bu bilgisayara bir model kur seçeneğini seçin",
+"Kokoro or Chatterbox installed first": "Önce Kokoro veya Chatterbox'ı kurun"
+}

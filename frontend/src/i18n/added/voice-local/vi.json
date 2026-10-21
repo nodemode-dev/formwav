@@ -1,0 +1,9 @@
+{
+"Voice of": "Giọng của",
+"The clip whose voice the result takes": "Clip mà kết quả lấy giọng",
+"In the speaker's own voice (Chatterbox)": "Bằng giọng của chính người nói (Chatterbox)",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "Đổi giọng của một clip sang giọng của clip khác trên máy này (Chatterbox)",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "Lồng tiếng một clip trên máy này (Whisper, Argos Translate, Kokoro hoặc Chatterbox)",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "Kokoro hoặc Chatterbox đã cài trên máy này: chọn Cài một mô hình trên máy này",
+"Kokoro or Chatterbox installed first": "Cài Kokoro hoặc Chatterbox trước"
+}

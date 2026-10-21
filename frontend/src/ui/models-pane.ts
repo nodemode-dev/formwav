@@ -17,7 +17,7 @@ interface Choice {
   run: (v: Record<string, string>) => Promise<{ media: MediaRef; at?: number } | { done: string }>;
 }
 type LocalEngine = { id: string; name: string; installed: boolean; installing: string; clones: boolean; size: string; license: string };
-type LocalDub = { kokoro: boolean; translator: boolean; languages: { code: string; name: string; installed: boolean; installing: string }[] };
+type LocalDub = { kokoro: boolean; chatterbox?: boolean; translator: boolean; languages: { code: string; name: string; installed: boolean; installing: string }[] };
 type Origin = { id: string; name: string; kind: string; source: string; code: string; weights: string; runs: string; sends: string; note: string };
 type Providers = { localDub?: LocalDub; localSpeech?: LocalEngine[]; provenance?: Origin[]; providers: { id: string; ready: boolean; needs: string; presets?: { model: string; label: string; fields: string[] }[]; models?: { id: string; label: string; fields?: string[]; license?: string; source?: string }[] }[] };
 
@@ -51,6 +51,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-models-row" data-field="model">Model<input class="fw-models-model" placeholder="fal-ai/..."></label>
 <label class="fw-models-row" data-field="input">Input JSON<textarea rows="2" class="fw-models-input">{}</textarea></label>
 <label class="fw-models-row" data-field="clip">Clip<select class="fw-models-clip"></select></label>
+<label class="fw-models-row" data-field="voiceclip">Voice of<select class="fw-models-voiceclip" title="The clip whose voice the result takes"></select></label>
 <label class="fw-models-row" data-field="language">Language<input class="fw-models-language" value="es" placeholder="es, fr, de, ja"></label>
 <label class="fw-models-row" data-field="musicmodel">Music model<select class="fw-models-musicmodel"><option value="music_v1">Music v1</option><option value="music_v2">Music v2</option><option value="music_v2_5">Music v2.5</option></select></label>
 <label class="fw-models-row" data-field="stems">Stems<select class="fw-models-stems"><option value="six">Six: vocals, drums, bass, piano, guitar, other</option><option value="two">Two: vocals and the rest</option></select></label>
@@ -67,6 +68,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
 <label class="fw-models-row fw-models-check" data-field="loop"><input type="checkbox" class="fw-models-loop"> Loop seamlessly</label>
 <label class="fw-models-row fw-models-check" data-field="instrumental"><input type="checkbox" class="fw-models-instrumental"> Instrumental only</label>
 <label class="fw-models-row fw-models-check" data-field="denoise"><input type="checkbox" class="fw-models-denoise"> Remove background noise first</label>
+<label class="fw-models-row fw-models-check" data-field="ownvoice"><input type="checkbox" class="fw-models-ownvoice"> In the speaker's own voice (Chatterbox)</label>
 <button type="button" class="fw-btn fw-models-go">Make it on a new track</button><p class="fw-models-state" aria-live="polite"></p>
 <details class="fw-models-sources"><summary>Where every model comes from</summary><ul class="fw-models-sources-list"></ul></details>`;
   lib.after(box);
@@ -324,6 +326,21 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
             ] });
             return { done: `Replaced ${(endS - startS).toFixed(2)} s with ${Number(out.inserted_s).toFixed(2)} s in the speaker's voice, made on this machine by ${e.name}` };
           } });
+        // PLAN_v12 R3: the open-weight voice changer, a clip re-voiced in another clip's voice, the words kept
+        if (id === "chatterbox")
+          choices.push({ id: "ls-vc-chatterbox", label: "Change a clip's voice to another clip's on this machine (Chatterbox)", ready: e.installed, needs: localNeeds(id), fields: ["clip", "voiceclip"],
+            run: async (v) => {
+              const doc = engine.get("document");
+              const find = (ref: string) => {
+                const [trackId, clipId] = ref.split("/");
+                return doc.tracks.find((t) => t.id === trackId)?.clips.find((x) => x.id === clipId);
+              };
+              const c = find(v.clip);
+              const voiceOf = find(v.voiceclip);
+              if (!c || !voiceOf) throw new Error("Choose the clip to re-voice and the clip whose voice it takes");
+              const rate = doc.media[voiceOf.mediaId]?.sampleRate ?? doc.sampleRate;
+              return { media: await post("/api/providers/local-speech/chatterbox/voice-changer", { media_id: c.mediaId, target_media: voiceOf.mediaId, target_from: voiceOf.sourceIn / rate }), at: c.start };
+            } });
       }
       const missing = [...engines.values()].filter((e) => !e.installed);
       const pickEngine = box.querySelector<HTMLSelectElement>(".fw-models-localengine") as HTMLSelectElement;
@@ -352,8 +369,10 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
       const missing = dubbing.languages.filter((l) => !l.installed);
       const pick = box.querySelector<HTMLSelectElement>(".fw-models-dublang") as HTMLSelectElement;
       const fill = (langs: LocalDub["languages"]) => pick.replaceChildren(...langs.map((l) => new Option(l.name, l.code)));
-      const needs = !dubbing.kokoro ? "Kokoro installed on this machine: choose Install a model on this machine" : "a dubbing language installed: choose Install a dubbing language on this machine";
-      choices.push({ id: "ld-dub", label: "Dub a clip on this machine (Whisper, Argos Translate, Kokoro)", ready: dubbing.kokoro && dubbing.translator && ready.length > 0, needs, fields: ["clip", "dublang"],
+      const speaks = dubbing.kokoro || !!dubbing.chatterbox;
+      const needs = !speaks ? "Kokoro or Chatterbox installed on this machine: choose Install a model on this machine" : "a dubbing language installed: choose Install a dubbing language on this machine";
+      // PLAN_v12 R4: with Chatterbox installed, the dub can speak in the speaker's own voice (cloned from the clip)
+      choices.push({ id: "ld-dub", label: "Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)", ready: speaks && dubbing.translator && ready.length > 0, needs, fields: dubbing.chatterbox ? ["clip", "dublang", "ownvoice"] : ["clip", "dublang"],
         run: async (v) => {
           const [trackId, clipId] = v.clip.split("/");
           const doc = engine.get("document");
@@ -361,10 +380,11 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
           if (!c) throw new Error("Choose the clip to dub");
           const mediaRate = doc.media[c.mediaId]?.sampleRate ?? doc.sampleRate;
           const start = c.sourceIn / mediaRate;
-          const out = await post(`/api/providers/local-dub/${v.dublang}`, { media_id: c.mediaId, start, end: start + c.length / doc.sampleRate });
+          const own = !!v.ownvoice || !dubbing.kokoro;
+          const out = await post(`/api/providers/local-dub/${v.dublang}`, { media_id: c.mediaId, start, end: start + c.length / doc.sampleRate, ...(own ? { voice: "own" } : {}) });
           return { media: out.media, at: c.start };
         } });
-      choices.push({ id: "ld-install", label: "Install a dubbing language on this machine", ready: dubbing.kokoro && missing.length > 0, needs: dubbing.kokoro ? "nothing: every dubbing language is installed" : "Kokoro installed first", fields: ["dublang"],
+      choices.push({ id: "ld-install", label: "Install a dubbing language on this machine", ready: speaks && missing.length > 0, needs: speaks ? "nothing: every dubbing language is installed" : "Kokoro or Chatterbox installed first", fields: ["dublang"],
         run: async (v) => {
           await post(`/api/providers/local-dub/${v.dublang}/install`, null);
           for (;;) {
@@ -445,9 +465,12 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
       const doc = engine.get("document");
       const rate = doc.sampleRate;
       const wanted = doc.tracks.flatMap((t) => t.clips.map((x) => ({ v: `${t.id}/${x.id}`, label: `${t.name}: ${doc.media[x.mediaId]?.name ?? "clip"} at ${(x.start / rate).toFixed(1)} s` })));
-      const have = [...clip.options].map((o) => o.value).join("|");
-      if (have !== wanted.map((w) => w.v).join("|")) {
-        clip.replaceChildren(...wanted.map((w) => Object.assign(document.createElement("option"), { value: w.v, textContent: w.label })));
+      // PLAN_v12 R3: the voice changer's second clip, the voice to take, chosen from the same list
+      for (const pick of c.fields.includes("voiceclip") ? [clip, $<HTMLSelectElement>(".fw-models-voiceclip")] : [clip]) {
+        const have = [...pick.options].map((o) => o.value).join("|");
+        if (have !== wanted.map((w) => w.v).join("|")) {
+          pick.replaceChildren(...wanted.map((w) => Object.assign(document.createElement("option"), { value: w.v, textContent: w.label })));
+        }
       }
     }
   };
@@ -460,7 +483,7 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
     const c = choices.find((x) => x.id === kind.value);
     if (!c?.ready) return;
     const v: Record<string, string> = {};
-    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language", "musicmodel", "stems", "speakers", "keyterms", "lines", "preview", "loop", "instrumental", "denoise", "strength", "from", "to", "localvoice", "localengine", "dublang"]) v[f] = value(f);
+    for (const f of ["text", "voice", "prompt", "tags", "lyrics", "duration", "model", "input", "clip", "language", "musicmodel", "stems", "speakers", "keyterms", "lines", "preview", "loop", "instrumental", "denoise", "strength", "from", "to", "localvoice", "localengine", "dublang", "voiceclip", "ownvoice"]) v[f] = value(f);
     go.disabled = true;
     setText(state, `Making it with ${c.label}...`);
     try {

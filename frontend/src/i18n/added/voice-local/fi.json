@@ -1,0 +1,9 @@
+{
+"Voice of": "Ääni leikkeestä",
+"The clip whose voice the result takes": "Leike, jonka äänen tulos saa",
+"In the speaker's own voice (Chatterbox)": "Puhujan omalla äänellä (Chatterbox)",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "Vaihda leikkeen ääni toisen leikkeen ääneksi tällä koneella (Chatterbox)",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "Jälkiäänitä leike tällä koneella (Whisper, Argos Translate, Kokoro tai Chatterbox)",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "Kokoro tai Chatterbox asennettuna tälle koneelle: valitse Asenna malli tälle koneelle",
+"Kokoro or Chatterbox installed first": "Asenna ensin Kokoro tai Chatterbox"
+}

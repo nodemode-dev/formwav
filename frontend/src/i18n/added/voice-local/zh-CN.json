@@ -1,0 +1,9 @@
+{
+"Voice of": "声音来自",
+"The clip whose voice the result takes": "结果采用其声音的片段",
+"In the speaker's own voice (Chatterbox)": "用说话人自己的声音（Chatterbox）",
+"Change a clip's voice to another clip's on this machine (Chatterbox)": "在本机把片段的声音换成另一片段的声音（Chatterbox）",
+"Dub a clip on this machine (Whisper, Argos Translate, Kokoro or Chatterbox)": "在本机为片段配音（Whisper、Argos Translate、Kokoro 或 Chatterbox）",
+"Kokoro or Chatterbox installed on this machine: choose Install a model on this machine": "在本机安装 Kokoro 或 Chatterbox：选择“在本机安装模型”",
+"Kokoro or Chatterbox installed first": "先安装 Kokoro 或 Chatterbox"
+}
