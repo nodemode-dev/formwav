@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderelő",
+"Renderer panel": "Renderelő panel",
+"Close the renderer": "Renderelő bezárása",
+"Speakers and their live levels": "Hangszórók és élő szintjeik",
+"Fold to stereo": "Összehajtás sztereóra",
+"Levels show while the session plays as a fold-down": "A szintek akkor jelennek meg, amikor a munkamenet downmixként szól",
+"Speaker {0} level": "{0}. hangszóró szintje",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Renderelő megnyitása: a munkamenet hangszórói és élő szintjeik, amikor downmixként szól"
+}

@@ -1,0 +1,10 @@
+{
+"Renderer": "Moteur de rendu",
+"Renderer panel": "Panneau du moteur de rendu",
+"Close the renderer": "Fermer le moteur de rendu",
+"Speakers and their live levels": "Enceintes et leurs niveaux en direct",
+"Fold to stereo": "Réduire en stéréo",
+"Levels show while the session plays as a fold-down": "Les niveaux s'affichent pendant que la session est lue en downmix",
+"Speaker {0} level": "Niveau de l'enceinte {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Ouvrir le moteur de rendu : les enceintes de la session et leurs niveaux en direct pendant la lecture en downmix"
+}

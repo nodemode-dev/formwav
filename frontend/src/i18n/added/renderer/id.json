@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderer",
+"Renderer panel": "Panel renderer",
+"Close the renderer": "Tutup renderer",
+"Speakers and their live levels": "Speaker dan level langsungnya",
+"Fold to stereo": "Lipat ke stereo",
+"Levels show while the session plays as a fold-down": "Level ditampilkan saat sesi diputar sebagai downmix",
+"Speaker {0} level": "Level speaker {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Buka renderer: speaker sesi dan level langsungnya saat diputar sebagai downmix"
+}

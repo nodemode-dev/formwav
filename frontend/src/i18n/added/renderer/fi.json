@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderöijä",
+"Renderer panel": "Renderöijän paneeli",
+"Close the renderer": "Sulje renderöijä",
+"Speakers and their live levels": "Kaiuttimet ja niiden live-tasot",
+"Fold to stereo": "Sulje stereoksi",
+"Levels show while the session plays as a fold-down": "Tasot näkyvät, kun istunto toistetaan alasmiksauksena",
+"Speaker {0} level": "Kaiuttimen {0} taso",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Avaa renderöijä: istunnon kaiuttimet ja niiden live-tasot, kun se toistetaan alasmiksauksena"
+}

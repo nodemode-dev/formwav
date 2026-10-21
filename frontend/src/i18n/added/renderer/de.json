@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderer",
+"Renderer panel": "Renderer-Bereich",
+"Close the renderer": "Renderer schließen",
+"Speakers and their live levels": "Lautsprecher und ihre Live-Pegel",
+"Fold to stereo": "Auf Stereo falten",
+"Levels show while the session plays as a fold-down": "Pegel werden angezeigt, während die Session als Downmix abgespielt wird",
+"Speaker {0} level": "Pegel von Lautsprecher {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Renderer öffnen: die Lautsprecher der Session und ihre Live-Pegel bei der Wiedergabe als Downmix"
+}

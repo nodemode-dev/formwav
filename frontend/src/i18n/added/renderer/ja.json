@@ -1,0 +1,10 @@
+{
+"Renderer": "レンダラー",
+"Renderer panel": "レンダラーパネル",
+"Close the renderer": "レンダラーを閉じる",
+"Speakers and their live levels": "スピーカーとそのライブレベル",
+"Fold to stereo": "ステレオにフォールド",
+"Levels show while the session plays as a fold-down": "セッションをフォールドダウンで再生している間、レベルが表示されます",
+"Speaker {0} level": "スピーカー{0}のレベル",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "レンダラーを開く: フォールドダウンで再生中のセッションのスピーカーとそのライブレベル"
+}

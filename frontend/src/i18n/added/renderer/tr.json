@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderer",
+"Renderer panel": "Renderer paneli",
+"Close the renderer": "Renderer'ı kapat",
+"Speakers and their live levels": "Hoparlörler ve canlı seviyeleri",
+"Fold to stereo": "Stereoya indir",
+"Levels show while the session plays as a fold-down": "Seviyeler, oturum downmix olarak çalınırken gösterilir",
+"Speaker {0} level": "{0} numaralı hoparlör seviyesi",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Renderer'ı aç: downmix olarak çalınırken oturumun hoparlörleri ve canlı seviyeleri"
+}

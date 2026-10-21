@@ -1,0 +1,10 @@
+{
+"Renderer": "Trình render",
+"Renderer panel": "Bảng trình render",
+"Close the renderer": "Đóng trình render",
+"Speakers and their live levels": "Loa và mức trực tiếp của chúng",
+"Fold to stereo": "Gộp xuống stereo",
+"Levels show while the session plays as a fold-down": "Mức hiển thị khi phiên được phát dưới dạng downmix",
+"Speaker {0} level": "Mức của loa {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Mở trình render: các loa của phiên và mức trực tiếp của chúng khi phát dưới dạng downmix"
+}

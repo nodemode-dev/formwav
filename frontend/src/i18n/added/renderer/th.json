@@ -1,0 +1,10 @@
+{
+"Renderer": "เรนเดอเรอร์",
+"Renderer panel": "แผงเรนเดอเรอร์",
+"Close the renderer": "ปิดเรนเดอเรอร์",
+"Speakers and their live levels": "ลำโพงและระดับสัญญาณแบบสด",
+"Fold to stereo": "พับเป็นสเตอริโอ",
+"Levels show while the session plays as a fold-down": "ระดับสัญญาณจะแสดงขณะที่เซสชันเล่นแบบดาวน์มิกซ์",
+"Speaker {0} level": "ระดับของลำโพง {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "เปิดเรนเดอเรอร์: ลำโพงของเซสชันและระดับสัญญาณแบบสดขณะเล่นแบบดาวน์มิกซ์"
+}

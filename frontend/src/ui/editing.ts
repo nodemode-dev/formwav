@@ -13,6 +13,7 @@ import { clipTransients, consolidate, createFades, deleteFades, editSpan, fadeTo
 import { gridStepOf, NUDGE_DEFAULT, parseGrid } from "../engine/grid";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { mountBigCounter } from "./big-counter";
+import { mountRendererPanel } from "./renderer-panel";
 import { commands } from "./commands";
 import { frameRate, gridCuts, shuffleEnabled } from "./grid";
 import { getZoom, samplesPerPixel, setZoom, zoomToSpan } from "./lanes";
@@ -316,6 +317,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     run(separateOnGrid(doc, target(), step), typeof step === "number" ? `Separated on the grid every ${seconds(step)}` : "Separated on the grid", target().range || target().clipIds.length ? "No grid line inside the selection (or the grid is too fine): zoom out" : "Select clips or a range to separate");
   };
   const counter = mountBigCounter(host, engine);
+  const renderer = mountRendererPanel(host, engine, player);
 
   // The menus' items, each running its command (the menu closes after any item, as the menu bar's do)
   const item = (label: string, key: string, title: string, act: () => void, checked?: () => boolean, onChange?: (sync: () => void) => void) => {
@@ -385,6 +387,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     Object.assign(document.createElement("span"), { className: "fw-menu-label", textContent: "Zoom presets" }),
     presetRow,
     item("Big counter", "", "The playhead's position in large figures on a panel of its own", counter.toggle, counter.isOpen, (sync) => counter.onChange(sync)),
+    item("Renderer", "", "Open the renderer: the session's speakers and their live levels while it plays as a fold-down", renderer.toggle, renderer.isOpen, (sync) => renderer.onChange(sync)),
     item("Counters and rulers...", "", "The main and sub counters' timebases, the session's timecode rate and the rulers shown", () => host.dispatchEvent(new CustomEvent("fw-counters"))),
   );
   // PLAN_v13 S13, Commands Focus: single keys for the editing commands (the a-z button): A and S trim the start

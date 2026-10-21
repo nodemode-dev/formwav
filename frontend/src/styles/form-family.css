@@ -137,5 +137,41 @@ dialog::backdrop { background: var(--bg-scrim); }
 .fw-agent-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .fw-agent-tab[aria-selected="true"] { border-color: var(--line-3); background: var(--surface-raised); color: var(--text-primary); font-weight: 500; }
 
+/* S16: the renderer panel, a floating card of fixed size: the room from above, a pooled cell per speaker placed by
+ * the layout table (custom properties set when the layout changes), its level bar scaled in place. */
+:root { --fw-renderer-w: 264px; --fw-renderer-room: 232px; }
+.fw-renderer {
+  position: fixed;
+  inset-block-start: 96px;
+  inset-inline-end: 24px;
+  z-index: var(--z-companion);
+  box-sizing: border-box;
+  inline-size: var(--fw-renderer-w);
+  display: grid;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-3);
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius-xl);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-lg);
+}
+.fw-renderer[hidden] { display: none; }
+.fw-rend-head { display: flex; align-items: center; justify-content: space-between; block-size: var(--fw-group-head-h); font-size: var(--fs-12); font-weight: 500; color: var(--text-secondary); cursor: grab; user-select: none; touch-action: none; }
+.fw-rend-close { inline-size: 22px; block-size: 22px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: var(--text-muted); }
+.fw-rend-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-rend-room { position: relative; inline-size: var(--fw-renderer-room); block-size: var(--fw-renderer-room); justify-self: center; border-radius: 50%; background: var(--surface-0); }
+.fw-rend-room canvas { position: absolute; inset: 0; inline-size: 100%; block-size: 100%; color: var(--text-muted); }
+.fw-rend-ch { position: absolute; inset-inline-start: calc(var(--x, 0.5) * 100%); inset-block-start: calc(var(--y, 0.5) * 100%); translate: -50% -50%; display: grid; justify-items: center; gap: 1px; inline-size: 34px; font-size: var(--fs-9); color: var(--text-secondary); pointer-events: none; }
+.fw-rend-ch[hidden] { display: none; }
+.fw-rend-bar { position: relative; inline-size: 6px; block-size: 26px; overflow: hidden; border-radius: var(--radius-xs); background: var(--line-1); }
+.fw-rend-fill { position: absolute; inset: 0; background: var(--fw-meter); transform: scaleY(0); transform-origin: bottom; }
+.fw-rend-hold { position: absolute; inset-inline: 0; inset-block-end: 0; block-size: 1px; background: var(--text-primary); transform: translateY(0); }
+.fw-rend-name { font-weight: 600; line-height: 1; }
+.fw-rend-db { font-family: var(--font-mono); font-variant-numeric: tabular-nums; inline-size: 4.5ch; text-align: center; line-height: 1; color: var(--text-muted); }
+.fw-rend-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--fs-11); color: var(--text-secondary); }
+.fw-rend-layout { padding: 2px 8px; border: 1px solid var(--line-3); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--text-primary); }
+.fw-rend-note { margin: 0; block-size: 2.7em; font-size: var(--fs-11); line-height: 1.35; color: var(--text-muted); }
+.fw-rend-note[hidden] { display: block; visibility: hidden; }
+
 /* Status bar: the family's footer. */
 .fw-status { background: var(--bg-secondary); border-block-start: 1px solid var(--line-0); }

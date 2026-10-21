@@ -1,0 +1,10 @@
+{
+"Renderer": "渲染器",
+"Renderer panel": "渲染器面板",
+"Close the renderer": "关闭渲染器",
+"Speakers and their live levels": "扬声器及其实时电平",
+"Fold to stereo": "降混为立体声",
+"Levels show while the session plays as a fold-down": "会话以降混方式播放时显示电平",
+"Speaker {0} level": "扬声器 {0} 的电平",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "打开渲染器:会话以降混方式播放时的扬声器及其实时电平"
+}

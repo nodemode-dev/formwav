@@ -1,0 +1,10 @@
+{
+"Renderer": "算繪器",
+"Renderer panel": "算繪器面板",
+"Close the renderer": "關閉算繪器",
+"Speakers and their live levels": "喇叭及其即時電平",
+"Fold to stereo": "降混為立體聲",
+"Levels show while the session plays as a fold-down": "工作階段以降混方式播放時顯示電平",
+"Speaker {0} level": "喇叭 {0} 的電平",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "開啟算繪器:工作階段以降混方式播放時的喇叭及其即時電平"
+}

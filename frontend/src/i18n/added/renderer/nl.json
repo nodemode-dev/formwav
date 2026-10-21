@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderer",
+"Renderer panel": "Rendererpaneel",
+"Close the renderer": "Renderer sluiten",
+"Speakers and their live levels": "Luidsprekers en hun live niveaus",
+"Fold to stereo": "Terugbrengen naar stereo",
+"Levels show while the session plays as a fold-down": "Niveaus worden getoond terwijl de sessie als downmix wordt afgespeeld",
+"Speaker {0} level": "Niveau van luidspreker {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Renderer openen: de luidsprekers van de sessie en hun live niveaus tijdens het afspelen als downmix"
+}

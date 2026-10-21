@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderer",
+"Renderer panel": "Rendererpanel",
+"Close the renderer": "Luk renderen",
+"Speakers and their live levels": "Højttalere og deres live-niveauer",
+"Fold to stereo": "Fold ned til stereo",
+"Levels show while the session plays as a fold-down": "Niveauerne vises, mens sessionen afspilles som nedmix",
+"Speaker {0} level": "Niveau for højttaler {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Åbn renderen: sessionens højttalere og deres live-niveauer, mens den afspilles som nedmix"
+}

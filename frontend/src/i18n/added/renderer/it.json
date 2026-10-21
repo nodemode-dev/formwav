@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderer",
+"Renderer panel": "Pannello renderer",
+"Close the renderer": "Chiudi il renderer",
+"Speakers and their live levels": "Altoparlanti e i loro livelli in tempo reale",
+"Fold to stereo": "Riduci a stereo",
+"Levels show while the session plays as a fold-down": "I livelli vengono mostrati mentre la sessione viene riprodotta come downmix",
+"Speaker {0} level": "Livello dell'altoparlante {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Apri il renderer: gli altoparlanti della sessione e i loro livelli in tempo reale durante la riproduzione come downmix"
+}

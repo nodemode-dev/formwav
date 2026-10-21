@@ -1,0 +1,10 @@
+{
+"Renderer": "렌더러",
+"Renderer panel": "렌더러 패널",
+"Close the renderer": "렌더러 닫기",
+"Speakers and their live levels": "스피커와 실시간 레벨",
+"Fold to stereo": "스테레오로 폴드",
+"Levels show while the session plays as a fold-down": "세션이 폴드다운으로 재생되는 동안 레벨이 표시됩니다",
+"Speaker {0} level": "스피커 {0} 레벨",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "렌더러 열기: 폴드다운으로 재생되는 동안 세션의 스피커와 실시간 레벨"
+}

@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderer",
+"Renderer panel": "Panel rendereru",
+"Close the renderer": "Zavřít renderer",
+"Speakers and their live levels": "Reproduktory a jejich aktuální úrovně",
+"Fold to stereo": "Složit do stereo",
+"Levels show while the session plays as a fold-down": "Úrovně se zobrazují, když se relace přehrává jako downmix",
+"Speaker {0} level": "Úroveň reproduktoru {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Otevřít renderer: reproduktory relace a jejich aktuální úrovně při přehrávání jako downmix"
+}

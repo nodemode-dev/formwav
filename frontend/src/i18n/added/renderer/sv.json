@@ -1,0 +1,10 @@
+{
+"Renderer": "Renderare",
+"Renderer panel": "Renderarpanel",
+"Close the renderer": "Stäng renderaren",
+"Speakers and their live levels": "Högtalare och deras livenivåer",
+"Fold to stereo": "Fäll ihop till stereo",
+"Levels show while the session plays as a fold-down": "Nivåerna visas medan sessionen spelas upp som nedmixning",
+"Speaker {0} level": "Nivå för högtalare {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Öppna renderaren: sessionens högtalare och deras livenivåer medan den spelas upp som nedmixning"
+}

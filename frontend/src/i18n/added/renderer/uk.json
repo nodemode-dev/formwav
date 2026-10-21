@@ -1,0 +1,10 @@
+{
+"Renderer": "Рендерер",
+"Renderer panel": "Панель рендерера",
+"Close the renderer": "Закрити рендерер",
+"Speakers and their live levels": "Колонки та їхні рівні в реальному часі",
+"Fold to stereo": "Звести в стерео",
+"Levels show while the session plays as a fold-down": "Рівні показуються, поки сесія відтворюється як даунмікс",
+"Speaker {0} level": "Рівень колонки {0}",
+"Open the renderer: the session's speakers and their live levels while it plays as a fold-down": "Відкрити рендерер: колонки сесії та їхні рівні в реальному часі під час відтворення як даунмікс"
+}
