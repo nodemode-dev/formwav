@@ -109,7 +109,7 @@ def _acestep_entry() -> dict:
     from . import acestep
 
     st = acestep.status()
-    return {"id": "acestep", "label": "ACE-Step 1.5 (this machine)", "ready": st["ready"], "needs": f"ACE-Step's server at {st['url']} (uv run acestep-api)", "offers": ["music", "cover", "repaint", "lego", "extract", "complete"], "models": st["models"]}
+    return {"id": "acestep", "label": "ACE-Step 1.5 (this machine)", "ready": st["ready"], "needs": f"ACE-Step installed on this machine (Install a model on this machine), or its server at {st['url']} (uv run acestep-api)", "offers": ["music", "cover", "repaint", "lego", "extract", "complete"], "models": st["models"]}
 
 
 def providers() -> dict:

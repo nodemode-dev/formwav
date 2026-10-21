@@ -40,8 +40,20 @@ def _data(raw: bytes, what: str):
     return out.get("data")
 
 
+def _local() -> bool:
+    """PLAN_v12 R6: ACE-Step built on this machine (services/acestep_local.py) serves the tasks when no server address
+    is set; an address set in ACESTEP_API_URL keeps them on that server."""
+    from . import acestep_local
+
+    return not os.environ.get("ACESTEP_API_URL") and acestep_local.installed()
+
+
 def status() -> dict:
     """Whether ACE-Step's server answers here, and its loaded models."""
+    if _local():
+        from . import acestep_local
+
+        return {"ready": True, "models": [acestep_local.TURBO, acestep_local.BASE], "default": acestep_local.TURBO, "url": "this machine (acestep.cpp)"}
     try:
         code, raw, _ = _http("GET", f"{_base()}/v1/models", _headers(), None, timeout=3)
     except ProviderError:
@@ -62,6 +74,10 @@ def generate(task: str = "text2music", prompt: str = "", lyrics: str = "", secon
         raise ProviderError(422, "describe the music, or give lyrics")
     if task != "text2music" and not media_id:
         raise ProviderError(422, f"{task} works on a clip: choose one")
+    if _local():
+        from . import acestep_local
+
+        return acestep_local.generate(task, prompt, lyrics, seconds, media_id, repaint_start, repaint_end, strength, bpm, key, max_wait_s=max(max_wait_s, 3600))
     fields: dict[str, str] = {"task_type": task, "batch_size": "1", "audio_format": "wav"}
     if prompt.strip():
         fields["prompt"] = prompt
