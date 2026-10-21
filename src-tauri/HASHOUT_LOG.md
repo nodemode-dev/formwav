@@ -2,6 +2,13 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### icons/, ../assets/formwav_folder_icon.png, ../assets/formwav_icon.svg, ../frontend/public/ icons · the family icon (owner decision)
+- refers-to: icons/icon.icns, icon.ico, icon.png, 32x32.png, 128x128.png, 128x128@2x.png; ../frontend/public/favicon-32.png, apple-touch-icon.png, icon-192.png; ../assets/formwav_folder_icon.png, formwav_icon.svg
+- kind: rationale
+- logged: v2.17.2 · 2026-10-20
+
+The yellow f-note moves to the form family construction: the dark tile with bloom, rim and drop shadow, and one diagonal spectrum gradient (#3A7BFF, #9A5CFF, #FF4F7A, #FFAE2B) with an extruded side, gloss, a soft blurred highlight and an inset light rim. The f-note outline is traced from the previous 1024 px icon, so the shape is the owner's own. A waveform in the rounded stroke style of the audio-waveform glyph runs into the f at its crossbar nub from the left, and a second one leaves the stem lower down on the right with one deep swing and one tall peak; the three are one shape, nudged left of centre for optical balance. The macOS .icns uses the 824 px tile inside a 1024 canvas with a 100 px margin; everything else is full bleed at its previous size, and icon.png is now a native 1024 px master, which retires the upscaled 512 px master noted under the desktop shell entry below. assets/formwav_icon.svg is the vector source. The in-app `.fw-logo` stays the currentColor waveform glyph. File names are unchanged, so tauri.conf.json's icon list and index.html's links need no edit. Landed from the owner's icon files by hand; the feat/app-icon-redesign bundle was read as the change description and not applied.
+
 ### src/main.rs, tauri.conf.json, capabilities/default.json, Cargo.toml, build.rs, icons/ · the desktop shell (owner decision, Sprint D)
 - refers-to: src/main.rs :: `main`, `kill_backend`, `with_open`, `open_session`, `Backend`, `Session`; tauri.conf.json; capabilities/default.json; ../build_macos_app; ../backend/desktop_entry.py
 - kind: warning-context
