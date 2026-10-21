@@ -23,6 +23,8 @@ Each recipe assumes `formwav_status` answered and `formwav_open_session_tools` l
 2. `formwav_describe_command` before each: quantize takes a note value and strength.
 3. Run them as one batch, then `get_session` to read the clip's note count.
 
+Lyrics on a note clip (v2.19.6): `apply_document_commands` with `set-note-lyrics` (trackId, clipId, from: the index of the first note in the clip's notes, text: the whole line; one syllable lands on each note in time order, a hyphen splits a word where typed, "-" alone holds the syllable before), `shift-lyrics` (from, by 1 or -1) to fix a line that landed one note off, and `set-sing-syllable` ("da", the default, or "la") for what notes without a lyric sing. Lyrics do not re-render the clip; read them back from `get_session_state`.
+
 ## Surround placement
 
 1. `formwav_list_commands` text "surround" for the format and fold-down commands.
