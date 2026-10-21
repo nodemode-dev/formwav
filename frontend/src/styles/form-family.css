@@ -1,0 +1,141 @@
+/* The form family's look, matched to formvfx v0.47.0: panels are bordered cards on a 4 px gutter, heads are 32 px
+ * group heads with chip tabs, floating surfaces are glass, fields carry the family's chevron and accent focus, and the
+ * timeline bed and timecode take the family's track and timecode colours. Loaded last, so it sets the look over the
+ * older layers; every value is a token, so all fifteen theme profiles (light and sand included) follow it. */
+
+:root {
+  --fw-titlebar-h: 40px;
+  --fw-group-head-h: 32px;
+  --fw-gutter: var(--space-1);
+  --fw-track-bg: color-mix(in srgb, var(--bg-primary) 82%, #000);
+  --fw-ruler-bg: var(--surface-1);
+  --fw-timecode: #4d93ff;
+}
+body.theme-light {
+  --fw-track-bg: var(--bg-secondary);
+  --fw-timecode: #2f62c9;
+}
+
+.fw-shell { font-size: var(--fs-12); line-height: 1.35; background: var(--bg-primary); }
+
+/* Workspace: cards on a gutter, the resizers living in the gaps. */
+.fw-workspace { padding: var(--fw-gutter); background: var(--bg-primary); }
+.fw-pane {
+  border: 1px solid var(--line-0);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.fw-pane-media, .fw-pane-inspector { background: var(--surface-0); }
+.fw-pane-timeline { background: var(--surface-0); }
+.fw-pane:focus-within { border-color: var(--line-3); }
+.fw-pane-divider,
+.fw-pane-divider[data-side="media"],
+.fw-pane-divider[data-side="inspector"] { border: 0; background: transparent; position: relative; }
+.fw-pane-divider::after {
+  content: "";
+  position: absolute;
+  inset-block: var(--space-2);
+  inset-inline-start: calc(50% - 1px);
+  inline-size: 2px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+.fw-pane-divider:hover,
+.fw-pane-divider.is-dragging { background: transparent; }
+.fw-pane-divider:hover::after,
+.fw-pane-divider.is-dragging::after { background: var(--accent-color); }
+
+/* Group heads and chip tabs. */
+.fw-pane-header { min-block-size: var(--fw-group-head-h); gap: var(--space-1); padding: 0 var(--space-1); }
+.fw-pane-tab { block-size: 24px; padding: 0 10px; border-radius: var(--radius); }
+.fw-pane:focus-within .fw-pane-tab.is-active { border-color: var(--accent-line); }
+.fw-pane-title {
+  padding: 3px 10px;
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: var(--fs-12);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Buttons: the family's chips. */
+.fw-ibtn, .fw-tbtn { border-color: var(--line-2); background: var(--surface-1); }
+.fw-ibtn:hover:not(:disabled), .fw-tbtn:hover:not(:disabled) { background: var(--surface-raised); color: var(--text-primary); }
+.fw-ibtn:focus-visible, .fw-tbtn:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+
+/* Fields: accent border on focus, the family's chevron on every select. */
+.fw-shell select,
+dialog select {
+  appearance: none;
+  padding-inline-end: 22px;
+  border-color: var(--line-2);
+  border-radius: var(--radius);
+  background-color: var(--surface-field);
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 11px) 50%, calc(100% - 7px) 50%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.fw-shell input[type="text"]:focus,
+.fw-shell input[type="number"]:focus,
+.fw-shell input[type="search"]:focus,
+.fw-shell select:focus,
+.fw-shell textarea:focus,
+dialog input:focus,
+dialog select:focus,
+dialog textarea:focus { outline: none; border-color: var(--accent-color); }
+
+/* Floating surfaces: glass, as the family's menus and flyouts are. */
+.fw-popover,
+.fw-menu-pop,
+.fw-palette {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--surface-2) 95%, transparent);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+}
+.fw-popover { padding: 6px; }
+.fw-popover-row { border-radius: 7px; }
+.fw-popover-row:hover { background: var(--accent-soft); }
+.fw-palette-input { border-color: var(--line-2); border-radius: var(--radius-md); background: var(--surface-field); }
+.fw-palette-input:focus { border-color: var(--accent-color); }
+.fw-palette-row { border-radius: 7px; }
+.fw-palette-row[aria-selected="true"] { background: var(--accent-soft); }
+
+dialog[open] {
+  border: 1px solid var(--line-3);
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+body.theme-light dialog[open] { box-shadow: var(--shadow-window); }
+dialog::backdrop { background: var(--bg-scrim); }
+
+/* Timeline: the family's ruler and track bed, and the timecode in its own colour. */
+.fw-ruler { background: var(--fw-ruler-bg); border-block-end-color: var(--line-0); }
+.fw-lanes { background: var(--fw-track-bg); }
+.fw-clock[data-mode="time"],
+.fw-status .fw-clock[data-mode="time"] { color: var(--fw-timecode); }
+.fw-status .fw-clock { font-weight: 500; }
+
+/* The agent column: a card like the others, its head a group head, its tabs chips. */
+.fw-pane-agent { border: 1px solid var(--line-0); border-radius: var(--radius-md); background: var(--surface-0); overflow: hidden; }
+.fw-pane-agent .fw-term-head { gap: var(--space-1); min-block-size: var(--fw-group-head-h); padding: 0 var(--space-1); background: var(--group-head); border-block-end: 1px solid var(--line-0); }
+.fw-pane-agent .fw-term-head > * { flex-shrink: 0; }
+.fw-pane-agent .fw-term-head > .fw-agent-via { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-pane-agent .fw-term-head > .fw-ibtn { padding: 0 8px; }
+.fw-agent-tabs { gap: 2px; }
+.fw-agent-tab { block-size: 24px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--radius); color: var(--text-secondary); font-size: var(--fs-12); }
+.fw-agent-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-agent-tab[aria-selected="true"] { border-color: var(--line-3); background: var(--surface-raised); color: var(--text-primary); font-weight: 500; }
+
+/* Status bar: the family's footer. */
+.fw-status { background: var(--bg-secondary); border-block-start: 1px solid var(--line-0); }
