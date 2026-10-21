@@ -21,6 +21,36 @@ async def import_aup(request: Request) -> dict:
         raise HTTPException(422, str(err)) from err
 
 
+@router.post("/projects/import-omf")
+async def import_omf(request: Request) -> dict:
+    """R11: an OMF 2 file's timeline as tracks of clips (services/omf.py), its audio from its own media data, or, for an
+    .omf whose audio lives beside it, from a zip of the .omf and those files."""
+    import io
+    import zipfile
+
+    from ..services import omf
+
+    data = await request.body()
+    if not data:
+        raise HTTPException(400, "the request carried no file")
+    beside: dict[str, bytes] = {}
+    if data[:2] == b"PK":
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                names = [n for n in z.namelist() if not n.endswith("/") and "__MACOSX" not in n]
+                first = next((n for n in names if n.lower().endswith(".omf")), None)
+                if first is None:
+                    raise HTTPException(422, "the zip holds no .omf file")
+                beside = {n: z.read(n) for n in names if n != first and n.lower().rsplit(".", 1)[-1] in ("wav", "aif", "aiff")}
+                data = z.read(first)
+        except zipfile.BadZipFile as err:
+            raise HTTPException(422, "the zip could not be read") from err
+    try:
+        return omf.import_omf(data, beside)
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
+
+
 @router.post("/projects/import-aaf")
 async def import_aaf(request: Request) -> dict:
     """PT-30: an AAF's timeline as tracks of clips, its embedded audio imported (services/aaf.py)."""
