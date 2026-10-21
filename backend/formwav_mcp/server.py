@@ -347,12 +347,13 @@ async def formwav_regenerate_words(media_id: str, start_seconds: float, end_seco
 
 
 @mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
-async def formwav_dub_media(media_id: str, language: str = "es", engine: str = "local") -> dict[str, Any]:
+async def formwav_dub_media(media_id: str, language: str = "es", engine: str = "local", own_voice: bool = False) -> dict[str, Any]:
     """Dubs a media's speech into another language, as new media the same length: engine local (Whisper, Argos
-    Translate and Kokoro on this machine; es, fr, it or pt once installed) or elevenlabs (needs ELEVENLABS_API_KEY;
-    waits for the job, up to 20 minutes)."""
+    Translate and Kokoro on this machine; es, fr, it or pt once installed; own_voice speaks it in the speaker's own
+    voice with Chatterbox instead, about 100 s for an 11 s clip) or elevenlabs (needs ELEVENLABS_API_KEY; waits for
+    the job, up to 20 minutes)."""
     if engine == "local":
-        out = (await _post(f"/api/providers/local-dub/{quote(language)}", {"media_id": media_id})).json()
+        out = (await _post(f"/api/providers/local-dub/{quote(language)}", {"media_id": media_id, **({"voice": "own"} if own_voice else {})}, timeout=7200.0)).json()
         return {**_media(out["media"]), "language": language, "sentences": [{"start": p["start"], "text": p["text"], "translated": p.get("translated")} for p in out.get("sentences", [])]}
     if engine == "elevenlabs":
         import asyncio

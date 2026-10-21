@@ -114,9 +114,9 @@ Speech from text, as new media: engine kokoro (on this machine; voice a Kokoro v
 
 ### `formwav_dub_media`
 
-Kind: makes new media or writes a file. Parameters: `media_id` (string), `language` (string, default 'es'), `engine` (string, default 'local').
+Kind: makes new media or writes a file. Parameters: `media_id` (string), `language` (string, default 'es'), `engine` (string, default 'local'), `own_voice` (boolean, default false).
 
-Dubs a media's speech into another language, as new media the same length: engine local (Whisper, Argos Translate and Kokoro on this machine; es, fr, it or pt once installed) or elevenlabs (needs ELEVENLABS_API_KEY; waits for the job, up to 20 minutes).
+Dubs a media's speech into another language, as new media the same length: engine local (Whisper, Argos Translate and Kokoro on this machine; es, fr, it or pt once installed; own_voice speaks it in the speaker's own voice with Chatterbox instead, about 100 s for an 11 s clip) or elevenlabs (needs ELEVENLABS_API_KEY; waits for the job, up to 20 minutes).
 
 ## Music and sound
 

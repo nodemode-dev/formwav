@@ -51,7 +51,7 @@
 ## Dubbing
 
 1. `formwav_local_models_status`: local dubbing languages installed, or the ElevenLabs key.
-2. `formwav_dub_media` with the language code (es, fr, it, pt) and engine local or elevenlabs. It returns media the same length as the source, each sentence placed where it was said, and the sentences translated.
+2. `formwav_dub_media` with the language code (es, fr, it, pt) and engine local or elevenlabs. It returns media the same length as the source, each sentence placed where it was said, and the sentences translated. Locally, `own_voice` true keeps the speaker's voice (Chatterbox, when the status lists it installed) instead of a stock Kokoro voice; it is slower, about 100 s for an 11 s clip, so say so before starting a long one.
 3. Report the translated sentences so the person can check them.
 
 ## Recording a take
