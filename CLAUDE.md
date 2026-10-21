@@ -57,8 +57,8 @@ order of steps and how to recover; load it before driving formwav, and update it
 the skill changes, so the two stay byte for byte equal.
 
 The look is the form family's (formvfx's): `frontend/src/styles/form-family.css`, loaded last, makes panels bordered
-cards on a 4 px gutter, 32 px group heads with chip tabs, glass floating surfaces and the family's field chevron and
-timecode colour, all from tokens so every theme follows; a new surface takes its look from there, not from the older
+cards on a 4 px gutter, 32 px group heads with chip tabs, glass floating surfaces, the family's field surfaces (selects
+keep the system arrow: the clipping check allows for it) and timecode colour, all from tokens so every theme follows; a new surface takes its look from there, not from the older
 layers (shell.css, workspace.css, frame.css, surfaces.css, canvas.css).
 
 The interface is in 26 languages (PLAN_v14 W7): code writes English everywhere, and `frontend/src/ui/i18n.ts` translates
