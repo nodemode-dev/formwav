@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "formwav": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/backend/formwav_mcp/serve"
+    }
+  }
+}

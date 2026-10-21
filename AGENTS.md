@@ -46,9 +46,9 @@ Every menu bar item and session tool is a command in `frontend/src/ui/commands.t
 command by itself (menu.words), so give it clear words and a title; agents reach commands through `run_command`.
 
 Agents drive formwav through two surfaces; extend them rather than adding a third. The MCP server in
-`backend/formwav_mcp` (started by `backend/formwav_mcp/serve`, or from a checkout by `mcp/formwav_mcp.py`) gives 28 tools over the engine's HTTP API; the in-app
+`backend/formwav_mcp` (started by `backend/formwav_mcp/serve`, or from a checkout by `mcp/formwav_mcp.py`; registered for Codex by `.codex/config.toml`, for Cursor by `.cursor/mcp.json`, for Claude Code by `.mcp.json`) gives 34 tools over the engine's HTTP API, six of which reach the open window's session (its 37 tools and every catalogue command, batches rolled back on failure; the window asks the person once to allow an outside agent); the in-app
 agent (`frontend/src/ui/agent-pane.ts`) gives 37 tools over the session's commands (33 tools and the 4 command tools; PLAN_v13 S12 added the whole session's state and the engine's own commands, listed with their parameters by `frontend/src/engine/catalogue.ts`), placing what it makes on tracks. With no window, `./formwav cli headless run --in FILE.fmw|--demo --cmd JSON --bounce OUT.wav` applies the same engine commands to a saved session (`backend/app/headless.py`). The playbook in
-`.claude/skills/formwav-harness/SKILL.md` (plain Markdown, with sub-skills under it) teaches an agent to use the MCP tools well: what to check first, which tool fits, the
+`.agents/skills/formwav-harness/SKILL.md` (a copy of `.claude/skills/formwav-harness`, kept identical; plain Markdown, with sub-skills under it, `sub-skills/session` for editing a session) teaches an agent to use the MCP tools well: what to check first, which tool fits, the
 order of steps and how to recover; read it before driving formwav, and update its tools reference whenever a tool changes.
 
 The interface is in 26 languages: code writes English, and `frontend/src/ui/i18n.ts` translates it in place from the tables in `frontend/src/i18n/<code>.json` (keyed by

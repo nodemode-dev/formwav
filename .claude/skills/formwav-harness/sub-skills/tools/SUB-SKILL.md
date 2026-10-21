@@ -11,7 +11,7 @@ Say which tool does a job and how to call it, without guessing names or paramete
 
 ## How the tools are organised
 
-`references/tools.md` lists all 28 in eight groups (check before working; find and measure media; repair and effects; words and speech; music and sound; recording; sessions and delivery; cloud), each with its kind, its parameters and defaults, and what it does. It is generated from the server's own listing; trust it over memory.
+`references/tools.md` lists all 34 in nine groups (check before working; find and measure media; repair and effects; words and speech; music and sound; recording; sessions and delivery; cloud; the open session), each with its kind, its parameters and defaults, and what it does. It is generated from the server's own listing; trust it over memory.
 
 Three kinds, from each tool's annotations: tools that only read (status, lists, analysis, speech regions, inputs, cloud status and files) can be called freely; tools that make new media or write a file never change a source but do add media or overwrite the named file; `formwav_cloud_save` reaches the person's cloud store.
 

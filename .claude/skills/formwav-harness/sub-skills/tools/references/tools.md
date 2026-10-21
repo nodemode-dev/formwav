@@ -1,6 +1,6 @@
 # formwav's MCP tools
 
-Generated from the server's own listing (28 tools) by the harness's generator; regenerate after any tool change rather than editing by hand (the generator refuses when this grouping and the server disagree). Names are exact and case sensitive.
+Generated from the server's own listing (34 tools) by the harness's generator; regenerate after any tool change rather than editing by hand (the generator refuses when this grouping and the server disagree). Names are exact and case sensitive.
 
 ## Contents
 
@@ -12,6 +12,7 @@ Generated from the server's own listing (28 tools) by the harness's generator; r
 - Recording
 - Sessions and delivery
 - Cloud
+- The open session
 
 ## Check before working
 
@@ -77,7 +78,7 @@ Removes what leaked into a recording from another recording (headphone spill, a 
 
 Kind: makes new media or writes a file. Parameters: `media_id` (string).
 
-Splits a media into speech, music and effects, three new media that add up to it exactly, on this machine: DeepFilterNet3's speech, then music by the trained TIGER-DnR separator where it is installed (`method` "trained"; the effects part comes back under `ambience`) or by harmonic-percussive masks (`method` "rule"). The trained model is installed from the interface (Sounds > Models, Install a model on this machine) and takes about eleven times the clip's length on a two-core machine.
+Splits a media into speech, music and effects, three new media that add up to it exactly, on this machine: DeepFilterNet3's speech, then music by the trained TIGER-DnR separator where it is installed (method "trained"; the effects part comes back under ambience) or by harmonic-percussive masks (method "rule").
 
 ## Words and speech
 
@@ -196,3 +197,41 @@ Brings a file from a connected cloud store into formwav: a session (.fmw) become
 Kind: reaches the cloud. Parameters: `provider` (string), `session` (string, default ''), `media_id` (string, default '').
 
 Saves a saved session (by name) or a media (by id) to a connected cloud store (google or dropbox).
+
+## The open session
+
+### `formwav_open_session_tools`
+
+Kind: reads only. Parameters: none.
+
+The tools of the session open in formwav's window (tracks, clips, effects, transcript, markers, loop, the command catalogue): names, descriptions and input schemas. They run inside the open window, so formwav must be open with a session; call formwav_open_session_call with a name from this list.
+
+### `formwav_open_session_call`
+
+Kind: makes new media or writes a file. Parameters: `tool` (string), `arguments` (object/null, default None).
+
+Runs one tool of the open session (from formwav_open_session_tools), for example get_session, set_track_gain, split_clip or apply_effect_to_clip. Every change is one undoable step in the window.
+
+### `formwav_list_commands`
+
+Kind: reads only. Parameters: `group` (string, default ''), `text` (string, default '').
+
+The open session's command catalogue: every menu, key and button action, with its id and group. Filter by group or by words in text. Needs formwav's window open.
+
+### `formwav_describe_command`
+
+Kind: reads only. Parameters: `command_id` (string).
+
+One catalogue command's parameters, defaults and what it does, before running it with formwav_run_command.
+
+### `formwav_run_command`
+
+Kind: makes new media or writes a file. Parameters: `command_id` (string), `params` (object/null, default None).
+
+Runs one catalogue command on the open session with its params (see formwav_describe_command). One undo step.
+
+### `formwav_run_commands`
+
+Kind: makes new media or writes a file. Parameters: `commands` (array).
+
+Runs several catalogue commands in order, each {"id": ..., "params": {...}}; stops at the first that fails and takes back everything the batch did, so the session is never left half-edited.

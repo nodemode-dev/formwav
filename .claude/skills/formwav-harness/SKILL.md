@@ -1,11 +1,11 @@
 ---
 name: formwav-harness
-description: "Drives formwav, the audio editor, through its MCP server (the formwav_* tools) with the judgment the tools lack: which engine is ready, what to measure first, what each edit makes. Use whenever the user wants formwav to repair a recording (noise, hum, clicks, reverb or echo, a leak from another track), clean up a podcast or interview, transcribe or rewrite words in the speaker's own voice, make speech, music, songs or sound effects, dub into another language, split speech, music and ambience, record a take, render a session as a stereo mix, 5.1 or moving ADM objects, or save to Google Drive or Dropbox; when a formwav_ tool (formwav_status, formwav_dub_media or any other) fails, says it needs a key or an install, or does not show up; and when connecting the formwav MCP server to Claude Code, Codex, Cursor or Claude Desktop, or adding or changing one of its tools. Not for formcut (video) or formvis (images), and not for audio work that does not involve formwav."
+description: "Drives formwav, the audio editor, through its MCP server (the formwav_* tools) with the judgment the tools lack: which engine is ready, what to measure first, what each edit makes. Use whenever the user wants formwav to edit the open session (tracks, clips, menu commands, batches), repair a recording (noise, hum, clicks, reverb, a leak from another track), clean up a podcast, transcribe or rewrite words in the speaker's own voice, make speech, music, songs or sound effects, dub into another language, split speech, music and ambience, record a take, render a session as a stereo mix, 5.1 or moving ADM objects, or save to Google Drive or Dropbox; when a formwav_ tool (formwav_status, formwav_dub_media or any other) fails, says it needs a key or an install, or does not show up; and when connecting the formwav MCP server to Claude Code, Codex, Cursor or Claude Desktop, or adding or changing one of its tools. Not for formcut (video) or formvis (images), and not for audio work that does not involve formwav."
 ---
 
 # formwav harness
 
-formwav's MCP server gives an agent 28 `formwav_*` tools that reach formwav's engine: media, repairs, speech, music, dubbing, separation, recording, sessions, renders and the cloud. Access is not judgment. Without this harness an agent calls a generator whose engine is not installed, edits before measuring, loses track of which media came from which, or stops dead at a missing key. This pack is the judgment: what to check first, which tool fits, the order of the steps, and what to tell the person when something they must do is missing.
+formwav's MCP server gives an agent 34 `formwav_*` tools that reach formwav's engine: media, repairs, speech, music, dubbing, separation, recording, sessions, renders and the cloud, and, with the window open, the open session itself (its tools and every menu, key and button command). Access is not judgment. Without this harness an agent calls a generator whose engine is not installed, edits before measuring, loses track of which media came from which, or stops dead at a missing key. This pack is the judgment: what to check first, which tool fits, the order of the steps, and what to tell the person when something they must do is missing.
 
 ## How this pack is laid out
 
@@ -15,7 +15,8 @@ formwav-harness/
   EVALS.json                    evaluations and trigger tests
   sub-skills/
     harness-director/           first look: is the engine up, what is installed, which workflow
-    tools/                      what each tool does; references/tools.md lists all 28, generated from the server
+    tools/                      what each tool does; references/tools.md lists all 34, generated from the server
+    session/                    editing the open session: its tools, the command catalogue, batches, the headless CLI
     workflows/                  every workflow step by step; references/workflows.md
     setup/                      connecting Claude Code, Codex, Cursor and Claude Desktop; the troubleshooting checklist
     development/                adding or changing a tool; the tool-change checklist
@@ -27,6 +28,7 @@ formwav-harness/
 | --- | --- |
 | Any formwav job not covered below, or unclear which tool fits | `sub-skills/harness-director/SUB-SKILL.md` |
 | What a tool does, its parameters, which of two tools to use | `sub-skills/tools/SUB-SKILL.md` |
+| Changing a session: tracks, clips, effects on tracks, markers, MIDI, surround, any menu command, or a saved .fmw with no window | `sub-skills/session/SUB-SKILL.md` |
 | A job with several steps: cleanup, words, music, dubbing, delivery, recording, cloud | `sub-skills/workflows/SUB-SKILL.md` |
 | Connecting formwav's server to a client, or the tools do not appear | `sub-skills/setup/SUB-SKILL.md` |
 | Adding a tool to the server or changing one | `sub-skills/development/SUB-SKILL.md` |
@@ -41,7 +43,9 @@ These hold for every workflow, because each one prevents a failure seen in pract
 - **Measure before and after.** `formwav_analyze_media` on the source and on the result; report both. A repair without numbers is a guess.
 - **Paths come from the person.** `formwav_import_audio`, `formwav_export_media` and `formwav_render_session` read and write files; use paths the person gave, and ask when they gave none.
 
-## The three core workflows
+## The four core workflows
+
+**0. Edit the open session.** With formwav's window open: `formwav_open_session_tools`, `formwav_open_session_call` with `get_session` for the ids, then a session tool, or `formwav_list_commands` and `formwav_describe_command` to find a menu command and `formwav_run_command` to run it; several dependent steps go in one `formwav_run_commands`, which takes everything back on a failure. The first call asks the person to allow the agent in the window. Details in `sub-skills/session/SUB-SKILL.md`.
 
 **1. Repair a recording.** `formwav_status`; find the media with `formwav_list_media` or bring a file in with `formwav_import_audio`; measure with `formwav_analyze_media`; find the repair with `formwav_list_effects` and a word from the problem (dereverb, denoise, click, hum, bleed); apply it with `formwav_apply_effect` at moderate settings, or `formwav_debleed` with the leaking recording as `reference_media_id`; measure the result; export with `formwav_export_media`. When the problem is music or room under speech, `formwav_separate_speech_music_ambience` gives three media that add up to the source exactly.
 

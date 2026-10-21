@@ -1,7 +1,9 @@
 {
   "mcpServers": {
     "formwav": {
-      "command": "backend/formwav_mcp/serve"
+      "type": "stdio",
+      "command": "${CLAUDE_PROJECT_DIR:-.}/backend/formwav_mcp/serve",
+      "args": []
     }
   }
 }

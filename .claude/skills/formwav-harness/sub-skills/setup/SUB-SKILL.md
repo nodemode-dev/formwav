@@ -7,11 +7,11 @@ description: "Connects formwav's MCP server to Claude Code, Codex, Cursor or Cla
 
 ## Purpose
 
-Get the 28 tools in front of the agent. The server is `backend/formwav_mcp/serve` in the formwav repository: it starts from any working directory, speaks stdio by default, and Streamable HTTP on 127.0.0.1:8061/mcp with `--http`. It reaches formwav's engine at `FORMWAV_ENGINE` (default http://127.0.0.1:8060), so formwav must be running.
+Get the 34 tools in front of the agent. Inside a formwav checkout nothing needs setting up: the repository's `.mcp.json` (Claude Code), `.codex/config.toml` (Codex, trusted project) and `.cursor/mcp.json` (Cursor) already register this server, and `.agents/skills/formwav-harness` mirrors this skill for agents that do not read `.claude`. The server is `backend/formwav_mcp/serve` in the formwav repository: it starts from any working directory, speaks stdio by default, and Streamable HTTP on 127.0.0.1:8061/mcp with `--http`. It reaches formwav's engine at `FORMWAV_ENGINE` (default http://127.0.0.1:8060), so formwav must be running.
 
 ## The quickest way
 
-In formwav, Settings > Agents adds formwav to Claude Code, Codex, Cursor or Claude Desktop in one click, merging into the client's own configuration beside its other servers and keeping the previous file as a backup; it also shows each client's exact text to copy. Restart the client afterwards. In the installed desktop app the stdio command is the app's own engine with `--mcp-stdio`, which relays to the running app's session tools (the window's, not the 28 here), so the app must be open; Claude Code connects to the app over HTTP at `/mcp` instead.
+In formwav, Settings > Agents adds formwav to Claude Code, Codex, Cursor or Claude Desktop in one click, merging into the client's own configuration beside its other servers and keeping the previous file as a backup; it also shows each client's exact text to copy. Restart the client afterwards. In the installed desktop app the stdio command is the app's own engine with `--mcp-stdio`, which relays to the running app's session tools (the window's 37, which the six open-session tools here also reach), so the app must be open; Claude Code connects to the app over HTTP at `/mcp` instead.
 
 ## Per client, by hand
 

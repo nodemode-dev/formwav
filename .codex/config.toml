@@ -1,0 +1,5 @@
+[mcp_servers.formwav]
+command = "sh"
+args = ["-c", "exec \"$(git rev-parse --show-toplevel)/backend/formwav_mcp/serve\""]
+startup_timeout_sec = 60
+tool_timeout_sec = 900

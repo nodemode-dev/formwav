@@ -1,0 +1,160 @@
+{
+ "skill_name": "formwav-harness",
+ "notes": "Each prompt is something a formwav user would type. Expected behaviours are observable in the transcript of tool calls and the reply. Run with formwav's MCP server connected and the engine running; evaluation 2 assumes no ElevenLabs key and ACE-Step's server not running, as on a fresh install.",
+ "evals": [
+  {
+   "id": 1,
+   "name": "podcast-cleanup-measured-and-non-destructive",
+   "prompt": "My interview kitchen-table.wav on the desktop has a fridge hum and a lot of room echo. Clean it up with formwav and save the result as kitchen-table-clean.wav next to it.",
+   "files": [],
+   "expected_behavior": [
+    "formwav_status is called before any other formwav tool",
+    "the file is brought in with formwav_import_audio using the path the person gave, not an invented one",
+    "formwav_analyze_media is called on the source before any repair and on the result after it, and the reply reports both measurements",
+    "the repair is found through formwav_list_effects (hum, dereverb) or formwav_separate_speech_music_ambience, and applied as new media; the reply lists the media ids and never claims the source was changed",
+    "the result is written with formwav_export_media to kitchen-table-clean.wav in the same folder"
+   ]
+  },
+  {
+   "id": 2,
+   "name": "generation-with-nothing-ready",
+   "prompt": "use formwav to make me a 20 second lofi beat for my podcast intro",
+   "files": [],
+   "expected_behavior": [
+    "formwav_local_models_status is called before formwav_generate_music",
+    "when no music engine is ready, the reply names exactly what is missing (ELEVENLABS_API_KEY in formwav's backend/.env, or ACE-Step's server started with uv run acestep-api) rather than retrying the failing call",
+    "the reply offers what is ready instead, or asks which of the two the person wants to set up, and does not claim a beat was made"
+   ]
+  },
+  {
+   "id": 3,
+   "name": "fix-a-word-in-the-speakers-voice",
+   "prompt": "In interview.wav I say 'next Tuesday' at the start but it should be 'next Thursday'. Can formwav fix that in my own voice?",
+   "files": [],
+   "expected_behavior": [
+    "formwav_transcribe_media is called and the start and end times of the words 'next Tuesday' are taken from its result",
+    "formwav_regenerate_words is called with those times, the text 'next Thursday', and an engine formwav_local_models_status lists as ready (or the reply names what to install or which key to add when none is)",
+    "the new media is transcribed again to confirm the words, and its media id is reported with the note that the original is unchanged"
+   ]
+  },
+  {
+   "id": 4,
+   "name": "deliver-a-session-as-adm-and-stereo",
+   "prompt": "Render my formwav session Night Drive as an ADM file for the mix stage, and a stereo WAV for the client.",
+   "files": [],
+   "expected_behavior": [
+    "formwav_list_sessions or formwav_get_session confirms the session's exact name and its tracks before rendering",
+    "formwav_render_session is called twice, once with what set to adm and once with what set to mix, each to a path the person gives or confirms",
+    "the reply explains that objects come from tracks placed on formwav's surround pad (and move along their paths) and that tracks marked Bed form a 5.1 bed, and says so plainly if none are placed"
+   ]
+  },
+  {
+   "id": 5,
+   "name": "concept-question-without-tool-calls",
+   "prompt": "What is the difference between an ADM file and a plain 5.1 WAV?",
+   "files": [],
+   "expected_behavior": [
+    "the question is answered from knowledge without calling any formwav tool",
+    "it may mention that formwav renders both (formwav_render_session with what adm or surround51) without starting a workflow"
+   ]
+  }
+ ],
+ "trigger_evals": [
+  {
+   "query": "clean up this podcast in formwav",
+   "should_trigger": true
+  },
+  {
+   "query": "use formwav to take the hum out of this recording",
+   "should_trigger": true
+  },
+  {
+   "query": "transcribe this interview with formwav",
+   "should_trigger": true
+  },
+  {
+   "query": "rewrite the opening words in the speaker's voice with formwav",
+   "should_trigger": true
+  },
+  {
+   "query": "dub this clip into Spanish with formwav",
+   "should_trigger": true
+  },
+  {
+   "query": "make a song with formwav",
+   "should_trigger": true
+  },
+  {
+   "query": "render the formwav session as ADM objects",
+   "should_trigger": true
+  },
+  {
+   "query": "export a 5.1 mix of my formwav session",
+   "should_trigger": true
+  },
+  {
+   "query": "formwav_dub_media says it needs a key",
+   "should_trigger": true
+  },
+  {
+   "query": "connect the formwav MCP server to Claude Code",
+   "should_trigger": true
+  },
+  {
+   "query": "set up formwav in Cursor",
+   "should_trigger": true
+  },
+  {
+   "query": "add a tool to the formwav MCP server",
+   "should_trigger": true
+  },
+  {
+   "query": "formwav pls fix the echo on my vocal take",
+   "should_trigger": true
+  },
+  {
+   "query": "how do i hook formwav up to codex",
+   "should_trigger": true
+  },
+  {
+   "query": "Please render the session Night Drive from formwav as a stereo WAV and save it to Dropbox.",
+   "should_trigger": true
+  },
+  {
+   "query": "the formwav tools are not showing up in my agent",
+   "should_trigger": true
+  },
+  {
+   "query": "trim the first ten seconds of this clip in formcut",
+   "should_trigger": false
+  },
+  {
+   "query": "remove the background from this photo in formvis",
+   "should_trigger": false
+  },
+  {
+   "query": "clean up the noise in my audio file with another audio editor",
+   "should_trigger": false
+  },
+  {
+   "query": "write me a song about my dog",
+   "should_trigger": false
+  },
+  {
+   "query": "what is the best DAW for podcasts",
+   "should_trigger": false
+  },
+  {
+   "query": "connect the GitHub MCP server to Claude Code",
+   "should_trigger": false
+  },
+  {
+   "query": "explain how reverb works",
+   "should_trigger": false
+  },
+  {
+   "query": "transcribe this meeting recording",
+   "should_trigger": false
+  }
+ ]
+}

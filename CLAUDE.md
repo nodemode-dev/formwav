@@ -49,10 +49,17 @@ command by itself (menu.words), so give it clear words and a title; agents reach
 
 Agents drive formwav through two surfaces; extend them rather than adding a third. The MCP server in
 `backend/formwav_mcp` (started by `backend/formwav_mcp/serve`, or from a checkout by `mcp/formwav_mcp.py`; `.mcp.json`
-registers it for Claude Code) gives 28 tools over the engine's HTTP API; the in-app
+registers it for Claude Code, `.codex/config.toml` for Codex, `.cursor/mcp.json` for Cursor) gives 34 tools over the engine's HTTP API, six of which reach the open window's session (its 37 tools through `POST /mcp`, the catalogue through `/api/commands`, batches rolled back on failure); the in-app
 agent (`frontend/src/ui/agent-pane.ts`) gives 37 tools over the session's commands (33 tools and the 4 command tools; PLAN_v13 S12 added the whole session's state and the engine's own commands, listed with their parameters by `frontend/src/engine/catalogue.ts`), placing what it makes on tracks. With no window, `./formwav cli headless run --in FILE.fmw|--demo --cmd JSON --bounce OUT.wav` applies the same engine commands to a saved session (`backend/app/headless.py`). The project skill
 `.claude/skills/formwav-harness` teaches an agent to use the MCP tools well: what to check first, which tool fits, the
 order of steps and how to recover; load it before driving formwav, and update its tools reference whenever a tool changes.
+`.agents/skills/formwav-harness` is the same skill for agents that do not read `.claude`; copy the folder over it whenever
+the skill changes, so the two stay byte for byte equal.
+
+The look is the form family's (formvfx's): `frontend/src/styles/form-family.css`, loaded last, makes panels bordered
+cards on a 4 px gutter, 32 px group heads with chip tabs, glass floating surfaces and the family's field chevron and
+timecode colour, all from tokens so every theme follows; a new surface takes its look from there, not from the older
+layers (shell.css, workspace.css, frame.css, surfaces.css, canvas.css).
 
 The interface is in 26 languages (PLAN_v14 W7): code writes English everywhere, and `frontend/src/ui/i18n.ts` translates
 text, title, aria-label, placeholder, data-empty and data-label in place from `frontend/src/i18n/<code>.json`, tables
