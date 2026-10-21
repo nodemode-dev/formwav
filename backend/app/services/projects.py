@@ -220,7 +220,20 @@ def _read(path: Path) -> tuple[dict, dict, zipfile.ZipFile]:
     if int(manifest.get("formatVersion", 0)) > FORMAT_VERSION:
         z.close()
         raise ProjectError("the session was saved by a newer formwav")
+    # Sessions saved before v2.18.5 were mixed with each fader on the clips, ahead of the track's effects; S17 moved it
+    # after them. Marked as it is read, such a session plays and exports as it was mixed (player.ts and render.py read
+    # the mark, and every later save keeps it): Glasshouse, saved by 2.16.6, came out 2.2 LU quieter without it.
+    if isinstance(doc, dict) and "fadersBeforeInserts" not in doc and _older(str(manifest.get("appVersion", "")), (2, 18, 5)):
+        doc["fadersBeforeInserts"] = True
     return manifest, doc, z
+
+
+def _older(version: str, than: tuple[int, ...]) -> bool:
+    """Whether a version string (2.16.6) is before `than`; an unreadable or missing one counts as older."""
+    try:
+        return tuple(int(p) for p in version.split(".")[:3]) < than
+    except ValueError:
+        return True
 
 
 def open_project(name: str, near: list[Path] | None = None) -> dict:
@@ -308,31 +321,48 @@ def open_file(path_text: str) -> dict:
     """A .fmw from anywhere on this machine (the desktop app hands over a session file the user opened): checked to be
     a formwav session, copied into the sessions under its own name, or "name (2)" and on when a different session
     already has it (the same file twice reuses its copy), then opened like any saved session."""
-    import shutil
-
     source = Path(path_text).expanduser()
     if source.suffix.lower() != ".fmw" or not source.is_file():
         raise ProjectError("open a .fmw file that exists on this machine")
+    return open_project(adopt(source, source.stem), [source.parent])
+
+
+def _digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def adopt(source: Path, title: str, move: bool = False) -> str:
+    """A .fmw checked to be a formwav session and put among the sessions under its own name, or "name (2)" and on when a
+    different session already has it (the same file twice reuses its copy); its name. Copied, or moved for a file the
+    engine received, in blocks: a session with its media is hundreds of MB, never read into memory whole."""
+    import shutil
+
     try:
         _, _, z = _read(source)
         z.close()
     except zipfile.BadZipFile as err:
-        raise ProjectError("the file is damaged") from err
-    stem = re.sub(r"[^A-Za-z0-9 .,'()\-_]", "", source.stem).strip()[:72] or "Session"
+        raise ProjectError("the file is damaged or is not a formwav session") from err
+    stem = re.sub(r"[^A-Za-z0-9 .,'()\-_]", "", title).strip()[:72] or "Session"
     if not stem[0].isalnum():
         stem = f"Session {stem}"[:72]
-    data = source.read_bytes()
+    size, digest = source.stat().st_size, None
     for n in range(1, 100):
         name = stem if n == 1 else f"{stem} ({n})"
         target = _path(name)
         if not target.exists():
-            target.write_bytes(data)
-            break
-        if target.read_bytes() == data:
-            break
-    else:
-        raise ProjectError("too many sessions share this name")
-    return open_project(name, [source.parent])
+            (shutil.move if move else shutil.copyfile)(str(source), str(target))
+            return name
+        if target.stat().st_size == size:
+            digest = digest or _digest(source)
+            if _digest(target) == digest:
+                if move:
+                    source.unlink()
+                return name
+    raise ProjectError("too many sessions share this name")
 
 
 def list_projects() -> list[dict]:

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
@@ -183,6 +185,30 @@ def open_project_file(body: dict = Body(...)) -> dict:
         raise HTTPException(503, str(err)) from err
     except (projects.ProjectError, media.MediaError) as err:
         raise HTTPException(400, str(err)) from err
+
+
+@router.post("/projects/upload")
+async def upload_project(request: Request) -> dict:
+    """A .fmw sent by the interface (picked or dropped in the browser), streamed to disk as it arrives and put among
+    the sessions (projects.adopt); its name, which the interface then opens the way it opens any saved session."""
+    import uuid
+
+    title = Path(request.headers.get("x-filename", "Session.fmw")).name
+    if not title.lower().endswith(".fmw"):
+        raise HTTPException(400, "send a .fmw session file")
+    part = projects.projects_dir() / f".upload-{uuid.uuid4().hex}.part"
+    try:
+        with open(part, "wb") as out:
+            async for block in request.stream():
+                out.write(block)
+        if part.stat().st_size == 0:
+            raise HTTPException(400, "the file arrived empty")
+        name = projects.adopt(part, Path(title).stem, move=True)
+    except projects.ProjectError as err:
+        raise HTTPException(400, str(err)) from err
+    finally:
+        part.unlink(missing_ok=True)
+    return {"name": name}
 
 
 @router.get("/projects/{name}")
