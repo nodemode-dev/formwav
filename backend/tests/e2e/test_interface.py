@@ -83,11 +83,17 @@ def app_url(model, tmp_path_factory):
 @pytest.fixture(scope="module")
 def browser():
     sync_api = pytest.importorskip("playwright.sync_api", reason="needs Playwright: pip install -r backend/tests/requirements.txt")
+    # PLAN_v12 C6: FORMWAV_TEST_BROWSER=firefox runs the same tests in Firefox (CI's second interface job); Chromium
+    # otherwise. Tests that need Chromium's stand-in microphone launch their own Chromium either way.
+    name = os.environ.get("FORMWAV_TEST_BROWSER", "chromium")
     with sync_api.sync_playwright() as p:
         try:
-            chromium = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
+            if name == "firefox":
+                chromium = p.firefox.launch(firefox_user_prefs={"media.autoplay.default": 0, "media.autoplay.blocking_policy": 0})
+            else:
+                chromium = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
         except Exception as err:  # noqa: BLE001 - any launch failure means the browser is not installed here
-            pytest.skip(f"needs Playwright's Chromium (python -m playwright install chromium): {str(err)[:200]}")
+            pytest.skip(f"needs Playwright's {name} (python -m playwright install {name}): {str(err)[:200]}")
         yield chromium
         chromium.close()
 
