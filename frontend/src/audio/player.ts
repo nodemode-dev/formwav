@@ -31,6 +31,9 @@ export interface ClipPlan {
   processorTracks: ({ trackId: string; fx: number } | null)[];
   /** The pan law for a mono source, in the core's codes (0 the balance, 1 to 3 for -3, -4.5 and -6 dB). */
   panLaw: number;
+  /** S17: the fader gain a track's own bus applies after its inserts, by the track's place in the document; the core
+   * meters a track at its clips, ahead of that bus, so its strip meter is scaled by it. */
+  meterGains?: number[];
   /** S17: the hosted plug-ins a stage [21, k, ...] names by k (native output and the export host them). */
   plugins?: MixPlugin[];
 }
@@ -334,6 +337,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
   // order), for the core's six-channel bus when the session hears its fold-down
   const places: number[] = [];
   const busPlaces: number[] = [];
+  const meterGains: number[] = [];
   let end = 0;
   let skipped = 0;
   for (const track of doc.tracks) {
@@ -358,6 +362,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
       const user = bus;
       busFaderDb = faderDb;
       faderDb = 0;
+      meterGains[doc.tracks.indexOf(track)] = dbToGain(busFaderDb);
       bus = buses.length + 1;
       buses.push({ id: bus, gain: dbToGain(busFaderDb), pan: 0, stages: flatStages(track.fx, processors, plugins), ...(off ? {} : { fxAuto: flatStagesAuto(track.fx) }), ...(user ? { out: user } : {}) });
       if (!user && doc.surroundFold && track.surround) busPlaces.push(bus, ...placeRecord(track.surround));
@@ -424,7 +429,7 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     }
   }
   const masterLane = doc.masterAutomation?.length ? doc.masterAutomation.flatMap((p) => [p.time, p.value]) : undefined;
-  return { clips, end, skipped, buses, masterDb: masterLane ? 0 : doc.masterGainDb ?? 0, ...(masterLane ? { masterPoints: masterLane } : {}), places, busPlaces, fold: !!doc.surroundFold && (places.length > 0 || busPlaces.length > 0), surroundFormat: LAYOUT_IDS[doc.spatialFormat ?? "5.1"] ?? 0, processors, processorTracks, panLaw: PAN_LAWS[doc.panLaw ?? ""] ?? 0, ...(plugins.length ? { plugins } : {}) };
+  return { clips, end, skipped, buses, masterDb: masterLane ? 0 : doc.masterGainDb ?? 0, ...(masterLane ? { masterPoints: masterLane } : {}), places, busPlaces, fold: !!doc.surroundFold && (places.length > 0 || busPlaces.length > 0), surroundFormat: LAYOUT_IDS[doc.spatialFormat ?? "5.1"] ?? 0, processors, processorTracks, panLaw: PAN_LAWS[doc.panLaw ?? ""] ?? 0, ...(plugins.length ? { plugins } : {}), ...(meterGains.length ? { meterGains } : {}) };
 }
 
 function send(node: AudioWorkletNode, message: WorkletMessage, transfer: Transferable[] = []): void {
@@ -817,7 +822,11 @@ export class Player {
   private handlePosition(reply: Extract<WorkletReply, { type: "position" }>): void {
     this.engine.setTransport({ positionSamples: reply.position });
     this.lastIntegrated = reply.loudness[2];
-    if (this.engine.get("transport").playing) this.emitLevel(reply.peakLeft, reply.peakRight, reply.trackPeaks, reply.loudness, reply.busPeaks, reply.correlation ?? null);
+    if (this.engine.get("transport").playing) {
+      const gains = this.lastPlan.meterGains;
+      const tracks = gains ? reply.trackPeaks.map((p, i) => p * (gains[i >> 1] ?? 1)) : reply.trackPeaks;
+      this.emitLevel(reply.peakLeft, reply.peakRight, tracks, reply.loudness, reply.busPeaks, reply.correlation ?? null);
+    }
     else {
       // AU-37: the live instrument played with the transport stopped, measured by the core's idle render; the
       // worklet reports only while it sounds, so the meter falls to silence a moment after its last report
