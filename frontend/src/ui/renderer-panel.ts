@@ -25,7 +25,7 @@ export function mountRendererPanel(host: HTMLElement, engine: Engine, player: Pl
   panel.className = "fw-renderer";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Renderer panel");
-  const cells = Array.from({ length: CELLS }, (_, k) => `<div class="fw-rend-ch" data-rend-ch="${k}" hidden><span class="fw-rend-bar"><span class="fw-rend-fill"></span><span class="fw-rend-hold"></span></span><span class="fw-rend-name" translate="no"> </span><output class="fw-rend-db" data-db="-inf">-inf</output></div>`).join("");
+  const cells = Array.from({ length: CELLS }, (_, k) => `<div class="fw-rend-ch" data-rend-ch="${k}" hidden><span class="fw-rend-bar"><span class="fw-rend-fill"></span><span class="fw-rend-hold"></span></span><span class="fw-rend-name" translate="no"> </span><output class="fw-rend-db" data-db="-inf" translate="no">-inf</output></div>`).join("");
   panel.innerHTML = `<div class="fw-rend-head"><span>Renderer</span><button type="button" class="fw-icon-btn fw-rend-close" aria-label="Close the renderer" title="Close the renderer">${fvIcon("close", 14)}</button></div><div class="fw-rend-room"><canvas data-rend-room width="232" height="232" aria-label="Speakers and their live levels"></canvas>${cells}</div><div class="fw-rend-foot"><span class="fw-rend-layout" data-rend-layout translate="no">5.1</span><label class="fw-sam-opt"><input type="checkbox" data-rend-fold> Fold to stereo</label></div><p class="fw-rend-note" data-rend-note>Levels show while the session plays as a fold-down</p>`;
   host.append(panel);
   const room = panel.querySelector<HTMLCanvasElement>("[data-rend-room]") as HTMLCanvasElement;

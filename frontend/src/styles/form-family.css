@@ -68,18 +68,13 @@ body.theme-light {
 .fw-ibtn:hover:not(:disabled), .fw-tbtn:hover:not(:disabled) { background: var(--surface-raised); color: var(--text-primary); }
 .fw-ibtn:focus-visible, .fw-tbtn:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
 
-/* Fields: accent border on focus, the family's chevron on every select. */
+/* Fields: the family's line and field surface and an accent border on focus; selects keep the system's own arrow,
+ * whose room every select's width already allows for. */
 .fw-shell select,
 dialog select {
-  appearance: none;
-  padding-inline-end: 22px;
   border-color: var(--line-2);
   border-radius: var(--radius);
   background-color: var(--surface-field);
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
-  background-position: calc(100% - 11px) 50%, calc(100% - 7px) 50%;
-  background-size: 4px 4px, 4px 4px;
-  background-repeat: no-repeat;
 }
 .fw-shell input[type="text"]:focus,
 .fw-shell input[type="number"]:focus,
@@ -130,12 +125,10 @@ dialog::backdrop { background: var(--bg-scrim); }
 .fw-pane-agent { border: 1px solid var(--line-0); border-radius: var(--radius-md); background: var(--surface-0); overflow: hidden; }
 .fw-pane-agent .fw-term-head { gap: var(--space-1); min-block-size: var(--fw-group-head-h); padding: 0 var(--space-1); background: var(--group-head); border-block-end: 1px solid var(--line-0); }
 .fw-pane-agent .fw-term-head > * { flex-shrink: 0; }
-.fw-pane-agent .fw-term-head > .fw-agent-via { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .fw-pane-agent .fw-term-head > .fw-ibtn { padding: 0 8px; }
-.fw-agent-tabs { gap: 2px; }
-.fw-agent-tab { block-size: 24px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--radius); color: var(--text-secondary); font-size: var(--fs-12); }
-.fw-agent-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
-.fw-agent-tab[aria-selected="true"] { border-color: var(--line-3); background: var(--surface-raised); color: var(--text-primary); font-weight: 500; }
+.fw-agent-tabs { gap: var(--space-2); padding-inline-start: var(--space-1); }
+.fw-agent-tab { color: var(--text-secondary); font-size: var(--fs-12); }
+.fw-agent-tab[aria-selected="true"] { color: var(--text-primary); font-weight: 600; }
 
 /* S16: the renderer panel, a floating card of fixed size: the room from above, a pooled cell per speaker placed by
  * the layout table (custom properties set when the layout changes), its level bar scaled in place. */
