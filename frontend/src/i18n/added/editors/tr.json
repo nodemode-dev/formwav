@@ -1,0 +1,7 @@
+{
+"Done": "Bitti",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Eklentinin kendi düzenleyicisini açar; orada ayarladığınız, penceresini kapattığınızda veya Bitti'ye bastığınızda korunur",
+"The plug-in's editor is open: what you set there is kept when you close it": "Eklentinin düzenleyicisi açık: orada ayarladığınız, kapattığınızda korunur",
+"The plug-in keeps what was set in its editor": "Eklenti, düzenleyicisinde ayarlananı korur",
+"The plug-in's editor could not open here": "Eklentinin düzenleyicisi burada açılamadı"
+}

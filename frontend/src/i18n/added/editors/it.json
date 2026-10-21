@@ -1,0 +1,7 @@
+{
+"Done": "Fatto",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Apre l'editor del plug-in; quello che imposti lì viene tenuto quando chiudi la sua finestra o premi Fatto",
+"The plug-in's editor is open: what you set there is kept when you close it": "L'editor del plug-in è aperto: quello che imposti lì viene tenuto quando lo chiudi",
+"The plug-in keeps what was set in its editor": "Il plug-in tiene quello che è stato impostato nel suo editor",
+"The plug-in's editor could not open here": "Non è stato possibile aprire qui l'editor del plug-in"
+}

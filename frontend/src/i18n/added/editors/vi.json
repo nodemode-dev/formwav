@@ -1,0 +1,7 @@
+{
+"Done": "Xong",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Mở trình chỉnh sửa riêng của plug-in; những gì bạn đặt ở đó được giữ khi đóng cửa sổ hoặc nhấn Xong",
+"The plug-in's editor is open: what you set there is kept when you close it": "Trình chỉnh sửa của plug-in đang mở: những gì bạn đặt ở đó được giữ khi đóng nó",
+"The plug-in keeps what was set in its editor": "Plug-in giữ những gì đã đặt trong trình chỉnh sửa",
+"The plug-in's editor could not open here": "Không thể mở trình chỉnh sửa của plug-in ở đây"
+}

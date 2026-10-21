@@ -1,0 +1,7 @@
+{
+"Done": "Færdig",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Åbn plug-in'ets egen editor; det du indstiller der, bevares når du lukker vinduet eller trykker Færdig",
+"The plug-in's editor is open: what you set there is kept when you close it": "Plug-in'ets editor er åben: det du indstiller der, bevares når du lukker den",
+"The plug-in keeps what was set in its editor": "Plug-in'et beholder det, der blev indstillet i dets editor",
+"The plug-in's editor could not open here": "Plug-in'ets editor kunne ikke åbnes her"
+}

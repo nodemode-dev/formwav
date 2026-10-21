@@ -171,6 +171,66 @@ def params(name: str) -> list[dict]:
     return _params[name]
 
 
+#: S17 phase C: the editors open now, by plug-in name, each a fwhost edit run waiting on its window
+_editing: dict[str, subprocess.Popen] = {}
+
+
+def edit(name: str, state: str | None = None, seconds: float = 3600) -> dict:
+    """Opens an installed CLAP plug-in's own editor window (X11, on the engine's display) with its saved state (base64)
+    loaded, and waits until the window is closed or close_editor is called; returns the plug-in's state after editing
+    ({"name", "state", "ended"}). Only one editor per plug-in at a time."""
+    fmt, path, plugin = _installed(name)
+    if fmt != "clap":
+        raise media.MediaError(f"{plugin['name']}: its own editor opens for CLAP plug-ins here")
+    if name in _editing:
+        raise media.MediaError(f"{plugin['name']}'s editor is already open")
+    with tempfile.TemporaryDirectory(prefix="formwav-editor-") as tmp:
+        given = Path(tmp) / "in.state"
+        if state:
+            try:
+                given.write_bytes(base64.b64decode(state, validate=True))
+            except ValueError as err:
+                raise media.MediaError(f"{plugin['name']}: its saved state is not base64") from err
+        out = Path(tmp) / "out.state"
+        command = [host_binary(), "edit", "clap", path, str(given) if state else "-", str(out), f"{max(1.0, seconds):g}"]
+        try:
+            proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except OSError as err:
+            raise media.MediaError(f"the plugin host could not start: {err}") from err
+        _editing[name] = proc
+        try:
+            # not communicate(): it would close the host's standard input, which the host reads as the app's close
+            proc.wait(timeout=seconds + 30)
+            stdout, stderr = proc.stdout.read() if proc.stdout else b"", proc.stderr.read() if proc.stderr else b""
+        except subprocess.TimeoutExpired as err:
+            proc.kill()
+            raise media.MediaError(f"{plugin['name']}'s editor did not close") from err
+        finally:
+            _editing.pop(name, None)
+        if proc.returncode != 0 or not out.is_file():
+            reason = (stderr or b"").decode(errors="replace").strip().splitlines()[-1:] or [f"exit status {proc.returncode}"]
+            if proc.returncode < 0:
+                reason = [f"the plugin crashed (signal {-proc.returncode}); formwav is unaffected"]
+            raise media.MediaError(f"{plugin['name']}'s editor: {reason[0][:300]}")
+        report = json.loads((stdout or b"{}").decode(errors="replace").strip().splitlines()[-1] or "{}")
+        return {"name": name, "state": base64.b64encode(out.read_bytes()).decode(), "ended": report.get("ended", "")}
+
+
+def close_editor(name: str | None = None) -> int:
+    """Asks the open editor of `name` (every open one without a name) to close; how many were asked."""
+    asked = 0
+    for key, proc in list(_editing.items()):
+        if name is None or key == name:
+            try:
+                if proc.stdin:
+                    proc.stdin.write(b"close\n")
+                    proc.stdin.flush()
+                asked += 1
+            except OSError:
+                pass
+    return asked
+
+
 def live_insert(entry: dict) -> tuple[str, bytes | None, list[tuple[int, float]]]:
     """S17: a track's plug-in insert ({"name": "plugin:clap:<path>", "state": base64, "values": {"p<id>": value}}) as the
     core hosts it live: (path, saved state, [(parameter id, value)]). Only a CLAP plug-in the scan found is loaded, in the

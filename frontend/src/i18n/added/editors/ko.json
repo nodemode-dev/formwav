@@ -1,0 +1,7 @@
+{
+"Done": "완료",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "플러그인 자체 편집기를 엽니다. 거기서 설정한 내용은 창을 닫거나 완료를 누르면 유지됩니다",
+"The plug-in's editor is open: what you set there is kept when you close it": "플러그인 편집기가 열려 있습니다. 거기서 설정한 내용은 닫으면 유지됩니다",
+"The plug-in keeps what was set in its editor": "플러그인이 편집기에서 설정한 내용을 유지합니다",
+"The plug-in's editor could not open here": "여기서 플러그인 편집기를 열 수 없었습니다"
+}

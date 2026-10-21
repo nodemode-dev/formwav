@@ -1,0 +1,7 @@
+{
+"Done": "完成",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "打开插件自己的编辑器；在其中所做的设置会在关闭其窗口或按“完成”时保留",
+"The plug-in's editor is open: what you set there is kept when you close it": "插件编辑器已打开：在其中所做的设置会在关闭时保留",
+"The plug-in keeps what was set in its editor": "插件保留了在其编辑器中的设置",
+"The plug-in's editor could not open here": "无法在此打开插件编辑器"
+}

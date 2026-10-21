@@ -1,0 +1,7 @@
+{
+"Done": "Kész",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Megnyitja a plug-in saját szerkesztőjét; amit ott beállítasz, megmarad, ha bezárod az ablakát vagy a Kész gombra kattintasz",
+"The plug-in's editor is open: what you set there is kept when you close it": "A plug-in szerkesztője nyitva van: amit ott beállítasz, megmarad, ha bezárod",
+"The plug-in keeps what was set in its editor": "A plug-in megtartja, amit a szerkesztőjében beállítottak",
+"The plug-in's editor could not open here": "A plug-in szerkesztője itt nem nyitható meg"
+}

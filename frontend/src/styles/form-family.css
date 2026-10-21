@@ -171,3 +171,5 @@ dialog::backdrop { background: var(--bg-scrim); }
 
 /* S17: a hosted plug-in's row in a track's effects says where it plays. */
 .fw-rtfx-note { font-size: var(--fs-11); color: var(--text-muted); }
+/* Its Edit becomes Done while the editor is open: one width for both words, so the row does not move. */
+.fw-rtfx-edit { min-inline-size: 6em; }

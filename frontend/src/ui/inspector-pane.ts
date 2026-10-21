@@ -2814,6 +2814,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const busId = find(doc)?.track.busId;
     return busId !== undefined ? (doc.buses ?? []).find((b) => b.id === busId) ?? null : null;
   };
+  // S17 phase C: the plug-ins whose own editor is open now (by engine name), so their row offers Done
+  const editingPlugins = new Set<string>();
   const RTFX_LABEL: Record<TrackFx["kind"], string> = { processor: "Processor", highpass: "High-pass", dehum: "De-hum", declick: "De-click", dereverb: "De-reverb", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor", denoise: "Denoise", reverb: "Reverb", echo: "Echo", chorus: "Chorus", limiter: "Limiter", tremolo: "Tremolo", gate: "Gate", phaser: "Phaser", flanger: "Flanger", voice: "Dialogue isolate", plugin: "Plug-in" };
   const RTFX_DEFAULT: Record<TrackFx["kind"], TrackFx> = {
     processor: { kind: "processor", id: "gain", values: { gain: 0 } },
@@ -2861,7 +2863,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         const UNIT: Record<string, [string, number]> = { Db: ["dB", 0.1], Hz: ["Hz", 1], Ms: ["ms", 0.1], Percent: ["%", 1], Ratio: [":1", 0.1], Semitones: ["st", 1], Cents: ["ct", 1], Seconds: ["s", 0.05] };
         const fields =
           f.kind === "plugin"
-            ? `<span class="fw-rtfx-note">Native output and exports</span>`
+            ? `<span class="fw-rtfx-note">Native output and exports</span><button type="button" class="fw-ibtn fw-rtfx-edit" data-rtfx="edit" title="Open the plug-in's own editor; what you set there is kept when you close its window or press Done">${editingPlugins.has(f.name) ? "Done" : "Edit"}</button>`
             : f.kind === "processor"
             ? (PROCESSOR_BY_ID.get(f.id)?.params ?? [])
                 .map((p) =>
@@ -2981,6 +2983,37 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const index = Number(button.closest<HTMLElement>(".fw-rtfx-row")?.dataset.index);
     if (!Number.isInteger(index)) return;
     button.blur();
+    if (action === "edit") {
+      // S17 phase C: the plug-in's own editor, opened by the engine; Done (or closing its window) keeps what was set
+      const target = getFx(scope)[index];
+      if (target?.kind !== "plugin") return;
+      const name = target.name;
+      if (editingPlugins.has(name)) {
+        void fetch(`/api/plugins/edit/close?name=${encodeURIComponent(name)}`, { method: "POST" });
+        return;
+      }
+      editingPlugins.add(name);
+      setText(button, "Done");
+      setText(notice, "The plug-in's editor is open: what you set there is kept when you close it");
+      void fetch("/api/plugins/edit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, ...(target.state ? { state: target.state } : {}) }) })
+        .then(async (res) => {
+          const out = (await res.json().catch(() => ({}))) as { state?: string; detail?: unknown };
+          if (!res.ok || typeof out.state !== "string") throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          const state = out.state;
+          commitRtfx(scope, (fx) => fx.map((f) => (f.kind === "plugin" && f.name === name ? { ...f, state } : f)));
+          setText(notice, "The plug-in keeps what was set in its editor");
+        })
+        .catch((err) => {
+          // the reason names the user's file and the plug-in's own words, so it goes to the console untranslated
+          console.warn("formwav plug-in editor:", err instanceof Error ? err.message : String(err));
+          setText(notice, "The plug-in's editor could not open here");
+        })
+        .finally(() => {
+          editingPlugins.delete(name);
+          renderRtfx(true);
+        });
+      return;
+    }
     if (action === "remove") commitRtfx(scope, (fx) => fx.filter((_, k) => k !== index));
     else if (action === "up" || action === "down") {
       const to = action === "up" ? index - 1 : index + 1;

@@ -35,6 +35,11 @@ Each recipe assumes `formwav_status` answered and `formwav_open_session_tools` l
 2. `get_session` for the track's chain as it is, then `set_track_effects` with that chain plus `{ "kind": "plugin", "name": "plugin:clap:<path>", "values": { "p<id>": value } }`. Pass a plug-in already in the chain back unchanged, or its saved state goes.
 3. Say where it is heard: native output (Settings) and every export, every track lined up for its delay, the fader after it. The browser's engine plays the track without it. Only CLAP plays live; a VST3 or LV2 plug-in is rendered onto the clip with `formwav_apply_effect` instead.
 4. To check it, `formwav_render_session` and measure: an insert that could not load fails the render with its reason.
+5. A plug-in's own editor (v2.18.6, CLAP on Linux) is the person's: its row's Edit opens the window and Done or closing it keeps the state on the insert. Do not try to drive the window; set values with `values` instead. VST3 and LV2 editors, and windows on macOS and Windows, do not open yet.
+
+## A VST3 instrument on a note track (v2.18.6)
+
+VST3 instruments are listed beside CLAP ones (the window's instrument choice, `/api/midi/instruments`): pick one as the note track's instrument and its clips render through it, notes placed to the sample.
 
 ## A batch failed
 

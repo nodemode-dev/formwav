@@ -1,0 +1,7 @@
+{
+"Done": "Hotovo",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Otevře vlastní editor plug-inu; co v něm nastavíte, zůstane, když zavřete jeho okno nebo stisknete Hotovo",
+"The plug-in's editor is open: what you set there is kept when you close it": "Editor plug-inu je otevřený: co v něm nastavíte, zůstane, až ho zavřete",
+"The plug-in keeps what was set in its editor": "Plug-in si ponechá, co bylo nastaveno v jeho editoru",
+"The plug-in's editor could not open here": "Editor plug-inu se zde nepodařilo otevřít"
+}

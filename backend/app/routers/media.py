@@ -682,6 +682,27 @@ def plugin_params(name: str) -> dict:
         raise HTTPException(status_code=404, detail=str(err)) from err
 
 
+@router.post("/plugins/edit")
+def plugin_edit(payload: dict = Body(...)) -> dict:
+    """S17 phase C: an installed CLAP plug-in's own editor opened (an X11 window on the engine's display) with the
+    saved state given ({"name", "state"}); answers once the window is closed (or POST /plugins/edit/close) with the
+    plug-in's state after editing."""
+    from ..services import plugins
+
+    try:
+        return plugins.edit(str(payload.get("name") or ""), payload.get("state") if isinstance(payload.get("state"), str) else None)
+    except media.MediaError as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
+
+
+@router.post("/plugins/edit/close")
+def plugin_edit_close(name: str | None = None) -> dict:
+    """S17 phase C: closes the open editor of `name` (every open one without), as its window's own close does."""
+    from ..services import plugins
+
+    return {"asked": plugins.close_editor(name)}
+
+
 @router.get("/ara/plugins")
 def ara_plugins(refresh: bool = False) -> dict:
     """PT-24: the installed CLAP plug-ins that offer ARA (services/plugins.py), each with what it can analyze."""

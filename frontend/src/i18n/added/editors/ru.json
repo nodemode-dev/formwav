@@ -1,0 +1,7 @@
+{
+"Done": "Готово",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Открывает собственный редактор плагина; заданное в нём сохраняется, когда вы закрываете его окно или нажимаете «Готово»",
+"The plug-in's editor is open: what you set there is kept when you close it": "Редактор плагина открыт: заданное в нём сохранится, когда вы его закроете",
+"The plug-in keeps what was set in its editor": "Плагин сохраняет то, что задано в его редакторе",
+"The plug-in's editor could not open here": "Не удалось открыть здесь редактор плагина"
+}

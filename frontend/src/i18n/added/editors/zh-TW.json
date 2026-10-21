@@ -1,0 +1,7 @@
+{
+"Done": "完成",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "開啟外掛自己的編輯器；在其中所做的設定會在關閉視窗或按「完成」時保留",
+"The plug-in's editor is open: what you set there is kept when you close it": "外掛編輯器已開啟：在其中所做的設定會在關閉時保留",
+"The plug-in keeps what was set in its editor": "外掛保留了在其編輯器中的設定",
+"The plug-in's editor could not open here": "無法在此開啟外掛編輯器"
+}

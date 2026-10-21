@@ -1,0 +1,7 @@
+{
+"Done": "Klar",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Öppnar insticksprogrammets egen redigerare; det du ställer in där sparas när du stänger fönstret eller trycker Klar",
+"The plug-in's editor is open: what you set there is kept when you close it": "Insticksprogrammets redigerare är öppen: det du ställer in där sparas när du stänger den",
+"The plug-in keeps what was set in its editor": "Insticksprogrammet behåller det som ställdes in i dess redigerare",
+"The plug-in's editor could not open here": "Insticksprogrammets redigerare kunde inte öppnas här"
+}

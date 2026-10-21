@@ -1,0 +1,7 @@
+{
+"Done": "Valmis",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Avaa liitännäisen oman editorin; siellä asettamasi säilyy, kun suljet sen ikkunan tai painat Valmis",
+"The plug-in's editor is open: what you set there is kept when you close it": "Liitännäisen editori on auki: siellä asettamasi säilyy, kun suljet sen",
+"The plug-in keeps what was set in its editor": "Liitännäinen säilyttää editorissaan asetetun",
+"The plug-in's editor could not open here": "Liitännäisen editoria ei voitu avata täällä"
+}

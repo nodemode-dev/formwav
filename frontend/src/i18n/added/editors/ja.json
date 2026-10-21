@@ -1,0 +1,7 @@
+{
+"Done": "完了",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "プラグイン独自のエディターを開きます。そこで設定した内容は、ウィンドウを閉じるか「完了」を押すと保持されます",
+"The plug-in's editor is open: what you set there is kept when you close it": "プラグインのエディターが開いています。そこで設定した内容は閉じると保持されます",
+"The plug-in keeps what was set in its editor": "プラグインはエディターで設定された内容を保持します",
+"The plug-in's editor could not open here": "ここではプラグインのエディターを開けませんでした"
+}

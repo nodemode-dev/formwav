@@ -1,0 +1,7 @@
+{
+"Done": "Klaar",
+"Open the plug-in's own editor; what you set there is kept when you close its window or press Done": "Opent de eigen editor van de plug-in; wat je daar instelt blijft bewaard als je het venster sluit of op Klaar drukt",
+"The plug-in's editor is open: what you set there is kept when you close it": "De editor van de plug-in is open: wat je daar instelt blijft bewaard als je hem sluit",
+"The plug-in keeps what was set in its editor": "De plug-in houdt wat er in zijn editor is ingesteld",
+"The plug-in's editor could not open here": "De editor van de plug-in kon hier niet openen"
+}
