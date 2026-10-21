@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "fixtures/clap-gain", "fixtures/clap-sine", "fixtures/vst3-gain"]
+members = [".", "fixtures/clap-gain", "fixtures/clap-sine", "fixtures/vst3-gain", "fixtures/vst3-sine"]
 
 [package]
 name = "fwhost"

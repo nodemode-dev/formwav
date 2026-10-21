@@ -55,6 +55,132 @@ fn note_event(kind: u16, at: u32, key: u8, velocity: u8) -> clap_event_note {
     }
 }
 
+/// S17, VST3: one block's notes as an IEventList, each at its sample offset within the block.
+struct Vst3Notes {
+    events: std::cell::RefCell<Vec<vst3::Steinberg::Vst::Event>>,
+}
+
+impl vst3::Class for Vst3Notes {
+    type Interfaces = (vst3::Steinberg::Vst::IEventList,);
+}
+
+impl vst3::Steinberg::Vst::IEventListTrait for Vst3Notes {
+    unsafe fn getEventCount(&self) -> i32 {
+        self.events.borrow().len() as i32
+    }
+
+    unsafe fn getEvent(&self, index: i32, e: *mut vst3::Steinberg::Vst::Event) -> vst3::Steinberg::tresult {
+        match self.events.borrow().get(index.max(0) as usize) {
+            Some(found) if index >= 0 => {
+                *e = *found;
+                vst3::Steinberg::kResultOk
+            }
+            _ => vst3::Steinberg::kResultFalse,
+        }
+    }
+
+    unsafe fn addEvent(&self, _e: *mut vst3::Steinberg::Vst::Event) -> vst3::Steinberg::tresult {
+        vst3::Steinberg::kResultFalse
+    }
+}
+
+/// S17: plays `notes` on the VST3 instrument at `path` (its first class the factory calls an instrument, else its first
+/// audio module) for `frames` frames: no audio input, the notes as note-on and note-off events at their sample offsets.
+pub fn render_vst3(path: &Path, rate: u32, notes: &[Note], frames: usize) -> Result<[Vec<f32>; 2], String> {
+    use vst3::Steinberg::Vst::Event_::EventTypes_::{kNoteOffEvent, kNoteOnEvent};
+    use vst3::Steinberg::Vst::*;
+    use vst3::Steinberg::{kResultOk, FUnknown, IPluginBaseTrait, IPluginFactoryTrait};
+    use vst3::{ComPtr, ComWrapper, Interface};
+    let mut timeline: Vec<(u64, bool, u8, u8)> = notes.iter().flat_map(|&(start, length, key, velocity)| [(start, true, key, velocity), (start + length, false, key, 0)]).collect();
+    timeline.sort_by_key(|e| (e.0, e.1));
+    unsafe {
+        let (lib, factory) = crate::offline::vst3_open(path)?;
+        let effects = crate::offline::vst3_effects(&factory);
+        let instruments = crate::offline::vst3_instruments(&factory);
+        let cid = instruments.first().copied().or_else(|| effects.first().map(|e| e.0)).ok_or("the module holds no instrument")?;
+        let mut obj: *mut c_void = ptr::null_mut();
+        if factory.createInstance(cid.as_ptr(), IComponent::IID.as_ptr() as *const std::ffi::c_char, &mut obj) != kResultOk {
+            return Err("the factory would not create the component".into());
+        }
+        let component = ComPtr::from_raw(obj as *mut IComponent).ok_or("no component")?;
+        let host = ComWrapper::new(crate::HostApplication);
+        let context = host.to_com_ptr::<IHostApplication>().ok_or("host context")?;
+        if component.initialize(context.as_ptr() as *mut FUnknown) != kResultOk {
+            return Err("the component would not initialise".into());
+        }
+        let processor = component.cast::<IAudioProcessor>().ok_or("the component is not an audio processor")?;
+        let mut outs = [SpeakerArr::kStereo];
+        processor.setBusArrangements(ptr::null_mut(), 0, outs.as_mut_ptr(), 1);
+        component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32, 0, 1);
+        component.activateBus(MediaTypes_::kEvent as i32, BusDirections_::kInput as i32, 0, 1);
+        let mut setup = ProcessSetup { processMode: ProcessModes_::kOffline as i32, symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32, maxSamplesPerBlock: BLOCK as i32, sampleRate: rate as f64 };
+        if processor.setupProcessing(&mut setup) != kResultOk || component.setActive(1) != kResultOk {
+            return Err("the instrument would not set up or activate".into());
+        }
+        processor.setProcessing(1);
+        let list = ComWrapper::new(Vst3Notes { events: std::cell::RefCell::new(Vec::new()) });
+        let list_ptr = list.to_com_ptr::<IEventList>().ok_or("event list")?;
+        let mut out = [vec![0f32; frames], vec![0f32; frames]];
+        let (o0, o1) = (out[0].as_mut_ptr(), out[1].as_mut_ptr());
+        let (mut pos, mut next) = (0usize, 0usize);
+        let mut failed = None;
+        while pos < frames {
+            let n = BLOCK.min(frames - pos);
+            {
+                let mut events = list.events.borrow_mut();
+                events.clear();
+                while next < timeline.len() && (timeline[next].0 as usize) < pos + n {
+                    let (at, on, key, velocity) = timeline[next];
+                    let mut e: Event = std::mem::zeroed();
+                    e.sampleOffset = (at as usize).saturating_sub(pos) as i32;
+                    if on {
+                        e.r#type = kNoteOnEvent as u16;
+                        e.__field0.noteOn = NoteOnEvent { channel: 0, pitch: key as i16, tuning: 0.0, velocity: velocity as f32 / 127.0, length: 0, noteId: -1 };
+                    } else {
+                        e.r#type = kNoteOffEvent as u16;
+                        e.__field0.noteOff = NoteOffEvent { channel: 0, pitch: key as i16, velocity: 0.0, noteId: -1, tuning: 0.0 };
+                    }
+                    events.push(e);
+                    next += 1;
+                }
+            }
+            let mut out_ptrs = [o0.add(pos), o1.add(pos)];
+            let mut out_bus = AudioBusBuffers { numChannels: 2, silenceFlags: 0, __field0: AudioBusBuffers__type0 { channelBuffers32: out_ptrs.as_mut_ptr() } };
+            let mut data = ProcessData {
+                processMode: ProcessModes_::kOffline as i32,
+                symbolicSampleSize: SymbolicSampleSizes_::kSample32 as i32,
+                numSamples: n as i32,
+                numInputs: 0,
+                numOutputs: 1,
+                inputs: ptr::null_mut(),
+                outputs: &mut out_bus,
+                inputParameterChanges: ptr::null_mut(),
+                outputParameterChanges: ptr::null_mut(),
+                inputEvents: list_ptr.as_ptr(),
+                outputEvents: ptr::null_mut(),
+                processContext: ptr::null_mut(),
+            };
+            if processor.process(&mut data) != kResultOk {
+                failed = Some(pos);
+                break;
+            }
+            pos += n;
+        }
+        processor.setProcessing(0);
+        component.setActive(0);
+        component.terminate();
+        drop(list_ptr);
+        drop(processor);
+        drop(component);
+        drop(factory);
+        crate::offline::vst3_close(lib);
+        match failed {
+            Some(at) => Err(format!("the instrument failed at frame {at}")),
+            None => Ok(out),
+        }
+    }
+}
+
 /// Plays `notes` on the CLAP instrument at `path` (`file.clap#index` for a bundle's others) for `frames` frames.
 pub fn render(path: &Path, rate: u32, notes: &[Note], frames: usize) -> Result<[Vec<f32>; 2], String> {
     // every note's on and off, in time order (offs first at a shared frame, so a repeated key restarts cleanly)

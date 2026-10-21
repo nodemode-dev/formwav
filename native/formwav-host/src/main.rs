@@ -722,7 +722,8 @@ fn main() {
             let seconds: f64 = args.get(6).and_then(|s| s.parse().ok()).unwrap_or(0.0);
             let end = notes.iter().map(|n| n.0 + n.1).max().unwrap_or(0) as usize;
             let frames = ((seconds * rate as f64) as usize).max(end).max(1);
-            let channels = instrument::render(std::path::Path::new(plugin), rate, &notes, frames)?;
+            // S17: a .vst3 module plays through VST3's event list, anything else as CLAP
+            let channels = if plugin.trim_end_matches('/').ends_with(".vst3") { instrument::render_vst3(std::path::Path::new(plugin), rate, &notes, frames)? } else { instrument::render(std::path::Path::new(plugin), rate, &notes, frames)? };
             wav::write(&args[4], &wav::Audio { rate, channels: channels.to_vec() })?;
             println!("{{\"frames\": {frames}, \"rate\": {rate}, \"channels\": 2, \"notes\": {}}}", notes.len());
             Ok(())

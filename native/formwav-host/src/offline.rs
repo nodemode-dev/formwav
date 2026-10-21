@@ -196,6 +196,21 @@ pub(crate) unsafe fn vst3_effects(factory: &ComPtr<IPluginFactory>) -> Vec<(TUID
     effects
 }
 
+/// S17: the classes a VST3 factory calls instruments (IPluginFactory2's subcategories hold "Instrument"); a factory
+/// without IPluginFactory2 names none.
+pub(crate) unsafe fn vst3_instruments(factory: &ComPtr<IPluginFactory>) -> Vec<TUID> {
+    use vst3::Steinberg::{IPluginFactory2, IPluginFactory2Trait, PClassInfo2};
+    let Some(two) = factory.cast::<IPluginFactory2>() else { return Vec::new() };
+    let mut found = Vec::new();
+    for index in 0..factory.countClasses() {
+        let mut info: PClassInfo2 = std::mem::zeroed();
+        if two.getClassInfo2(index, &mut info) == kResultOk && CStr::from_ptr(info.subCategories.as_ptr()).to_string_lossy().split('|').any(|s| s == "Instrument") {
+            found.push(info.cid);
+        }
+    }
+    found
+}
+
 /// Every plugin found under `dirs`, one JSON object each: format, path, id and name, or the reason it could not be read.
 pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
     let mut found = Vec::new();
@@ -238,7 +253,8 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
                     Ok(list)
                 }),
                 _ => vst3_open(&path).map(|(lib, factory)| {
-                    let list = vst3_effects(&factory).into_iter().map(|(cid, name)| (cid.iter().map(|b| format!("{:02X}", *b as u8)).collect(), name, false)).collect();
+                    let instruments = vst3_instruments(&factory);
+                    let list = vst3_effects(&factory).into_iter().map(|(cid, name)| (cid.iter().map(|b| format!("{:02X}", *b as u8)).collect(), name, instruments.contains(&cid))).collect();
                     drop(factory);
                     vst3_close(lib);
                     list
