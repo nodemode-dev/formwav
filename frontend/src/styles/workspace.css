@@ -207,7 +207,7 @@
 .fw-rtfx-row select { padding: 1px 4px; font-family: var(--font-mono); font-size: 11px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 .fw-q-field { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); }
 .fw-q-field input { inline-size: 56px; padding: 2px 4px; font: inherit; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 4px; }
-.fw-analyze-buttons select { padding: 3px 6px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
+.fw-analyze-buttons select { box-sizing: border-box; flex: 0 0 auto; inline-size: 12em; max-inline-size: 100%; block-size: var(--ctl-md); text-overflow: ellipsis; padding: 3px 6px; font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
 .fw-speed { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
 .fw-key-readout { align-self: center; font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
 .fw-sam-desc { flex: 1 1 140px; min-inline-size: 0; padding: 3px 6px; font: inherit; font-size: 12px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 6px; }
