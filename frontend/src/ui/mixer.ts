@@ -540,6 +540,7 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   // six-channel peaks; hidden when the session plays plain stereo
   let layoutRows: LayoutRow[] | null = null;
   void layoutTable().then((rows) => (layoutRows = rows));
+  let lastSurround = performance.now();
   player.onSurroundLevel((six) => {
     // PT-42: an ambisonic session meters its four channels, W Y Z X
     const format = engine.get("document").spatialFormat ?? "5.1";
@@ -554,7 +555,9 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
       if (t.title !== title) t.title = title;
     });
     const now = performance.now();
-    drive("master51", '.fw-strip[data-kind="master"] .fw-out-51 .fw-out-bar', six ?? [0, 0, 0, 0, 0, 0], !six, ((now - lastTime) / 1000) * 20);
+    const fall = ((now - lastSurround) / 1000) * 20;
+    lastSurround = now;
+    drive("master51", '.fw-strip[data-kind="master"] .fw-out-51 .fw-out-bar', six ?? [0, 0, 0, 0, 0, 0], !six, fall);
   });
   player.onOutputLevel((left, right, tracks, _loudness, buses) => {
     const now = performance.now();
