@@ -185,6 +185,14 @@ def local_speech_regenerate(engine: str, body: dict = Body(...)) -> dict:
     return _run(local_speech.regenerate, engine, str(body.get("media_id", "")), float(body.get("start_s", 0)), float(body.get("end_s", 0)), str(body.get("text", "")))
 
 
+@router.post("/providers/local-speech/chatterbox/voice-changer", status_code=201)
+def local_voice_changer(body: dict = Body(...)) -> dict:
+    """PLAN_v12 R3: a clip re-voiced on this machine (ChatterboxVC) in the voice of another clip."""
+    from ..services import local_speech
+
+    return _run(local_speech.change_voice, str(body.get("media_id", "")), str(body.get("target_media", "")), float(body.get("target_from") or 0))
+
+
 
 # Dubbing on this machine (PLAN_v11 2.M5): Whisper, Argos Translate's models through CTranslate2, Kokoro
 @router.get("/providers/local-dub")

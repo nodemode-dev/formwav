@@ -38,7 +38,7 @@ a=json.load(sys.stdin)
 sp=spm.SentencePieceProcessor(model_file=a["base"]+"/sentencepiece.model")
 tr=ctranslate2.Translator(a["base"]+"/model",device="cpu",compute_type="int8")
 out=tr.translate_batch([sp.encode(t,out_type=str) for t in a["texts"]],beam_size=4)
-print(json.dumps([sp.decode(o.hypotheses[0]) for o in out]))
+print(json.dumps([" ".join(sp.decode(o.hypotheses[0]).replace("\\u2581"," ").split()) for o in out]))
 """
 SPEAK_ALL = """
 import json,sys,wave
@@ -64,7 +64,7 @@ def _runtime_ready() -> bool:
 
 
 def status() -> dict:
-    return {"kokoro": local_speech.installed("kokoro"), "translator": _runtime_ready(),
+    return {"kokoro": local_speech.installed("kokoro"), "chatterbox": local_speech.installed("chatterbox"), "translator": _runtime_ready(),
             "languages": [{"code": c, "name": v[0], "installed": (_base(c) / "model" / "model.bin").exists(), "installing": _installing.get(c, "")} for c, v in LANGS.items()]}
 
 
@@ -77,7 +77,7 @@ def install(lang: str) -> dict:
         try:
             if not _runtime_ready():
                 if not local_speech._python().exists():
-                    raise RuntimeError("install Kokoro first (Install a speech engine on this machine): dubbing speaks with it")
+                    raise RuntimeError("install Kokoro or Chatterbox first (Install a model on this machine): dubbing speaks with one of them")
                 _installing[lang] = "installing: ctranslate2 and sentencepiece"
                 subprocess.run([str(local_speech._python()), "-m", "pip", "install", "-q", "ctranslate2", "sentencepiece"], check=True, capture_output=True, timeout=1800)
             base = _base(lang)
@@ -133,7 +133,12 @@ def _worker(script: str, args: dict, timeout: float = 1800) -> str:
 def dub(media_id: str, lang: str, start: float = 0.0, end: float | None = None, voice: str = "") -> dict:
     if lang not in LANGS:
         raise ProviderError(404, f"no dubbing language {lang}; there are {', '.join(LANGS)}")
-    if not local_speech.installed("kokoro"):
+    # PLAN_v12 R4: voice "own" speaks the translation in the speaker's own voice, Chatterbox Multilingual cloning it from
+    # the clip; any other voice is one of Kokoro's
+    own = voice == "own"
+    if own and not local_speech.installed("chatterbox"):
+        raise ProviderError(409, "dubbing in the speaker's own voice takes Chatterbox: install it first (Install a model on this machine)")
+    if not own and not local_speech.installed("kokoro"):
         raise ProviderError(409, "dubbing on this machine speaks with Kokoro: install it first (Install a speech engine on this machine)")
     if not (_base(lang) / "model" / "model.bin").exists() or not _runtime_ready():
         raise ProviderError(409, f"install the English to {LANGS[lang][0]} translation first")
@@ -146,13 +151,17 @@ def dub(media_id: str, lang: str, start: float = 0.0, end: float | None = None, 
         raise ProviderError(422, "no words to dub in that range")
     translated = json.loads(_worker(TRANSLATE, {"base": str(_base(lang)), "texts": [p["text"] for p in parts]}))
     name, klang, prefix, _ = LANGS[lang]
-    if not voice:
+    if not voice and not own:
         names = local_speech.voices("kokoro")
         voice = next((v for v in names if v.startswith(prefix + "f_")), next((v for v in names if v.startswith(prefix)), "af_heart"))
     total = int(round((end - start) * rate))
     out = np.zeros(total, np.float32)
     with tempfile.TemporaryDirectory(prefix="formwav-dub-") as tmp:
-        _worker(SPEAK_ALL, {"model": str(local_speech._models() / "kokoro-v1.0.onnx"), "voices": str(local_speech._models() / "voices-v1.0.bin"), "texts": translated, "voice": voice, "lang": klang, "folder": tmp})
+        if own:
+            reference = local_speech._reference(media_id, Path(tmp), start)
+            local_speech._run("chatterbox", {"texts": translated, "language": lang, "reference": reference, "folder": tmp}, timeout=7200, worker="chatterbox-many")
+        else:
+            _worker(SPEAK_ALL, {"model": str(local_speech._models() / "kokoro-v1.0.onnx"), "voices": str(local_speech._models() / "voices-v1.0.bin"), "texts": translated, "voice": voice, "lang": klang, "folder": tmp})
         for i, p in enumerate(parts):
             at = int(round((p["start"] - start) * rate))
             room = (int(round((parts[i + 1]["start"] - start) * rate)) if i + 1 < len(parts) else total) - at

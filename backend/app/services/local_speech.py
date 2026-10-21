@@ -24,7 +24,7 @@ from .providers import ProviderError, _splice
 ENGINES = {
     "kokoro": {"name": "Kokoro", "module": "kokoro_onnx", "package": "kokoro-onnx==0.6.1", "license": "Apache-2.0", "clones": False, "size": "about 600 MB with its model (570 MB measured here)"},
     "pocket": {"name": "Pocket TTS", "module": "pocket_tts", "package": "pocket-tts", "license": "MIT code, CC-BY-4.0 weights (Kyutai)", "clones": True, "size": "PyTorch and its weights, not measured here (expect a GB or more)"},
-    "chatterbox": {"name": "Chatterbox", "module": "chatterbox", "package": "chatterbox-tts", "license": "MIT (Resemble AI); every output carries an inaudible watermark", "clones": True, "size": "PyTorch and its weights, not measured here (expect several GB)"},
+    "chatterbox": {"name": "Chatterbox", "module": "chatterbox", "package": "chatterbox-tts", "license": "MIT (Resemble AI); every output carries an inaudible watermark", "clones": True, "size": "PyTorch's CPU build and its weights, 7.8 GB measured"},
 }
 KOKORO_FILES = {
     "kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx",
@@ -32,6 +32,8 @@ KOKORO_FILES = {
 }
 POCKET_VOICES = ["alba", "marius", "javert", "jean", "fantine", "cosette", "eponine", "azelma"]
 REFERENCE_SECONDS = 20
+#: The PyTorch the cloning engines run on (Chatterbox 0.1.7 pins these; TIGER-DnR's runtime shares torch 2.6.0)
+TORCH = ["torch==2.6.0", "torchaudio==2.6.0"]
 _installing: dict[str, str] = {}
 _known: dict[str, bool] = {}
 
@@ -81,7 +83,42 @@ with wave.open(args["output"],"wb") as out:
     out.writeframes(np.round(np.clip(audio,-1,1)*32767).astype("<i2").tobytes())
 sys.stdout.flush();sys.stderr.flush();os._exit(0)
 """
-WORKERS = {"kokoro": KOKORO, "pocket": POCKET, "chatterbox": CHATTERBOX}
+#: PLAN_v12 R3: ChatterboxVC re-voices a recording in the voice of a reference, the words and timing kept
+CHATTERBOX_VC = """
+import json,sys,wave,os
+import numpy as np
+import torch
+args=json.load(sys.stdin)
+mps=getattr(torch.backends,"mps",None)
+device="cuda" if torch.cuda.is_available() else ("mps" if mps is not None and mps.is_available() else "cpu")
+from chatterbox.vc import ChatterboxVC
+model=ChatterboxVC.from_pretrained(device)
+wav=model.generate(audio=args["source"],target_voice_path=args["reference"])
+audio=wav.detach().cpu().numpy().reshape(-1)
+with wave.open(args["output"],"wb") as out:
+    out.setnchannels(1);out.setsampwidth(2);out.setframerate(int(model.sr))
+    out.writeframes(np.round(np.clip(audio,-1,1)*32767).astype("<i2").tobytes())
+sys.stdout.flush();sys.stderr.flush();os._exit(0)
+"""
+#: PLAN_v12 R4: Chatterbox Multilingual speaking many sentences in one language in a cloned voice, the model loaded once
+CHATTERBOX_MANY = """
+import json,sys,wave,os
+import numpy as np
+import torch
+args=json.load(sys.stdin)
+mps=getattr(torch.backends,"mps",None)
+device="cuda" if torch.cuda.is_available() else ("mps" if mps is not None and mps.is_available() else "cpu")
+from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+model=ChatterboxMultilingualTTS.from_pretrained(device=device)
+for i,text in enumerate(args["texts"]):
+    wav=model.generate(text,language_id=args["language"],audio_prompt_path=args["reference"],exaggeration=0.5,cfg_weight=0.5)
+    audio=wav.detach().cpu().numpy().reshape(-1)
+    with wave.open(os.path.join(args["folder"],f"{i}.wav"),"wb") as out:
+        out.setnchannels(1);out.setsampwidth(2);out.setframerate(int(model.sr))
+        out.writeframes(np.round(np.clip(audio,-1,1)*32767).astype("<i2").tobytes())
+sys.stdout.flush();sys.stderr.flush();os._exit(0)
+"""
+WORKERS = {"kokoro": KOKORO, "pocket": POCKET, "chatterbox": CHATTERBOX, "chatterbox-vc": CHATTERBOX_VC, "chatterbox-many": CHATTERBOX_MANY}
 
 
 def _runtime() -> Path:
@@ -122,10 +159,18 @@ def install(engine: str) -> dict:
             if not _python().exists():
                 _installing[engine] = "installing: making the speech runtime"
                 subprocess.run([sys.executable, "-m", "venv", str(_runtime())], check=True, capture_output=True, timeout=600)
+            if engine != "kokoro":
+                # PLAN_v12 R2: PyTorch's CPU build first (PyPI's default build brings several GB of CUDA libraries a
+                # CPU or Apple machine never uses), at the versions Chatterbox pins, so its install keeps them
+                _installing[engine] = "installing: PyTorch (CPU build)"
+                index = [] if sys.platform == "darwin" else ["--index-url", "https://download.pytorch.org/whl/cpu"]
+                done = subprocess.run([str(_python()), "-m", "pip", "install", "-q", *TORCH, *index], capture_output=True, timeout=3600)
+                if done.returncode != 0:
+                    raise RuntimeError(_last_line(done))
             _installing[engine] = f"installing: {ENGINES[engine]['package']}"
             done = subprocess.run([str(_python()), "-m", "pip", "install", "-q", ENGINES[engine]["package"], "numpy"], capture_output=True, timeout=3600)
             if done.returncode != 0:
-                raise RuntimeError(done.stderr.decode(errors="replace").strip().splitlines()[-1][:300])
+                raise RuntimeError(_last_line(done))
             if engine == "kokoro":
                 _models().mkdir(parents=True, exist_ok=True)
                 for name, url in KOKORO_FILES.items():
@@ -145,12 +190,19 @@ def install(engine: str) -> dict:
     return {"installing": _installing[engine]}
 
 
-def _run(engine: str, args: dict, timeout: float = 1800) -> subprocess.CompletedProcess:
+def _last_line(done: subprocess.CompletedProcess) -> str:
+    """A failed pip's last word, or its exit status when it said nothing (a pip stopped from outside)."""
+    lines = (done.stderr or b"").decode(errors="replace").strip().splitlines()
+    return lines[-1][:300] if lines else f"pip stopped with status {done.returncode}"
+
+
+def _run(engine: str, args: dict, timeout: float = 1800, worker: str = "") -> subprocess.CompletedProcess:
+    """A worker of `engine` (its own by default, or another of its, as chatterbox-vc) run in the speech runtime."""
     if not installed(engine):
         raise ProviderError(409, f"{ENGINES[engine]['name']} is not installed on this machine yet ({ENGINES[engine]['size']}): install it first")
     if engine == "kokoro":
         args = {**args, "model": str(_models() / "kokoro-v1.0.onnx"), "voices": str(_models() / "voices-v1.0.bin")}
-    done = subprocess.run([str(_python()), "-c", WORKERS[engine]], input=json.dumps(args).encode(), capture_output=True, timeout=timeout)
+    done = subprocess.run([str(_python()), "-c", WORKERS[worker or engine]], input=json.dumps(args).encode(), capture_output=True, timeout=timeout)
     if done.returncode != 0:
         raise ProviderError(502, f"{ENGINES[engine]['name']} failed: {done.stderr.decode(errors='replace').strip().splitlines()[-1][:300] if done.stderr else done.returncode}")
     return done
@@ -206,3 +258,25 @@ def regenerate(engine: str, media_id: str, start_s: float, end_s: float, text: s
         raise ProviderError(422, "select at least 50 ms of the clip to regenerate")
     spoken = speak(engine, text, reference_media=media_id, rate=rate, reference_from=max(0.0, float(start_s) - REFERENCE_SECONDS / 2))
     return {**_splice(media_id, a, b, spoken["id"]), "engine": engine}
+
+
+#: The longest stretch the voice changer takes in one go (the model works on the whole recording at once)
+VC_SECONDS = 60
+
+
+def change_voice(media_id: str, target_media: str, target_from: float = 0.0) -> dict:
+    """PLAN_v12 R3, the open-weight voice changer: a clip's recording (its first minute) re-voiced by ChatterboxVC in the
+    voice of another clip (up to 20 s of it from target_from), the words and their timing kept, imported as new media at
+    the source's rate."""
+    if not media_id or not target_media:
+        raise ProviderError(422, "choose the clip to re-voice and the clip whose voice to take")
+    info = media.media_info(media_id)
+    with tempfile.TemporaryDirectory(prefix="formwav-vc-") as tmp:
+        folder = Path(tmp)
+        source = folder / "source.wav"
+        done = subprocess.run([media._tool("ffmpeg"), "-v", "error", "-nostdin", "-y", "-i", str(media.media_dir() / f"{media_id}.wav"), "-ac", "1", "-ar", "24000", "-t", str(VC_SECONDS), str(source)], capture_output=True, timeout=300)
+        if done.returncode != 0:
+            raise ProviderError(404, "the clip to re-voice could not be read")
+        _run("chatterbox", {"source": str(source), "reference": _reference(target_media, folder, target_from), "output": str(folder / "out.wav")}, worker="chatterbox-vc")
+        stem = str(info.get("name", "clip")).rsplit(".", 1)[0]
+        return media.import_audio(f"{stem} (re-voiced, Chatterbox).wav", (folder / "out.wav").read_bytes(), int(info.get("sampleRate") or 48000))
