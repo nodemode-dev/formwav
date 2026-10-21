@@ -55,7 +55,7 @@ class RenderRequest(BaseModel):
     patch: Patch = Patch()
     name: str = "notes"
     sampler: Sampler | None = None
-    # PT-15: a CLAP instrument from the plugin folder (plugin:clap:<path>, as /api/midi/instruments lists them)
+    # PT-15, S17: a CLAP or VST3 instrument from the plugin folder (plugin:<format>:<path>, as /api/midi/instruments lists them)
     plugin: str | None = None
     # S7: the rendering lasts at least this long (seconds), silent after its notes; with no notes, an empty note clip
     length: float = Field(0.0, ge=0, le=3600)
@@ -105,7 +105,7 @@ def midi_test(payload: dict) -> dict:
 
 @router.get("/instruments")
 def list_instruments() -> list[dict]:
-    """PT-15: the CLAP instruments in the plugin folder, for a note track's Instrument choice."""
+    """PT-15, S17: the CLAP and VST3 instruments in the plugin folder, for a note track's Instrument choice."""
     from ..services import plugins
 
     return plugins.instruments()
@@ -127,7 +127,7 @@ def _render(notes: list[dict], rate: int, patch: Patch, name: str, sampler: Samp
         return media.import_wav(f"{name}.wav", _wav_bytes([silence, silence], rate))
     frames = [(int(round(n["start"] * rate)), max(1, int(round(n["length"] * rate))), int(n["pitch"]), int(n["velocity"])) for n in notes]
     if plugin is not None:
-        # PT-15: the notes played on a CLAP instrument by the plugin host
+        # PT-15, S17: the notes played on a CLAP or VST3 instrument by the plugin host
         from ..services import plugins
 
         try:

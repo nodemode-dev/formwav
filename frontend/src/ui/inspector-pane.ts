@@ -138,7 +138,7 @@ const BODY = `
   <div class="fw-rtfx-list" data-scope="track" data-empty="No realtime effects yet"></div>
   <div class="fw-analyze-buttons" data-midifx-row title="MIDI effects on this note track, before the instrument: its clips keep the notes as played and sound them after these, and live MIDI passes through them"><select data-midifx="kind" aria-label="MIDI effect to add"><option value="transpose">Transpose</option><option value="velocity">Velocity</option><option value="quantize">Quantize</option><option value="duration">Duration</option><option value="delay">Delay</option></select><button type="button" class="fw-ibtn" data-midifx="add">Add MIDI effect</button></div>
   <div data-midifx-list></div>
-  <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="subtractive">Subtractive synth</option><option value="drums">Drum synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
+  <div class="fw-analyze-buttons" title="What plays this note track's clips: the built-in synth, a sampler re-pitching a session clip from its root note, or a CLAP or VST3 instrument from the plugin folder"><label class="fw-q-field">Instrument <select data-instrument aria-label="Instrument"><option value="synth">Synth</option><option value="subtractive">Subtractive synth</option><option value="drums">Drum synth</option><option value="sampler">Sampler</option></select></label><label class="fw-q-field" data-sampler-only hidden>Sample <select data-sampler-media aria-label="Sample"></select></label><label class="fw-q-field" data-sampler-only hidden>Root <input type="number" min="0" max="127" step="1" value="60" data-sampler-root aria-label="Root note"></label></div>
   ${INSTRUMENT_FIELDS}
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fill-gaps title="Fill every gap between this track's clips with room tone: learned from half a second at each side, moving from the one background to the other across the gap">Fill gaps with room tone</button></div>
   <div data-stems></div>
@@ -1322,7 +1322,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     }
   });
 
-  // PT-15: the Instrument row: Synth, Sampler (a session clip and its root note) or a CLAP instrument from the plugin
+  // PT-15, S17: the Instrument row: Synth, Sampler (a session clip and its root note) or a CLAP or VST3 instrument from the plugin
   // folder (listed once by the engine); a change re-renders the track's note clips through it
   const instSel = body.querySelector<HTMLSelectElement>("[data-instrument]");
   const sampleSel = body.querySelector<HTMLSelectElement>("[data-sampler-media]");

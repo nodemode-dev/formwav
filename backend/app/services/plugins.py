@@ -97,7 +97,8 @@ def catalogue_group() -> list[dict]:
 
 
 def instruments() -> list[dict]:
-    """PT-15: the CLAP instruments installed here, as note tracks offer them (plugin:<format>:<path> and a name)."""
+    """PT-15, S17: the CLAP and VST3 instruments installed here (a VST3 class whose subcategories hold Instrument), as
+    note tracks offer them (plugin:<format>:<path> and a name)."""
     return [{"id": f"plugin:{p['format']}:{p['path']}", "name": p["name"]} for p in scan() if "error" not in p and p.get("instrument")]
 
 

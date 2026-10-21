@@ -550,7 +550,7 @@ export interface Track {
    *  other), so the Stems view can rebalance the group. */
   stem?: { of: string; part: string };
   /** PT-15: what plays a note track's clips: the built-in synth when absent, a sampler (a session media re-pitched
-   *  from its root note) or a CLAP instrument from the plugin folder. */
+   *  from its root note) or a CLAP or VST3 instrument from the plugin folder. */
   instrument?: Instrument;
   /** Volume (dB) and pan automation; when present each replaces the track's static fader or pan. S9: mute (1 muted,
    *  0 not, held from each point to the next) and trim (dB, added to the volume, its own lane or the fader). */
