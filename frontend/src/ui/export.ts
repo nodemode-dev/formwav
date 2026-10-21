@@ -37,7 +37,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     <option value="flac">FLAC, 24-bit lossless</option><option value="flac16">FLAC, 16-bit lossless</option><option value="mp3">MP3, 320 kbps</option><option value="mp3-192">MP3, 192 kbps</option>
     <option value="ogg">OGG Vorbis</option><option value="m4a">M4A, AAC 256 kbps</option></select></label>
   <label class="fw-field fw-field-stack"><span>What</span><select data-x="what">
-    <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option><option value="aaf">The timeline as AAF, for other editors (audio embedded)</option><option value="otio">The timeline as OpenTimelineIO, an .otioz with its audio</option><option value="surround51">5.1 surround, six channels in one WAV (tracks placed by their 5.1 position)</option><option value="surround">Surround in the session's layout, one channel per speaker in one WAV</option><option value="ambisonic">Ambisonics, first order: an AmbiX WAV (W Y Z X; tracks placed by direction and elevation)</option><option value="adm">Objects: an ADM BWF file (each track placed on the surround pad as an object, for object-audio and MPEG-H tools)</option><option value="preview">Streaming preview: add a track that sounds like the encoded file (MP3, OGG or M4A)</option></select></label>
+    <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option><option value="aaf">The timeline as AAF, for other editors (audio embedded)</option><option value="omf">The timeline as OMF, for other editors (audio embedded)</option><option value="otio">The timeline as OpenTimelineIO, an .otioz with its audio</option><option value="surround51">5.1 surround, six channels in one WAV (tracks placed by their 5.1 position)</option><option value="surround">Surround in the session's layout, one channel per speaker in one WAV</option><option value="ambisonic">Ambisonics, first order: an AmbiX WAV (W Y Z X; tracks placed by direction and elevation)</option><option value="adm">Objects: an ADM BWF file (each track placed on the surround pad as an object, for object-audio and MPEG-H tools)</option><option value="preview">Streaming preview: add a track that sounds like the encoded file (MP3, OGG or M4A)</option></select></label>
   <label class="fw-field fw-field-stack" data-x="range-row"><span>Range</span><select data-x="range"><option value="all">The whole session</option><option value="selection">The selected range</option><option value="loop">The loop</option><option value="span">From and to, in seconds</option></select></label>
   <div class="fw-export-span" data-x="span-row"><label><span>From</span><input type="number" data-x="from" min="0" step="0.001" value="0" aria-label="From, in seconds"></label><label><span>To</span><input type="number" data-x="to" min="0" step="0.001" value="0" aria-label="To, in seconds" title="Past the last clip, the effects' tails ring out"></label></div>
   <label class="fw-export-opt" data-x="dither-row"><input type="checkbox" data-x="dither" checked><span>Dither (TPDF) for 16 and 24-bit</span></label>
@@ -68,7 +68,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     show(platformRow, what === "preview");
     show(channelsRow, what === "multichannel");
     // the range applies where the engine renders frames from the mix: not to the AAF, the ADM objects or a preview
-    const ranged = what !== "aaf" && what !== "otio" && what !== "adm" && what !== "preview";
+    const ranged = what !== "aaf" && what !== "omf" && what !== "otio" && what !== "adm" && what !== "preview";
     enable("range-row", ranged);
     enable("span-row", ranged && field<HTMLSelectElement>("range")?.value === "span");
     enable("dither-row", (what === "mix" || what === "stems" || what === "multichannel") && DITHERED.has(field<HTMLSelectElement>("format")?.value ?? ""));
@@ -199,19 +199,20 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
   dialog.addEventListener("close", () => {
     if (dialog.returnValue !== "export") return;
     const interchange = dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value;
-    if (interchange === "aaf" || interchange === "otio") {
-      // PT-30: the timeline as an AAF, its audio embedded, for other editors; PLAN_v14 W4: or as OpenTimelineIO
+    if (interchange === "aaf" || interchange === "omf" || interchange === "otio") {
+      // PT-30: the timeline as an AAF, its audio embedded, for other editors; R11: or as an OMF 2 file, the same;
+      // PLAN_v14 W4: or as OpenTimelineIO
       void (async () => {
         const res = await fetch(`/api/projects/export-${interchange}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(engine.get("document")) });
         if (!res.ok) {
           const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
-          window.alert(`Could not export the ${interchange === "aaf" ? "AAF" : "OpenTimelineIO bundle"}: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
+          window.alert(`Could not export the ${interchange === "aaf" ? "AAF" : interchange === "omf" ? "OMF" : "OpenTimelineIO bundle"}: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
           return;
         }
         const url = URL.createObjectURL(await res.blob());
         const link = document.createElement("a");
         link.href = url;
-        link.download = interchange === "aaf" ? "formwav-session.aaf" : "formwav-session.otioz";
+        link.download = interchange === "otio" ? "formwav-session.otioz" : `formwav-session.${interchange}`;
         link.click();
         window.setTimeout(() => URL.revokeObjectURL(url), 60000);
       })();
