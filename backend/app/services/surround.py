@@ -16,57 +16,65 @@ import numpy as np
 from . import render
 
 CHANNELS = ("L", "R", "C", "LFE", "Ls", "Rs")
-SPEAKERS = (("Ls", -110.0), ("L", -30.0), ("C", 0.0), ("R", 30.0), ("Rs", 110.0))
 MASK_51_SIDE = 0x60F  # front left, front right, front centre, low frequency, side left, side right
+#: S16: the session's spatialFormat values and the core's layout ids (crate::layout); absent is 5.1.
+LAYOUT_IDS = {"5.1": 0, "foa": 1, "stereo": 2, "lcr": 3, "quad": 4, "5.0": 5, "6.1": 6, "7.1": 7, "5.1.2": 8, "5.1.4": 9, "7.1.2": 10, "7.1.4": 11, "9.1.6": 12}
 
 
-def foa_gains(x: float, y: float, el: float = 0.0) -> list[float]:
-    """PT-42: a source's first-order ambisonic gains (AmbiX: W Y Z X, SN3D) from its place on the pad (x from left to
-    right, y from behind to in front; its distance from the middle how focused it is, the middle all around) and its
-    elevation in degrees (90 overhead, -90 below)."""
-    r = min(1.0, math.hypot(x, y))
-    az = math.atan2(-x, y)  # ambisonic azimuth: 0 ahead, positive to the left
-    e = math.radians(max(-90.0, min(90.0, el)))
-    return [1.0, r * math.sin(az) * math.cos(e), math.sin(e), r * math.cos(az) * math.cos(e)]
+def layout_id(doc: object) -> int:
+    return LAYOUT_IDS.get(doc.get("spatialFormat") if isinstance(doc, dict) else None, 0)
 
 
-def gains(x: float, y: float) -> dict[str, float]:
-    """The five full-range speakers' gains for a source at (x, y): x from -1 (left) to 1 (right), y from -1 (behind)
-    to 1 (in front); its angle chooses the speaker pair, its distance from the middle how far it spreads."""
-    r = min(1.0, math.hypot(x, y))
-    angle = math.degrees(math.atan2(x, y)) if r > 1e-9 else 0.0
-    ring = list(SPEAKERS) + [("Ls", 250.0)]  # the gap behind, Rs (110) round to Ls (250, that is -110)
-    a = angle if angle >= -110.0 else angle + 360.0
-    point = {name: 0.0 for name, _ in SPEAKERS}
-    for (n1, a1), (n2, a2) in zip(ring, ring[1:]):
-        if a1 <= a <= a2:
-            p = (a - a1) / (a2 - a1)
-            point[n1] += math.cos(p * math.pi / 2)
-            point[n2] += math.sin(p * math.pi / 2)
-            break
-    even = 1 / math.sqrt(len(SPEAKERS))
-    spread = {k: r * v + (1 - r) * even for k, v in point.items()}
-    norm = math.sqrt(sum(v * v for v in spread.values())) or 1.0
-    return {k: v / norm for k, v in spread.items()}
+def layouts() -> list[dict]:
+    """S16: every layout the core renders: id, name, WAVE speaker mask and each channel in file order with its azimuth,
+    elevation and share of the stereo fold-down, read from the core so the engine never holds a second copy."""
+    from . import media
+
+    out = []
+    for lid, name, mask, chans in media._require_core().surround_layouts():
+        out.append({"id": lid, "name": name, "mask": mask, "channels": [{"name": n, "az": round(az, 3), "el": round(el, 3), "fold": [round(fl, 6), round(fr, 6)]} for n, az, el, fl, fr in chans]})
+    return out
+
+
+def place_record(place: object) -> list[float] | None:
+    """A track's place as the core's record: x, y, divergence (0 to 1), centre percent (0 to 100), elevation in degrees
+    and LFE send in dB (-120 for none); the core computes every speaker's gain from it for the session's layout."""
+    if not isinstance(place, dict):
+        return None
+
+    def num(key: str, default: float, lo: float, hi: float) -> float:
+        try:
+            v = float(place.get(key, default) if place.get(key) is not None else default)
+        except (TypeError, ValueError):
+            v = default
+        return max(lo, min(hi, v)) if math.isfinite(v) else default
+
+    lfe = place.get("lfeDb")
+    return [num("x", 0.0, -1, 1), num("y", 1.0, -1, 1), num("div", 0.0, 0, 1), num("centre", 100.0, 0, 100), num("el", 0.0, -90, 90), float(lfe) if isinstance(lfe, (int, float)) and float(lfe) > -80 else -120.0]
 
 
 def places_for(doc: dict, owners: list[int], fmt: int = 0) -> list[tuple[int, list[float]]]:
-    """Each placed clip's gains by the clip's index in the plan: for 5.1 (fmt 0) its speaker gains in SMPTE order (L R
-    C LFE Ls Rs, the LFE's from its send in dB), for first-order ambisonics (fmt 1) its W Y Z X gains with its
-    elevation; clips of tracks without a position are left out (on L and R in 5.1, ahead in ambisonics)."""
+    """Each placed clip's place record by the clip's index in the plan (see place_record); clips of tracks without a
+    position are left out (on L and R in a speaker layout, ahead in ambisonics). `fmt` is kept for older callers: the
+    layout is given to the core separately."""
     tracks = [t for t in (doc.get("tracks") or []) if isinstance(t, dict)]
     out = []
     for index, owner in enumerate(owners):
-        place = tracks[owner].get("surround") if owner < len(tracks) else None
-        if not isinstance(place, dict):
-            continue
-        if fmt == 1:
-            out.append((index, foa_gains(float(place.get("x", 0.0)), float(place.get("y", 1.0)), float(place.get("el") or 0.0)) + [0.0, 0.0]))
-            continue
-        g = gains(float(place.get("x", 0.0)), float(place.get("y", 1.0)))
-        lfe = place.get("lfeDb")
-        lfe_gain = 10 ** (float(lfe) / 20) if lfe is not None and float(lfe) > -80 else 0.0
-        out.append((index, [g["L"], g["R"], g["C"], lfe_gain, g["Ls"], g["Rs"]]))
+        record = place_record(tracks[owner].get("surround")) if owner < len(tracks) else None
+        if record is not None:
+            out.append((index, record))
+    return out
+
+
+def bus_places_for(doc: dict, own_buses: list[tuple[int, int]]) -> list[tuple[int, list[float]]]:
+    """S16: each placed track's own bus (a track whose chain must hear its sum: a compressor, an echo, a processor) by
+    bus id with the track's place record, so the bus plays at the track's place rather than on L and R."""
+    tracks = [t for t in (doc.get("tracks") or []) if isinstance(t, dict)]
+    out = []
+    for bus_id, owner in own_buses:
+        record = place_record(tracks[owner].get("surround")) if owner < len(tracks) else None
+        if record is not None:
+            out.append((bus_id, record))
     return out
 
 
@@ -96,9 +104,19 @@ def render_51(doc: dict, start: int = 0, stop: int | None = None) -> dict:
     core's six-channel master bus (render.rs render_surround), so the master chain and fader act on the 5.1 mix (the
     chain on each pair of channels) as they do on the stereo one. Planned with the fold-down off, a placed track's
     position shaping its own sound; each clip takes its track's speaker gains and LFE send."""
-    out, rate = _bus(doc, 0, start, stop)
-    levels = {name: round(20 * math.log10(max(1e-12, float(np.abs(out[:, k]).max()))), 2) for k, name in enumerate(CHANNELS)}
-    return {"wav": wav_51(out, rate), "frames": len(out), "sampleRate": rate, "levels": levels}
+    return render_layout(doc, 0, start, stop)
+
+
+def render_layout(doc: dict, layout: int, start: int = 0, stop: int | None = None) -> dict:
+    """S16: {"wav", "frames", "sampleRate", "levels", "names", "mask"}: the session through the core's master bus in a
+    speaker layout (crate::layout ids 0 and 2 to 12), written in the layout's channel order as a WAVE_FORMAT_EXTENSIBLE
+    file with its speaker mask, the levels keyed by channel name."""
+    table = {row["id"]: row for row in layouts()}
+    row = table.get(layout) or table[0]
+    out, rate = _bus(doc, row["id"], start, stop)
+    names = [c["name"] for c in row["channels"]]
+    levels = {name: round(20 * math.log10(max(1e-12, float(np.abs(out[:, k]).max()))), 2) for k, name in enumerate(names)}
+    return {"wav": wav_float(out, rate, row["mask"]), "frames": len(out), "sampleRate": rate, "levels": levels, "names": names, "mask": row["mask"], "layout": row["name"]}
 
 
 FOA_CHANNELS = ["W", "Y", "Z", "X"]
@@ -124,7 +142,8 @@ def _bus(doc: dict, fmt: int, start: int = 0, stop: int | None = None) -> tuple[
         raise render.RenderError("there are no tracks to mix")
     native = media._require_core()
     unfolded = {k: v for k, v in doc.items() if k != "surroundFold"}
-    rate, sources, clips, end, _skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = render.plan(unfolded)
+    own_buses: list = []
+    rate, sources, clips, end, _skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = render.plan(unfolded, own_buses)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -134,8 +153,9 @@ def _bus(doc: dict, fmt: int, start: int = 0, stop: int | None = None) -> tuple[
         loaded.append((source, path.read_bytes()))
     chains = chains + [(2, 0, *s) for s in (render._stage(f) for f in (doc.get("masterFx") or [])) if s]
     places = places_for(doc, owners, fmt)
+    on_buses = bus_places_for(doc, own_buses)
     if not places:
-        places = [(len(clips), [0.0] * 6)]  # nothing placed: still the bus (5.1: the stereo on L and R; ambisonics: ahead)
+        places = [(len(clips), [0.0, 1.0, 0.0, 100.0, 0.0, -120.0])]  # nothing placed on a clip: still the bus
     chains, processors = render.native_chains(chains)
     if start < 0 or (stop is not None and stop <= start):
         raise render.RenderError("the range must start at 0 or later and end after it starts")
@@ -143,8 +163,8 @@ def _bus(doc: dict, fmt: int, start: int = 0, stop: int | None = None) -> tuple[
     master_db, master_pts = render.master_lane(doc)
     if master_pts:
         envelopes.append((master_pts, True))
-    interleaved, _, _ = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, False, fmt, processors, bus_auto, render.PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, render.bus_outs(doc))
-    out = np.frombuffer(bytes(interleaved), dtype="<f4").reshape(-1, 6).astype(np.float64)
+    interleaved, _, _ = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, False, fmt, processors, bus_auto, render.PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, render.bus_outs(doc), on_buses)
+    out = np.frombuffer(bytes(interleaved), dtype="<f4").reshape(-1, native.surround_channels(fmt)).astype(np.float64)
     if start >= len(out):
         raise render.RenderError("the range starts after the session ends")
     return out[start : len(out) if stop is None else int(stop)], rate

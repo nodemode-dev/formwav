@@ -198,16 +198,17 @@ async def formwav_render_session(name: str, path: str, format: str = "wav", what
     """Renders a saved session's mix (every track, its effects and automation, as the app plays it) to a file on this
     machine: `format` wav (32-bit float), wav32, wav24, wav16, aiff (24-bit), aiff16, aifc (32-bit float), flac (24-bit),
     flac16, mp3, mp3-192, ogg or m4a; `path` the file to write in an existing folder (replaced if present). `what`: mix
-    (stereo, the default), surround51 (six channels, L R C LFE Ls Rs) or adm (an ADM BWF: tracks placed on the surround pad
+    (stereo, the default), surround51 (six channels, L R C LFE Ls Rs), surround (the session's own layout, stereo to
+    9.1.6, one channel per speaker with the WAVE speaker mask) or adm (an ADM BWF: tracks placed on the surround pad
     as objects, moving along their paths, and tracks marked Bed as a 5.1 bed; always WAV). `start` and `end`, in seconds,
-    render that range only (a mix or surround51; an end past the last clip keeps the effects' tails); `normalize`, in
+    render that range only (a mix, surround51 or surround; an end past the last clip keeps the effects' tails); `normalize`, in
     dBFS, sets the mix's highest sample (-0.1 is usual); `dither` (on unless false) adds TPDF dither to the 16 and 24-bit
     formats. A WAV carries the session's timecode start in its BWF bext chunk. Returns the file, and for a mix its sample
     peak, true peak and loudness as written."""
     fmt = format.lower().strip()
     kind = what.lower().strip()
-    if kind not in ("mix", "surround51", "adm"):
-        raise ToolError("what must be mix, surround51 or adm.")
+    if kind not in ("mix", "surround51", "surround", "adm"):
+        raise ToolError("what must be mix, surround51, surround or adm.")
     if kind != "mix":
         fmt = "wav"
     if fmt not in RENDER_FORMATS:
@@ -236,6 +237,8 @@ async def formwav_render_session(name: str, path: str, format: str = "wav", what
         peaks = [res.headers.get("X-Peak-Left-dBFS", "-inf"), res.headers.get("X-Peak-Right-dBFS", "-inf")]
         out.update({"seconds": round(int(res.headers.get("X-Frames", 0)) / rate, 3), "peak_dbfs": max(peaks, key=float), "true_peak_dbtp": res.headers.get("X-True-Peak-dBTP"),
                     "loudness_lufs": res.headers.get("X-Loudness-LUFS"), "normalized_by_db": res.headers.get("X-Normalize-dB")})
+    if kind == "surround" and res.headers.get("X-Channel-Names"):
+        out.update({"channels": res.headers["X-Channel-Names"].split(","), "levels_dbfs": json.loads(res.headers.get("X-Channel-Peaks") or "{}")})
     return out
 
 

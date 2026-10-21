@@ -166,6 +166,14 @@ def _measure(wav: bytes) -> tuple[float, float, float | None, float | None]:
     return float(np.abs(x[:, 0]).max(initial=0.0)), float(np.abs(x[:, -1]).max(initial=0.0)), native.true_peak(raw, x.shape[1], rate), native.loudness(raw, x.shape[1], rate)
 
 
+@router.get("/surround/layouts")
+def surround_layouts() -> list[dict]:
+    """S16: every speaker layout the core renders, with each channel's direction and its fold-down share."""
+    from ..services import surround
+
+    return surround.layouts()
+
+
 @router.post("/render")
 def render_session(document: dict = Body(...), format: str = "wav", what: str = "mix", platform: str = "", channels: str = "",
                    start: int | None = None, end: int | None = None, normalize: float | None = None, dither: bool = True) -> Response:
@@ -206,6 +214,18 @@ def render_session(document: dict = Body(...), format: str = "wav", what: str = 
 
             out = surround.render_51(document, a, end)
             return Response(content=out["wav"], media_type="audio/wav", headers={"Content-Disposition": 'attachment; filename="surround-5.1.wav"', "X-Channel-Peaks": json.dumps(out["levels"])})
+        if what == "surround":
+            # S16: the session in its own speaker layout (spatialFormat, 5.1 when unset), one channel per speaker in the
+            # layout's order, the WAVE speaker mask naming them
+            import json
+
+            from ..services import surround
+
+            lid = surround.layout_id(document)
+            if lid == 1:
+                raise HTTPException(422, "the session is in ambisonics: export it as ambisonics")
+            out = surround.render_layout(document, lid, a, end)
+            return Response(content=out["wav"], media_type="audio/wav", headers={"Content-Disposition": f'attachment; filename="surround-{out["layout"]}.wav"', "X-Channel-Peaks": json.dumps(out["levels"]), "X-Channel-Names": ",".join(out["names"])})
         if what in ("stems", "multichannel"):
             import io
             import zipfile

@@ -14,9 +14,6 @@ FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 
 #: The stages that must see a track's sum, so a track carrying one plays through a bus of its own: every kind but the
 #: five filters, which are linear and run per clip.
 ON_THE_SUM = (6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
-#: A track with a 5.1 or ambisonic place goes to a bus of its own only for these, the others staying per clip where its
-#: place still reaches them (a track on its own bus plays on L and R in 5.1 until PLAN_v13 S16).
-PLACED_ON_THE_SUM = (6, 8, 16, 18, 19, 20)
 #: The session's pan law for a mono source (the core's codes; absent is the balance every session had).
 PAN_LAWS = {"-3": 1, "-4.5": 2, "-6": 3}
 
@@ -217,7 +214,8 @@ def _fade_code(clip: dict) -> int:
     return a if b == a else a + 16 * (b + 1)
 
 
-def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
+def plan(doc: object, own_buses: list | None = None) -> tuple[int, dict[str, int], list[tuple], int, int]:
+    own_buses = [] if own_buses is None else own_buses
     if not isinstance(doc, dict) or not isinstance(doc.get("tracks"), list) or not isinstance(doc.get("media"), dict):
         raise RenderError("not a session document")
     rate = doc.get("sampleRate")
@@ -271,12 +269,13 @@ def plan(doc: object) -> tuple[int, dict[str, int], list[tuple], int, int]:
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
 
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
-        on_sum = PLACED_ON_THE_SUM if isinstance(track.get("surround"), dict) else ON_THE_SUM
-        if bus_index == 0 and any(s[0] in on_sum for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency), a processor
+        if bus_index == 0 and any(s[0] in ON_THE_SUM for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency), a processor
             # A compressor is nonlinear, so it must see the track's sum: the track plays through a bus of its own
             # (unity gain, centre) whose chain is the track's whole chain, in order.
             buses[f"__track:{track.get('id')}"] = (len(buses) + 1, 1.0, 0.0)
             bus_index = len(buses)
+            if isinstance(track.get("surround"), dict):
+                own_buses.append((bus_index, tracks.index(track)))
             chains.extend((1, bus_index - 1, *s) for s in stages)
             # the filters' automation (PT-19) goes with them onto the bus, numbered by the bus chain's stages
             live = [f for f in (track.get("fx") or []) if _stage(f)]
@@ -406,7 +405,8 @@ def render(doc: object, start: int = 0, stop: int | None = None) -> dict:
     """The session's stereo mix, or the frames from `start` to `stop` of it: a stop past the last clip renders on into
     the buses' tails, then silence."""
     native = media._require_core()
-    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = plan(doc)
+    own_buses: list = []
+    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = plan(doc, own_buses)
     if start < 0 or (stop is not None and stop <= start):
         raise RenderError("the range must start at 0 or later and end after it starts")
     length = max(1, end) if stop is None or len(doc.get("timeTrack") or []) >= 2 else max(1, end, int(stop))
@@ -420,16 +420,20 @@ def render(doc: object, start: int = 0, stop: int | None = None) -> dict:
     chains = chains + [(2, 0, *s) for s in (_stage(f) for f in (doc.get("masterFx") or [])) if s]
     # PT-38, AA-11: a session hearing its 5.1 as a fold-down plays the core's six-channel bus folded to stereo, here as
     # in playback, so the stereo mix and the 5.1 export's fold-down are the same computation
-    from .surround import places_for
+    from .surround import bus_places_for, layout_id, places_for
 
-    # PT-42: in the session's format, the 5.1 bus or first-order ambisonics (folded through two cardioids)
-    spatial = 1 if isinstance(doc, dict) and doc.get("spatialFormat") == "foa" else 0
-    places = places_for(doc, owners, spatial) if isinstance(doc, dict) and doc.get("surroundFold") else []
+    # PT-42, S16: in the session's layout (5.1 when unset, first-order ambisonics folded through two cardioids)
+    spatial = layout_id(doc)
+    folding = isinstance(doc, dict) and bool(doc.get("surroundFold"))
+    places = places_for(doc, owners) if folding else []
+    on_buses = bus_places_for(doc, own_buses) if folding else []
+    if folding and on_buses and not places:
+        places = [(len(clips), [0.0, 1.0, 0.0, 100.0, 0.0, -120.0])]
     chains, processors = native_chains(chains)
     master_db, master_pts = master_lane(doc)
     if master_pts:
         envelopes.append((master_pts, True))
-    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, bus_outs(doc))
+    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, bus_outs(doc), on_buses)
     frames = length
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:
