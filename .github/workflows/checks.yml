@@ -48,7 +48,8 @@ jobs:
   engine:
     name: engine and interface tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    # Linux also fetches the judging models on a cold cache (up to 40 minutes) and runs their tests
+    timeout-minutes: 100
     strategy:
       fail-fast: false
       matrix:
@@ -114,6 +115,27 @@ jobs:
           cd frontend && npm ci && npm run build
       - name: Chromium for the interface tests
         run: python -m playwright install --with-deps chromium
+      # PLAN_v12 C6: on Linux the tests that judge with models run instead of skipping. Whisper's own requirements,
+      # then formwav's own installers (tests/fetch_models.py: Silero VAD, DeepFilterNet, Whisper base.en and tiny,
+      # Kokoro, the English to Spanish model, TIGER-DnR), kept in a cache keyed on the installers' pins. A model that
+      # fails to arrive is reported here and its tests skip with their reason; it does not stop the run.
+      - name: Whisper's requirements (Linux)
+        if: runner.os == 'Linux'
+        run: python -m pip install -r backend/requirements_transcript.txt
+      - name: the models' cache (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: |
+            backend/models
+            backend/data/speech-runtime
+          key: models-${{ runner.os }}-${{ hashFiles('backend/app/services/vad.py', 'backend/app/services/deepfilter.py', 'backend/app/services/local_speech.py', 'backend/app/services/local_dub.py', 'backend/app/services/tiger_dnr.py', 'backend/app/services/transcript.py') }}
+      - name: the models the tests judge with (Linux)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        working-directory: backend
+        timeout-minutes: 40
+        run: python tests/fetch_models.py
       - name: compile and lint
         run: |
           python -m compileall -q -x '[/\\]\.?venv' backend/app backend/formwav_mcp backend/tests
@@ -121,6 +143,54 @@ jobs:
       - name: tests
         working-directory: backend
         run: python -m pytest tests -q -rs
+
+  firefox:
+    name: interface tests in Firefox
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # PLAN_v12 C6: the same interface tests in a second engine. Reported, not blocking, until its first green run on
+    # GitHub: it has not been run anywhere yet (this repository's build machine has no Firefox).
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: system packages
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libasound2-dev pkg-config
+      - name: the engine, with the audio core built into it
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt -r backend/tests/requirements.txt
+          maturin build --release --auditwheel skip -m native/formwav-dsp/Cargo.toml -o native-dist
+          python -m pip install native-dist/*.whl
+      - name: the interface with its audio core
+        env:
+          CARGO_PROFILE_RELEASE_STRIP: debuginfo
+        run: |
+          cargo build --release --locked --target wasm32-unknown-unknown --lib --manifest-path native/formwav-dsp/Cargo.toml
+          mkdir -p frontend/public/core
+          cp native/formwav-dsp/target/wasm32-unknown-unknown/release/formwav_dsp.wasm frontend/public/core/formwav_dsp.wasm
+          cd frontend && npm ci && npm run build
+      # Firefox runs the suite; Chromium too, for the tests that launch their own with its stand-in microphone
+      - name: Firefox and Chromium
+        run: python -m playwright install --with-deps firefox chromium
+      - name: interface tests
+        working-directory: backend
+        env:
+          FORMWAV_TEST_BROWSER: firefox
+        run: python -m pytest tests/e2e -q -rs
 
   shell:
     name: desktop shell
