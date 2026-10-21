@@ -86,7 +86,7 @@ const BODY = `
   <div class="fw-fx-params"></div>
   <div class="fw-analyze-buttons"><select data-preset="fx" aria-label="Preset for this effect"><option value="">Presets</option></select><button type="button" class="fw-ibtn" data-preset="fx-save">Save preset</button><button type="button" class="fw-ibtn" data-preset="fx-delete">Delete</button></div>
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx-preview aria-pressed="false" title="Hear the picked effect or plugin at its current settings on 5 s of the clip from the playhead, looped, without changing the session; while it plays, a changed setting is heard again">Preview</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx-preview aria-pressed="false" title="Hear the picked effect or plugin at its current settings on 5 s of the clip from the playhead, looped, without changing the session; while it plays, a changed setting is heard again">Preview</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="insert" disabled title="Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it">Insert on track</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges">Fill with room tone</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="heal-brush" aria-pressed="false" title="Paint over a sound in the spectrogram view to heal it as you go: Spot heal under the stroke, one undo step per stroke">Heal brush</button><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select><button type="button" class="fw-ibtn" data-fx="chain-files" hidden title="Run this chain on audio files from the computer, outside the session, and download the results as a zip">Run chain on files...</button><input type="file" data-chain="files" accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff" multiple hidden><button type="button" class="fw-ibtn" data-fx="detect-silences" title="Mark this track's silences (over 0.3 s) as regions on the timeline, to see them before stripping or splitting">Detect silences</button><button type="button" class="fw-ibtn" data-fx="split-silences" title="Split this track's clips where sound starts and stops (silences over 0.3 s)">Split at silences</button><button type="button" class="fw-ibtn" data-fx="similar" title="Mark every event like the one in the selected range (draw a range over one event first)">Find similar</button><button type="button" class="fw-ibtn" data-fx="restore" title="Put the clip's original audio back in the selected range, or the whole clip without a range">Restore original</button><button type="button" class="fw-ibtn" data-video="write" title="For a clip imported from a video: the video with the session's mix as its sound, the picture copied untouched, downloaded as MP4">Write into its video</button></div>
   <ol class="fw-chain" hidden></ol>
@@ -788,6 +788,34 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       .catch(() => fetchedPlugins.delete(name));
   });
   pick?.addEventListener("change", syncBand);
+  // S17: Insert on track takes a CLAP plug-in only (hosted live), and a clip to know the track
+  const insertButton = body.querySelector<HTMLButtonElement>('[data-fx="insert"]');
+  const syncInsert = () => {
+    const off = !pick?.value.startsWith("plugin:clap:") || !find(engine.get("document"));
+    if (insertButton && insertButton.disabled !== off) insertButton.disabled = off;
+  };
+  pick?.addEventListener("change", syncInsert);
+  host.addEventListener("fw-selection", syncInsert);
+  window.addEventListener("fw-plugin-error", (e) => {
+    // the reason names the user's file and the plug-in's own words, so it goes to the console untranslated
+    console.warn("formwav plug-in insert:", (e as CustomEvent).detail);
+    setText(notice, "A plug-in insert could not start, so its track plays without it");
+  });
+  body.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest<HTMLElement>("[data-fx]")?.dataset.fx !== "insert") return;
+    const hit = find(engine.get("document"));
+    const name = pick?.value ?? "";
+    if (!hit || !name.startsWith("plugin:clap:")) return;
+    const label = pick?.selectedOptions[0]?.textContent?.trim() || name;
+    const values: Record<string, number> = {};
+    for (const [k, v] of Object.entries(currentParams())) if (k && /^p\d+$/.test(k) && typeof v === "number" && Number.isFinite(v)) values[k] = v;
+    // the state the plug-in kept on this clip's audio, when it made it
+    const made = engine.get("document").media[hit.clip.mediaId]?.plugin;
+    const state = made?.name === name && made.state ? { state: made.state } : {};
+    const fx: TrackFx = { kind: "plugin", name, label, ...state, ...(Object.keys(values).length ? { values } : {}) };
+    engine.dispatch({ type: "set-track-fx", trackId: hit.track.id, fx: [...(hit.track.fx ?? []), fx] });
+    setText(notice, `Plug-in live on ${hit.track.name}: it plays through native output and in exports`);
+  });
   // Effect search: filter the Effects menu by name or group.
   const search = body.querySelector<HTMLInputElement>('[data-fx="search"]');
   search?.addEventListener("input", () => {
@@ -2786,7 +2814,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     const busId = find(doc)?.track.busId;
     return busId !== undefined ? (doc.buses ?? []).find((b) => b.id === busId) ?? null : null;
   };
-  const RTFX_LABEL: Record<TrackFx["kind"], string> = { processor: "Processor", highpass: "High-pass", dehum: "De-hum", declick: "De-click", dereverb: "De-reverb", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor", denoise: "Denoise", reverb: "Reverb", echo: "Echo", chorus: "Chorus", limiter: "Limiter", tremolo: "Tremolo", gate: "Gate", phaser: "Phaser", flanger: "Flanger", voice: "Dialogue isolate" };
+  const RTFX_LABEL: Record<TrackFx["kind"], string> = { processor: "Processor", highpass: "High-pass", dehum: "De-hum", declick: "De-click", dereverb: "De-reverb", lowpass: "Low-pass", peak: "Peak EQ", lowshelf: "Low shelf", highshelf: "High shelf", compressor: "Compressor", denoise: "Denoise", reverb: "Reverb", echo: "Echo", chorus: "Chorus", limiter: "Limiter", tremolo: "Tremolo", gate: "Gate", phaser: "Phaser", flanger: "Flanger", voice: "Dialogue isolate", plugin: "Plug-in" };
   const RTFX_DEFAULT: Record<TrackFx["kind"], TrackFx> = {
     processor: { kind: "processor", id: "gain", values: { gain: 0 } },
     denoise: { kind: "denoise", reductionDb: 12, sensitivityDb: 3 },
@@ -2808,6 +2836,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     lowshelf: { kind: "lowshelf", freq: 200, gainDb: 0, q: 0.707 },
     highshelf: { kind: "highshelf", freq: 6000, gainDb: 0, q: 0.707 },
     compressor: { kind: "compressor", thresholdDb: -20, ratio: 4, attackMs: 10, releaseMs: 150, makeupDb: 0 },
+    // S17: never offered in the menu; a plug-in is put on a track by Insert on track
+    plugin: { kind: "plugin", name: "plugin:clap:", label: "Plug-in" },
   };
   const getFx = (scope: FxScope): readonly TrackFx[] => {
     const doc = engine.get("document");
@@ -2830,7 +2860,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         const num = (label: string, p: string, min: number, max: number, step: number) => `<label>${label} <input type="number" min="${min}" max="${max}" step="${step}" data-p="${p}"></label>`;
         const UNIT: Record<string, [string, number]> = { Db: ["dB", 0.1], Hz: ["Hz", 1], Ms: ["ms", 0.1], Percent: ["%", 1], Ratio: [":1", 0.1], Semitones: ["st", 1], Cents: ["ct", 1], Seconds: ["s", 0.05] };
         const fields =
-          f.kind === "processor"
+          f.kind === "plugin"
+            ? `<span class="fw-rtfx-note">Native output and exports</span>`
+            : f.kind === "processor"
             ? (PROCESSOR_BY_ID.get(f.id)?.params ?? [])
                 .map((p) =>
                   p.unit === "Toggle" || p.unit === "Choice"
@@ -2870,7 +2902,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         row.innerHTML = `<span class="fw-rtfx-name"></span>${fields}<label><input type="checkbox" data-p="on"> On</label><button type="button" class="fw-ibtn" data-rtfx="up">Up</button><button type="button" class="fw-ibtn" data-rtfx="down">Down</button><button type="button" class="fw-ibtn" data-rtfx="remove">Remove</button><select data-preset="rt" aria-label="Preset for this effect"></select><button type="button" class="fw-ibtn" data-preset="rt-save">Save</button>`;
         fillPresets(row.querySelector<HTMLSelectElement>('[data-preset="rt"]'), rtKey(f));
         const name = row.querySelector<HTMLElement>(".fw-rtfx-name");
-        if (name) name.textContent = f.kind === "processor" ? PROCESSOR_BY_ID.get(f.id)?.name ?? f.id : RTFX_LABEL[f.kind];
+        if (name) name.textContent = f.kind === "processor" ? PROCESSOR_BY_ID.get(f.id)?.name ?? f.id : f.kind === "plugin" ? f.label : RTFX_LABEL[f.kind];
+        // a plug-in's own name is the user's installed software, not interface text
+        if (name && f.kind === "plugin") name.setAttribute("translate", "no");
         for (const input of row.querySelectorAll<HTMLInputElement>("input[data-p], select[data-p]")) {
           const p = input.dataset.p;
           if (p === "on") input.checked = !f.bypass;

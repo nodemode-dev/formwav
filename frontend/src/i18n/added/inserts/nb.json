@@ -1,0 +1,7 @@
+{
+"Insert on track": "Sett inn på spor",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Setter den valgte CLAP-plugin-modulen live på sporet til dette klippet med gjeldende innstillinger: den spiller gjennom den native utgangen (Innstillinger) og i eksporter, og hvert spor rettes inn etter forsinkelsen; nettleserens motor spiller sporet uten den",
+"Native output and exports": "Native utgang og eksporter",
+"Plug-in live on {a}: it plays through native output and in exports": "Plugin live på {a}: den spiller gjennom den native utgangen og i eksporter",
+"A plug-in insert could not start, so its track plays without it": "En innsatt plugin kunne ikke starte, så sporet spiller uten den"
+}

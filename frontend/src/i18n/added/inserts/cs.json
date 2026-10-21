@@ -1,0 +1,7 @@
+{
+"Insert on track": "Vložit do stopy",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Umístí vybraný CLAP plug-in živě do stopy tohoto klipu s jeho aktuálním nastavením: hraje přes nativní výstup (Nastavení) a v exportech a všechny stopy se vyrovnají podle jeho zpoždění; engine prohlížeče hraje stopu bez něj",
+"Native output and exports": "Nativní výstup a exporty",
+"Plug-in live on {a}: it plays through native output and in exports": "Plug-in živě na {a}: hraje přes nativní výstup a v exportech",
+"A plug-in insert could not start, so its track plays without it": "Vložený plug-in se nepodařilo spustit, takže jeho stopa hraje bez něj"
+}

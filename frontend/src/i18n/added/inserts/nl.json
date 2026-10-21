@@ -1,0 +1,7 @@
+{
+"Insert on track": "Op spoor invoegen",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Zet de gekozen CLAP-plug-in live op het spoor van deze clip, met de huidige instellingen: hij speelt via de native uitvoer (Instellingen) en in exports, en elk spoor wordt op zijn vertraging uitgelijnd; de engine van de browser speelt het spoor zonder hem",
+"Native output and exports": "Native uitvoer en exports",
+"Plug-in live on {a}: it plays through native output and in exports": "Plug-in live op {a}: hij speelt via de native uitvoer en in exports",
+"A plug-in insert could not start, so its track plays without it": "Een ingevoegde plug-in kon niet starten, dus het spoor speelt zonder hem"
+}

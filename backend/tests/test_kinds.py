@@ -10,8 +10,9 @@ from conftest import BACKEND, ROOT
 
 FRONTEND = ROOT / "frontend"
 FX_RS = ROOT / "native" / "formwav-dsp" / "src" / "fx.rs"
-# the processor library (kind 20) is one kind holding many processors; tests/test_processors.py holds it to the core
-KINDS = sorted(k for k in render.FX_KINDS if k != "processor")
+# the processor library (kind 20) is one kind holding many processors; tests/test_processors.py holds it to the core.
+# A hosted plug-in (kind 21, S17) is no design of the core's: its stage names an installed plug-in
+KINDS = sorted(k for k in render.FX_KINDS if k not in ("processor", "plugin"))
 
 
 @pytest.fixture(scope="module")
@@ -35,7 +36,7 @@ def _core_kinds() -> dict[str, int]:
 
 def test_every_place_names_the_same_nineteen_kinds(interface):
     assert len(KINDS) == 19
-    assert set(interface["kinds"]) == set(KINDS) == set(interface["catalogue"]) == set(_core_kinds()) - {"processor"}
+    assert set(interface["kinds"]) - {"plugin"} == set(KINDS) == set(interface["catalogue"]) == set(_core_kinds()) - {"processor", "hosted"}
 
 
 @pytest.mark.parametrize("kind", KINDS)

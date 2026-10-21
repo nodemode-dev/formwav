@@ -1,0 +1,7 @@
+{
+"Insert on track": "Lisää raidalle",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Asettaa valitun CLAP-liitännäisen livenä tämän leikkeen raidalle nykyisin asetuksin: se soi natiivin ulostulon (Asetukset) kautta ja vienneissä, ja kaikki raidat tasataan sen viiveeseen; selaimen moottori soittaa raidan ilman sitä",
+"Native output and exports": "Natiivi ulostulo ja viennit",
+"Plug-in live on {a}: it plays through native output and in exports": "Liitännäinen livenä raidalla {a}: se soi natiivin ulostulon kautta ja vienneissä",
+"A plug-in insert could not start, so its track plays without it": "Lisätty liitännäinen ei käynnistynyt, joten sen raita soi ilman sitä"
+}

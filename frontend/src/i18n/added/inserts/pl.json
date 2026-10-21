@@ -1,0 +1,7 @@
+{
+"Insert on track": "Wstaw na ścieżkę",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Umieszcza wybraną wtyczkę CLAP na żywo na ścieżce tego klipu z jej bieżącymi ustawieniami: gra przez wyjście natywne (Ustawienia) i w eksportach, a każda ścieżka jest wyrównywana do jej opóźnienia; silnik przeglądarki odtwarza ścieżkę bez niej",
+"Native output and exports": "Wyjście natywne i eksporty",
+"Plug-in live on {a}: it plays through native output and in exports": "Wtyczka na żywo na {a}: gra przez wyjście natywne i w eksportach",
+"A plug-in insert could not start, so its track plays without it": "Wstawiona wtyczka nie mogła się uruchomić, więc jej ścieżka gra bez niej"
+}

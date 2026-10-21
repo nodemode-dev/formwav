@@ -35,8 +35,9 @@ def _stated(pattern: str) -> list[int]:
 
 def _live_kinds() -> int:
     doc = (ROOT / "frontend/src/engine/document.ts").read_text(encoding="utf-8")
-    # the processor kind holds the library's processors, counted on their own below
-    return len([k for k in re.findall(r'"([a-z]+)"', re.search(r"const FX_KINDS: ReadonlySet<string> = new Set\(\[([^\]]*)\]", doc).group(1)) if k != "processor"])
+    # the processor kind holds the library's processors, counted on their own below; the plugin kind (S17) holds
+    # installed plug-ins, not an effect of formwav's own
+    return len([k for k in re.findall(r'"([a-z]+)"', re.search(r"const FX_KINDS: ReadonlySet<string> = new Set\(\[([^\]]*)\]", doc).group(1)) if k not in ("processor", "plugin")])
 
 
 def _studio_processors() -> int:

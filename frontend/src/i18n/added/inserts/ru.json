@@ -1,0 +1,7 @@
+{
+"Insert on track": "Вставить на дорожку",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Ставит выбранный плагин CLAP вживую на дорожку этого клипа с текущими настройками: он звучит через нативный вывод (Настройки) и в экспорте, а все дорожки выравниваются по его задержке; движок браузера играет дорожку без него",
+"Native output and exports": "Нативный вывод и экспорт",
+"Plug-in live on {a}: it plays through native output and in exports": "Плагин вживую на {a}: звучит через нативный вывод и в экспорте",
+"A plug-in insert could not start, so its track plays without it": "Вставленный плагин не удалось запустить, поэтому его дорожка звучит без него"
+}

@@ -1,0 +1,7 @@
+{
+"Insert on track": "트랙에 삽입",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "선택한 CLAP 플러그인을 현재 설정 그대로 이 클립의 트랙에 실시간으로 넣습니다. 네이티브 출력(설정)과 내보내기에서 재생되며, 모든 트랙이 그 지연에 맞춰 정렬됩니다. 브라우저 엔진은 플러그인 없이 트랙을 재생합니다",
+"Native output and exports": "네이티브 출력과 내보내기",
+"Plug-in live on {a}: it plays through native output and in exports": "{a}에 실시간 플러그인: 네이티브 출력과 내보내기에서 재생됩니다",
+"A plug-in insert could not start, so its track plays without it": "삽입한 플러그인을 시작할 수 없어 해당 트랙은 플러그인 없이 재생됩니다"
+}

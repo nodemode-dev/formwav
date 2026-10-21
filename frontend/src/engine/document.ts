@@ -377,7 +377,19 @@ export interface ProcessorFx {
   bypass?: boolean;
 }
 
-export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx | TremoloFx | GateFx | PhaserFx | FlangerFx | VoiceFx | DeHumFx | DeClickFx | DeReverbFx | ProcessorFx;
+/** PLAN_v13 S17: an installed CLAP plug-in live as a track's insert (core kind 21): `name` as the engine lists it
+ *  (plugin:clap:<path>), `label` its own name, its saved state (base64) and its values by parameter (p<id>). It plays
+ *  through native output and in exports; the browser's engine passes the sound by. */
+export interface PluginFx {
+  kind: "plugin";
+  name: string;
+  label: string;
+  state?: string;
+  values?: Record<string, number>;
+  bypass?: boolean;
+}
+
+export type TrackFx = FilterFx | CompressorFx | DenoiseFx | ReverbFx | EchoFx | ChorusFx | LimiterFx | TremoloFx | GateFx | PhaserFx | FlangerFx | VoiceFx | DeHumFx | DeClickFx | DeReverbFx | ProcessorFx | PluginFx;
 
 /** PT-16: a MIDI effect: transpose by semitones; scale and offset velocity; quantize starts to a grid of beats (at the
  *  session's tempo, 120 when it has none) by a strength from 0 to 1. */
@@ -436,7 +448,7 @@ export type MidiFx =
   | { kind: "duration"; percent: number }
   | { kind: "delay"; ms: number };
 
-const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice", "dehum", "declick", "dereverb", "processor"]);
+const FX_KINDS: ReadonlySet<string> = new Set(["highpass", "lowpass", "peak", "lowshelf", "highshelf", "compressor", "denoise", "reverb", "echo", "chorus", "limiter", "tremolo", "gate", "phaser", "flanger", "voice", "dehum", "declick", "dereverb", "processor", "plugin"]);
 
 /** The bypass groups (Track > Bypass Inserts): every insert, or those of one kind of processing. */
 export type FxCategory = "all" | "eq" | "dynamics" | "reverb" | "delay" | "modulation";
@@ -456,9 +468,15 @@ export function fxCategory(f: TrackFx): FxCategory | undefined {
 export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
   const clamp = (v: number, lo: number, hi: number, fallback: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
   return fx
-    .filter((f) => FX_KINDS.has(f.kind) && (f.kind !== "processor" || PROCESSOR_BY_ID.has(f.id)))
+    .filter((f) => FX_KINDS.has(f.kind) && (f.kind !== "processor" || PROCESSOR_BY_ID.has(f.id)) && (f.kind !== "plugin" || (typeof f.name === "string" && f.name.startsWith("plugin:clap:"))))
     .map((f): TrackFx => {
       const bypass = f.bypass ? { bypass: true } : {};
+      if (f.kind === "plugin") {
+        const values: Record<string, number> = {};
+        for (const [k, v] of Object.entries(f.values ?? {})) if (/^p\d+$/.test(k) && typeof v === "number" && Number.isFinite(v)) values[k] = v;
+        const state = typeof f.state === "string" && /^[A-Za-z0-9+/=]*$/.test(f.state) ? { state: f.state } : {};
+        return { kind: "plugin", name: f.name, label: typeof f.label === "string" && f.label.trim() ? f.label.trim().slice(0, 80) : f.name.split(/[\\/]/).pop() ?? f.name, ...state, ...(Object.keys(values).length ? { values } : {}), ...bypass };
+      }
       if (f.kind === "processor") {
         const info = PROCESSOR_BY_ID.get(f.id);
         return { kind: "processor", id: f.id, values: info ? processorValues(info, f.values) : {}, ...bypass };
@@ -1446,7 +1464,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-fx-automation":
       return mapTrack(doc, cmd.trackId, (t) => {
         const target = t.fx?.[cmd.fxIndex];
-        if (!t.fx || !target || target.kind === "processor" || target.kind === "compressor" || target.kind === "dehum" || target.kind === "declick" || target.kind === "dereverb" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter" || target.kind === "tremolo" || target.kind === "gate" || target.kind === "phaser" || target.kind === "flanger" || target.kind === "voice") return t;
+        if (!t.fx || !target || target.kind === "processor" || target.kind === "compressor" || target.kind === "dehum" || target.kind === "declick" || target.kind === "dereverb" || target.kind === "denoise" || target.kind === "reverb" || target.kind === "echo" || target.kind === "chorus" || target.kind === "limiter" || target.kind === "tremolo" || target.kind === "gate" || target.kind === "phaser" || target.kind === "flanger" || target.kind === "voice" || target.kind === "plugin") return t;
         const { [cmd.param]: _old, ...others } = target.automation ?? {};
         const automation = cmd.points.length ? { ...others, [cmd.param]: cmd.points } : others;
         const next = cleanFx(t.fx.map((f, i) => (i === cmd.fxIndex ? { ...target, automation } : f)));

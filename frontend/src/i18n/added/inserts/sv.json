@@ -1,0 +1,7 @@
+{
+"Insert on track": "Infoga på spår",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Lägger det valda CLAP-insticksprogrammet live på det här klippets spår med nuvarande inställningar: det spelar genom den inbyggda utgången (Inställningar) och i exporter, och varje spår justeras efter dess fördröjning; webbläsarens motor spelar spåret utan det",
+"Native output and exports": "Inbyggd utgång och exporter",
+"Plug-in live on {a}: it plays through native output and in exports": "Insticksprogram live på {a}: det spelar genom den inbyggda utgången och i exporter",
+"A plug-in insert could not start, so its track plays without it": "Ett infogat insticksprogram kunde inte starta, så spåret spelar utan det"
+}

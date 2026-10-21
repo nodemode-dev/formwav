@@ -1,0 +1,7 @@
+{
+"Insert on track": "插入到轨道",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "把所选 CLAP 插件以当前设置实时放到此片段的轨道上：它通过原生输出（设置）和导出播放，所有轨道都按它的延迟对齐；浏览器引擎播放该轨道时不经过它",
+"Native output and exports": "原生输出和导出",
+"Plug-in live on {a}: it plays through native output and in exports": "{a} 上的实时插件：通过原生输出和导出播放",
+"A plug-in insert could not start, so its track plays without it": "插入的插件未能启动，因此其轨道不经过它播放"
+}

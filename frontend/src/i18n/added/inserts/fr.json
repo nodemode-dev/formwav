@@ -1,0 +1,7 @@
+{
+"Insert on track": "Insérer sur la piste",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Place le plug-in CLAP choisi en direct sur la piste de ce clip, avec ses réglages actuels : il joue par la sortie native (Réglages) et dans les exports, et chaque piste est alignée sur son retard ; le moteur du navigateur joue la piste sans lui",
+"Native output and exports": "Sortie native et exports",
+"Plug-in live on {a}: it plays through native output and in exports": "Plug-in en direct sur {a} : il joue par la sortie native et dans les exports",
+"A plug-in insert could not start, so its track plays without it": "Un plug-in inséré n'a pas pu démarrer, sa piste joue donc sans lui"
+}

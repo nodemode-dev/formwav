@@ -1,0 +1,7 @@
+{
+"Insert on track": "Sisipkan di trek",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Memasang plug-in CLAP yang dipilih secara langsung di trek klip ini dengan pengaturannya saat ini: berbunyi melalui keluaran native (Pengaturan) dan dalam ekspor, dan setiap trek diselaraskan dengan tundanya; mesin peramban memutar trek tanpanya",
+"Native output and exports": "Keluaran native dan ekspor",
+"Plug-in live on {a}: it plays through native output and in exports": "Plug-in langsung di {a}: berbunyi melalui keluaran native dan dalam ekspor",
+"A plug-in insert could not start, so its track plays without it": "Plug-in sisipan tidak dapat dimulai, jadi treknya berbunyi tanpanya"
+}

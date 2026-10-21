@@ -17,7 +17,7 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..core.security import ws_allowed
-from ..services import media
+from ..services import media, plugins
 
 router = APIRouter(prefix="/api/audio", tags=["audio"])
 
@@ -82,7 +82,22 @@ async def native(ws: WebSocket) -> None:
                         loaded[number] = media_id
                     await ws.send_text(json.dumps({"type": "loaded", "source": number}))
                 elif kind == "clips":
-                    out.set_mix(json.dumps(msg))
+                    # S17: a track's hosted plug-ins, each resolved against the scan (only an installed CLAP plug-in
+                    # loads) and made by the core off the audio thread; one that cannot be made is said, its track
+                    # playing without it
+                    failed: list[str] = []
+                    resolved = []
+                    for entry in msg.get("plugins") or []:
+                        try:
+                            path, state, values = plugins.live_insert(entry if isinstance(entry, dict) else {})
+                            resolved.append({"path": path, "state": list(state) if state else None, "values": values})
+                        except media.MediaError as err:
+                            failed.append(str(err))
+                            resolved.append({"path": "", "values": []})
+                    msg["plugins"] = resolved
+                    failed += [e for e in await asyncio.to_thread(out.set_mix, json.dumps(msg)) if not e.startswith(": ")]
+                    for message in failed:
+                        await ws.send_text(json.dumps({"type": "plugin-error", "message": message}))
                 elif kind == "seek":
                     out.seek(int(msg.get("position") or 0))
                 elif kind == "loop":

@@ -1,0 +1,7 @@
+{
+"Insert on track": "トラックに挿入",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "選んだ CLAP プラグインを現在の設定のまま、このクリップのトラックにライブで挿します。ネイティブ出力（設定）と書き出しで鳴り、すべてのトラックがその遅延に合わせて揃います。ブラウザのエンジンではプラグインなしで再生されます",
+"Native output and exports": "ネイティブ出力と書き出し",
+"Plug-in live on {a}: it plays through native output and in exports": "{a} にライブのプラグイン：ネイティブ出力と書き出しで鳴ります",
+"A plug-in insert could not start, so its track plays without it": "挿入したプラグインを開始できなかったため、そのトラックはプラグインなしで鳴ります"
+}

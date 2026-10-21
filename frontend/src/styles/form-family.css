@@ -168,3 +168,6 @@ dialog::backdrop { background: var(--bg-scrim); }
 
 /* Status bar: the family's footer. */
 .fw-status { background: var(--bg-secondary); border-block-start: 1px solid var(--line-0); }
+
+/* S17: a hosted plug-in's row in a track's effects says where it plays. */
+.fw-rtfx-note { font-size: var(--fs-11); color: var(--text-muted); }

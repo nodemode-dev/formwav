@@ -170,6 +170,24 @@ def params(name: str) -> list[dict]:
     return _params[name]
 
 
+def live_insert(entry: dict) -> tuple[str, bytes | None, list[tuple[int, float]]]:
+    """S17: a track's plug-in insert ({"name": "plugin:clap:<path>", "state": base64, "values": {"p<id>": value}}) as the
+    core hosts it live: (path, saved state, [(parameter id, value)]). Only a CLAP plug-in the scan found is loaded, in the
+    engine's own process (native output, exports); a crash there is the engine's, unlike an offline render's."""
+    name = str(entry.get("name") or "")
+    fmt, path, plugin = _installed(name)
+    if fmt != "clap":
+        raise media.MediaError(f"{plugin['name']}: only CLAP plug-ins play live; render it onto the clip instead")
+    raw = entry.get("state")
+    try:
+        state = base64.b64decode(raw, validate=True) if isinstance(raw, str) and raw else None
+    except ValueError as err:
+        raise media.MediaError(f"{plugin['name']}: its saved state is not base64") from err
+    given = entry.get("values") if isinstance(entry.get("values"), dict) else {}
+    values = [(int(k[1:]), float(v)) for k, v in given.items() if isinstance(k, str) and k.startswith("p") and k[1:].isdigit() and isinstance(v, (int, float))]
+    return path, state, values
+
+
 def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     """Renders a stored media file through the plugin `name` (plugin:<format>:<path>, as listed) into new media, with
     any parameter values chosen in its controls (p<id>) set at its first sample. S17, CLAP plugins: `state` (base64,

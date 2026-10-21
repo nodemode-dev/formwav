@@ -193,7 +193,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
     },
     {
       name: "set_track_effects",
-      description: `Replaces a track's realtime effect chain, heard live and shown in the Effects tab (an empty list clears it). Each effect is an object with kind and any parameters (the rest take their defaults), and bypass: true to keep it but switch it off. Kinds and parameter ranges: ${KIND_SUMMARY}. Or a studio processor, { "kind": "processor", "id": one of the ids below, "values": { parameter id: value } } (values outside a range are held to it; switches 0 or 1; choices by index): ${PROCESSOR_SUMMARY}.`,
+      description: `Replaces a track's realtime effect chain, heard live and shown in the Effects tab (an empty list clears it). Each effect is an object with kind and any parameters (the rest take their defaults), and bypass: true to keep it but switch it off. Kinds and parameter ranges: ${KIND_SUMMARY}. Or a studio processor, { "kind": "processor", "id": one of the ids below, "values": { parameter id: value } } (values outside a range are held to it; switches 0 or 1; choices by index): ${PROCESSOR_SUMMARY}. Or an installed CLAP plug-in live on the track (S17), { "kind": "plugin", "name": its id from list_effects (plugin:clap:<path>), "values": { "p<id>": value }, "state": base64 it saved }: it plays through native output and in exports (lined up for its delay), the browser's engine passes it by; keep a plug-in already in the chain by passing it back as it is.`,
       input_schema: obj({ track_id: id("track"), effects: { type: "array", items: { type: "object" }, description: 'The chain in order, e.g. [{ "kind": "highpass", "freq": 90 }, { "kind": "compressor", "thresholdDb": -20, "ratio": 3 }]' } }, ["track_id", "effects"]),
       run: (i) => {
         const t = track(i.track_id);
@@ -206,6 +206,16 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
             const values = e.values && typeof e.values === "object" ? (e.values as Record<string, unknown>) : {};
             return { kind: "processor", id: info.id, values: processorValues(info, values), ...(e.bypass === true ? { bypass: true } : {}) } as TrackFx;
           }
+          if (kind === "plugin") {
+            const name = String(e.name ?? "");
+            if (!name.startsWith("plugin:clap:")) throw new Error(`effect ${n + 1}: a plug-in is named plugin:clap:<path>, as list_effects gives it; only CLAP plug-ins play live`);
+            const given = (t.fx ?? []).find((f) => f.kind === "plugin" && f.name === name);
+            const values: Record<string, number> = {};
+            if (e.values && typeof e.values === "object") for (const [key, v] of Object.entries(e.values as Record<string, unknown>)) if (/^p\d+$/.test(key) && typeof v === "number" && Number.isFinite(v)) values[key] = v;
+            const state = typeof e.state === "string" ? e.state : given?.kind === "plugin" ? given.state : undefined;
+            const label = typeof e.label === "string" && e.label ? e.label : given?.kind === "plugin" ? given.label : name.split("/").pop() ?? name;
+            return { kind: "plugin", name, label, ...(state ? { state } : {}), ...(Object.keys(values).length ? { values } : {}), ...(e.bypass === true ? { bypass: true } : {}) } as TrackFx;
+          }
           const k = KINDS[kind];
           if (!k) throw new Error(`effect ${n + 1}: unknown kind "${kind}"; the kinds are ${Object.keys(KINDS).join(", ")}`);
           const out: Record<string, unknown> = { kind, ...k.init };
@@ -214,7 +224,7 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
           return out as unknown as TrackFx;
         });
         engine.dispatch({ type: "set-track-fx", trackId: t.id, fx });
-        return { track: t.name, effects: fx.map((f) => (f.kind === "processor" ? f.id : f.kind)) };
+        return { track: t.name, effects: fx.map((f) => (f.kind === "processor" ? f.id : f.kind === "plugin" ? f.label : f.kind)) };
       },
     },
     {

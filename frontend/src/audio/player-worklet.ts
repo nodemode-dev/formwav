@@ -103,7 +103,7 @@ export type WorkletMessage =
   | { type: "alloc"; id: number; rate: number; channels: number; frames: number; window?: number }
   | { type: "stats" }
   | { type: "write"; id: number; offset: number; data: Float32Array }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterPoints?: number[]; masterFx?: number[]; processors?: string[]; panLaw?: number; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; busPlaces?: number[]; fold?: boolean; surroundFormat?: number }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterPoints?: number[]; masterFx?: number[]; processors?: string[]; panLaw?: number; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; busPlaces?: number[]; fold?: boolean; surroundFormat?: number; plugins?: { name: string; state?: string; values?: Record<string, number> }[] }
   | { type: "play" }
   | { type: "speed"; value: number }
   | { type: "rate-ratio"; value: number }
@@ -121,7 +121,9 @@ export type WorkletReply =
   | { type: "loaded"; id: number; frames: number }
   | { type: "stats"; bytes: number }
   | { type: "position"; position: number; playing: boolean; peakLeft: number; peakRight: number; correlation?: number | null; trackPeaks: number[]; loudness: number[]; busPeaks: number[]; surroundPeaks?: number[]; reductions?: number[] }
-  | { type: "ended"; position: number };
+  | { type: "ended"; position: number }
+  /** S17, native output only: a track's hosted plug-in that could not be made */
+  | { type: "plugin-error"; message: string };
 
 /** The AudioWorkletGlobalScope's context sample rate. */
 declare const sampleRate: number;

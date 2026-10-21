@@ -1,0 +1,7 @@
+{
+"Insert on track": "Parçaya ekle",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Seçilen CLAP eklentisini mevcut ayarlarıyla bu klibin parçasına canlı olarak koyar: yerel çıkıştan (Ayarlar) ve dışa aktarımlarda çalar, her parça onun gecikmesine göre hizalanır; tarayıcının motoru parçayı onsuz çalar",
+"Native output and exports": "Yerel çıkış ve dışa aktarımlar",
+"Plug-in live on {a}: it plays through native output and in exports": "{a} üzerinde canlı eklenti: yerel çıkıştan ve dışa aktarımlarda çalar",
+"A plug-in insert could not start, so its track plays without it": "Eklenen bir eklenti başlatılamadı, bu yüzden parçası onsuz çalıyor"
+}

@@ -10,10 +10,10 @@ class RenderError(ValueError):
 
 
 #: Track effect kinds, as the core's stage codes (formwav-dsp fx.rs).
-FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11, "tremolo": 12, "gate": 13, "phaser": 14, "flanger": 15, "voice": 16, "dehum": 17, "declick": 18, "dereverb": 19, "processor": 20}
+FX_KINDS = {"highpass": 1, "lowpass": 2, "peak": 3, "lowshelf": 4, "highshelf": 5, "compressor": 6, "denoise": 7, "reverb": 8, "echo": 9, "chorus": 10, "limiter": 11, "tremolo": 12, "gate": 13, "phaser": 14, "flanger": 15, "voice": 16, "dehum": 17, "declick": 18, "dereverb": 19, "processor": 20, "plugin": 21}
 #: The stages that must see a track's sum, so a track carrying one plays through a bus of its own: every kind but the
 #: five filters, which are linear and run per clip.
-ON_THE_SUM = (6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+ON_THE_SUM = (6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
 #: The session's pan law for a mono source (the core's codes; absent is the balance every session had).
 PAN_LAWS = {"-3": 1, "-4.5": 2, "-6": 3}
 
@@ -42,6 +42,22 @@ def native_chains(chains: list[tuple]) -> tuple[list[tuple], list[str]]:
     return out, processors
 
 
+def native_plugins(chains: list[tuple]) -> tuple[list[tuple], list[tuple]]:
+    """S17: chains as the core takes them: each hosted plug-in stage's entry (21) moved to a list the stage names by its
+    place, as (path, saved state bytes or None, [(parameter id, value)]); only a CLAP plug-in the scan found is loaded
+    (plugins.live_insert, which raises MediaError otherwise)."""
+    from . import plugins as hosted
+
+    found: list[tuple] = []
+    out = []
+    for ch in chains:
+        if ch[2] == 21:
+            found.append(hosted.live_insert(ch[3]))
+            ch = (*ch[:3], float(len(found) - 1), *ch[4:])
+        out.append(ch)
+    return out, found
+
+
 def _stage(f: dict) -> tuple | None:
     """An effect entry as a core stage (kind, a, b, c, d, e); None when bypassed or unknown. Filters carry frequency,
     gain and Q; the compressor carries threshold, ratio, attack and release (ms) and makeup gain."""
@@ -50,6 +66,8 @@ def _stage(f: dict) -> tuple | None:
         return None
     if kind == 20:
         return (20, processor_spec(f), 0.0, 0.0, 0.0, 0.0)
+    if kind == 21:  # S17: a hosted plug-in, its entry carried until native_plugins resolves it
+        return (21, {"name": f.get("name"), "state": f.get("state"), "values": f.get("values") or {}}, 0.0, 0.0, 0.0, 0.0)
     if kind == 17:  # L6: de-hum, a = the hum in Hz, b = harmonics, c = Q
         return (17, float(f.get("baseHz", 60)), float(f.get("harmonics", 8)), float(f.get("q", 30)), 0.0, 0.0)
     if kind == 19:  # L6: de-reverb, a = reverb time T60 in s, b = the most taken down in dB
@@ -273,12 +291,15 @@ def plan(doc: object, own_buses: list | None = None, routes: list | None = None)
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
 
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
+        fader_db = 0.0  # S17: the part of the track's level its own bus applies after the inserts
         if any(s[0] in ON_THE_SUM for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency), a processor
             # A compressor is nonlinear, so it must see the track's sum: the track plays through a bus of its own
-            # (unity gain, centre) whose chain is the track's whole chain, in order; C7: a track routed to a user bus
-            # has one too, playing into that bus.
+            # (centre) whose chain is the track's whole chain, in order; C7: a track routed to a user bus has one too,
+            # playing into that bus. S17: the bus plays at the track's fader (and its VCA's), so the fader comes after
+            # the inserts; a volume lane still rides the clips, ahead of them.
             user_bus = bus_index
-            buses[f"__track:{track.get('id')}"] = (len(buses) + 1, 1.0, 0.0)
+            fader_db, track_db = track_db, 0.0
+            buses[f"__track:{track.get('id')}"] = (len(buses) + 1, math.pow(10, fader_db / 20), 0.0)
             bus_index = len(buses)
             if user_bus:
                 routes.append((bus_index, user_bus))
@@ -343,7 +364,7 @@ def plan(doc: object, own_buses: list | None = None, routes: list | None = None)
             # the clip gain, which the core applies after the chain), then the track's filters, whose automation moves
             # past the clip's stages
             own = [s for s in (_stage(f) for f in (clip.get("fx") or [])) if s]
-            own_filters = [s[:4] for s in own if s[0] not in (6, 8, 16, 20)]
+            own_filters = [s[:4] for s in own if s[0] not in (6, 8, 16, 20, 21)]  # a plug-in plays on a track's sum only
             own_comp = next((s for s in own if s[0] == 6), None)
             ahead = len(own_filters) + (1 if own_comp else 0)
             chain = own_filters + stages
@@ -365,7 +386,7 @@ def plan(doc: object, own_buses: list | None = None, routes: list | None = None)
                 # S10: a pre-fader send takes the clip before the track's fader, volume lane and VCA (after trim,
                 # polarity and the clip's own gain and line); a send's own pan replaces the track's
                 pre = bool(send.get("pre"))
-                base_gain = polarity * math.pow(10, (trim_db + float(clip.get("gainDb", 0))) / 20) if pre else main[4]
+                base_gain = polarity * math.pow(10, (trim_db + float(clip.get("gainDb", 0))) / 20) if pre else main[4] * math.pow(10, fader_db / 20)
                 base_pts = (_clip_envelope(own_line, []) if own_line else []) if pre else main_pts
                 lane = [] if off else [(int(p["time"]), float(p["value"])) for p in (send.get("automation") or [])]
                 level = 1.0 if lane else 10 ** (float(send.get("gainDb", 0.0)) / 20)
@@ -438,10 +459,11 @@ def render(doc: object, start: int = 0, stop: int | None = None) -> dict:
     if folding and on_buses and not places:
         places = [(len(clips), [0.0, 1.0, 0.0, 100.0, 0.0, -120.0])]
     chains, processors = native_chains(chains)
+    chains, hosted = native_plugins(chains)
     master_db, master_pts = master_lane(doc)
     if master_pts:
         envelopes.append((master_pts, True))
-    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, bus_outs(doc) + routes, on_buses)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, bus_outs(doc) + routes, on_buses, hosted)
     frames = length
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:

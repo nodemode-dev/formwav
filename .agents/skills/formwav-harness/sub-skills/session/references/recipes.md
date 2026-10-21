@@ -29,6 +29,13 @@ Each recipe assumes `formwav_status` answered and `formwav_open_session_tools` l
 2. Set the master format first, then each track's placement.
 3. `formwav_render_session` with `what` surround51 or adm after the person saves.
 
+## A plug-in live on a track (v2.18.5)
+
+1. `formwav_list_effects` with query "CLAP" (or the window's `list_effects`) for the installed CLAP plug-ins: each is named `plugin:clap:<path>`.
+2. `get_session` for the track's chain as it is, then `set_track_effects` with that chain plus `{ "kind": "plugin", "name": "plugin:clap:<path>", "values": { "p<id>": value } }`. Pass a plug-in already in the chain back unchanged, or its saved state goes.
+3. Say where it is heard: native output (Settings) and every export, every track lined up for its delay, the fader after it. The browser's engine plays the track without it. Only CLAP plays live; a VST3 or LV2 plug-in is rendered onto the clip with `formwav_apply_effect` instead.
+4. To check it, `formwav_render_session` and measure: an insert that could not load fails the render with its reason.
+
 ## A batch failed
 
 `formwav_run_commands` returns `ok: false` and one result per command; the failing one says why ("There is no command ...; list_commands gives the ids"). Everything before it was taken back, so fix that one command and send the whole batch again. Do not re-send the commands that succeeded on their own.

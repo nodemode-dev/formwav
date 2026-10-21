@@ -1,0 +1,7 @@
+{
+"Insert on track": "Beszúrás a sávra",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "A kiválasztott CLAP plug-int élőben a klip sávjára teszi a jelenlegi beállításaival: a natív kimeneten (Beállítások) és az exportokban szól, és minden sáv a késleltetéséhez igazodik; a böngésző motorja nélküle játssza a sávot",
+"Native output and exports": "Natív kimenet és exportok",
+"Plug-in live on {a}: it plays through native output and in exports": "Élő plug-in ezen: {a}; a natív kimeneten és az exportokban szól",
+"A plug-in insert could not start, so its track plays without it": "Egy beszúrt plug-in nem tudott elindulni, ezért a sávja nélküle szól"
+}

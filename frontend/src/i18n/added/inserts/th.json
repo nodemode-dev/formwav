@@ -1,0 +1,7 @@
+{
+"Insert on track": "แทรกบนแทร็ก",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "ใส่ปลั๊กอิน CLAP ที่เลือกแบบสดลงบนแทร็กของคลิปนี้ด้วยการตั้งค่าปัจจุบัน: เล่นผ่านเอาต์พุตเนทีฟ (การตั้งค่า) และในการส่งออก โดยทุกแทร็กจะถูกจัดให้ตรงกับดีเลย์ของมัน ส่วนเอนจินของเบราว์เซอร์จะเล่นแทร็กโดยไม่มีมัน",
+"Native output and exports": "เอาต์พุตเนทีฟและการส่งออก",
+"Plug-in live on {a}: it plays through native output and in exports": "ปลั๊กอินแบบสดบน {a}: เล่นผ่านเอาต์พุตเนทีฟและในการส่งออก",
+"A plug-in insert could not start, so its track plays without it": "ปลั๊กอินที่แทรกไว้เริ่มทำงานไม่ได้ แทร็กจึงเล่นโดยไม่มีมัน"
+}

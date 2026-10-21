@@ -1,0 +1,7 @@
+{
+"Insert on track": "Chèn vào track",
+"Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it": "Đặt plug-in CLAP đã chọn chạy trực tiếp trên track của clip này với thiết lập hiện tại: nó phát qua đầu ra gốc (Cài đặt) và trong bản xuất, mọi track được căn theo độ trễ của nó; engine của trình duyệt phát track mà không có nó",
+"Native output and exports": "Đầu ra gốc và bản xuất",
+"Plug-in live on {a}: it plays through native output and in exports": "Plug-in trực tiếp trên {a}: phát qua đầu ra gốc và trong bản xuất",
+"A plug-in insert could not start, so its track plays without it": "Một plug-in chèn không khởi động được nên track của nó phát mà không có nó"
+}
