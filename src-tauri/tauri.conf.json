@@ -34,6 +34,9 @@
     "linux": {
       "deb": {
         "depends": ["libsndfile1", "libportaudio2", "liblilv-0-0", "libasound2t64 | libasound2"]
+      },
+      "rpm": {
+        "depends": ["libsndfile", "portaudio", "lilv-libs", "alsa-lib"]
       }
     }
   }

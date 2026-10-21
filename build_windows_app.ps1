@@ -91,9 +91,19 @@ Get-ChildItem $Bin | ForEach-Object { Write-Host "sidecar: src-tauri\binaries\$(
 
 # the icons are committed in src-tauri\icons (regenerating them each build rewrote tracked files)
 
+# S18, signing: FORMWAV_WINDOWS_SIGN_COMMAND, a command with %1 where the file goes (signtool with a certificate,
+# or a cloud signer's tool), signs the app, its sidecars and the installer through Tauri's bundle.windows.signCommand;
+# without it the installer is unsigned, as before.
+$SignArgs = @()
+if ($env:FORMWAV_WINDOWS_SIGN_COMMAND) {
+  Write-Host "Signing with: $env:FORMWAV_WINDOWS_SIGN_COMMAND"
+  $Override = @{ bundle = @{ windows = @{ signCommand = $env:FORMWAV_WINDOWS_SIGN_COMMAND } } } | ConvertTo-Json -Depth 4 -Compress
+  $SignArgs = @("--config", $Override)
+}
+
 Say "Building the app bundle (this compiles Rust; the first run takes a while)"
 Push-Location (Join-Path $Root "src-tauri")
-Run $Tauri[0] (@($Tauri[1..($Tauri.Length - 1)]) + @("build", "--bundles", "nsis"))
+Run $Tauri[0] (@($Tauri[1..($Tauri.Length - 1)]) + @("build", "--bundles", "nsis") + $SignArgs)
 Pop-Location
 
 Say "Done"
