@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "ให้ลิงก์แก่แขกที่ใช้ได้จากทุกเครือข่าย (ผ่าน cloudflared)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "แขกเปิดลิงก์นี้ ใส่รหัสจับคู่ แล้วเข้าได้เฉพาะห้องบันทึกเสียง:",
+"Starting the link...": "กำลังเริ่มลิงก์...",
+"Off: guests must be on this network.": "ปิด: แขกต้องอยู่ในเครือข่ายนี้",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "ต้องติดตั้ง cloudflared บนคอมพิวเตอร์เครื่องนี้ (บน Mac: brew install cloudflared)",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "ยังไม่ได้ติดตั้ง cloudflared: ติดตั้งก่อน (บน Mac ใช้ brew install cloudflared) แล้วเปิดใหม่อีกครั้ง",
+"turn on access from the network, or the link for guests from anywhere, first": "เปิดการเข้าถึงจากเครือข่าย หรือลิงก์สำหรับแขกจากทุกที่ ก่อน"
+}

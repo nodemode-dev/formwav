@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Дать гостям ссылку, работающую из любой сети (через cloudflared)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "Гости открывают эту ссылку, вводят код сопряжения и попадают только в комнату записи:",
+"Starting the link...": "Запуск ссылки...",
+"Off: guests must be on this network.": "Выключено: гости должны быть в этой сети.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "Нужен cloudflared, установленный на этом компьютере (на Mac: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "cloudflared не установлен: установите его (на Mac: brew install cloudflared), затем включите снова",
+"turn on access from the network, or the link for guests from anywhere, first": "сначала включите доступ из сети или ссылку для гостей откуда угодно"
+}

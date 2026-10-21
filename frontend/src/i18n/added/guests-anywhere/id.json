@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Beri tamu tautan yang berfungsi dari jaringan mana pun (melalui cloudflared)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "Tamu membuka tautan ini, memasukkan kode pemasangan, dan hanya dapat masuk ke ruang rekaman:",
+"Starting the link...": "Memulai tautan...",
+"Off: guests must be on this network.": "Mati: tamu harus berada di jaringan ini.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "Memerlukan cloudflared terpasang di komputer ini (di Mac: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "cloudflared belum terpasang: pasang (di Mac, brew install cloudflared), lalu aktifkan ini lagi",
+"turn on access from the network, or the link for guests from anywhere, first": "aktifkan dulu akses dari jaringan, atau tautan untuk tamu dari mana saja"
+}

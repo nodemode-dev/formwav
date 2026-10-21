@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Dar aos convidados um link que funciona de qualquer rede (pelo cloudflared)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "Os convidados abrem este link, digitam um código de pareamento e acessam apenas a sala de gravação:",
+"Starting the link...": "Iniciando o link...",
+"Off: guests must be on this network.": "Desligado: os convidados precisam estar nesta rede.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "Requer o cloudflared instalado neste computador (no Mac: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "o cloudflared não está instalado: instale-o (no Mac, brew install cloudflared) e ative isto de novo",
+"turn on access from the network, or the link for guests from anywhere, first": "ative primeiro o acesso pela rede ou o link para convidados de qualquer lugar"
+}

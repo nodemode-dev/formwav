@@ -173,3 +173,7 @@ dialog::backdrop { background: var(--bg-scrim); }
 .fw-rtfx-note { font-size: var(--fs-11); color: var(--text-muted); }
 /* Its Edit becomes Done while the editor is open: one width for both words, so the row does not move. */
 .fw-rtfx-edit { min-inline-size: 6em; }
+/* R12: the Devices dialog's notes hold a fixed number of lines (no shift as they change), counted inside the family's
+   padding: two for where to pair, three for the guest link and its address. */
+.fw-devices-where { box-sizing: content-box; block-size: 2lh; }
+.fw-devices-where.fw-devices-link { block-size: 3lh; }

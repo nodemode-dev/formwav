@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Adjon a vendégeknek bármely hálózatról működő hivatkozást (cloudflared révén)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "A vendégek megnyitják ezt a hivatkozást, megadnak egy párosítási kódot, és csak a felvételi szobába jutnak be:",
+"Starting the link...": "A hivatkozás indítása...",
+"Off: guests must be on this network.": "Ki: a vendégeknek ezen a hálózaton kell lenniük.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "A cloudflared telepítése szükséges ezen a számítógépen (Macen: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "a cloudflared nincs telepítve: telepítse (Macen brew install cloudflared), majd kapcsolja be újra",
+"turn on access from the network, or the link for guests from anywhere, first": "előbb kapcsolja be a hálózati hozzáférést vagy a bárhonnan érkező vendégek hivatkozását"
+}

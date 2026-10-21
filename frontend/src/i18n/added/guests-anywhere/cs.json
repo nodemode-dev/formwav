@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Dát hostům odkaz, který funguje z jakékoli sítě (přes cloudflared)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "Hosté otevřou tento odkaz, zadají párovací kód a dostanou se jen do nahrávací místnosti:",
+"Starting the link...": "Spouštím odkaz...",
+"Off: guests must be on this network.": "Vypnuto: hosté musí být v této síti.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "Vyžaduje cloudflared nainstalovaný na tomto počítači (na Macu: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "cloudflared není nainstalován: nainstalujte ho (na Macu brew install cloudflared) a pak to znovu zapněte",
+"turn on access from the network, or the link for guests from anywhere, first": "nejprve zapněte přístup ze sítě nebo odkaz pro hosty odkudkoli"
+}

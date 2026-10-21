@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Konuklara her ağdan çalışan bir bağlantı ver (cloudflared üzerinden)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "Konuklar bu bağlantıyı açar, bir eşleştirme kodu girer ve yalnızca kayıt odasına erişir:",
+"Starting the link...": "Bağlantı başlatılıyor...",
+"Off: guests must be on this network.": "Kapalı: konuklar bu ağda olmalı.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "Bu bilgisayarda cloudflared kurulu olmalı (Mac'te: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "cloudflared kurulu değil: kurun (Mac'te brew install cloudflared), sonra bunu yeniden açın",
+"turn on access from the network, or the link for guests from anywhere, first": "önce ağdan erişimi veya her yerden konuk bağlantısını açın"
+}

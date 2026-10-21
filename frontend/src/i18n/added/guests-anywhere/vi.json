@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Cho khách một liên kết dùng được từ mọi mạng (qua cloudflared)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "Khách mở liên kết này, nhập mã ghép đôi và chỉ vào được phòng thu:",
+"Starting the link...": "Đang khởi động liên kết...",
+"Off: guests must be on this network.": "Tắt: khách phải ở trong mạng này.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "Cần cài cloudflared trên máy tính này (trên Mac: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "chưa cài cloudflared: hãy cài (trên Mac, brew install cloudflared) rồi bật lại",
+"turn on access from the network, or the link for guests from anywhere, first": "hãy bật trước quyền truy cập từ mạng hoặc liên kết cho khách từ mọi nơi"
+}

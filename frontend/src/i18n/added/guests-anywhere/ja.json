@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "どのネットワークからでも使えるリンクをゲストに渡す（cloudflared 経由）",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "ゲストはこのリンクを開き、ペアリングコードを入力すると、録音ルームだけに入れます：",
+"Starting the link...": "リンクを開始しています...",
+"Off: guests must be on this network.": "オフ：ゲストはこのネットワーク上にいる必要があります。",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "このコンピュータに cloudflared のインストールが必要です（Mac では brew install cloudflared）。",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "cloudflared がインストールされていません：インストールしてから（Mac では brew install cloudflared）、もう一度オンにしてください",
+"turn on access from the network, or the link for guests from anywhere, first": "先にネットワークからのアクセス、またはどこからでも使えるゲスト用リンクをオンにしてください"
+}

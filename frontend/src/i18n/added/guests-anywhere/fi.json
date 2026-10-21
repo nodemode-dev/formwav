@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Anna vieraille linkki, joka toimii mistä tahansa verkosta (cloudflaredin kautta)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "Vieraat avaavat tämän linkin, syöttävät parituskoodin ja pääsevät vain äänityshuoneeseen:",
+"Starting the link...": "Käynnistetään linkkiä...",
+"Off: guests must be on this network.": "Pois: vieraiden on oltava tässä verkossa.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "Vaatii cloudflaredin asennettuna tähän tietokoneeseen (Macissa: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "cloudflaredia ei ole asennettu: asenna se (Macissa brew install cloudflared) ja ota tämä sitten uudelleen käyttöön",
+"turn on access from the network, or the link for guests from anywhere, first": "ota ensin käyttöön pääsy verkosta tai linkki vieraille mistä tahansa"
+}

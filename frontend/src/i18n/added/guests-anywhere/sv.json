@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Ge gäster en länk som fungerar från vilket nätverk som helst (via cloudflared)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "Gäster öppnar länken, anger en parkopplingskod och kommer bara in i inspelningsrummet:",
+"Starting the link...": "Startar länken...",
+"Off: guests must be on this network.": "Av: gäster måste vara på det här nätverket.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "Kräver att cloudflared är installerat på den här datorn (på en Mac: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "cloudflared är inte installerat: installera det (på en Mac brew install cloudflared) och slå sedan på detta igen",
+"turn on access from the network, or the link for guests from anywhere, first": "slå först på åtkomst från nätverket eller länken för gäster var som helst ifrån"
+}

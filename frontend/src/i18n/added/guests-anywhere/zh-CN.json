@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "为访客提供可在任何网络使用的链接（通过 cloudflared）",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "访客打开此链接并输入配对码后，只能进入录音室：",
+"Starting the link...": "正在启动链接...",
+"Off: guests must be on this network.": "关闭：访客必须在此网络中。",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "需要在这台电脑上安装 cloudflared（Mac 上：brew install cloudflared）。",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "未安装 cloudflared：请先安装（Mac 上 brew install cloudflared），然后再次开启",
+"turn on access from the network, or the link for guests from anywhere, first": "请先开启网络访问，或开启面向任何地方访客的链接"
+}

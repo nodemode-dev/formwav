@@ -10,6 +10,7 @@ import { setText } from "../vendor/nodemode/dom-stable";
  */
 type Device = { id: string; name: string; created: number };
 type RemoteState = { enabled: boolean; port: number; addresses: string[]; devices: Device[] };
+type TunnelState = { installed: boolean; running: boolean; url: string; error: string };
 type Arrival = { take: string; device: string; name: string; media: MediaRef; offset: number };
 type RoomState = { now: number; take: { id: string; started: number; stopped: number | null } | null; guests: { id: string; name: string; state: string; online: boolean }[]; arrived: Arrival[] };
 const STATE_WORDS: Record<string, string> = { waiting: "ready", recording: "recording", sending: "sending its take", sent: "take received", "no-microphone": "no microphone" };
@@ -29,6 +30,8 @@ export function mountRoom(host: HTMLElement, engine: Engine): void {
   <h2 class="fw-dialog-title">Devices on this network</h2>
   <label class="fw-cloud-check"><input type="checkbox" data-d="on"> Let phones and other computers on this network join, after pairing</label>
   <p class="fw-empty-note fw-devices-where" data-d="where"></p>
+  <label class="fw-cloud-check"><input type="checkbox" data-d="anywhere"> Give guests a link that works from any network (through cloudflared)</label>
+  <p class="fw-empty-note fw-devices-where fw-devices-link"><span data-d="link"></span> <span data-d="url" translate="no"></span></p>
   <div class="fw-dialog-actions fw-devices-pair"><span class="fw-devices-code" data-d="code"></span><button type="button" class="fw-ibtn" data-d="pair">Show a pairing code</button></div>
   <ol class="fw-cloud-list fw-devices-list" aria-label="Paired devices"></ol>
   <p class="fw-empty-note fw-cloud-note" data-d="say" aria-live="polite"></p>
@@ -37,10 +40,24 @@ export function mountRoom(host: HTMLElement, engine: Engine): void {
   host.append(devices);
   const d = <T extends HTMLElement>(n: string) => devices.querySelector<T>(`[data-d="${n}"]`) as T;
   let timer = 0;
+  let linkTimer = 0;
+  let linked = false;
+  let lanOn = false;
+  // PLAN_v12 R12: the tunnel's link (services/tunnel.py); a guest through it reaches pairing and the room only
+  const drawLink = (t: TunnelState) => {
+    linked = !!t.url;
+    d<HTMLInputElement>("anywhere").checked = t.running;
+    setText(d("url"), t.url ? `${t.url}/pair` : "");
+    setText(d("link"), t.url ? "Guests open this link, enter a pairing code, and reach the recording room only:" : t.error ? t.error : t.running ? "Starting the link..." : t.installed ? "Off: guests must be on this network." : "Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).");
+    d<HTMLButtonElement>("pair").disabled = !lanOn && !linked;
+    window.clearInterval(linkTimer);
+    if (t.running && !t.url && !t.error) linkTimer = window.setInterval(() => void call<TunnelState>("/api/remote/tunnel").then(drawLink, () => undefined), 500);
+  };
   const draw = (st: RemoteState) => {
+    lanOn = st.enabled;
     d<HTMLInputElement>("on").checked = st.enabled;
     setText(d("where"), !st.enabled ? "Off: the engine answers this computer only." : st.addresses.length ? `On the device, open ${st.addresses.map((a) => `http://${a}:${st.port}/pair`).join(" or ")}` : "On, but no network address was found.");
-    d<HTMLButtonElement>("pair").disabled = !st.enabled;
+    d<HTMLButtonElement>("pair").disabled = !st.enabled && !linked;
     const list = devices.querySelector<HTMLOListElement>(".fw-devices-list") as HTMLOListElement;
     list.replaceChildren(...st.devices.map((dev) => {
       const li = document.createElement("li");
@@ -51,14 +68,18 @@ export function mountRoom(host: HTMLElement, engine: Engine): void {
       (li.querySelector("button") as HTMLButtonElement).dataset.remove = dev.id;
       return li;
     }));
-    if (!st.enabled) {
+    if (!st.enabled && !linked) {
       window.clearInterval(timer);
       setText(d("code"), "");
     }
-    setText(d("say"), st.enabled && !st.devices.length ? "No device paired yet." : "");
+    setText(d("say"), (st.enabled || linked) && !st.devices.length ? "No device paired yet." : "");
   };
   const refreshDevices = () => call<RemoteState>("/api/remote").then(draw, (e) => setText(d("say"), String(e.message ?? e)));
   devices.addEventListener("change", (e) => {
+    if ((e.target as HTMLElement).dataset.d === "anywhere") {
+      void call<TunnelState>("/api/remote/tunnel", "PUT", { enabled: d<HTMLInputElement>("anywhere").checked }).then(drawLink, (err) => setText(d("say"), err.message));
+      return;
+    }
     if ((e.target as HTMLElement).dataset.d !== "on") return;
     void call<RemoteState>("/api/remote", "PUT", { enabled: d<HTMLInputElement>("on").checked }).then(draw, (err) => setText(d("say"), err.message));
   });
@@ -96,6 +117,7 @@ export function mountRoom(host: HTMLElement, engine: Engine): void {
   item.addEventListener("click", () => {
     if (!devices.open) devices.showModal();
     void refreshDevices();
+    void call<TunnelState>("/api/remote/tunnel").then(drawLink, () => undefined);
   });
 
   // Room, beside Rec in the transport

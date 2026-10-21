@@ -1,0 +1,9 @@
+{
+"Give guests a link that works from any network (through cloudflared)": "Gasten een link geven die vanaf elk netwerk werkt (via cloudflared)",
+"Guests open this link, enter a pairing code, and reach the recording room only:": "Gasten openen deze link, voeren een koppelcode in en komen alleen in de opnameruimte:",
+"Starting the link...": "Link wordt gestart...",
+"Off: guests must be on this network.": "Uit: gasten moeten op dit netwerk zijn.",
+"Needs cloudflared installed on this computer (on a Mac: brew install cloudflared).": "Vereist cloudflared op deze computer (op een Mac: brew install cloudflared).",
+"cloudflared is not installed: install it (on a Mac, brew install cloudflared), then turn this on again": "cloudflared is niet geïnstalleerd: installeer het (op een Mac brew install cloudflared) en zet dit daarna weer aan",
+"turn on access from the network, or the link for guests from anywhere, first": "zet eerst toegang via het netwerk of de link voor gasten van overal aan"
+}
