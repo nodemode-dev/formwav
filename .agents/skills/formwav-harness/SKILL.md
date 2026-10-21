@@ -60,7 +60,7 @@ The other workflows (podcast cleanup, music and songs, sound effects, recording 
 Every formwav tool reports failure as an instruction. Read it to the person; it is usually something only they can do.
 
 - **The engine is not running.** The error names the address it tried. Ask the person to start formwav; nothing else will work until it answers.
-- **A key or an install is missing.** ElevenLabs tools need `ELEVENLABS_API_KEY` in formwav's `backend/.env`; ACE-Step needs its own server running (`uv run acestep-api`); Kokoro, Pocket TTS, Chatterbox, EzAudio (sound effects) and dubbing languages install from formwav's Create tab. Say which, offer the engine that is ready instead (`formwav_local_models_status` lists them), and do not retry the same call.
+- **A key or an install is missing.** ElevenLabs tools need `ELEVENLABS_API_KEY` in formwav's `backend/.env`; ACE-Step installs on this machine from formwav's Create tab (or runs as its own server, `uv run acestep-api`); Kokoro, Pocket TTS, Chatterbox, EzAudio (sound effects) and dubbing languages install from formwav's Create tab. Say which, offer the engine that is ready instead (`formwav_local_models_status` lists them), and do not retry the same call.
 - **A tool name does not resolve.** The server may be older than this skill. Call `formwav_status` for its version and list the tools the client sees; use only names it lists. `sub-skills/tools/references/tools.md` gives the exact names for this version.
 - **A workflow stopped partway.** Nothing made so far is lost: every step made new media and kept its source. Report the media ids made, say which step failed and why, and resume from that step once the cause is fixed.
 

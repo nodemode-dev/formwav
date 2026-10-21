@@ -124,7 +124,7 @@ Dubs a media's speech into another language, as new media the same length: engin
 
 Kind: makes new media or writes a file. Parameters: `prompt` (string), `lyrics` (string, default ''), `seconds` (number, default 30), `engine` (string, default 'elevenlabs').
 
-Music or a song from a prompt, with lyrics sung when given, as new media: engine elevenlabs (needs ELEVENLABS_API_KEY; 3 s to 10 min) or acestep (ACE-Step 1.5's server on this machine, uv run acestep-api; 10 s to 10 min).
+Music or a song from a prompt, with lyrics sung when given, as new media: engine elevenlabs (needs ELEVENLABS_API_KEY; 3 s to 10 min) or acestep (ACE-Step 1.5 on this machine, installed from Install a model on this machine, or its own server, uv run acestep-api; 10 s to 10 min; installed here, about 6 minutes for 30 s on two CPU cores).
 
 ### `formwav_generate_sound_effect`
 
