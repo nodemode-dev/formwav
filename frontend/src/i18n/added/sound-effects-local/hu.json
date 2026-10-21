@@ -1,0 +1,5 @@
+{
+"Sound effect on this machine, up to 10 s (EzAudio)": "Hangeffekt ezen a gépen, legfeljebb 10 s (EzAudio)",
+"Sound effect on this machine, up to 10 s (EzAudio): needs Sound effects (EzAudio) installed on this machine (PyTorch's CPU build, 2.6 GB of EzAudio's weights and 3.1 GB of FLAN-T5 large on the first effect): choose Install a model on this machine": "Hangeffekt ezen a gépen, legfeljebb 10 s (EzAudio): Hangeffektek (EzAudio) telepítése szükséges ezen a gépen (a PyTorch CPU-s változata, 2,6 GB EzAudio-súly és 3,1 GB FLAN-T5 large az első effektnél): válassza a Modell telepítése ezen a gépen lehetőséget",
+"Sound effects (EzAudio): PyTorch's CPU build, 2.6 GB of EzAudio's weights and 3.1 GB of FLAN-T5 large on the first effect; MIT code and weights (EzAudio); FLAN-T5 Apache-2.0": "Hangeffektek (EzAudio): a PyTorch CPU-s változata, 2,6 GB EzAudio-súly és 3,1 GB FLAN-T5 large az első effektnél; MIT kód és súlyok (EzAudio); FLAN-T5 Apache-2.0"
+}

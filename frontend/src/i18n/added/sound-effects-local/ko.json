@@ -1,0 +1,5 @@
+{
+"Sound effect on this machine, up to 10 s (EzAudio)": "이 컴퓨터에서 효과음, 최대 10초(EzAudio)",
+"Sound effect on this machine, up to 10 s (EzAudio): needs Sound effects (EzAudio) installed on this machine (PyTorch's CPU build, 2.6 GB of EzAudio's weights and 3.1 GB of FLAN-T5 large on the first effect): choose Install a model on this machine": "이 컴퓨터에서 효과음, 최대 10초(EzAudio): 이 컴퓨터에 효과음(EzAudio) 설치가 필요합니다(PyTorch CPU 빌드, EzAudio 가중치 2.6 GB, 첫 효과음 때 FLAN-T5 large 3.1 GB): '이 컴퓨터에 모델 설치'를 선택하세요",
+"Sound effects (EzAudio): PyTorch's CPU build, 2.6 GB of EzAudio's weights and 3.1 GB of FLAN-T5 large on the first effect; MIT code and weights (EzAudio); FLAN-T5 Apache-2.0": "효과음(EzAudio): PyTorch CPU 빌드, EzAudio 가중치 2.6 GB, 첫 효과음 때 FLAN-T5 large 3.1 GB, MIT 코드와 가중치(EzAudio), FLAN-T5 Apache-2.0"
+}

@@ -296,6 +296,10 @@ export function mountModelsPane(host: HTMLElement, engine: Engine): void {
       const kokoro = engines.get("kokoro");
       choices.push({ id: "ls-kokoro", label: "Speech on this machine (Kokoro)", ready: !!kokoro?.installed, needs: localNeeds("kokoro"), fields: ["text", "localvoice"],
         run: async (v) => ({ media: await post("/api/providers/local-speech/kokoro/speak", { text: v.text, voice: v.localvoice }) }) });
+      // PLAN_v12 R5: an effect from a description on this machine, 1 to 10 s (services/local_sfx.py)
+      if (engines.has("ezaudio"))
+        choices.push({ id: "ls-ezaudio", label: "Sound effect on this machine, up to 10 s (EzAudio)", ready: !!engines.get("ezaudio")?.installed, needs: localNeeds("ezaudio"), fields: ["text", "duration"],
+          run: async (v) => ({ media: await post("/api/providers/local-sfx/generate", { text: v.text, duration_s: Math.min(10, Number(v.duration) || 5) }) }) });
       if (kokoro?.installed)
         void fetch("/api/providers/local-speech/kokoro/voices").then((r) => r.json()).then((d: { voices?: string[] }) => {
           const pick = box.querySelector<HTMLSelectElement>(".fw-models-localvoice") as HTMLSelectElement;

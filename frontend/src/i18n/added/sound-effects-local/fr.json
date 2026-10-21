@@ -1,0 +1,5 @@
+{
+"Sound effect on this machine, up to 10 s (EzAudio)": "Effet sonore sur cet ordinateur, jusqu'à 10 s (EzAudio)",
+"Sound effect on this machine, up to 10 s (EzAudio): needs Sound effects (EzAudio) installed on this machine (PyTorch's CPU build, 2.6 GB of EzAudio's weights and 3.1 GB of FLAN-T5 large on the first effect): choose Install a model on this machine": "Effet sonore sur cet ordinateur, jusqu'à 10 s (EzAudio) : nécessite Effets sonores (EzAudio) installé sur cet ordinateur (la version CPU de PyTorch, 2,6 Go de poids d'EzAudio et 3,1 Go de FLAN-T5 large au premier effet) : choisissez Installer un modèle sur cet ordinateur",
+"Sound effects (EzAudio): PyTorch's CPU build, 2.6 GB of EzAudio's weights and 3.1 GB of FLAN-T5 large on the first effect; MIT code and weights (EzAudio); FLAN-T5 Apache-2.0": "Effets sonores (EzAudio) : la version CPU de PyTorch, 2,6 Go de poids d'EzAudio et 3,1 Go de FLAN-T5 large au premier effet ; code et poids MIT (EzAudio) ; FLAN-T5 Apache-2.0"
+}
