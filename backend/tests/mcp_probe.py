@@ -54,6 +54,9 @@ async def main():
         err, speech, text = await call("formwav_generate_speech", {"text": "Formwav speaks through its MCP server.", "voice": "af_heart"})
         record("formwav_generate_speech kokoro", (not err and speech["seconds"] > 1) if "kokoro" in installed else says(err, text, "install"), text[:120])
         for engine_name, words in (("elevenlabs", ("ELEVENLABS_API_KEY",)), ("acestep", ("acestep-api",))):
+            if engine_name in installed:  # ACE-Step built on this machine makes the song (minutes): not this check's subject
+                absent(f"formwav_generate_music {engine_name} not set up", "ACE-Step is installed on this machine")
+                continue
             err, out, text = await call("formwav_generate_music", {"prompt": "folk", "engine": engine_name})
             record(f"formwav_generate_music {engine_name} not set up", says(err, text, *words), text[:140])
         err, out, text = await call("formwav_generate_sound_effect", {"description": "rain"})
