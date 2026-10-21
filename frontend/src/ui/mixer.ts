@@ -1,4 +1,5 @@
 import type { Player } from "../audio/player";
+import { LAYOUT_IDS, layoutTable, type LayoutRow } from "../audio/surround";
 import type { Engine, SessionDoc, Track } from "../engine";
 import { fxCategory, type Bus, type FxCategory, type Vca } from "../engine/document";
 import { patchList, setText } from "../vendor/nodemode/dom-stable";
@@ -537,15 +538,19 @@ export function mountMixer(host: HTMLElement, engine: Engine, player: Player): v
   };
   // PT-38, AA-11: the 5.1 bus's six channels (L R C LFE Ls Rs) on the master strip while it plays, from the core's own
   // six-channel peaks; hidden when the session plays plain stereo
+  let layoutRows: LayoutRow[] | null = null;
+  void layoutTable().then((rows) => (layoutRows = rows));
   player.onSurroundLevel((six) => {
     // PT-42: an ambisonic session meters its four channels, W Y Z X
-    const foa = engine.get("document").spatialFormat === "foa";
-    const names = foa ? ["W", "Y", "Z", "X"] : ["L", "R", "C", "LFE", "Ls", "Rs"];
+    const format = engine.get("document").spatialFormat ?? "5.1";
+    const foa = format === "foa";
+    // S16: the session layout's channel names from the core's table (the first six shown on the strip)
+    const names = foa ? ["W", "Y", "Z", "X"] : (layoutRows?.find((r) => r.id === LAYOUT_IDS[format])?.channels.map((c) => c.name) ?? ["L", "R", "C", "LFE", "Ls", "Rs"]);
     const tracks = panel.querySelectorAll<HTMLElement>('.fw-strip[data-kind="master"] .fw-out-51');
     tracks.forEach((t, i) => {
       const show = !!six && i < names.length;
       if (t.hidden === show) t.hidden = !show;
-      const title = i < names.length ? `${foa ? "Ambisonic" : "5.1"} ${names[i]}` : "";
+      const title = i < names.length ? `${foa ? "Ambisonic" : format} ${names[i]}` : "";
       if (t.title !== title) t.title = title;
     });
     const now = performance.now();

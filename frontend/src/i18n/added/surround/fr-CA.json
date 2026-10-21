@@ -1,0 +1,16 @@
+{
+"Where this track sits in the session's surround layout: left to right and back to front from {0} to {1} (front centre is {2} and {3}), its spread, centre and height, and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback hears it with the fold-down on": "Position de cette piste dans la configuration surround de la session : de gauche à droite et de l'arrière à l'avant de {0} à {1} (le centre avant est {2} et {3}), avec sa dispersion, son centre et sa hauteur, et un envoi vers le canal LFE; sans cela, l'image stéréo de la piste va sur L et R. La lecture l'entend avec le mixage réducteur activé",
+"Height": "Hauteur",
+"How far up the sound sits, {0} on the speakers round you, {1} overhead; layouts without height speakers ignore it": "Hauteur du son, {0} sur les haut-parleurs autour de vous, {1} au-dessus; les configurations sans haut-parleurs de hauteur l'ignorent",
+"Divergence": "Divergence",
+"How far the sound spreads over the speakers, {0} a point, {1} all of them": "Étalement du son sur les haut-parleurs, {0} un point, {1} tous",
+"Centre %": "Centre %",
+"How much of the centre speaker's sound stays in the centre; the rest sits between left and right": "Part du son du haut-parleur central qui reste au centre; le reste se place entre la gauche et la droite",
+"Surround layout": "Configuration surround",
+"The session's surround layout, stereo to {0}.{1} speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for {2} video and binaural or speaker decoding later)": "La configuration surround de la session, de la stéréo aux haut-parleurs {0}.{1}, ou ambisonie du premier ordre (AmbiX : un champ sonore sur quatre canaux, W Y Z X, pour la vidéo {2} et un décodage binaural ou sur haut-parleurs ultérieur)",
+"Stereo": "Stéréo",
+"LCR (left, centre, right)": "LCR (gauche, centre, droite)",
+"Quad": "Quad",
+"Surround in the session's layout, one channel per speaker in one WAV": "Surround dans la configuration de la session, un canal par haut-parleur dans un seul WAV",
+"The session places tracks in the chosen surround layout": "La session place les pistes dans la configuration surround choisie"
+}

@@ -12,7 +12,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
   const nameField = host.querySelector<HTMLInputElement>("input.fw-session-name");
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   let busy = false;
-  let choice: { format: string; what: "mix" | "stems" | "multichannel" | "preview" | "surround51" | "ambisonic" | "adm" } = { format: "wav", what: "mix" };
+  let choice: { format: string; what: "mix" | "stems" | "multichannel" | "preview" | "surround51" | "surround" | "ambisonic" | "adm" } = { format: "wav", what: "mix" };
   let platform = "";
   let channelOrder = "";
   // PLAN_v13 S3: the range (the whole session, the Smart Tool's range, the loop, or seconds typed), the dither switch
@@ -37,7 +37,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
     <option value="flac">FLAC, 24-bit lossless</option><option value="flac16">FLAC, 16-bit lossless</option><option value="mp3">MP3, 320 kbps</option><option value="mp3-192">MP3, 192 kbps</option>
     <option value="ogg">OGG Vorbis</option><option value="m4a">M4A, AAC 256 kbps</option></select></label>
   <label class="fw-field fw-field-stack"><span>What</span><select data-x="what">
-    <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option><option value="aaf">The timeline as AAF, for other editors (audio embedded)</option><option value="otio">The timeline as OpenTimelineIO, an .otioz with its audio</option><option value="surround51">5.1 surround, six channels in one WAV (tracks placed by their 5.1 position)</option><option value="ambisonic">Ambisonics, first order: an AmbiX WAV (W Y Z X; tracks placed by direction and elevation)</option><option value="adm">Objects: an ADM BWF file (each track placed on the surround pad as an object, for object-audio and MPEG-H tools)</option><option value="preview">Streaming preview: add a track that sounds like the encoded file (MP3, OGG or M4A)</option></select></label>
+    <option value="mix">The mix, one stereo file</option><option value="stems">Stems, one file per track (zip)</option><option value="multichannel">Multichannel, one channel per track (WAV or FLAC)</option><option value="aaf">The timeline as AAF, for other editors (audio embedded)</option><option value="otio">The timeline as OpenTimelineIO, an .otioz with its audio</option><option value="surround51">5.1 surround, six channels in one WAV (tracks placed by their 5.1 position)</option><option value="surround">Surround in the session's layout, one channel per speaker in one WAV</option><option value="ambisonic">Ambisonics, first order: an AmbiX WAV (W Y Z X; tracks placed by direction and elevation)</option><option value="adm">Objects: an ADM BWF file (each track placed on the surround pad as an object, for object-audio and MPEG-H tools)</option><option value="preview">Streaming preview: add a track that sounds like the encoded file (MP3, OGG or M4A)</option></select></label>
   <label class="fw-field fw-field-stack" data-x="range-row"><span>Range</span><select data-x="range"><option value="all">The whole session</option><option value="selection">The selected range</option><option value="loop">The loop</option><option value="span">From and to, in seconds</option></select></label>
   <div class="fw-export-span" data-x="span-row"><label><span>From</span><input type="number" data-x="from" min="0" step="0.001" value="0" aria-label="From, in seconds"></label><label><span>To</span><input type="number" data-x="to" min="0" step="0.001" value="0" aria-label="To, in seconds" title="Past the last clip, the effects' tails ring out"></label></div>
   <label class="fw-export-opt" data-x="dither-row"><input type="checkbox" data-x="dither" checked><span>Dither (TPDF) for 16 and 24-bit</span></label>
@@ -218,7 +218,7 @@ export function mountExport(host: HTMLElement, engine: Engine): void {
       return;
     }
     const format = dialog.querySelector<HTMLSelectElement>('[data-x="format"]')?.value ?? "wav";
-    const what = (dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value ?? "mix") as "mix" | "stems" | "multichannel" | "preview" | "surround51" | "ambisonic" | "adm";
+    const what = (dialog.querySelector<HTMLSelectElement>('[data-x="what"]')?.value ?? "mix") as "mix" | "stems" | "multichannel" | "preview" | "surround51" | "surround" | "ambisonic" | "adm";
     choice = { format, what };
     rangeChoice = field<HTMLSelectElement>("range")?.value ?? "all";
     span = { from: Number(field<HTMLInputElement>("from")?.value ?? 0), to: Number(field<HTMLInputElement>("to")?.value ?? 0) };

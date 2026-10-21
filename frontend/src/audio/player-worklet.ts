@@ -41,6 +41,9 @@ interface CoreExports {
   fw_set_fold_51(player: number, on: number): void;
   fw_set_surround_format(player: number, format: number): void;
   fw_take_peaks_51(player: number, out: number): void;
+  fw_set_surround_layout(player: number, id: number): void;
+  fw_set_bus_places(player: number, ptr: number, count: number): void;
+  fw_take_peaks_surround(player: number, out: number): number;
   fw_live_note(player: number, pitch: number, velocity: number): void;
   fw_live_patch(player: number, wave: number, attack: number, decay: number, sustain: number, release: number, gain: number, cutoff: number, resonance: number): void;
   fw_live_all_off(player: number): void;
@@ -100,7 +103,7 @@ export type WorkletMessage =
   | { type: "alloc"; id: number; rate: number; channels: number; frames: number; window?: number }
   | { type: "stats" }
   | { type: "write"; id: number; offset: number; data: Float32Array }
-  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterPoints?: number[]; masterFx?: number[]; processors?: string[]; panLaw?: number; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; fold?: boolean; surroundFormat?: number }
+  | { type: "clips"; clips: WorkletClip[]; end: number; buses: WorkletBus[]; masterDb: number; masterPoints?: number[]; masterFx?: number[]; processors?: string[]; panLaw?: number; timeTrack?: number[]; timeTrackLog?: boolean; places?: number[]; busPlaces?: number[]; fold?: boolean; surroundFormat?: number }
   | { type: "play" }
   | { type: "speed"; value: number }
   | { type: "rate-ratio"; value: number }
@@ -206,7 +209,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       loudness: Array.from(new Float32Array(core.memory.buffer, loudnessAt, 3)),
       busPeaks: Array.from(new Float32Array(core.memory.buffer, busesAt, buses * 2)),
       ...(reduced ? { reductions: Array.from(new Float32Array(core.memory.buffer, this.reductions, reduced)) } : {}),
-      ...(this.fold51 ? { surroundPeaks: (core.fw_take_peaks_51(this.player, this.peaks51), Array.from(new Float32Array(core.memory.buffer, this.peaks51, 6))) } : {}),
+      ...(this.fold51 ? { surroundPeaks: Array.from(new Float32Array(core.memory.buffer, this.peaks51, core.fw_take_peaks_surround(this.player, this.peaks51))) } : {}),
     });
   }
 
@@ -220,7 +223,7 @@ class PlayerProcessor extends AudioWorkletProcessor {
       this.left = core.fw_alloc(MAX_FRAMES * 4);
       this.right = core.fw_alloc(MAX_FRAMES * 4);
       this.peaks = core.fw_alloc(8 + MAX_METERED_TRACKS * 8 + 12 + MAX_METERED_BUSES * 8);
-      this.peaks51 = core.fw_alloc(24);
+      this.peaks51 = core.fw_alloc(64);
       this.reductions = core.fw_alloc(MAX_METERED_BUSES * 4);
       this.reply({ type: "ready" });
       return;
@@ -325,14 +328,18 @@ class PlayerProcessor extends AudioWorkletProcessor {
         // PT-38, AA-11: the placements and the fold mode, after the master chain (the core copies it for the C and LFE
         // pair and the surrounds); a session not hearing its fold-down clears both
         const records = msg.fold && msg.places ? msg.places : [];
-        const placeBytes = Math.max(4, records.length * 4);
+        const onBuses = msg.fold && msg.busPlaces ? msg.busPlaces : [];
+        const placeBytes = Math.max(4, Math.max(records.length, onBuses.length) * 4);
         const placeAt = core.fw_alloc(placeBytes);
         new Float32Array(core.memory.buffer, placeAt, records.length).set(records);
-        core.fw_set_surround_format(this.player, msg.surroundFormat === 1 ? 1 : 0);
+        core.fw_set_surround_layout(this.player, Math.max(0, Math.min(255, msg.surroundFormat ?? 0)));
         core.fw_set_places(this.player, placeAt, records.length / 7);
+        new Float32Array(core.memory.buffer, placeAt, onBuses.length).set(onBuses);
+        core.fw_set_bus_places(this.player, placeAt, onBuses.length / 7);
         core.fw_free(placeAt, placeBytes);
-        core.fw_set_fold_51(this.player, records.length ? 1 : 0);
-        this.fold51 = records.length > 0;
+        const folding = records.length > 0 || onBuses.length > 0;
+        core.fw_set_fold_51(this.player, folding ? 1 : 0);
+        this.fold51 = folding;
         this.end = msg.end;
         break;
       }

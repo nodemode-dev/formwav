@@ -3,7 +3,8 @@ import type { FadeShape, Instrument, MidiFx, TrackFx } from "../engine/document"
 import { renderNotes } from "../audio/notes";
 import { importFile } from "../io/media-client";
 import { formatClock, parseTimecodeSeconds, timecodeRate } from "./shell";
-import { PALETTE } from "../engine/document";
+import { PALETTE, SPATIAL_FORMATS, type SpatialFormat } from "../engine/document";
+import { LAYOUT_IDS, layoutTable, type LayoutRow } from "../audio/surround";
 import { fitToRange } from "../engine/editing";
 import { PROCESSOR_BY_ID, PROCESSORS, processorValues } from "../engine/processors";
 import { INSTRUMENT_PARAMS, instrumentValues, isInstrumentKind, WAVE_NAMES, type InstrumentKind } from "../engine/instruments";
@@ -117,7 +118,7 @@ const BODY = `
 <div class="fw-insp-section fw-insp-track" hidden>
   <div class="fw-insp-head fw-insp-track-name">Track</div>
   <label class="fw-field"><span>Name</span><input type="text" maxlength="60" data-track-name aria-label="Track name"><span></span></label>
-  <div class="fw-analyze-buttons" title="Where this track sits in a 5.1 export: left to right and back to front from -1 to 1 (front centre is 0 and 1), and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback stays stereo for now"><label class="fw-sam-opt"><input type="checkbox" data-sur="on"> 5.1 position</label><label class="fw-sam-opt"><span>Left to right</span><input type="number" min="-1" max="1" step="0.05" value="0" data-sur="x"></label><label class="fw-sam-opt"><span>Back to front</span><input type="number" min="-1" max="1" step="0.05" value="1" data-sur="y"></label><label class="fw-sam-opt"><span>LFE dB</span><input type="number" min="-80" max="10" step="1" value="-80" data-sur="lfe"></label><label class="fw-sam-opt" title="Elevation in degrees, for ambisonics: 90 overhead, -90 below (5.1 has no height and ignores it)"><span>Elev°</span><input type="number" min="-90" max="90" step="5" value="0" data-sur="el"></label><label class="fw-sam-opt" title="The session's spatial format: 5.1 speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for 360 video and binaural or speaker decoding later)"><span>Format</span><select data-sur-format><option value="5.1">5.1</option><option value="foa">Ambisonics (FOA)</option></select></label><label class="fw-sam-opt" title="Hear the session's 5.1 as an ITU stereo fold-down (centre and surrounds at -3 dB), in playback and in the stereo mix export; off, the 5.1 position shapes only the 5.1 export"><input type="checkbox" data-sur-fold> Hear the fold-down</label></div>
+  <div class="fw-analyze-buttons" title="Where this track sits in the session's surround layout: left to right and back to front from -1 to 1 (front centre is 0 and 1), its spread, centre and height, and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback hears it with the fold-down on"><label class="fw-sam-opt"><input type="checkbox" data-sur="on"> 5.1 position</label><label class="fw-sam-opt"><span>Left to right</span><input type="number" min="-1" max="1" step="0.05" value="0" data-sur="x"></label><label class="fw-sam-opt"><span>Back to front</span><input type="number" min="-1" max="1" step="0.05" value="1" data-sur="y"></label><label class="fw-sam-opt"><span>LFE dB</span><input type="number" min="-80" max="10" step="1" value="-80" data-sur="lfe"></label><label class="fw-sam-opt" title="How far up the sound sits, 0 on the speakers round you, 90 overhead; layouts without height speakers ignore it"><span>Height</span><input type="number" min="-90" max="90" step="5" value="0" data-sur="el"></label><label class="fw-sam-opt" title="How far the sound spreads over the speakers, 0 a point, 1 all of them"><span>Divergence</span><input type="number" min="0" max="1" step="0.05" value="0" data-sur="div"></label><label class="fw-sam-opt" title="How much of the centre speaker's sound stays in the centre; the rest sits between left and right"><span>Centre %</span><input type="number" min="0" max="100" step="5" value="100" data-sur="centre"></label><label class="fw-sam-opt" title="The session's surround layout, stereo to 9.1.6 speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for 360 video and binaural or speaker decoding later)"><span>Surround layout</span><select data-sur-format><option value="stereo">Stereo</option><option value="lcr">LCR (left, centre, right)</option><option value="quad">Quad</option><option value="5.0">5.0</option><option value="5.1">5.1</option><option value="6.1">6.1</option><option value="7.1">7.1</option><option value="5.1.2">5.1.2</option><option value="5.1.4">5.1.4</option><option value="7.1.2">7.1.2</option><option value="7.1.4">7.1.4</option><option value="9.1.6">9.1.6</option><option value="foa">Ambisonics (FOA)</option></select></label><label class="fw-sam-opt" title="Hear the session's 5.1 as an ITU stereo fold-down (centre and surrounds at -3 dB), in playback and in the stereo mix export; off, the 5.1 position shapes only the 5.1 export"><input type="checkbox" data-sur-fold> Hear the fold-down</label></div>
   <canvas class="fw-surround-pad" data-sur-pad width="168" height="168" aria-label="The track's place in the 5.1 room: drag the dot; front is up, the five speakers marked"></canvas>
   <div class="fw-analyze-buttons" title="L2: the object moves through the points along the session in an ADM export; a bed track goes into the 5.1 bed instead"><button type="button" class="fw-ibtn" data-sur-path="add">Add point at playhead</button><button type="button" class="fw-ibtn" data-sur-path="clear">Clear path</button><label class="fw-sam-opt"><input type="checkbox" data-sur-bed> Bed</label><output data-sur-path-n>No path</output></div>
   <label class="fw-field"><span>Colour</span><select data-track-color aria-label="Track colour"><option value="">Green</option>${COLOURS.replace('<option value="green">Green</option>', "")}</select><span></span></label>
@@ -300,6 +301,8 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       put(body.querySelector<HTMLInputElement>('[data-sur="y"]'), String(track.surround.y));
       put(body.querySelector<HTMLInputElement>('[data-sur="lfe"]'), String(track.surround.lfeDb ?? -80));
       put(body.querySelector<HTMLInputElement>('[data-sur="el"]'), String(track.surround.el ?? 0));
+      put(body.querySelector<HTMLInputElement>('[data-sur="div"]'), String(track.surround.div ?? 0));
+      put(body.querySelector<HTMLInputElement>('[data-sur="centre"]'), String(track.surround.centre ?? 100));
     }
     const foldBox = body.querySelector<HTMLInputElement>("[data-sur-fold]");
     if (foldBox && document.activeElement !== foldBox) foldBox.checked = !!doc.surroundFold;
@@ -846,13 +849,18 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (!track) return;
     const value = (name: string) => Number(body.querySelector<HTMLInputElement>(`[data-sur="${name}"]`)?.value ?? 0);
     const on = body.querySelector<HTMLInputElement>('[data-sur="on"]')?.checked === true;
-    engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: on ? { x: value("x"), y: value("y"), lfeDb: value("lfe"), el: value("el"), path: track.surround?.path, bed: track.surround?.bed } : null });
+    engine.dispatch({ type: "set-track-surround", trackId: track.id, surround: on ? { x: value("x"), y: value("y"), lfeDb: value("lfe"), el: value("el"), div: value("div"), centre: value("centre"), path: track.surround?.path, bed: track.surround?.bed } : null });
     if (notice) setText(notice, on ? `${track.name} placed in 5.1 at ${value("x")}, ${value("y")}${value("lfe") > -80 ? `, LFE ${value("lfe")} dB` : ""}` : `${track.name} back to stereo in 5.1 exports`);
   });
   // PT-38, AA-11: the two-dimensional panner, the room from above with the front up and the five speakers on a circle at
   // their ITU angles; dragging moves the dot, and letting go places the track there as one change
   const pad = body.querySelector<HTMLCanvasElement>("[data-sur-pad]");
   let padDrag: { x: number; y: number } | null = null;
+  let padLayouts: LayoutRow[] | null = null;
+  void layoutTable().then((rows) => {
+    padLayouts = rows;
+    if (!padDrag) drawPad(find(engine.get("document"))?.track.surround ?? null);
+  });
   const drawPad = (pos: { x: number; y: number } | null) => {
     const g = pad?.getContext("2d");
     if (!pad || !g) return;
@@ -872,13 +880,37 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     g.font = `10px ${style.fontFamily}`;
     g.textAlign = "center";
     g.textBaseline = "middle";
-    for (const [name, deg] of [["L", -30], ["C", 0], ["R", 30], ["Ls", -110], ["Rs", 110]] as [string, number][]) {
-      const a = (deg * Math.PI) / 180;
-      g.fillText(name, w / 2 + Math.sin(a) * (radius + 10), h / 2 - Math.cos(a) * (radius + 10));
+    // S16: the session layout's speakers from the core's table, the height ring inside the bed's
+    const format = engine.get("document").spatialFormat ?? "5.1";
+    const row = padLayouts?.find((l) => l.id === LAYOUT_IDS[format]);
+    const speakers = row && format !== "foa" ? row.channels.filter((c) => c.name !== "LFE") : [{ name: "L", az: -30, el: 0 }, { name: "C", az: 0, el: 0 }, { name: "R", az: 30, el: 0 }, { name: "Ls", az: -110, el: 0 }, { name: "Rs", az: 110, el: 0 }];
+    const tops = speakers.some((c) => c.el > 0);
+    if (tops) {
+      g.globalAlpha = 0.18;
+      g.beginPath();
+      g.arc(w / 2, h / 2, radius * 0.55, 0, Math.PI * 2);
+      g.stroke();
+      g.globalAlpha = 0.8;
+    }
+    for (const c of speakers) {
+      const a = (c.az * Math.PI) / 180;
+      const ring = c.el > 0 ? radius * 0.55 - 9 : radius + 10;
+      g.fillText(c.name, w / 2 + Math.sin(a) * ring, h / 2 - Math.cos(a) * ring);
     }
     g.globalAlpha = 1;
     pad.dataset.pos = pos ? `${pos.x.toFixed(2)},${pos.y.toFixed(2)}` : "";
+    pad.dataset.layout = format;
     if (!pos) return;
+    const div = Number(body.querySelector<HTMLInputElement>('[data-sur="div"]')?.value ?? 0) || 0;
+    const spread = 1 - (1 - Math.min(1, Math.max(0, div))) * Math.min(1, Math.hypot(pos.x, pos.y));
+    if (spread > 0.02) {
+      g.globalAlpha = 0.15;
+      g.fillStyle = accent;
+      g.beginPath();
+      g.arc(w / 2 + pos.x * radius, h / 2 - pos.y * radius, 6 + spread * radius, 0, Math.PI * 2);
+      g.fill();
+      g.globalAlpha = 1;
+    }
     g.fillStyle = accent;
     g.beginPath();
     g.arc(w / 2 + pos.x * radius, h / 2 - pos.y * radius, 6, 0, Math.PI * 2);
@@ -914,7 +946,9 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (!hit || !pos) return;
     const lfe = Number(body.querySelector<HTMLInputElement>('[data-sur="lfe"]')?.value ?? -80);
     const el = Number(body.querySelector<HTMLInputElement>('[data-sur="el"]')?.value ?? 0);
-    engine.dispatch({ type: "set-track-surround", trackId: hit.track.id, surround: { x: pos.x, y: pos.y, lfeDb: lfe, el, path: hit.track.surround?.path, bed: hit.track.surround?.bed } });
+    const div = Number(body.querySelector<HTMLInputElement>('[data-sur="div"]')?.value ?? 0);
+    const centre = Number(body.querySelector<HTMLInputElement>('[data-sur="centre"]')?.value ?? 100);
+    engine.dispatch({ type: "set-track-surround", trackId: hit.track.id, surround: { x: pos.x, y: pos.y, lfeDb: lfe, el, div, centre, path: hit.track.surround?.path, bed: hit.track.surround?.bed } });
     if (notice) setText(notice, `${hit.track.name} placed in 5.1 at ${pos.x}, ${pos.y}`);
   });
   // L2: the track's path in the room (Add point takes the dot's place at the playhead) and whether it is part of the bed
@@ -944,9 +978,11 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     if (bed) bed.checked = !!track?.surround?.bed;
   });
   body.querySelector<HTMLSelectElement>("[data-sur-format]")?.addEventListener("change", (e) => {
-    const format = (e.target as HTMLSelectElement).value === "foa" ? "foa" : "5.1";
+    const picked = (e.target as HTMLSelectElement).value;
+    const format: SpatialFormat = (SPATIAL_FORMATS as readonly string[]).includes(picked) ? (picked as SpatialFormat) : "5.1";
     engine.dispatch({ type: "set-spatial-format", format });
-    if (notice) setText(notice, format === "foa" ? "The session places tracks in first-order ambisonics: Export writes an AmbiX file, and the fold-down plays it through two cardioids" : "The session places tracks in 5.1");
+    drawPad(padDrag ?? (find(engine.get("document"))?.track.surround ?? null));
+    if (notice) setText(notice, format === "foa" ? "The session places tracks in first-order ambisonics: Export writes an AmbiX file, and the fold-down plays it through two cardioids" : "The session places tracks in the chosen surround layout");
   });
   body.querySelector<HTMLInputElement>("[data-sur-fold]")?.addEventListener("change", (e) => {
     const on = (e.target as HTMLInputElement).checked;

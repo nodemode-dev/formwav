@@ -55,6 +55,10 @@ export function fadeCode(clip: { fadeShape?: FadeShape; fadeOutShape?: FadeShape
 export const PALETTE: readonly string[] = ["green", "blue", "amber", "red", "violet", "cyan", "pink", "slate"];
 
 /** One note of a note clip, in frames of the clip's media (the instrument's rendering starts at media frame 0). */
+/** S16: the master bus's layouts, stereo to 9.1.6 and first-order ambisonics; absent in a session is 5.1. */
+export const SPATIAL_FORMATS = ["stereo", "lcr", "quad", "5.0", "5.1", "6.1", "7.1", "5.1.2", "5.1.4", "7.1.2", "7.1.4", "9.1.6", "foa"] as const;
+export type SpatialFormat = (typeof SPATIAL_FORMATS)[number];
+
 export interface NoteEvent {
   at: number;
   length: number;
@@ -568,8 +572,13 @@ export interface Track {
     x: number;
     y: number;
     lfeDb?: number;
-    /** PT-42: elevation in degrees, for ambisonics (90 overhead) */
+    /** PT-42, S16: elevation in degrees (90 overhead): the height on layouts with height speakers, 0 to 90; for
+     *  ambisonics -90 to 90 */
     el?: number;
+    /** S16: divergence, 0 (a point) to 1 (every speaker of its ring) */
+    div?: number;
+    /** S16: how much of the centre speaker's share stays there, 0 to 100 percent (absent is 100) */
+    centre?: number;
     /** L2: where the object is along the session (samples), for ADM export: it moves from point to point */
     path?: { at: number; x: number; y: number; el?: number }[];
     /** L2: part of the channel bed (5.1 in the ADM export) rather than an object */
@@ -663,7 +672,7 @@ export interface SessionDoc {
   surroundFold?: boolean;
   /** PT-42: the spatial format tracks are placed in: 5.1 (absent) or first-order ambisonics ("foa", AmbiX), which
    *  playback folds through two cardioids and Export writes as a four-channel AmbiX file. */
-  spatialFormat?: "5.1" | "foa";
+  spatialFormat?: SpatialFormat;
   /** AU-34: the view saved with the session (see SessionView), applied when it is opened. */
   view?: SessionView;
   /** Master fader in dB, applied after the buses; absent means 0 dB. */
@@ -800,9 +809,9 @@ export type Command =
   | { type: "set-clip-envelope"; trackId: string; clipId: string; points: { at: number; db: number }[] }
   | { type: "set-clip-type"; trackId: string; clipId: string; soundType: "dialogue" | "music" | "effects" | "ambience" | null }
   | { type: "new-playlist"; trackId: string; duplicate: boolean }
-  | { type: "set-track-surround"; trackId: string; surround: { x: number; y: number; lfeDb?: number; el?: number; path?: { at: number; x: number; y: number; el?: number }[]; bed?: boolean } | null }
+  | { type: "set-track-surround"; trackId: string; surround: { x: number; y: number; lfeDb?: number; el?: number; div?: number; centre?: number; path?: { at: number; x: number; y: number; el?: number }[]; bed?: boolean } | null }
   | { type: "set-surround-fold"; on: boolean }
-  | { type: "set-spatial-format"; format: "5.1" | "foa" }
+  | { type: "set-spatial-format"; format: SpatialFormat }
   | { type: "set-track-midi-fx"; trackId: string; midiFx: MidiFx[] }
   | { type: "set-timecode-start"; seconds: number }
   | { type: "set-picture"; picture: Picture | null }
@@ -1522,7 +1531,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-spatial-format": {
       // PT-42: 5.1 is the default and is stored as nothing
       if ((doc.spatialFormat ?? "5.1") === cmd.format) return doc;
-      if (cmd.format === "foa") return { ...doc, spatialFormat: "foa" };
+      if (cmd.format !== "5.1" && (SPATIAL_FORMATS as readonly string[]).includes(cmd.format)) return { ...doc, spatialFormat: cmd.format };
       const { spatialFormat: _was, ...rest } = doc;
       return rest;
     }
@@ -1541,11 +1550,14 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         if (!s) return rest;
         const lfe = s.lfeDb !== undefined && Number.isFinite(s.lfeDb) && s.lfeDb > -80 ? { lfeDb: clamp(s.lfeDb, -80, 10) } : {};
         const el = s.el !== undefined && Number.isFinite(s.el) && s.el !== 0 ? { el: clamp(s.el, -90, 90) } : {};
+        // S16: divergence and centre kept only away from their defaults (0 and 100), so older sessions save unchanged
+        const div = s.div !== undefined && Number.isFinite(s.div) && s.div > 0 ? { div: clamp(s.div, 0, 1) } : {};
+        const centre = s.centre !== undefined && Number.isFinite(s.centre) && s.centre < 100 ? { centre: clamp(s.centre, 0, 100) } : {};
         // L2: a path's points held in the room, in order, at most 512; the bed flag kept only when set
         const path = Array.isArray(s.path) && s.path.length
           ? { path: s.path.filter((p) => Number.isFinite(p.at) && p.at >= 0).slice(0, 512).map((p) => ({ at: Math.round(p.at), x: clamp(p.x, -1, 1), y: clamp(p.y, -1, 1), ...(p.el ? { el: clamp(p.el, -90, 90) } : {}) })).sort((a, b) => a.at - b.at) }
           : {};
-        return { ...rest, surround: { x: clamp(s.x, -1, 1), y: clamp(s.y, -1, 1), ...lfe, ...el, ...path, ...(s.bed ? { bed: true } : {}) } };
+        return { ...rest, surround: { x: clamp(s.x, -1, 1), y: clamp(s.y, -1, 1), ...lfe, ...el, ...div, ...centre, ...path, ...(s.bed ? { bed: true } : {}) } };
       });
     }
     case "new-playlist": {

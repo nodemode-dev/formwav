@@ -1,0 +1,16 @@
+{
+"Where this track sits in the session's surround layout: left to right and back to front from {0} to {1} (front centre is {2} and {3}), its spread, centre and height, and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback hears it with the fold-down on": "此軌道在工作階段環繞聲配置中的位置:從左到右、從後到前,範圍從 {0} 到 {1}(前中置為 {2} 和 {3}),以及其擴散、中置和高度,還有傳送到 LFE 聲道的電平;不使用時,軌道的立體聲影像送往 L 和 R。播放時會在開啟降混的情況下聽到它",
+"Height": "高度",
+"How far up the sound sits, {0} on the speakers round you, {1} overhead; layouts without height speakers ignore it": "聲音所處的高度,{0} 為您周圍的喇叭,{1} 為頭頂;沒有高度喇叭的配置會忽略此項",
+"Divergence": "發散",
+"How far the sound spreads over the speakers, {0} a point, {1} all of them": "聲音在喇叭上擴散的程度,{0} 為一個點,{1} 為全部",
+"Centre %": "中置 %",
+"How much of the centre speaker's sound stays in the centre; the rest sits between left and right": "中置喇叭的聲音有多少留在中置;其餘部分位於左右之間",
+"Surround layout": "環繞聲配置",
+"The session's surround layout, stereo to {0}.{1} speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for {2} video and binaural or speaker decoding later)": "工作階段的環繞聲配置,從立體聲到 {0}.{1} 喇叭,或一階 Ambisonics(AmbiX:四聲道音場,W Y Z X,適用於 {2} 影片及之後的雙耳或喇叭解碼)",
+"Stereo": "立體聲",
+"LCR (left, centre, right)": "LCR(左、中、右)",
+"Quad": "四聲道",
+"Surround in the session's layout, one channel per speaker in one WAV": "依工作階段配置輸出環繞聲,每個喇叭一個聲道,存入一個 WAV",
+"The session places tracks in the chosen surround layout": "工作階段將軌道放置在所選的環繞聲配置中"
+}

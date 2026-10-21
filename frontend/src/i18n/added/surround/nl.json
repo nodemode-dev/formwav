@@ -1,0 +1,16 @@
+{
+"Where this track sits in the session's surround layout: left to right and back to front from {0} to {1} (front centre is {2} and {3}), its spread, centre and height, and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback hears it with the fold-down on": "Waar deze track staat in de surroundindeling van de sessie: van links naar rechts en van achter naar voor van {0} tot {1} (midden voor is {2} en {3}), met spreiding, midden en hoogte, en een send naar het LFE-kanaal; zonder dit gaat het stereobeeld van de track naar L en R. Bij afspelen is de track te horen met downmix aan",
+"Height": "Hoogte",
+"How far up the sound sits, {0} on the speakers round you, {1} overhead; layouts without height speakers ignore it": "Hoe hoog het geluid zit, {0} op de speakers om je heen, {1} erboven; indelingen zonder hoogtespeakers negeren dit",
+"Divergence": "Divergentie",
+"How far the sound spreads over the speakers, {0} a point, {1} all of them": "Hoe ver het geluid zich over de speakers verspreidt, {0} een punt, {1} alle",
+"Centre %": "Midden %",
+"How much of the centre speaker's sound stays in the centre; the rest sits between left and right": "Hoeveel van het geluid van de middenspeaker in het midden blijft; de rest zit tussen links en rechts",
+"Surround layout": "Surroundindeling",
+"The session's surround layout, stereo to {0}.{1} speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for {2} video and binaural or speaker decoding later)": "De surroundindeling van de sessie, van stereo tot {0}.{1}-speakers, of ambisonics van de eerste orde (AmbiX: een geluidsveld in vier kanalen, W Y Z X, voor {2}-video en later binaurale of speakerdecodering)",
+"Stereo": "Stereo",
+"LCR (left, centre, right)": "LCR (links, midden, rechts)",
+"Quad": "Quad",
+"Surround in the session's layout, one channel per speaker in one WAV": "Surround in de indeling van de sessie, één kanaal per speaker in één WAV",
+"The session places tracks in the chosen surround layout": "De sessie plaatst tracks in de gekozen surroundindeling"
+}

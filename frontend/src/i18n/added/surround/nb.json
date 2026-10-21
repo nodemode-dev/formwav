@@ -1,0 +1,16 @@
+{
+"Where this track sits in the session's surround layout: left to right and back to front from {0} to {1} (front centre is {2} and {3}), its spread, centre and height, and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback hears it with the fold-down on": "Hvor dette sporet plasseres i sesjonens surroundoppsett: fra venstre til høyre og bakfra og frem fra {0} til {1} (senter foran er {2} og {3}), med spredning, senter og høyde, og et send til LFE-kanalen; uten dette går sporets stereobilde til L og R. Avspillingen hører det med nedmiks på",
+"Height": "Høyde",
+"How far up the sound sits, {0} on the speakers round you, {1} overhead; layouts without height speakers ignore it": "Hvor høyt lyden ligger, {0} på høyttalerne rundt deg, {1} rett over; oppsett uten høydehøyttalere ignorerer det",
+"Divergence": "Divergens",
+"How far the sound spreads over the speakers, {0} a point, {1} all of them": "Hvor langt lyden brer seg over høyttalerne, {0} ett punkt, {1} alle",
+"Centre %": "Senter %",
+"How much of the centre speaker's sound stays in the centre; the rest sits between left and right": "Hvor mye av senterhøyttalerens lyd som blir i senteret; resten plasseres mellom venstre og høyre",
+"Surround layout": "Surroundoppsett",
+"The session's surround layout, stereo to {0}.{1} speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for {2} video and binaural or speaker decoding later)": "Sesjonens surroundoppsett, stereo til {0}.{1}-høyttalere, eller førsteordens ambisonics (AmbiX: et lydfelt i fire kanaler, W Y Z X, for {2}-video og senere binaural eller høyttaleravkoding)",
+"Stereo": "Stereo",
+"LCR (left, centre, right)": "LCR (venstre, senter, høyre)",
+"Quad": "Quad",
+"Surround in the session's layout, one channel per speaker in one WAV": "Surround i sesjonens oppsett, én kanal per høyttaler i én WAV",
+"The session places tracks in the chosen surround layout": "Sesjonen plasserer spor i det valgte surroundoppsettet"
+}

@@ -1,0 +1,16 @@
+{
+"Where this track sits in the session's surround layout: left to right and back to front from {0} to {1} (front centre is {2} and {3}), its spread, centre and height, and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback hears it with the fold-down on": "Onde esta faixa fica no layout surround da sessão: da esquerda para a direita e de trás para a frente de {0} a {1} (o centro frontal é {2} e {3}), com sua abertura, centro e altura, e um envio para o canal LFE; sem isso, a imagem estéreo da faixa vai para L e R. A reprodução a ouve com o downmix ativado",
+"Height": "Altura",
+"How far up the sound sits, {0} on the speakers round you, {1} overhead; layouts without height speakers ignore it": "A que altura o som fica, {0} nos alto-falantes ao seu redor, {1} acima; layouts sem alto-falantes de altura o ignoram",
+"Divergence": "Divergência",
+"How far the sound spreads over the speakers, {0} a point, {1} all of them": "Quanto o som se espalha pelos alto-falantes, {0} um ponto, {1} todos",
+"Centre %": "Centro %",
+"How much of the centre speaker's sound stays in the centre; the rest sits between left and right": "Quanto do som do alto-falante central fica no centro; o resto fica entre a esquerda e a direita",
+"Surround layout": "Layout surround",
+"The session's surround layout, stereo to {0}.{1} speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for {2} video and binaural or speaker decoding later)": "O layout surround da sessão, de estéreo a alto-falantes {0}.{1}, ou ambisonics de primeira ordem (AmbiX: um campo sonoro em quatro canais, W Y Z X, para vídeo {2} e decodificação binaural ou em alto-falantes depois)",
+"Stereo": "Estéreo",
+"LCR (left, centre, right)": "LCR (esquerda, centro, direita)",
+"Quad": "Quad",
+"Surround in the session's layout, one channel per speaker in one WAV": "Surround no layout da sessão, um canal por alto-falante em um único WAV",
+"The session places tracks in the chosen surround layout": "A sessão posiciona as faixas no layout surround escolhido"
+}

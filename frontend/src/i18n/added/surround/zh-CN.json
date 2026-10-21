@@ -1,0 +1,16 @@
+{
+"Where this track sits in the session's surround layout: left to right and back to front from {0} to {1} (front centre is {2} and {3}), its spread, centre and height, and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback hears it with the fold-down on": "此轨道在会话环绕声布局中的位置:从左到右、从后到前,范围从 {0} 到 {1}(前中置为 {2} 和 {3}),以及其扩散、中置和高度,还有发送到 LFE 声道的电平;不使用时,轨道的立体声影像送往 L 和 R。回放时会在开启降混的情况下听到它",
+"Height": "高度",
+"How far up the sound sits, {0} on the speakers round you, {1} overhead; layouts without height speakers ignore it": "声音所处的高度,{0} 为您周围的扬声器,{1} 为头顶;没有高度扬声器的布局会忽略此项",
+"Divergence": "发散",
+"How far the sound spreads over the speakers, {0} a point, {1} all of them": "声音在扬声器上扩散的程度,{0} 为一个点,{1} 为全部",
+"Centre %": "中置 %",
+"How much of the centre speaker's sound stays in the centre; the rest sits between left and right": "中置扬声器的声音有多少留在中置;其余部分位于左右之间",
+"Surround layout": "环绕声布局",
+"The session's surround layout, stereo to {0}.{1} speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for {2} video and binaural or speaker decoding later)": "会话的环绕声布局,从立体声到 {0}.{1} 扬声器,或一阶 Ambisonics(AmbiX:四声道声场,W Y Z X,适用于 {2} 视频及之后的双耳或扬声器解码)",
+"Stereo": "立体声",
+"LCR (left, centre, right)": "LCR(左、中、右)",
+"Quad": "四声道",
+"Surround in the session's layout, one channel per speaker in one WAV": "按会话布局输出环绕声,每个扬声器一个声道,存入一个 WAV",
+"The session places tracks in the chosen surround layout": "会话将轨道放置在所选的环绕声布局中"
+}

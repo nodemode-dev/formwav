@@ -1,0 +1,16 @@
+{
+"Where this track sits in the session's surround layout: left to right and back to front from {0} to {1} (front centre is {2} and {3}), its spread, centre and height, and a send to the LFE channel; without it the track's stereo image goes to L and R. Playback hears it with the fold-down on": "Gdzie ten ślad znajduje się w układzie surround sesji: od lewej do prawej i od tyłu do przodu od {0} do {1} (przedni środek to {2} i {3}), wraz z rozpiętością, środkiem i wysokością oraz wysyłką do kanału LFE; bez tego obraz stereo śladu trafia na L i R. Odtwarzanie słyszy go przy włączonym downmixie",
+"Height": "Wysokość",
+"How far up the sound sits, {0} on the speakers round you, {1} overhead; layouts without height speakers ignore it": "Jak wysoko znajduje się dźwięk, {0} na głośnikach wokół Ciebie, {1} nad głową; układy bez głośników wysokościowych to ignorują",
+"Divergence": "Dywergencja",
+"How far the sound spreads over the speakers, {0} a point, {1} all of them": "Jak szeroko dźwięk rozchodzi się po głośnikach, {0} punkt, {1} wszystkie",
+"Centre %": "Środek %",
+"How much of the centre speaker's sound stays in the centre; the rest sits between left and right": "Jaka część dźwięku głośnika środkowego zostaje w środku; reszta trafia między lewą i prawą stronę",
+"Surround layout": "Układ surround",
+"The session's surround layout, stereo to {0}.{1} speakers, or first-order ambisonics (AmbiX: a sound field in four channels, W Y Z X, for {2} video and binaural or speaker decoding later)": "Układ surround sesji, od stereo do głośników {0}.{1}, lub ambisonics pierwszego rzędu (AmbiX: pole dźwiękowe w czterech kanałach, W Y Z X, dla wideo {2} i późniejszego dekodowania binauralnego lub głośnikowego)",
+"Stereo": "Stereo",
+"LCR (left, centre, right)": "LCR (lewy, środek, prawy)",
+"Quad": "Quad",
+"Surround in the session's layout, one channel per speaker in one WAV": "Surround w układzie sesji, jeden kanał na głośnik w jednym pliku WAV",
+"The session places tracks in the chosen surround layout": "Sesja umieszcza ślady w wybranym układzie surround"
+}
