@@ -303,8 +303,8 @@ async def formwav_generate_speech(text: str, engine: str = "kokoro", voice: str 
 async def formwav_generate_music(prompt: str, lyrics: str = "", seconds: float = 30, engine: str = "elevenlabs") -> dict[str, Any]:
     """Music or a song from a prompt, with lyrics sung when given, as new media: engine elevenlabs (needs
     ELEVENLABS_API_KEY; 3 s to 10 min) or acestep (ACE-Step 1.5 on this machine, installed from Install a model on this
-    machine, or its own server, uv run acestep-api; 10 s to 10 min; installed here, about 6 minutes for 30 s on two CPU
-    cores)."""
+    machine, or its own server, uv run acestep-api; 10 s to 10 min; installed here, about 6 minutes for 30 s on one CPU
+    thread, and faster with more cores, as it uses half the machine's threads)."""
     if engine == "elevenlabs":
         return _media((await _post("/api/providers/elevenlabs/music", {"prompt": prompt, "lyrics": lyrics, "seconds": seconds})).json())
     if engine == "acestep":

@@ -41,7 +41,7 @@
 ## Music and songs
 
 1. `formwav_local_models_status`: is elevenlabs ready, or ACE-Step (installed on this machine, or its own server)?
-2. `formwav_generate_music` with a prompt (style, mood, instruments), lyrics if it should be sung, and seconds. ACE-Step on a CPU takes minutes (about 6 for 30 s on two CPU cores), so make a short one first and say how long a full one will take. Give the tempo and key in the prompt when they matter; ACE-Step keeps them.
+2. `formwav_generate_music` with a prompt (style, mood, instruments), lyrics if it should be sung, and seconds. ACE-Step on a CPU takes minutes (about 6 for 30 s on one CPU thread; it uses half the machine's threads, so more cores are faster), so make a short one first and say how long a full one will take. Give the tempo and key in the prompt when they matter; ACE-Step keeps them.
 3. `formwav_analyze_media` on the result; export or keep for a session.
 
 ## Sound effects
