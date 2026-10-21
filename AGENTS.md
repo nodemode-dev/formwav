@@ -35,6 +35,9 @@ Invariants worth repeating, because breaking them is silent:
 - A clip's `sourceIn` counts the media's samples and its `length` the session's; they differ whenever a file's rate
   differs from the session's.
 - `/api/generate` takes `freq`, not `hz`.
+- A hosted plug-in on a track (kind `plugin`, the core's 21) plays only where the core is built native: native output
+  and exports (`native/formwav-dsp/src/plugin.rs`); the browser's WebAssembly passes it by. The engine loads only a
+  CLAP plug-in its scan found (`services/plugins.live_insert`).
 - The engine binds 127.0.0.1. Only Settings > Devices on this network opens a listener, off by default, for paired
   devices; keep it that way.
 
