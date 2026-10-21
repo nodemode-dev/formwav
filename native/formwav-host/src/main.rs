@@ -695,9 +695,24 @@ fn main() {
                 Some(text) => params::parse_values(text)?,
                 None => Vec::new(),
             };
-            let output = offline::process(format, std::path::Path::new(&args[3]), &input, tail, &values)?;
+            // S17: optional automation (`frame id value` lines), a state to load and a file to save the state into;
+            // "-" leaves one out
+            let given = |k: usize| args.get(k).filter(|s| s.as_str() != "-");
+            let automation = match given(8) {
+                Some(file) => params::parse_automation(&std::fs::read_to_string(file).map_err(|e| format!("the automation file: {e}"))?)?,
+                None => Vec::new(),
+            };
+            let state_in = match given(9) {
+                Some(file) => Some(std::fs::read(file).map_err(|e| format!("the state file: {e}"))?),
+                None => None,
+            };
+            let mut state_out = given(10).map(|_| Vec::new());
+            let output = offline::process_with(format, std::path::Path::new(&args[3]), &input, tail, &values, &automation, state_in.as_deref(), state_out.as_mut())?;
             wav::write(&args[5], &output)?;
-            println!("{{\"frames\": {}, \"rate\": {}, \"channels\": 2}}", output.channels[0].len(), output.rate);
+            if let (Some(file), Some(bytes)) = (given(10), state_out.as_ref()) {
+                std::fs::write(file, bytes).map_err(|e| format!("the state file: {e}"))?;
+            }
+            println!("{{\"frames\": {}, \"rate\": {}, \"channels\": 2, \"automation_events\": {}, \"state_bytes\": {}}}", output.channels[0].len(), output.rate, automation.len(), state_out.as_ref().map_or(0, |s| s.len()));
             Ok(())
         }),
         // PT-15: notes (`start length key velocity` lines, frames) played on a CLAP instrument into a stereo WAV

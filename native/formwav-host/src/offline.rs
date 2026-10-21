@@ -257,7 +257,13 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
 /// Runs `input` (mono becomes both sides; beyond two channels, the first two) through the plugin's first audio effect,
 /// in blocks of BLOCK frames with its clock advancing, followed by `tail_s` seconds of silence so reverbs and delays
 /// can ring out; returns stereo.
-pub fn process(format: &str, plugin: &Path, input: &Audio, tail_s: f64, values: &[(u32, f64)]) -> Result<Audio, String> {
+/// S17: with automation (frame, id, value events, CLAP only), a saved state loaded into the plugin before it
+/// starts, and its state saved after it stops into `state_out` (CLAP only; other formats refuse either).
+#[allow(clippy::too_many_arguments)]
+pub fn process_with(format: &str, plugin: &Path, input: &Audio, tail_s: f64, values: &[(u32, f64)], automation: &[(u64, u32, f64)], state_in: Option<&[u8]>, state_out: Option<&mut Vec<u8>>) -> Result<Audio, String> {
+    if format != "clap" && (!automation.is_empty() || state_in.is_some() || state_out.is_some()) {
+        return Err(format!("automation and saved state are hosted for CLAP plugins only, not {format}"));
+    }
     if format == "ladspa" {
         return crate::ladspa::process(plugin, input, tail_s, values);
     }
@@ -273,7 +279,7 @@ pub fn process(format: &str, plugin: &Path, input: &Audio, tail_s: f64, values: 
     let mut out = vec![vec![0f32; total], vec![0f32; total]];
     unsafe {
         match format {
-            "clap" => clap_process(plugin, rate, &left, &right, &mut out, values)?,
+            "clap" => clap_process(plugin, rate, &left, &right, &mut out, values, automation, state_in, state_out)?,
             "vst3" => vst3_process(plugin, rate, &left, &right, &mut out, values)?,
             "au" => crate::au::process(&plugin.to_string_lossy(), rate, &left, &right, &mut out, values)?,
             other => return Err(format!("unknown plugin format {other}")),
@@ -282,8 +288,9 @@ pub fn process(format: &str, plugin: &Path, input: &Audio, tail_s: f64, values: 
     Ok(Audio { rate, channels: out })
 }
 
-unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out: &mut [Vec<f32>], values: &[(u32, f64)]) -> Result<(), String> {
-    let param_events = crate::params::ClapEvents::new(values);
+#[allow(clippy::too_many_arguments)]
+unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out: &mut [Vec<f32>], values: &[(u32, f64)], automation: &[(u64, u32, f64)], state_in: Option<&[u8]>, state_out: Option<&mut Vec<u8>>) -> Result<(), String> {
+    let param_events = crate::params::ClapEvents::new(values).with_automation(automation);
     // a bundle's other plugins by index, `file.clap#1`, as LADSPA libraries are named (RX-67: formwav's bundle holds two)
     let text = path.to_string_lossy();
     let (path, index) = match text.rsplit_once('#') {
@@ -315,6 +322,17 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     if plugin.is_null() || !((*plugin).init.ok_or("no init")?)(plugin) {
         return Err("the plugin would not initialise".into());
     }
+    let state_ext = ((*plugin).get_extension.ok_or("no get_extension")?)(plugin, clap_sys::ext::state::CLAP_EXT_STATE.as_ptr()) as *const clap_sys::ext::state::clap_plugin_state;
+    if (state_in.is_some() || state_out.is_some()) && state_ext.is_null() {
+        return Err("the plugin keeps no state".into());
+    }
+    if let Some(bytes) = state_in {
+        let mut reader = crate::params::StateReader { bytes, at: 0 };
+        let stream = clap_sys::stream::clap_istream { ctx: &mut reader as *mut crate::params::StateReader as *mut c_void, read: Some(crate::params::state_read) };
+        if !((*state_ext).load.ok_or("no state load")?)(plugin, &stream) {
+            return Err("the plugin refused the saved state".into());
+        }
+    }
     if !((*plugin).activate.ok_or("no activate")?)(plugin, rate as f64, 1, BLOCK as u32) || !((*plugin).start_processing.ok_or("no start_processing")?)(plugin) {
         return Err("the plugin would not start".into());
     }
@@ -333,6 +351,7 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     let mut pos = 0;
     while pos < left.len() {
         let n = BLOCK.min(left.len() - pos);
+        param_events.block(pos as u64, n as u64);
         let mut in_ptrs = [left.as_ptr().add(pos) as *mut f32, right.as_ptr().add(pos) as *mut f32];
         let mut out_ptrs = [o0.add(pos), o1.add(pos)];
         let in_buf = clap_audio_buffer { data32: in_ptrs.as_mut_ptr(), data64: ptr::null_mut(), channel_count: 2, latency: 0, constant_mask: 0 };
@@ -360,6 +379,13 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     }
     ((*plugin).stop_processing.ok_or("no stop_processing")?)(plugin);
     ((*plugin).deactivate.ok_or("no deactivate")?)(plugin);
+    if let Some(saved) = state_out {
+        saved.clear();
+        let stream = clap_sys::stream::clap_ostream { ctx: saved as *mut Vec<u8> as *mut c_void, write: Some(crate::params::state_write) };
+        if !((*state_ext).save.ok_or("no state save")?)(plugin, &stream) {
+            return Err("the plugin would not save its state".into());
+        }
+    }
     ((*plugin).destroy.ok_or("no destroy")?)(plugin);
     ((*entry).deinit.ok_or("no deinit")?)();
     drop(lib);

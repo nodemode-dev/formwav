@@ -171,42 +171,128 @@ unsafe fn vst3_list(path: &Path) -> Result<Vec<Param>, String> {
     Ok(params)
 }
 
-/// CLAP: the chosen values as param-value events, delivered in the first block only.
+/// CLAP: the chosen values as param-value events, delivered in the first block only, and S17's automation: timed
+/// events offered in the block they fall in, each at its frame within that block.
 pub struct ClapEvents {
     pub events: Vec<clap_event_param_value>,
     pub live: Cell<bool>,
+    timed: std::cell::UnsafeCell<Vec<clap_event_param_value>>,
+    timed_at: Vec<u64>,
+    window: Cell<(usize, usize)>,
+}
+
+fn param_event(time: u32, id: u32, value: f64) -> clap_event_param_value {
+    clap_event_param_value {
+        header: clap_event_header { size: std::mem::size_of::<clap_event_param_value>() as u32, time, space_id: CLAP_CORE_EVENT_SPACE_ID, type_: CLAP_EVENT_PARAM_VALUE, flags: 0 },
+        param_id: id,
+        cookie: ptr::null_mut(),
+        note_id: -1,
+        port_index: -1,
+        channel: -1,
+        key: -1,
+        value,
+    }
+}
+
+/// S17: a CLAP state stream read from saved bytes, and one written into a Vec.
+pub struct StateReader<'a> {
+    pub bytes: &'a [u8],
+    pub at: usize,
+}
+
+pub unsafe extern "C" fn state_read(stream: *const clap_sys::stream::clap_istream, buffer: *mut std::ffi::c_void, size: u64) -> i64 {
+    let reader = &mut *((*stream).ctx as *mut StateReader);
+    let n = (size as usize).min(reader.bytes.len() - reader.at);
+    std::ptr::copy_nonoverlapping(reader.bytes.as_ptr().add(reader.at), buffer as *mut u8, n);
+    reader.at += n;
+    n as i64
+}
+
+pub unsafe extern "C" fn state_write(stream: *const clap_sys::stream::clap_ostream, buffer: *const std::ffi::c_void, size: u64) -> i64 {
+    let out = &mut *((*stream).ctx as *mut Vec<u8>);
+    out.extend_from_slice(std::slice::from_raw_parts(buffer as *const u8, size as usize));
+    size as i64
+}
+
+/// S17: automation as given to `fwhost process` (`frame id value` lines, breakpoints in input frames), each parameter's
+/// line between its breakpoints sampled every AUTOMATION_STEP frames as CLAP events, held after the last.
+pub const AUTOMATION_STEP: u64 = 32;
+
+pub fn parse_automation(text: &str) -> Result<Vec<(u64, u32, f64)>, String> {
+    let mut points: Vec<(u32, u64, f64)> = Vec::new();
+    for line in text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+        let mut it = line.split_whitespace();
+        let (Some(f), Some(i), Some(v)) = (it.next(), it.next(), it.next()) else { return Err(format!("not an automation point: {line}")) };
+        let frame = f.parse::<u64>().map_err(|_| format!("not a frame: {f}"))?;
+        let id = i.parse::<u32>().map_err(|_| format!("not a parameter id: {i}"))?;
+        let value = v.parse::<f64>().map_err(|_| format!("not a number: {v}"))?;
+        points.push((id, frame, value));
+    }
+    points.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+    let mut out = Vec::new();
+    for (k, &(id, frame, value)) in points.iter().enumerate() {
+        out.push((frame, id, value));
+        if let Some(&(next_id, next_frame, next_value)) = points.get(k + 1) {
+            if next_id == id && next_frame > frame {
+                let mut t = (frame / AUTOMATION_STEP + 1) * AUTOMATION_STEP;
+                while t < next_frame {
+                    let p = (t - frame) as f64 / (next_frame - frame) as f64;
+                    out.push((t, id, value + (next_value - value) * p));
+                    t += AUTOMATION_STEP;
+                }
+            }
+        }
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+    Ok(out)
 }
 
 impl ClapEvents {
     pub fn new(values: &[(u32, f64)]) -> Self {
-        let events = values
-            .iter()
-            .map(|(id, value)| clap_event_param_value {
-                header: clap_event_header { size: std::mem::size_of::<clap_event_param_value>() as u32, time: 0, space_id: CLAP_CORE_EVENT_SPACE_ID, type_: CLAP_EVENT_PARAM_VALUE, flags: 0 },
-                param_id: *id,
-                cookie: ptr::null_mut(),
-                note_id: -1,
-                port_index: -1,
-                channel: -1,
-                key: -1,
-                value: *value,
-            })
-            .collect();
-        ClapEvents { events, live: Cell::new(true) }
+        let events = values.iter().map(|(id, value)| param_event(0, *id, *value)).collect();
+        ClapEvents { events, live: Cell::new(true), timed: std::cell::UnsafeCell::new(Vec::new()), timed_at: Vec::new(), window: Cell::new((0, 0)) }
+    }
+
+    /// The automation's events (frame, id, value; sorted by frame), offered block by block through `block`.
+    pub fn with_automation(mut self, points: &[(u64, u32, f64)]) -> Self {
+        self.timed_at = points.iter().map(|p| p.0).collect();
+        self.timed = std::cell::UnsafeCell::new(points.iter().map(|&(_, id, value)| param_event(0, id, value)).collect());
+        self
+    }
+
+    /// Chooses the automation events inside frames `pos` to `pos + n` for the next process call, timed within it.
+    pub fn block(&self, pos: u64, n: u64) {
+        let start = self.timed_at.partition_point(|&t| t < pos);
+        let end = self.timed_at.partition_point(|&t| t < pos + n);
+        // SAFETY: the host calls size and get only during process, after this, on the same thread
+        let timed = unsafe { &mut *self.timed.get() };
+        for k in start..end {
+            timed[k].header.time = (self.timed_at[k] - pos) as u32;
+        }
+        self.window.set((start, end));
     }
 }
 
 pub unsafe extern "C" fn clap_events_size(list: *const clap_input_events) -> u32 {
     let events = &*((*list).ctx as *const ClapEvents);
-    if events.live.get() { events.events.len() as u32 } else { 0 }
+    let (start, end) = events.window.get();
+    (if events.live.get() { events.events.len() } else { 0 } + (end - start)) as u32
 }
 
 pub unsafe extern "C" fn clap_events_get(list: *const clap_input_events, index: u32) -> *const clap_event_header {
     let events = &*((*list).ctx as *const ClapEvents);
-    if !events.live.get() {
+    let first = if events.live.get() { events.events.len() } else { 0 };
+    let index = index as usize;
+    if index < first {
+        return events.events.get(index).map_or(ptr::null(), |e| &e.header as *const clap_event_header);
+    }
+    let (start, end) = events.window.get();
+    let k = start + (index - first);
+    if k >= end {
         return ptr::null();
     }
-    events.events.get(index as usize).map_or(ptr::null(), |e| &e.header as *const clap_event_header)
+    let timed = &*events.timed.get();
+    timed.get(k).map_or(ptr::null(), |e| &e.header as *const clap_event_header)
 }
 
 /// VST3: one queue per chosen value, each a single point at sample 0, offered in the first block only.
