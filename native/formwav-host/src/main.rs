@@ -8,6 +8,8 @@
 mod ara;
 mod ara_sys;
 mod au;
+#[cfg(unix)]
+mod editor;
 mod instrument;
 mod ladspa;
 #[cfg(target_os = "macos")]
@@ -422,6 +424,25 @@ fn run_clap_gui(path: &str, seconds: f64) -> Result<(), String> {
     }
 }
 
+/// S17 phase C: `fwhost edit clap <plugin> <state-in|-> <state-out> [seconds]` (editor.rs); prints what ended it, the
+/// editor's size and the saved state's length as one JSON line.
+#[cfg(unix)]
+fn run_edit(format: &str, plugin: &str, state_in: &str, state_out: &str, seconds: f64) -> Result<(), String> {
+    if format != "clap" {
+        return Err(format!("a plug-in's own editor opens for CLAP plug-ins here, not {format}"));
+    }
+    let given = if state_in == "-" { None } else { Some(std::fs::read(state_in).map_err(|e| format!("the state file: {e}"))?) };
+    let edited = editor::edit_clap(std::path::Path::new(plugin), given.as_deref(), seconds)?;
+    std::fs::write(state_out, &edited.state).map_err(|e| format!("the state file: {e}"))?;
+    println!("{{\"format\": \"clap\", \"ended\": \"{}\", \"size\": [{}, {}], \"window\": {}, \"state_bytes\": {}}}", edited.why, edited.size.0, edited.size.1, edited.window, edited.state.len());
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn run_edit(_format: &str, _plugin: &str, _state_in: &str, _state_out: &str, _seconds: f64) -> Result<(), String> {
+    Err("plugin editor windows are not available on Windows yet; the plugin itself processes audio".into())
+}
+
 /// Plugin editor windows are X11 windows driven by Unix event polling; on Windows (native windows: not built yet) both
 /// editor commands answer so rather than failing to build.
 #[cfg(windows)]
@@ -669,6 +690,8 @@ fn main() {
         (Some("clap"), Some(path)) => run_clap(path),
         (Some("vst3"), Some(path)) => run_vst3(path),
         (Some("clap-gui"), Some(path)) => run_clap_gui(path, args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0)),
+        // S17 phase C: a plug-in's editor opened until closed, its state in and out ("-" for none in)
+        (Some("edit"), Some(format)) if args.len() >= 6 => run_edit(format, &args[3], &args[4], &args[5], args.get(6).and_then(|s| s.parse().ok()).unwrap_or(3600.0)),
         (Some("vst3-gui"), Some(path)) => run_vst3_gui(path, args.get(3).and_then(|s| s.parse().ok()).unwrap_or(5.0)),
         (Some("params"), Some(format)) if args.len() >= 4 => params::list(format, std::path::Path::new(&args[3])).map(|list| println!("{}", params::to_json(&list))),
         (Some("au-check"), _) => {

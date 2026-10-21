@@ -22,6 +22,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap-knob"
+version = "0.1.0"
+dependencies = [
+ "clap-sys",
+ "x11rb",
+]
+
+[[package]]
 name = "clap-sine"
 version = "0.1.0"
 dependencies = [
