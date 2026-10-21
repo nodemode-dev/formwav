@@ -89,6 +89,18 @@ def export_aaf(document: dict = Body(...)) -> Response:
     return Response(content=data, media_type="application/octet-stream", headers={"Content-Disposition": 'attachment; filename="formwav-session.aaf"'})
 
 
+@router.post("/projects/export-omf")
+def export_omf(document: dict = Body(...)) -> Response:
+    """R11: the session's timeline as an OMF 2 file with its audio embedded, a mono track per channel (services/omf.py)."""
+    from ..services import omf
+
+    try:
+        data = omf.export_omf(document)
+    except (media.MediaError, KeyError) as err:
+        raise HTTPException(422, str(err)) from err
+    return Response(content=data, media_type="application/octet-stream", headers={"Content-Disposition": 'attachment; filename="formwav-session.omf"'})
+
+
 @router.post("/projects/export-otio")
 def export_otio(document: dict = Body(...), name: str = "formwav session") -> Response:
     """PLAN_v14 W4: the session's timeline as OpenTimelineIO, an .otioz bundle with the clips' audio (services/otio.py)."""
