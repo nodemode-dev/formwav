@@ -312,9 +312,14 @@ async def formwav_generate_music(prompt: str, lyrics: str = "", seconds: float =
 
 
 @mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
-async def formwav_generate_sound_effect(description: str, seconds: float = 5, loop: bool = False) -> dict[str, Any]:
-    """A sound effect from a description, 0.5 to 30 s, looping seamlessly when asked, as new media (ElevenLabs, needs
-    ELEVENLABS_API_KEY; there is no open-weight path on this machine)."""
+async def formwav_generate_sound_effect(description: str, seconds: float = 5, loop: bool = False, engine: str = "elevenlabs", seed: int = 0) -> dict[str, Any]:
+    """A sound effect from a description, as new media: engine elevenlabs (0.5 to 30 s, looping seamlessly when asked,
+    needs ELEVENLABS_API_KEY) or local (EzAudio on this machine once installed: 1 to 10 whole seconds, no loop, the same
+    seed and description make the same sound; about a minute or more on a laptop's CPU)."""
+    if engine == "local":
+        return _media((await _post("/api/providers/local-sfx/generate", {"text": description, "duration_s": seconds, "seed": seed}, timeout=3600.0)).json())
+    if engine != "elevenlabs":
+        raise ToolError("engine must be elevenlabs or local.")
     return _media((await _post("/api/providers/elevenlabs/sound", {"text": description, "duration_s": seconds, "loop": loop})).json())
 
 

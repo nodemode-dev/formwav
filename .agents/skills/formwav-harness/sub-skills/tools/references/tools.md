@@ -128,9 +128,9 @@ Music or a song from a prompt, with lyrics sung when given, as new media: engine
 
 ### `formwav_generate_sound_effect`
 
-Kind: makes new media or writes a file. Parameters: `description` (string), `seconds` (number, default 5), `loop` (boolean, default False).
+Kind: makes new media or writes a file. Parameters: `description` (string), `seconds` (number, default 5), `loop` (boolean, default False), `engine` (string, default 'elevenlabs'), `seed` (integer, default 0).
 
-A sound effect from a description, 0.5 to 30 s, looping seamlessly when asked, as new media (ElevenLabs, needs ELEVENLABS_API_KEY; there is no open-weight path on this machine).
+A sound effect from a description, as new media: engine elevenlabs (0.5 to 30 s, looping seamlessly when asked, needs ELEVENLABS_API_KEY) or local (EzAudio on this machine once installed: 1 to 10 whole seconds, no loop, the same seed and description make the same sound; about a minute or more on a laptop's CPU).
 
 ## Recording
 

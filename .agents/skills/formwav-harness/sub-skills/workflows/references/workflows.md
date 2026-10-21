@@ -46,7 +46,7 @@
 
 ## Sound effects
 
-`formwav_generate_sound_effect` with a plain description, seconds (0.5 to 30) and loop for ambiences that repeat. ElevenLabs only; with no key, say there is no local path for sound effects yet.
+`formwav_generate_sound_effect` with a plain description, the source of the sound first ("a wooden door slamming shut", not "slam"). With an ElevenLabs key: seconds 0.5 to 30, and loop for ambiences that repeat. Without one, or to keep the prompt on the machine: engine local (EzAudio, listed by `formwav_local_models_status` once installed), 1 to 10 whole seconds and no loop; it takes minutes on a CPU, so make one, listen, then make the rest, and change the seed for another take of the same description.
 
 ## Dubbing
 
