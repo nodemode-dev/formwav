@@ -54,7 +54,7 @@ def _events(track: bytes):
             pos += size
             if kind == 0x51 and size == 3:
                 yield tick, 0xFF51, body
-            elif kind in (0x03, 0x06, 0x58, 0x59):
+            elif kind in (0x03, 0x05, 0x06, 0x58, 0x59):
                 yield tick, 0xFF00 | kind, body
             elif kind == 0x2F:
                 yield tick, 0xFF2F, b""
@@ -165,9 +165,14 @@ def read_song(data: bytes) -> dict:
         held: dict[tuple[int, int], list[tuple[int, int]]] = {}
         notes: dict[int, list] = {}
         controls: dict[int, list] = {}
+        lyrics: dict[int, str] = {}
         end_tick = 0
         for tick, status, body in events:
             end_tick = max(end_tick, tick)
+            if status == 0xFF05:
+                if _text(body).strip():
+                    lyrics.setdefault(tick, _text(body).strip())
+                continue
             if status == 0xFF03:
                 names.setdefault(index, _text(body))
                 continue
@@ -214,7 +219,7 @@ def read_song(data: bytes) -> dict:
                 "name": name or f"Track {len(out_tracks) + 1}",
                 "channel": channel,
                 "drums": channel == 9,
-                "notes": [{"start": seconds(on), "length": max(0.0, seconds(off) - seconds(on)), "pitch": p, "velocity": max(1, v)} for on, off, p, v in found],
+                "notes": [{"start": seconds(on), "length": max(0.0, seconds(off) - seconds(on)), "pitch": p, "velocity": max(1, v), **({"lyric": lyrics.pop(on)} if on in lyrics else {})} for on, off, p, v in found],
                 "controllers": controls.get(channel, []),
             })
     duration = max((n["start"] + n["length"] for t in out_tracks for n in t["notes"]), default=0.0)

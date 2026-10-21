@@ -131,7 +131,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
       } else if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
         // the engine reads the file and the built-in instrument renders its notes; the rendering plays like any audio
         const res = await fetch(`/api/midi/import?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST", body: file, headers: { "X-Filename": file.name } });
-        type Song = SongMap & { detail?: unknown; tempo?: number; markers?: { time: number; label: string }[]; tracks?: { name: string; channel: number; media: MediaRef; notes: { start: number; length: number; pitch: number; velocity: number }[]; controllers: { time: number; kind: "cc" | "bend" | "program" | "pressure"; number: number; value: number }[] }[] };
+        type Song = SongMap & { detail?: unknown; tempo?: number; markers?: { time: number; label: string }[]; tracks?: { name: string; channel: number; media: MediaRef; notes: { start: number; length: number; pitch: number; velocity: number; lyric?: string }[]; controllers: { time: number; kind: "cc" | "bend" | "program" | "pressure"; number: number; value: number }[] }[] };
         const out = (await res.json().catch(() => ({}))) as Song;
         if (!res.ok || !out.tracks?.length) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
         // S8: one note track per track of the file, its name, notes and controllers; the file's markers; its first tempo and
@@ -140,7 +140,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
         const sessionRate = before.tracks.length ? before.sampleRate : out.tracks[0].media.sampleRate;
         const commands: Command[] = out.tracks.map((t) => {
           const rate = t.media.sampleRate;
-          return { type: "import-media" as const, media: t.media, at, notes: t.notes.map((n) => ({ at: n.start * rate, length: n.length * rate, pitch: n.pitch, velocity: n.velocity })), controllers: t.controllers.map((c) => ({ at: c.time * rate, kind: c.kind, number: c.number, value: c.value })), midiChannel: t.channel };
+          return { type: "import-media" as const, media: t.media, at, notes: t.notes.map((n) => ({ at: n.start * rate, length: n.length * rate, pitch: n.pitch, velocity: n.velocity, ...(n.lyric ? { lyric: n.lyric } : {}) })), controllers: t.controllers.map((c) => ({ at: c.time * rate, kind: c.kind, number: c.number, value: c.value })), midiChannel: t.channel };
         });
         for (const m of out.markers ?? []) commands.push({ type: "add-marker", at: Math.round(at + m.time * sessionRate), label: m.label });
         const meter = out.meters?.[0];

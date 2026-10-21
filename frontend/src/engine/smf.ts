@@ -4,7 +4,7 @@ import { PPQ, sampleToTick, tempoMap } from "./tempo";
 /** A note track's notes and controllers in session frames (each clip's own media frames mapped through its trim and
  *  its media's rate), cut to the part of each clip that plays. */
 export function trackEvents(doc: SessionDoc, track: Track) {
-  const notes: { at: number; length: number; pitch: number; velocity: number }[] = [];
+  const notes: { at: number; length: number; pitch: number; velocity: number; lyric?: string }[] = [];
   const controllers: { at: number; kind: "cc" | "bend" | "program" | "pressure"; number: number; value: number }[] = [];
   let channel: number | undefined;
   for (const c of track.clips) {
@@ -16,7 +16,7 @@ export function trackEvents(doc: SessionDoc, track: Track) {
       if (n.at >= end || n.at + n.length <= c.sourceIn) continue;
       const from = Math.max(n.at, c.sourceIn);
       const to = Math.min(n.at + n.length, end);
-      notes.push({ at: c.start + (from - c.sourceIn) * ratio, length: (to - from) * ratio, pitch: n.pitch, velocity: n.velocity });
+      notes.push({ at: c.start + (from - c.sourceIn) * ratio, length: (to - from) * ratio, pitch: n.pitch, velocity: n.velocity, ...(n.lyric && from === n.at ? { lyric: n.lyric } : {}) });
     }
     for (const e of c.controllers ?? []) if (e.at >= c.sourceIn && e.at < end) controllers.push({ ...e, at: c.start + (e.at - c.sourceIn) * ratio });
   }
@@ -108,7 +108,12 @@ export function sessionMidi(doc: SessionDoc, name = "formwav session", ppq = 480
       }
     }
     for (const n of notes) {
-      events.push([ticks(n.at), 3, [0x90 | ch, n.pitch & 0x7f, n.velocity & 0x7f]]);
+      // L1: a note's lyric (FF 05) after the note-offs at its tick and before its note-on
+      if (n.lyric) {
+        const word = text(n.lyric);
+        events.push([ticks(n.at), 3, [0xff, 0x05, ...vlq(word.length), ...word]]);
+      }
+      events.push([ticks(n.at), 4, [0x90 | ch, n.pitch & 0x7f, n.velocity & 0x7f]]);
       events.push([Math.max(ticks(n.at) + 1, ticks(n.at + n.length)), 2, [0x80 | ch, n.pitch & 0x7f, 64]]);
     }
     chunks.push(chunk(events));

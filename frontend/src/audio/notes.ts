@@ -15,23 +15,28 @@ import { instrumentValues, isInstrumentKind } from "../engine/instruments";
  */
 export function midiFile(notes: readonly NoteEvent[], rate: number, bpm = 120, ppq = 480, beatsPerBar = 4): Uint8Array<ArrayBuffer> {
   const ticks = (frames: number) => Math.max(0, Math.round((frames / rate) * (bpm / 60) * ppq));
-  const events: [number, number, number, number][] = [];
-  for (const n of notes) {
-    events.push([ticks(n.at), 0x90, n.pitch, n.velocity]);
-    events.push([ticks(n.at + n.length), 0x80, n.pitch, 64]);
-  }
-  events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const vlq = (v: number) => {
     const out = [v & 0x7f];
     for (v >>= 7; v > 0; v >>= 7) out.unshift((v & 0x7f) | 0x80);
     return out;
   };
+  // [tick, order, bytes]: at one tick, note-offs, then a note's lyric (FF 05, L1), then note-ons
+  const events: [number, number, number[]][] = [];
+  for (const n of notes) {
+    if (n.lyric) {
+      const word = [...new TextEncoder().encode(n.lyric)];
+      events.push([ticks(n.at), 1, [0xff, 0x05, ...vlq(word.length), ...word]]);
+    }
+    events.push([ticks(n.at), 2, [0x90, n.pitch & 0x7f, n.velocity & 0x7f]]);
+    events.push([ticks(n.at + n.length), 0, [0x80, n.pitch & 0x7f, 64]]);
+  }
+  events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const tempo = Math.round(60_000_000 / bpm);
   const meter = Math.min(255, Math.max(1, Math.round(beatsPerBar)));
   const body: number[] = [0x00, 0xff, 0x51, 0x03, (tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff, 0x00, 0xff, 0x58, 0x04, meter, 2, 24, 8];
   let last = 0;
-  for (const [tick, status, pitch, velocity] of events) {
-    body.push(...vlq(tick - last), status, pitch & 0x7f, velocity & 0x7f);
+  for (const [tick, , bytes] of events) {
+    body.push(...vlq(tick - last), ...bytes);
     last = tick;
   }
   body.push(0x00, 0xff, 0x2f, 0x00);
