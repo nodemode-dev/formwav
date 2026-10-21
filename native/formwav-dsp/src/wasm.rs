@@ -257,15 +257,49 @@ pub unsafe extern "C" fn fw_take_peaks(player: *mut Player, out: *mut f32) {
 #[no_mangle]
 pub unsafe extern "C" fn fw_set_places(player: *mut Player, ptr: *const f32, count: usize) {
     let records = if count == 0 { &[][..] } else { slice::from_raw_parts(ptr, count * 7) };
-    let mut places: Vec<Option<[f32; 6]>> = Vec::new();
+    let mut places: Vec<Option<crate::pan::Place>> = Vec::new();
     for r in records.chunks_exact(7) {
         let index = r[0] as usize;
         if places.len() <= index {
             places.resize(index + 1, None);
         }
-        places[index] = Some([r[1], r[2], r[3], r[4], r[5], r[6]]);
+        places[index] = Some(crate::pan::Place::from_record(&r[1..7]));
     }
     (*player).set_places(&places);
+}
+
+/// S16: the places of buses, `count` records of seven floats (the bus id, then x, y, divergence, centre percent,
+/// elevation and LFE send in dB); call after fw_set_places.
+///
+/// # Safety
+/// `player` must come from `fw_player_new`; `ptr` must hold `count * 7` floats.
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_bus_places(player: *mut Player, ptr: *const f32, count: usize) {
+    let records = if count == 0 { &[][..] } else { slice::from_raw_parts(ptr, count * 7) };
+    let places: Vec<(u32, crate::pan::Place)> = records.chunks_exact(7).map(|r| (r[0] as u32, crate::pan::Place::from_record(&r[1..7]))).collect();
+    (*player).set_bus_places(&places);
+}
+
+/// S16: the bus's speaker layout by id (0 5.1, 1 first-order ambisonics, 2 to 12 stereo to 9.1.6).
+///
+/// # Safety
+/// `player` must come from `fw_player_new` and not have been freed.
+#[no_mangle]
+pub unsafe extern "C" fn fw_set_surround_layout(player: *mut Player, id: u32) {
+    (*player).set_surround_layout(id.min(255) as u8);
+}
+
+/// S16: every channel's peak since the last call into `out` (up to 16), returning the layout's channel count.
+///
+/// # Safety
+/// `player` must come from `fw_player_new`; `out` must hold sixteen floats.
+#[no_mangle]
+pub unsafe extern "C" fn fw_take_peaks_surround(player: *mut Player, out: *mut f32) -> u32 {
+    let (peaks, n) = (*player).take_peaks_surround();
+    for (k, v) in peaks.into_iter().enumerate() {
+        *out.add(k) = v;
+    }
+    n as u32
 }
 
 /// Turns the fold mode on (nonzero) or off: playback then hears the six-channel bus folded to stereo.

@@ -105,6 +105,11 @@ pub fn law_gains(pan: f32, law: u8) -> (f32, f32) {
     }
 }
 
+fn lfe_pair(rate: f32) -> [crate::fx::Biquad; 2] {
+    let low = |q: f32| crate::fx::Biquad::design(crate::fx::LOWPASS, 120.0, 0.0, q, rate).unwrap_or(crate::fx::Biquad::bandpass(120.0, q, rate));
+    [low(0.5412), low(1.3066)]
+}
+
 #[derive(Debug, Default)]
 pub struct Player {
     sources: HashMap<u32, AudioBuffer>,
@@ -160,17 +165,21 @@ pub struct Player {
     prime_scratch: [Vec<f32>; 2],
     /// PT-38, AA-11: the 5.1 render's groups, clips sharing a placement (a track) mixed together and then spread by
     /// their speaker gains in SMPTE order (L R C LFE Ls Rs), each with its LFE send's fourth-order 120 Hz low-pass.
-    surround_groups: Vec<(Vec<usize>, [f32; 6], [crate::fx::Biquad; 2])>,
+    surround_groups: Vec<(Vec<usize>, [f32; crate::layout::MAX_CH], [crate::fx::Biquad; 2])>,
     /// Clips with no placement play their stereo image on L and R in the 5.1 render.
     surround_unplaced: Vec<usize>,
-    /// The master chain's copies for the C and LFE pair and the Ls and Rs pair (the chain itself serves L and R).
-    master_fx_51: [Vec<crate::fx::Stage>; 2],
-    peaks_51: [f32; 6],
+    /// The master chain's copies for each pair of channels after L and R (the chain itself serves L and R).
+    master_fx_51: Vec<Vec<crate::fx::Stage>>,
+    peaks_51: [f32; crate::layout::MAX_CH],
+    /// S16: each bus's place in the surround layout, parallel to `buses` (a placed track on a bus of its own, its
+    /// chain hearing the track's sum), and its LFE send's low-pass pair.
+    bus_places: Vec<Option<[f32; crate::layout::MAX_CH]>>,
+    bus_lfe: Vec<[crate::fx::Biquad; 2]>,
     /// When set, render runs the six-channel bus and folds it to stereo (ITU Lo/Ro), so playback, the bounce and the
     /// stereo export hear the 5.1 mix exactly and the six peaks are kept for the 5.1 meters.
     fold_51: bool,
-    /// The fold's six-channel scratch, kept between calls so a warm player renders without allocating.
-    scratch_51: [Vec<f32>; 6],
+    /// The fold's channel scratch, kept between calls so a warm player renders without allocating.
+    scratch_51: Vec<Vec<f32>>,
     /// AP-05: sources held as a window rather than whole (a file larger than memory): by source id, its true length,
     /// the window's length, and the contiguous range of frames it holds now.
     windows: HashMap<u32, SourceWindow>,
@@ -462,6 +471,10 @@ impl Player {
             lfe[0].reset();
             lfe[1].reset();
         }
+        for lfe in self.bus_lfe.iter_mut() {
+            lfe[0].reset();
+            lfe[1].reset();
+        }
     }
 
     pub fn clear_envelopes(&mut self) {
@@ -537,7 +550,7 @@ impl Player {
             let len = span as usize;
             let mut fx = std::mem::take(&mut self.clip_fx);
             self.mix(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from, |c| c.bus == 0);
-            self.mix_buses(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from);
+            self.mix_buses(&mut fx, &mut left[done..done + len], &mut right[done..done + len], from, None);
             self.clip_fx = fx;
             if let Some(live) = self.live.as_mut() {
                 // AU-37: the instrument played live, mono into both channels at unity as a note clip plays at pan 0,
@@ -592,10 +605,29 @@ impl Player {
     /// applied to what lies below 120 Hz; None, or no entry, plays the clip's stereo image on L and R). Clips sharing
     /// a placement are grouped; a clip routed to a bus plays through it to L and R; the master chain is copied for
     /// the C and LFE pair and the surround pair.
-    pub fn set_places(&mut self, places: &[Option<[f32; 6]>]) {
+    pub fn set_places(&mut self, places: &[Option<crate::pan::Place>]) {
+        let layout = crate::layout::layout(self.surround_format);
+        let gains: Vec<Option<[f32; crate::layout::MAX_CH]>> = places
+            .iter()
+            .map(|p| {
+                p.map(|place| {
+                    let mut g = [0.0f32; crate::layout::MAX_CH];
+                    crate::pan::place_gains(layout, &place, &mut g);
+                    g
+                })
+            })
+            .collect();
+        self.set_place_gains(&gains);
+    }
+
+    /// The clips' surround gains given directly, one per channel of the layout in file order (set_places computes
+    /// them from places).
+    pub fn set_place_gains(&mut self, places: &[Option<[f32; crate::layout::MAX_CH]>]) {
         self.surround_groups.clear();
         self.surround_unplaced.clear();
+        self.bus_places.clear();
         let rate = self.rate;
+        let layout = crate::layout::layout(self.surround_format);
         for (index, clip) in self.clips.iter().enumerate() {
             if clip.bus != 0 {
                 continue;
@@ -604,10 +636,7 @@ impl Player {
                 None => self.surround_unplaced.push(index),
                 Some(gains) => match self.surround_groups.iter_mut().find(|g| g.1 == gains) {
                     Some(group) => group.0.push(index),
-                    None => {
-                        let low = |q: f32| crate::fx::Biquad::design(crate::fx::LOWPASS, 120.0, 0.0, q, rate).unwrap_or(crate::fx::Biquad::bandpass(120.0, q, rate));
-                        self.surround_groups.push((vec![index], gains, [low(0.5412), low(1.3066)]));
-                    }
+                    None => self.surround_groups.push((vec![index], gains, lfe_pair(rate))),
                 },
             }
         }
@@ -615,14 +644,39 @@ impl Player {
         for s in copy.iter_mut() {
             s.reset();
         }
-        self.master_fx_51 = [copy.clone(), copy];
-        self.peaks_51 = [0.0; 6];
+        let pairs = layout.channels().div_ceil(2).max(1);
+        self.master_fx_51 = vec![copy; pairs - 1];
+        self.peaks_51 = [0.0; crate::layout::MAX_CH];
+    }
+
+    /// S16: the places of buses (a placed track's own bus, by bus id), set after set_places and the buses; such a bus
+    /// plays at its place in the surround render, its chain still hearing the whole track.
+    pub fn set_bus_places(&mut self, places: &[(u32, crate::pan::Place)]) {
+        let layout = crate::layout::layout(self.surround_format);
+        self.bus_places = vec![None; self.buses.len()];
+        self.bus_lfe = (0..self.buses.len()).map(|_| lfe_pair(self.rate)).collect();
+        for (id, place) in places {
+            if let Some(k) = self.buses.iter().position(|b| b.id == *id) {
+                let mut gains = [0.0f32; crate::layout::MAX_CH];
+                crate::pan::place_gains(layout, place, &mut gains);
+                self.bus_places[k] = Some(gains);
+            }
+        }
+    }
+
+    /// The number of channels the surround render writes for the current layout.
+    pub fn surround_channels(&self) -> usize {
+        crate::layout::layout(self.surround_format).channels()
     }
 
     /// The session as a 5.1 mix into six buffers (L R C LFE Ls Rs): unplaced clips and the buses' outputs on L and R,
     /// each placement group mixed, folded to mono and spread by its gains, the master chain on each pair of channels,
     /// then the master gain. The stereo render is untouched by any of this.
-    pub fn render_surround(&mut self, out: &mut [&mut [f32]; 6]) {
+    pub fn render_surround(&mut self, out: &mut [&mut [f32]]) {
+        let layout = crate::layout::layout(self.surround_format);
+        let nch = layout.channels().min(out.len());
+        let foa = layout.ambisonic;
+        let lfe_ch = layout.speakers.iter().position(|s| s.lfe);
         let n = out.iter().map(|c| c.len()).min().unwrap_or(0);
         for c in out.iter_mut() {
             c[..n].fill(0.0);
@@ -646,8 +700,8 @@ impl Player {
             for &index in &self.surround_unplaced {
                 self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], from, to, index);
             }
-            self.mix_buses(&mut fx, &mut sl[..len], &mut sr[..len], from);
-            if self.surround_format == SURROUND_FOA {
+            self.mix_buses(&mut fx, &mut sl[..len], &mut sr[..len], from, Some((&mut out[..nch], done)));
+            if foa {
                 // PT-42: unplaced sound encoded straight ahead (W and X at its level, Y and Z silent)
                 for j in 0..len {
                     let m = 0.5 * (sl[j] + sr[j]);
@@ -667,37 +721,44 @@ impl Player {
                 for &index in clips.iter() {
                     self.mix_one(&mut fx, &mut sl[..len], &mut sr[..len], from, to, index);
                 }
-                let foa = self.surround_format == SURROUND_FOA;
                 for j in 0..len {
                     let m = 0.5 * (sl[j] + sr[j]);
-                    if foa {
-                        for k in 0..6 {
+                    for k in 0..nch {
+                        if Some(k) == lfe_ch {
+                            if gains[k] != 0.0 {
+                                let first = lfe[0].process(0, m);
+                                let low = lfe[1].process(0, first);
+                                out[k][done + j] += gains[k] * low;
+                            }
+                        } else {
                             out[k][done + j] += gains[k] * m;
                         }
-                        continue;
-                    }
-                    for k in [0usize, 1, 2, 4, 5] {
-                        out[k][done + j] += gains[k] * m;
-                    }
-                    if gains[3] != 0.0 {
-                        let first = lfe[0].process(0, m);
-                        let low = lfe[1].process(0, first);
-                        out[3][done + j] += gains[3] * low;
                     }
                 }
             }
             self.surround_groups = groups;
             self.clip_fx = fx;
             if !self.master_fx.is_empty() {
+                let pairs = nch.div_ceil(2);
+                if self.master_fx_51.len() + 1 < pairs {
+                    let mut copy = self.master_fx.clone();
+                    for s in copy.iter_mut() {
+                        s.reset();
+                    }
+                    self.master_fx_51.resize(pairs - 1, copy);
+                }
                 for j in done..done + len {
-                    for (pair, chain) in [(0usize, 1usize), (2, 3), (4, 5)].into_iter().zip(0..3) {
+                    for chain in 0..pairs {
+                        let (a, b) = (2 * chain, 2 * chain + 1);
                         let stages = if chain == 0 { &mut self.master_fx } else { &mut self.master_fx_51[chain - 1] };
-                        let (mut l, mut r) = (out[pair.0][j], out[pair.1][j]);
+                        let (mut l, mut r) = (out[a][j], if b < nch { out[b][j] } else { 0.0 });
                         for s in stages.iter_mut() {
                             (l, r) = s.process(l, r);
                         }
-                        out[pair.0][j] = l;
-                        out[pair.1][j] = r;
+                        out[a][j] = l;
+                        if b < nch {
+                            out[b][j] = r;
+                        }
                     }
                 }
             }
@@ -716,7 +777,7 @@ impl Player {
                 }
             }
         }
-        for (k, c) in out.iter_mut().enumerate() {
+        for (k, c) in out.iter_mut().enumerate().take(crate::layout::MAX_CH) {
             if let Some(g) = self.master_gain {
                 for v in c[..n].iter_mut() {
                     *v *= g;
@@ -730,7 +791,13 @@ impl Player {
 
     /// The six channels' peaks since the last call (L R C LFE Ls Rs), for the 5.1 meters.
     pub fn take_peaks_51(&mut self) -> [f32; 6] {
-        std::mem::take(&mut self.peaks_51)
+        let all = std::mem::take(&mut self.peaks_51);
+        [all[0], all[1], all[2], all[3], all[4], all[5]]
+    }
+
+    /// S16: every channel's peak since the last call in the layout's file order, and how many channels it has.
+    pub fn take_peaks_surround(&mut self) -> ([f32; crate::layout::MAX_CH], usize) {
+        (std::mem::take(&mut self.peaks_51), self.surround_channels())
     }
 
     /// Sets the fold mode: render then plays the six-channel bus folded to stereo (set the placements first).
@@ -809,35 +876,54 @@ impl Player {
 
     /// PT-42: the bus's format, SURROUND_51 or SURROUND_FOA (any other value is taken as 5.1).
     pub fn set_surround_format(&mut self, format: u8) {
-        self.surround_format = if format == SURROUND_FOA { SURROUND_FOA } else { SURROUND_51 };
+        self.set_surround_layout(format);
+    }
+
+    /// S16: the bus's speaker layout by id (crate::layout: 0 is 5.1, 1 first-order ambisonics, 2 to 12 stereo to
+    /// 9.1.6; any other id is 5.1). Set it before the places, whose gains are computed for it.
+    pub fn set_surround_layout(&mut self, id: u8) {
+        self.surround_format = if id < crate::layout::COUNT { id } else { SURROUND_51 };
     }
 
     /// The six-channel bus folded to stereo by ITU-R BS.775's downmix (Lo = L + 0.707 C + 0.707 Ls, Ro likewise with
     /// R and Rs, the LFE left out), the stereo meters then taken on the fold as the stereo render takes them.
     fn render_folded(&mut self, left: &mut [f32], right: &mut [f32]) {
         let n = left.len().min(right.len());
+        let layout = crate::layout::layout(self.surround_format);
+        let nch = layout.channels();
         let mut scratch = std::mem::take(&mut self.scratch_51);
+        if scratch.len() < crate::layout::MAX_CH {
+            scratch.resize_with(crate::layout::MAX_CH, Vec::new);
+        }
         for c in scratch.iter_mut() {
             if c.len() < n {
                 c.resize(n, 0.0);
             }
         }
         {
-            let [c0, c1, c2, c3, c4, c5] = &mut scratch;
-            let mut bus: [&mut [f32]; 6] = [&mut c0[..n], &mut c1[..n], &mut c2[..n], &mut c3[..n], &mut c4[..n], &mut c5[..n]];
-            self.render_surround(&mut bus);
+            let mut it = scratch.iter_mut();
+            let mut bus: [&mut [f32]; crate::layout::MAX_CH] = std::array::from_fn(|_| match it.next() {
+                Some(c) => &mut c[..n],
+                None => &mut [][..],
+            });
+            self.render_surround(&mut bus[..nch]);
         }
-        if self.surround_format == SURROUND_FOA {
+        if layout.ambisonic {
             // PT-42: two virtual cardioids facing left and right (SN3D: a source to the left has Y equal to W)
             for i in 0..n {
                 left[i] = 0.5 * (scratch[0][i] + scratch[1][i]);
                 right[i] = 0.5 * (scratch[0][i] - scratch[1][i]);
             }
         } else {
-            let k = std::f32::consts::FRAC_1_SQRT_2;
+            let fold = layout.fold();
             for i in 0..n {
-                left[i] = scratch[0][i] + k * scratch[2][i] + k * scratch[4][i];
-                right[i] = scratch[1][i] + k * scratch[2][i] + k * scratch[5][i];
+                let (mut l, mut r) = (0.0f32, 0.0f32);
+                for k in 0..nch {
+                    l += fold[k][0] * scratch[k][i];
+                    r += fold[k][1] * scratch[k][i];
+                }
+                left[i] = l;
+                right[i] = r;
             }
         }
         self.scratch_51 = scratch;
@@ -864,6 +950,8 @@ impl Player {
         self.bus_fx_spec.clear();
         self.bus_fx_auto.clear();
         self.bus_outs.clear();
+        self.bus_places.clear();
+        self.bus_lfe.clear();
     }
 
     /// S10: bus `id` plays into bus `out` (0, or an id not added, for the master). Buses run in the order they were
@@ -913,10 +1001,12 @@ impl Player {
         }
     }
 
-    fn mix_buses(&mut self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64) {
+    fn mix_buses(&mut self, fx: &mut [Vec<crate::fx::Stage>], left: &mut [f32], right: &mut [f32], from: u64, mut placed: Option<(&mut [&mut [f32]], usize)>) {
         if self.buses.is_empty() {
             return;
         }
+        let lfe_ch = crate::layout::layout(self.surround_format).speakers.iter().position(|s| s.lfe);
+        let mut bus_lfe = std::mem::take(&mut self.bus_lfe);
         let n = left.len().min(right.len());
         let mut scratch_left = std::mem::take(&mut self.scratch_left);
         let mut scratch_right = std::mem::take(&mut self.scratch_right);
@@ -978,12 +1068,27 @@ impl Player {
             let gain_right = bus.gain * pan_right;
             let peak = &mut bus_peaks[k];
             let out = self.bus_outs.get(k).copied().flatten();
+            let place = if out.is_none() { self.bus_places.get(k).copied().flatten() } else { None };
             for i in 0..n {
                 let l = scratch_left[i] * gain_left;
                 let r = scratch_right[i] * gain_right;
                 if let Some(j) = out {
                     bus_in[j][0][i] += l;
                     bus_in[j][1][i] += r;
+                } else if let (Some(gains), Some((chans, at))) = (place, placed.as_mut()) {
+                    let m = 0.5 * (l + r);
+                    for (c, ch) in chans.iter_mut().enumerate() {
+                        if Some(c) == lfe_ch {
+                            if gains[c] != 0.0 {
+                                if let Some(pair) = bus_lfe.get_mut(k) {
+                                    let first = pair[0].process(0, m);
+                                    ch[*at + i] += gains[c] * pair[1].process(0, first);
+                                }
+                            }
+                        } else {
+                            ch[*at + i] += gains[c] * m;
+                        }
+                    }
                 } else {
                     left[i] += l;
                     right[i] += r;
@@ -997,6 +1102,7 @@ impl Player {
         self.bus_primed = primed;
         self.prime_scratch = prime;
         self.bus_peaks = bus_peaks;
+        self.bus_lfe = bus_lfe;
         self.scratch_left = scratch_left;
         self.scratch_right = scratch_right;
     }
@@ -1209,6 +1315,12 @@ pub struct SourceWindow {
 mod tests {
     use super::*;
 
+    fn g6(g: [f32; 6]) -> Option<[f32; crate::layout::MAX_CH]> {
+        let mut out = [0.0f32; crate::layout::MAX_CH];
+        out[..6].copy_from_slice(&g);
+        Some(out)
+    }
+
     /// AP-05: a windowed source plays the range it holds (through its ring) and silence elsewhere, its oldest frames
     /// giving way as writes carry on, a jump starting a fresh range, and its true length still ending the clip.
     #[test]
@@ -1386,7 +1498,7 @@ mod tests {
             p.add_clip(PlayClip { source: id, start: 0, source_in: 0, length: rate as u64, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 0, gain_env: 0, pan_env: 0 });
         }
         p.set_master_db(-6.0);
-        p.set_places(&[Some([0.0, 0.0, 1.0, 0.0, 0.0, 0.0]), None, Some([0.0, 0.0, 0.0, 1.0, 0.0, 0.0])]);
+        p.set_place_gains(&[g6([0.0, 0.0, 1.0, 0.0, 0.0, 0.0]), None, g6([0.0, 0.0, 0.0, 1.0, 0.0, 0.0])]);
         let mut chans: Vec<Vec<f32>> = (0..6).map(|_| vec![0.0f32; rate]).collect();
         let [c0, c1, c2, c3, c4, c5] = &mut chans[..] else { unreachable!() };
         let mut out: [&mut [f32]; 6] = [&mut c0[..], &mut c1[..], &mut c2[..], &mut c3[..], &mut c4[..], &mut c5[..]];
@@ -1418,7 +1530,7 @@ mod tests {
                 p.load_source(id, AudioBuffer { sample_rate: rate as u32, channels: vec![tone(hz)] });
                 p.add_clip(PlayClip { source: id, start: 0, source_in: 0, length: rate as u64, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 0, gain_env: 0, pan_env: 0 });
             }
-            p.set_places(&[Some([0.0, 0.0, 1.0, 0.0, 0.0, 0.0]), None, Some([0.0, 0.0, 0.0, 0.0, 1.0, 0.0])]);
+            p.set_place_gains(&[g6([0.0, 0.0, 1.0, 0.0, 0.0, 0.0]), None, g6([0.0, 0.0, 0.0, 0.0, 1.0, 0.0])]);
             p
         };
         let mut six = session();
@@ -1463,7 +1575,7 @@ mod tests {
                 p.add_clip(PlayClip { source: id, start: 0, source_in: 0, length: rate as u64, gain: 1.0, pan: 0.0, fade_in: 0, fade_out: 0, fade_shape: 0, bus: 0, track: 0, gain_env: 0, pan_env: 0 });
             }
             p.set_surround_format(SURROUND_FOA);
-            p.set_places(&[Some([1.0, 1.0, 0.0, 0.0, 0.0, 0.0]), None, Some([1.0, 0.0, 1.0, 0.0, 0.0, 0.0])]);
+            p.set_place_gains(&[g6([1.0, 1.0, 0.0, 0.0, 0.0, 0.0]), None, g6([1.0, 0.0, 1.0, 0.0, 0.0, 0.0])]);
             p.set_fold_51(fold);
             p
         };

@@ -11,7 +11,7 @@ const RENDER_BLOCK: usize = 128;
 type RenderClip = (u32, u64, u64, u64, f32, f32, u64, u64, u8, u32, u32, u32);
 
 #[pyfunction]
-#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0, processors = Vec::new(), bus_auto = Vec::new(), pan_law = 0, master_env = 0, bus_outs = Vec::new()))]
+#[pyo3(signature = (sources, clips, frames, buses, envelopes, master_db, rate = 48000.0, fx = Vec::new(), master_fx = Vec::new(), chains = Vec::new(), fx_auto = Vec::new(), comps = Vec::new(), places = Vec::new(), fold = false, surround_format = 0, processors = Vec::new(), bus_auto = Vec::new(), pan_law = 0, master_env = 0, bus_outs = Vec::new(), bus_places = Vec::new()))]
 #[allow(clippy::too_many_arguments)]
 fn render<'py>(
     py: Python<'py>,
@@ -35,6 +35,7 @@ fn render<'py>(
     pan_law: u8,
     master_env: u32,
     bus_outs: Vec<(u32, u32)>,
+    bus_places: Vec<(u32, [f32; 6])>,
 ) -> PyResult<(Bound<'py, PyBytes>, f32, f32)> {
     let spec = |a: f32| processors.get(a as usize).map(String::as_str).unwrap_or("");
     let n_clips = clips.len();
@@ -100,33 +101,36 @@ fn render<'py>(
         }
     }
     if !places.is_empty() {
-        // PT-38, AA-11: a 5.1 mix through the six-channel master bus, its channels interleaved in SMPTE order (L R C
-        // LFE Ls Rs); the two peaks returned are L's and R's, the engine reading all six from the samples
-        let mut per_clip: Vec<Option<[f32; 6]>> = vec![None; n_clips];
-        for &(index, gains) in &places {
-            if index < n_clips {
-                per_clip[index] = Some(gains);
+        // PT-38, AA-11, S16: a surround mix through the master bus in the layout's channel order; each record is the
+        // place (x, y, divergence, centre percent, elevation, LFE send in dB), the core computing the gains; the two
+        // peaks returned are L's and R's, the engine reading every channel from the samples
+        let mut per_clip: Vec<Option<crate::pan::Place>> = vec![None; n_clips];
+        for (index, record) in &places {
+            if *index < n_clips {
+                per_clip[*index] = Some(crate::pan::Place::from_record(record));
             }
         }
-        player.set_surround_format(surround_format);
+        player.set_surround_layout(surround_format);
         player.set_places(&per_clip);
+        let on_buses: Vec<(u32, crate::pan::Place)> = bus_places.iter().map(|(id, r)| (*id, crate::pan::Place::from_record(r))).collect();
+        player.set_bus_places(&on_buses);
         if fold {
             // the stereo mix heard as the 5.1 bus folded to stereo, as playback hears it: the stereo render below folds
             player.set_fold_51(true);
         }
     }
     if !places.is_empty() && !fold {
-        let mut chans: Vec<Vec<f32>> = (0..6).map(|_| vec![0.0f32; frames]).collect();
+        let nch = player.surround_channels();
+        let mut chans: Vec<Vec<f32>> = (0..nch).map(|_| vec![0.0f32; frames]).collect();
         let mut at = 0;
         while at < frames {
             let end = (at + RENDER_BLOCK).min(frames);
-            let [c0, c1, c2, c3, c4, c5] = &mut chans[..] else { unreachable!() };
-            let mut block: [&mut [f32]; 6] = [&mut c0[at..end], &mut c1[at..end], &mut c2[at..end], &mut c3[at..end], &mut c4[at..end], &mut c5[at..end]];
+            let mut block: Vec<&mut [f32]> = chans.iter_mut().map(|c| &mut c[at..end]).collect();
             player.render_surround(&mut block);
             at = end;
         }
-        let peaks = player.take_peaks_51();
-        let mut interleaved = Vec::with_capacity(frames * 24);
+        let (peaks, _) = player.take_peaks_surround();
+        let mut interleaved = Vec::with_capacity(frames * 4 * nch);
         for i in 0..frames {
             for c in &chans {
                 interleaved.extend_from_slice(&c[i].to_le_bytes());
@@ -498,8 +502,42 @@ fn process_chain<'py>(py: Python<'py>, interleaved: &[u8], channels: usize, rate
     Ok(PyBytes::new(py, &out))
 }
 
+type LayoutRow = (u8, String, u32, Vec<(String, f32, f32, f32, f32)>);
+
+/// S16: the surround layouts the core renders: id, name, WAVE speaker mask, and each channel in file order with its
+/// azimuth, elevation and its share of the stereo fold-down (left, right).
+#[pyfunction]
+fn surround_layouts() -> Vec<LayoutRow> {
+    (0..crate::layout::COUNT)
+        .map(|id| {
+            let l = crate::layout::layout(id);
+            let fold = l.fold();
+            (l.id, l.name.to_string(), l.mask, l.speakers.iter().enumerate().map(|(k, s)| (s.name.to_string(), s.az, s.el, fold[k][0], fold[k][1])).collect())
+        })
+        .collect()
+}
+
+/// S16: the channel count of a layout id.
+#[pyfunction]
+fn surround_channels(layout: u8) -> usize {
+    crate::layout::layout(layout).channels()
+}
+
+/// S16: a place's gains on each channel of a layout, as the core computes them (x, y, divergence, centre percent,
+/// elevation, LFE send in dB).
+#[pyfunction]
+fn place_gains(layout: u8, place: [f32; 6]) -> Vec<f32> {
+    let l = crate::layout::layout(layout);
+    let mut out = [0.0f32; crate::layout::MAX_CH];
+    crate::pan::place_gains(l, &crate::pan::Place::from_record(&place), &mut out);
+    out[..l.channels()].to_vec()
+}
+
 #[pymodule]
 fn formwav_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(surround_layouts, m)?)?;
+    m.add_function(wrap_pyfunction!(surround_channels, m)?)?;
+    m.add_function(wrap_pyfunction!(place_gains, m)?)?;
     m.add_function(wrap_pyfunction!(processors, m)?)?;
     m.add_function(wrap_pyfunction!(render_instrument, m)?)?;
     m.add_function(wrap_pyfunction!(instrument_params, m)?)?;

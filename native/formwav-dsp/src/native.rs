@@ -105,9 +105,12 @@ struct Mix {
     /// Whether the session hears its 5.1 as the bus folded to stereo.
     #[serde(default)]
     fold: bool,
-    /// PT-42: the bus's format, 0 for 5.1 and 1 for first-order ambisonics.
+    /// PT-42, S16: the bus's layout id (crate::layout: 0 5.1, 1 first-order ambisonics, 2 to 12 stereo to 9.1.6).
     #[serde(default)]
     surround_format: u8,
+    /// S16: placed tracks' own buses as records of seven (the bus id, then the place).
+    #[serde(default)]
+    bus_places: Option<Vec<f32>>,
 }
 
 /// AU-23: the hosts devices are offered from, each with the prefix its devices' names carry: the platform's default
@@ -319,17 +322,20 @@ impl NativeOutput {
             p.set_master_db(mix.master_db);
             // PT-38, AA-11: the placements and fold mode after the master chain, as the worklet applies them
             let records: &[f32] = if mix.fold { mix.places.as_deref().unwrap_or(&[]) } else { &[] };
-            let mut places: Vec<Option<[f32; 6]>> = Vec::new();
+            let on_buses: &[f32] = if mix.fold { mix.bus_places.as_deref().unwrap_or(&[]) } else { &[] };
+            let mut places: Vec<Option<crate::pan::Place>> = Vec::new();
             for r in records.chunks_exact(7) {
                 let index = r[0] as usize;
                 if places.len() <= index {
                     places.resize(index + 1, None);
                 }
-                places[index] = Some([r[1], r[2], r[3], r[4], r[5], r[6]]);
+                places[index] = Some(crate::pan::Place::from_record(&r[1..7]));
             }
-            p.set_surround_format(mix.surround_format);
+            p.set_surround_layout(mix.surround_format);
             p.set_places(&places);
-            p.set_fold_51(!records.is_empty());
+            let bus_places: Vec<(u32, crate::pan::Place)> = on_buses.chunks_exact(7).map(|r| (r[0] as u32, crate::pan::Place::from_record(&r[1..7]))).collect();
+            p.set_bus_places(&bus_places);
+            p.set_fold_51(!records.is_empty() || !bus_places.is_empty());
             s.end = mix.end.max(0.0) as u64;
         });
         Ok(())
@@ -370,7 +376,12 @@ impl NativeOutput {
             let mut buses = vec![0f32; MAX_BUSES * 2];
             let bn = p.take_bus_peaks(&mut buses);
             let (m, st, i) = p.loudness();
-            let surround = if p.is_fold_51() { Some(p.take_peaks_51()) } else { None };
+            let surround = if p.is_fold_51() {
+                let (peaks, n) = p.take_peaks_surround();
+                Some(peaks[..n].to_vec())
+            } else {
+                None
+            };
             serde_json::json!({
                 "surroundPeaks": surround,
                 "type": "position",
