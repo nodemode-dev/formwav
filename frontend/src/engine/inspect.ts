@@ -1,4 +1,5 @@
 import type { SessionDoc } from "./document";
+import { DEFAULT_SYLLABLE, singingOrder } from "./lyrics";
 
 /** S12: the whole open session as an agent reads it, times in seconds and levels in dB: tracks with their routing,
  *  sends, groups, effects and clips, the buses (and where each plays), VCAs, groups, markers, regions, the loop, the
@@ -31,6 +32,7 @@ export function inspectSession(doc: SessionDoc, more: Record<string, unknown> = 
         length_s: s(c.length),
         gain_db: c.gainDb,
         ...(c.notes ? { notes: c.notes.length } : {}),
+        ...(c.notes?.some((n) => n.lyric) ? { lyrics: singingOrder(c.notes).map((i) => c.notes?.[i].lyric ?? `(${doc.singSyllable ?? DEFAULT_SYLLABLE})`).join(" ") } : {}),
         ...(c.mute ? { mute: true } : {}),
         ...(c.fadeIn ? { fade_in_s: s(c.fadeIn) } : {}),
         ...(c.fadeOut ? { fade_out_s: s(c.fadeOut) } : {}),

@@ -3,6 +3,7 @@ import { FRAME_RATES, type FrameRateId } from "./timebase";
 import type { KeyChange, MeterChange, TempoChange } from "./tempo";
 import { clipPiece } from "./editing";
 import { cleanInstrumentValues, type InstrumentKind } from "./instruments";
+import { DEFAULT_SYLLABLE, SING_SYLLABLES, shiftLyrics, withLyrics, type SingSyllable } from "./lyrics";
 
 export interface MediaRef {
   id: string;
@@ -69,6 +70,10 @@ export interface NoteEvent {
   pitch: number;
   /** 1 to 127 */
   velocity: number;
+  /** The syllable this note sings; absent, the session's default syllable (engine/lyrics.ts). */
+  lyric?: string;
+  /** Set only when the pronunciation is edited by hand; absent, derived from the lyric. */
+  phonemes?: string[];
 }
 
 /** S8: a controller event kept from a MIDI file, in frames of the clip's media like its notes; kept and written back
@@ -731,6 +736,8 @@ export interface SessionDoc {
   /** The built-in synth's patch: what the live instrument plays and what renders every note track without an
    *  instrument of its own; absent is the core's default (a soft triangle, unfiltered). */
   synth?: SynthPatch;
+  /** The syllable a note without a lyric sings ("da" or "la"); absent is "da". */
+  singSyllable?: SingSyllable;
   /** The time track: playback speed over session time, linear between points, held outside them (sample position, factor 0.25 to 4). */
   timeTrack?: readonly TimePoint[];
   /** AU-36: speed interpolated logarithmically between the time track's points (a steady ratio), not linearly. */
@@ -851,6 +858,9 @@ export type Command =
   | { type: "set-clip-media"; trackId: string; clipId: string; media: MediaRef }
   /** A note clip's edited notes and the instrument's new rendering of them, replaced together (one undo step). */
   | { type: "set-clip-notes"; trackId: string; clipId: string; notes: readonly NoteEvent[]; media: MediaRef }
+  | { type: "set-note-lyrics"; trackId: string; clipId: string; from: number; text: string }
+  | { type: "shift-lyrics"; trackId: string; clipId: string; from: number; by: 1 | -1 }
+  | { type: "set-sing-syllable"; syllable: SingSyllable }
   | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean; smooth?: number; follow?: "tracks" | "session" }
   | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef; feather?: number }
   | { type: "remove-marker"; markerId: string }
@@ -957,6 +967,13 @@ function endLaunched(clips: readonly Clip[], at: number): Clip[] {
     if (!c.launched || c.start + c.length <= at) return [c];
     return c.start >= at ? [] : [{ ...c, length: at - c.start }];
   });
+}
+
+/** A note's sung fields, cleaned: a lyric of up to 64 characters, phonemes as up to 32 short strings; absent if empty. */
+function sungFields(n: NoteEvent): Pick<NoteEvent, "lyric" | "phonemes"> {
+  const lyric = typeof n.lyric === "string" ? n.lyric.trim().slice(0, 64) : "";
+  const phonemes = Array.isArray(n.phonemes) ? n.phonemes.map((p) => String(p).slice(0, 8)).filter(Boolean).slice(0, 32) : [];
+  return { ...(lyric ? { lyric } : {}), ...(phonemes.length ? { phonemes } : {}) };
 }
 
 function mapTrack(doc: SessionDoc, trackId: string, fn: (t: Track) => Track): SessionDoc {
@@ -1141,6 +1158,8 @@ function refusedByLock(doc: SessionDoc, cmd: Command): boolean {
     case "set-clip-warp":
     case "set-clip-pitch":
     case "set-clip-notes":
+    case "set-note-lyrics":
+    case "shift-lyrics":
     case "set-clip-take":
     case "comp-range":
       return sealed(clip(cmd.trackId, cmd.clipId));
@@ -1308,7 +1327,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
     case "set-clip-notes": {
       // the notes are the truth and the media their rendering: both change at once, and the clip (untrimmed, as the
       // instrument renders from the first note's time) covers the whole new rendering, release included
-      const notes = cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))) }));
+      const notes = cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))), ...sungFields(n) }));
       const previous = doc.tracks.find((t) => t.id === cmd.trackId)?.clips.find((c) => c.id === cmd.clipId)?.mediaId;
       const next = mapTrack(doc, cmd.trackId, (t) => ({
         ...t,
@@ -1319,6 +1338,24 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
       // the rendering it replaces leaves the media list once no clip plays it (undo restores the whole earlier session)
       if (previous && previous !== cmd.media.id && !next.tracks.some((t) => t.clips.some((c) => c.mediaId === previous || c.pitchMediaId === previous))) delete media[previous];
       return { ...next, media };
+    }
+    case "set-note-lyrics":
+    case "shift-lyrics": {
+      // L1: lyrics change what a note sings, not the instrument's rendering, so the clip's media stays as it is
+      const next = mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.map((c) => {
+          if (c.id !== cmd.clipId || !c.notes || !c.notes[cmd.from]) return c;
+          const notes = cmd.type === "set-note-lyrics" ? withLyrics(c.notes, cmd.from, String(cmd.text ?? "")) : shiftLyrics(c.notes, cmd.from, cmd.by === -1 ? -1 : 1);
+          return JSON.stringify(notes) === JSON.stringify(c.notes) ? c : { ...c, notes: notes.map((n) => ({ ...n, ...sungFields(n) })) };
+        }),
+      }));
+      return next;
+    }
+    case "set-sing-syllable": {
+      if (!SING_SYLLABLES.includes(cmd.syllable) || (doc.singSyllable ?? DEFAULT_SYLLABLE) === cmd.syllable) return doc;
+      const { singSyllable: _old, ...rest } = doc;
+      return cmd.syllable === DEFAULT_SYLLABLE ? rest : { ...rest, singSyllable: cmd.syllable };
     }
     case "set-clip-media": {
       let changed = false;
@@ -1870,7 +1907,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         sourceIn: shaped ? Math.max(0, Math.round(shaped.sourceIn)) : 0,
         ...(shaped?.takes && shaped.takes.length > 1 ? { takes: shaped.takes.map((s) => Math.max(0, Math.round(s))), take: shaped.take ?? shaped.takes.length - 1 } : {}),
         ...(cmd.notes
-          ? { notes: cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))) })) }
+          ? { notes: cmd.notes.map((n) => ({ at: Math.max(0, Math.round(n.at)), length: Math.max(1, Math.round(n.length)), pitch: Math.min(127, Math.max(0, Math.round(n.pitch))), velocity: Math.min(127, Math.max(1, Math.round(n.velocity))), ...sungFields(n) })) }
           : {}),
         ...(cmd.notes && cmd.controllers?.length
           ? { controllers: cmd.controllers.map((e) => ({ at: Math.max(0, Math.round(e.at)), kind: e.kind, number: Math.min(127, Math.max(0, Math.round(e.number))), value: Math.round(e.kind === "bend" ? Math.min(8191, Math.max(-8192, e.value)) : Math.min(127, Math.max(0, e.value))) })) }
