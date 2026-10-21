@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "프롬프트와 가사로 노래 만들기(ACE-Step, 이 컴퓨터)",
+"Cover a clip in another style (ACE-Step)": "클립을 다른 스타일로 커버(ACE-Step)",
+"Repaint part of a clip (ACE-Step)": "클립의 일부 다시 그리기(ACE-Step)",
+"Add a layer to a clip (ACE-Step)": "클립에 레이어 추가(ACE-Step)",
+"Extract a part of a clip (ACE-Step)": "클립의 일부 추출(ACE-Step)",
+"Complete a clip (ACE-Step)": "클립 이어 만들기(ACE-Step)",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}: 자체 서버에서 실행됩니다(이 컴퓨터 또는 지정한 컴퓨터). 실행 중인 서버 밖으로는 아무것도 나가지 않습니다. 코드 MIT, 가중치 MIT."
+}

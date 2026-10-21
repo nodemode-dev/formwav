@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "Laulu kehotteesta ja sanoituksesta (ACE-Step, tämä kone)",
+"Cover a clip in another style (ACE-Step)": "Tee klipistä cover toisella tyylillä (ACE-Step)",
+"Repaint part of a clip (ACE-Step)": "Repaint klipin osa (ACE-Step)",
+"Add a layer to a clip (ACE-Step)": "Lisää kerros klipille (ACE-Step)",
+"Extract a part of a clip (ACE-Step)": "Poimi osa klipistä (ACE-Step)",
+"Complete a clip (ACE-Step)": "Täydennä klipi (ACE-Step)",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}: toimii omalla palvelimellaan, tällä koneella tai nimeämälläsi; mikään ei poistu ajamaltasi palvelimelta. Koodi MIT; painot MIT."
+}

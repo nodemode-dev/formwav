@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "Dal promptból és szövegből (ACE-Step, ez a gép)",
+"Cover a clip in another style (ACE-Step)": "Klip feldolgozása más stílusban (ACE-Step)",
+"Repaint part of a clip (ACE-Step)": "Klip egy részének újrafestése (ACE-Step)",
+"Add a layer to a clip (ACE-Step)": "Réteg hozzáadása klipekhez (ACE-Step)",
+"Extract a part of a clip (ACE-Step)": "Klip egy részének kinyerése (ACE-Step)",
+"Complete a clip (ACE-Step)": "Klip kiegészítése (ACE-Step)",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}: a saját szerverén fut, ezen a gépen vagy egy megadott gépen; semmi sem hagyja el az Ön által futtatott szervert. Kód MIT; súlyok MIT."
+}

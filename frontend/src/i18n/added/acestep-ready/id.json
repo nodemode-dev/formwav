@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "Lagu dari prompt dan lirik (ACE-Step, mesin ini)",
+"Cover a clip in another style (ACE-Step)": "Cover klip dalam gaya lain (ACE-Step)",
+"Repaint part of a clip (ACE-Step)": "Repaint bagian klip (ACE-Step)",
+"Add a layer to a clip (ACE-Step)": "Tambah layer ke klip (ACE-Step)",
+"Extract a part of a clip (ACE-Step)": "Ekstrak bagian klip (ACE-Step)",
+"Complete a clip (ACE-Step)": "Lengkapi klip (ACE-Step)",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}: berjalan di servernya sendiri, di mesin ini atau mesin yang Anda tentukan; tidak ada yang keluar dari server yang Anda jalankan. Kode MIT; bobot MIT."
+}

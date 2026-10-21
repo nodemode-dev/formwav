@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "プロンプトと歌詞から曲を作成（ACE-Step、このマシン）",
+"Cover a clip in another style (ACE-Step)": "クリップを別のスタイルでカバー（ACE-Step）",
+"Repaint part of a clip (ACE-Step)": "クリップの一部を再生成（ACE-Step）",
+"Add a layer to a clip (ACE-Step)": "クリップにレイヤーを追加（ACE-Step）",
+"Extract a part of a clip (ACE-Step)": "クリップの一部を抽出（ACE-Step）",
+"Complete a clip (ACE-Step)": "クリップを補完（ACE-Step）",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}：自身のサーバーで動作します（このマシン、または指定したマシン）。実行中のサーバーの外には何も出ません。コード MIT、ウェイト MIT。"
+}

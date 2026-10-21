@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "เพลงจากพรอมต์และเนื้อเพลง (ACE-Step, เครื่องนี้)",
+"Cover a clip in another style (ACE-Step)": "คัฟเวอร์คลิปในสไตล์อื่น (ACE-Step)",
+"Repaint part of a clip (ACE-Step)": "วาดทับบางส่วนของคลิป (ACE-Step)",
+"Add a layer to a clip (ACE-Step)": "เพิ่มเลเยอร์ให้คลิป (ACE-Step)",
+"Extract a part of a clip (ACE-Step)": "สกัดบางส่วนของคลิป (ACE-Step)",
+"Complete a clip (ACE-Step)": "ต่อเติมคลิป (ACE-Step)",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}: ทำงานบนเซิร์ฟเวอร์ของตัวเอง บนเครื่องนี้หรือเครื่องที่คุณระบุ ไม่มีสิ่งใดออกจากเซิร์ฟเวอร์ที่คุณรัน โค้ด MIT น้ำหนัก MIT"
+}

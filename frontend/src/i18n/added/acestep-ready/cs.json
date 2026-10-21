@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "Píseň z promptu a textu (ACE-Step, tento počítač)",
+"Cover a clip in another style (ACE-Step)": "Udělat cover klipu v jiném stylu (ACE-Step)",
+"Repaint part of a clip (ACE-Step)": "Repaint části klipu (ACE-Step)",
+"Add a layer to a clip (ACE-Step)": "Přidat vrstvu ke klipu (ACE-Step)",
+"Extract a part of a clip (ACE-Step)": "Extrahovat část klipu (ACE-Step)",
+"Complete a clip (ACE-Step)": "Dokončit klip (ACE-Step)",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}: běží na vlastním serveru, na tomto počítači nebo na tom, který určíte; nic neopustí server, který spouštíte. Kód MIT; váhy MIT."
+}

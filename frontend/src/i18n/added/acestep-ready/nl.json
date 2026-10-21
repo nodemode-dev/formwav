@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "Een lied uit een prompt en songtekst (ACE-Step, deze computer)",
+"Cover a clip in another style (ACE-Step)": "Een clip in een andere stijl coveren (ACE-Step)",
+"Repaint part of a clip (ACE-Step)": "Een deel van een clip opnieuw schilderen (ACE-Step)",
+"Add a layer to a clip (ACE-Step)": "Een laag aan een clip toevoegen (ACE-Step)",
+"Extract a part of a clip (ACE-Step)": "Een deel van een clip extraheren (ACE-Step)",
+"Complete a clip (ACE-Step)": "Een clip aanvullen (ACE-Step)",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}: draait op een eigen server, op deze computer of een die u opgeeft; niets verlaat de server die u draait. Code MIT; gewichten MIT."
+}

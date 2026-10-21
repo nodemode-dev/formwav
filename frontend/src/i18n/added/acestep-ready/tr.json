@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "Bir istem ve sözden şarkı (ACE-Step, bu makine)",
+"Cover a clip in another style (ACE-Step)": "Bir klibi başka bir tarzda cover'la (ACE-Step)",
+"Repaint part of a clip (ACE-Step)": "Bir klibin bir bölümünü yeniden boya (ACE-Step)",
+"Add a layer to a clip (ACE-Step)": "Bir klibe katman ekle (ACE-Step)",
+"Extract a part of a clip (ACE-Step)": "Bir klibin bir bölümünü ayıkla (ACE-Step)",
+"Complete a clip (ACE-Step)": "Bir klibi tamamla (ACE-Step)",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}: kendi sunucusunda çalışır, bu makinede ya da belirttiğiniz bir makinede; çalıştırdığınız sunucudan hiçbir şey çıkmaz. Kod MIT; ağırlıklar MIT."
+}

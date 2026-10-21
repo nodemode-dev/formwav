@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "根据提示词和歌词生成歌曲（ACE-Step，本机）",
+"Cover a clip in another style (ACE-Step)": "以另一种风格翻唱片段（ACE-Step）",
+"Repaint part of a clip (ACE-Step)": "重绘片段的一部分（ACE-Step）",
+"Add a layer to a clip (ACE-Step)": "为片段添加一层（ACE-Step）",
+"Extract a part of a clip (ACE-Step)": "提取片段的一部分（ACE-Step）",
+"Complete a clip (ACE-Step)": "补全片段（ACE-Step）",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}：在自己的服务器上运行（本机或你指定的机器）；任何内容都不会离开你运行的服务器。代码 MIT；权重 MIT。"
+}

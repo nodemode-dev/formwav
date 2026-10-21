@@ -1,0 +1,9 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine)": "Песня по запросу и тексту (ACE-Step, этот компьютер)",
+"Cover a clip in another style (ACE-Step)": "Переделать клип в другом стиле (ACE-Step)",
+"Repaint part of a clip (ACE-Step)": "Перезаписать часть клипа (ACE-Step)",
+"Add a layer to a clip (ACE-Step)": "Добавить слой к клипу (ACE-Step)",
+"Extract a part of a clip (ACE-Step)": "Выделить часть клипа (ACE-Step)",
+"Complete a clip (ACE-Step)": "Дополнить клип (ACE-Step)",
+"ACE-Step {0}: runs on its own server, on this machine or one you name; nothing leaves the server you run. Code MIT; weights MIT.": "ACE-Step {0}: работает на собственном сервере, на этом компьютере или на указанном вами; ничего не покидает запущенный вами сервер. Код MIT; веса MIT."
+}
