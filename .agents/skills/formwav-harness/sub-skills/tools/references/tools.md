@@ -66,7 +66,7 @@ The effects and repairs formwav can apply, by group, each with its id and its pa
 
 Kind: makes new media or writes a file. Parameters: `media_id` (string), `effect` (string), `params` (object/null, default None).
 
-Applies one effect or repair to a media and returns the new media (the source is kept). `effect` is an id from formwav_list_effects; `params` maps that effect's parameter ids to numbers (missing ones take their defaults, values are kept inside their ranges). Example: effect "dereverb", params {"amount": 70, "rt60": 0.8, "floor": 18}.
+Applies one effect or repair to a media and returns the new media (the source is kept). `effect` is an id from formwav_list_effects; `params` maps that effect's parameter ids to numbers (missing ones take their defaults, values are kept inside their ranges). Example: effect "dereverb", params {"amount": 70, "rt60": 0.8, "floor": 18}. For a CLAP or VST3 plug-in (effect "plugin:clap:..." or "plugin:vst3:..."), params also take "state" (the base64 state a previous run returned as plugin.state, loaded first) and "automation" ({"p<id>": [[seconds, value], ...]}, the parameter moving along the media); the result then carries plugin {name, state}.
 
 ### `formwav_debleed`
 

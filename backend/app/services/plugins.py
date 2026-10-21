@@ -181,8 +181,8 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     tail = max(0.0, min(10.0, float((params or {}).get("tail", 0) or 0)))
     state = (params or {}).get("state")
     automation = (params or {}).get("automation") or {}
-    if (state or automation) and fmt != "clap":
-        raise media.MediaError(f"{plugin['name']}: automation and saved state are kept for CLAP plugins only")
+    if (state or automation) and fmt not in ("clap", "vst3"):
+        raise media.MediaError(f"{plugin['name']}: automation and saved state are kept for CLAP and VST3 plugins only")
     info = media.media_info(media_id)
     rate = int(info.get("sampleRate") or 48000)
     source = media.media_dir() / f"{media_id}.wav"
@@ -194,8 +194,8 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
                 command = [lv2_binary(), "run", path, str(source), str(out), "--tail", f"{tail:g}"] + [f"{k}={v:g}" for k, v in values.items()]
             else:
                 command = [host_binary(), "process", fmt, path, str(source), str(out), f"{tail:g}", json.dumps(values)]
-                if fmt == "clap":
-                    lines = [f"{max(0, round(float(t) * rate))} {k[1:]} {float(v):g}" for k, pts in automation.items() if k.startswith("p") and k[1:].isdigit() for t, v in pts]
+                if fmt in ("clap", "vst3"):
+                    lines =[f"{max(0, round(float(t) * rate))} {k[1:]} {float(v):g}" for k, pts in automation.items() if k.startswith("p") and k[1:].isdigit() for t, v in pts]
                     auto_file = Path(tmp) / "automation.txt"
                     auto_file.write_text("\n".join(lines))
                     state_file = Path(tmp) / "in.state"

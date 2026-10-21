@@ -121,12 +121,16 @@ async def formwav_list_effects(query: str = "") -> dict[str, Any]:
 
 
 @mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
-async def formwav_apply_effect(media_id: str, effect: str, params: dict[str, float] | None = None) -> dict[str, Any]:
+async def formwav_apply_effect(media_id: str, effect: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Applies one effect or repair to a media and returns the new media (the source is kept). `effect` is an id from
     formwav_list_effects; `params` maps that effect's parameter ids to numbers (missing ones take their defaults, values
-    are kept inside their ranges). Example: effect "dereverb", params {"amount": 70, "rt60": 0.8, "floor": 18}."""
+    are kept inside their ranges). Example: effect "dereverb", params {"amount": 70, "rt60": 0.8, "floor": 18}. For a
+    CLAP or VST3 plug-in (effect "plugin:clap:..." or "plugin:vst3:..."), params also take "state" (the base64 state a
+    previous run returned as plugin.state, loaded first) and "automation" ({"p<id>": [[seconds, value], ...]}, the
+    parameter moving along the media); the result then carries plugin {name, state}."""
     query = f"name={quote(effect)}" + (f"&params={quote(json.dumps(params))}" if params else "")
-    return _media((await _call("POST", f"/api/media/{quote(media_id)}/effect?{query}")).json())
+    out = (await _call("POST", f"/api/media/{quote(media_id)}/effect?{query}")).json()
+    return {**_media(out), **({"plugin": out["plugin"]} if isinstance(out.get("plugin"), dict) else {})}
 
 
 @mcp.tool(annotations=MAKES_MEDIA, structured_output=True)

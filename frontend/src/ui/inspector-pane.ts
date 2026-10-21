@@ -374,7 +374,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const showControls = () => {
     const list = controls.get(pick?.value ?? "") ?? [];
     paramsBox?.replaceChildren(
-      ...list.map((c) => {
+      ...list.flatMap((c) => {
         const row = document.createElement("label");
         row.className = "fw-field";
         const name = document.createElement("span");
@@ -395,7 +395,34 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
           out.textContent = `${input.value} ${c.unit}`;
         });
         row.append(name, input, out);
-        return row;
+        if (!/^p\d+$/.test(c.id)) return [row];
+        // S17: a plug-in parameter can ramp from its value at the start of the clip (or the range) to another at its end
+        const ramp = document.createElement("label");
+        ramp.className = "fw-field fw-ramp-row";
+        ramp.title = "Moves this parameter from its value at the start of the clip (or the selected range) to this value at its end";
+        const on = document.createElement("input");
+        on.type = "checkbox";
+        on.dataset.ramp = c.id;
+        const to = document.createElement("input");
+        to.type = "range";
+        to.min = input.min;
+        to.max = input.max;
+        to.step = input.step;
+        to.value = String(c.default);
+        to.disabled = true;
+        to.dataset.rampTo = c.id;
+        const toOut = document.createElement("output");
+        toOut.textContent = `${c.default} ${c.unit}`;
+        on.addEventListener("change", () => {
+          to.disabled = !on.checked;
+        });
+        to.addEventListener("input", () => {
+          toOut.textContent = `${to.value} ${c.unit}`;
+        });
+        const words = document.createElement("span");
+        words.append(on, " Ramp to");
+        ramp.append(words, to, toOut);
+        return [row, ramp];
       }),
     );
     // AU-B06, AU-B07: the curve effects get a curve editor drawn over their point fields
@@ -1459,8 +1486,24 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const noise = noiseParams(target.clip.mediaId, name);
       // S17: a CLAP plug-in applied again to audio it made starts from the state it kept, the chosen controls over it
       const made = engine.get("document").media[target.clip.mediaId]?.plugin;
-      const kept = name.startsWith("plugin:clap:") && made?.name === name ? { state: made.state } : {};
-      const params = { ...kept, ...(action === "apply" ? currentParams() : {}), ...noise };
+      const kept = (name.startsWith("plugin:clap:") || name.startsWith("plugin:vst3:")) && made?.name === name ? { state: made.state } : {};
+      // S17: each ticked ramp becomes two automation points in the media's seconds, the clip's (or the range's) start
+      // at the parameter's set value and its end at the ramp's value
+      const sessionRate = engine.get("document").sampleRate;
+      const rampRate = engine.get("document").media[target.clip.mediaId]?.sampleRate ?? sessionRate;
+      const inMedia = (at: number) => target.clip.sourceIn + ((at - target.clip.start) * rampRate) / sessionRate;
+      const rampFrom = inMedia(inRange ? Math.max(inRange.start, target.clip.start) : target.clip.start);
+      const rampTo = inMedia(inRange ? Math.min(inRange.end, target.clip.start + target.clip.length) : target.clip.start + target.clip.length);
+      const ramps = action === "apply" && name.startsWith("plugin:")
+        ? [...(paramsBox?.querySelectorAll<HTMLInputElement>("input[data-ramp]:checked") ?? [])].map((box) => {
+            const id = box.dataset.ramp ?? "";
+            const from = Number(paramsBox?.querySelector<HTMLInputElement>(`input[data-param="${id}"]`)?.value ?? 0);
+            const end = Number(paramsBox?.querySelector<HTMLInputElement>(`input[data-ramp-to="${id}"]`)?.value ?? from);
+            return [id, [[rampFrom / rampRate, from], [rampTo / rampRate, end]]] as const;
+          })
+        : [];
+      const automation = ramps.length ? { automation: Object.fromEntries(ramps) } : {};
+      const params = { ...kept, ...(action === "apply" ? currentParams() : {}), ...automation, ...noise };
       const withNoise = Object.keys(noise).length ? " with the learned noise profile" : "";
       // AU-31: a range drawn with a frequency band limits any effect to that band (the effects made for a band set
       // their own limits from it)
