@@ -39,7 +39,9 @@ Invariants worth repeating, because breaking them is silent:
   and exports (`native/formwav-dsp/src/plugin.rs`); the browser's WebAssembly passes it by. The engine loads only a
   CLAP plug-in its scan found (`services/plugins.live_insert`).
 - The engine binds 127.0.0.1. Only Settings > Devices on this network opens a listener, off by default, for paired
-  devices; keep it that way.
+  devices; keep it that way. Its link for guests from anywhere (also off by default) opens a second one on 127.0.0.1
+  only, for the user's cloudflared to tunnel to, and it admits pairing and the recording room and nothing else
+  (`remote.GUEST_PATHS`); never widen that set.
 
 Claude Code runs inside formwav (PLAN_v14 W1): `backend/app/services/claude_code.py` finds the user's `claude` and its
 environment, `backend/app/routers/claude.py` streams the Agent column's chat and serves `POST /mcp` on the engine, whose
