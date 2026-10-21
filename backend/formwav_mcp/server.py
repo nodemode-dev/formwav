@@ -43,7 +43,10 @@ mcp = MCPServer(
         "formwav_list_sessions). Editing never changes a source: every effect and repair returns a new media_id. "
         "Measure before and after with formwav_analyze_media, and export with formwav_export_media or "
         "formwav_render_session (a stereo mix, 5.1, or ADM objects). Generation, speech, dubbing and separation tools make new media too; "
-        "formwav_local_models_status says which engines are ready. The prompt formwav_repair_workflow describes the usual order."
+        "formwav_local_models_status says which engines are ready. The prompt formwav_repair_workflow describes the usual order. "
+        "With formwav's window open, the open session is editable too: formwav_open_session_tools and "
+        "formwav_open_session_call reach its tracks, clips and effects, and formwav_list_commands, formwav_describe_command, "
+        "formwav_run_command and formwav_run_commands reach every menu, key and button action; see formwav_edit_session_workflow."
     ),
 )
 
@@ -417,6 +420,86 @@ async def formwav_cloud_save(provider: str, session: str = "", media_id: str = "
     if bool(session) == bool(media_id):
         raise ToolError("give either session or media_id.")
     return (await _post(f"/api/cloud/{quote(provider)}/upload", {"project": session or None, "mediaId": media_id or None})).json()
+
+
+async def _window(method: str, params: dict[str, Any]) -> Any:
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    out = (await _call("POST", "/mcp", content=body, headers={"content-type": "application/json", "x-formwav-agent": "formwav's MCP server"}, timeout=900.0)).json()
+    if "error" in out:
+        raise ToolError(str(out["error"].get("message")))
+    return out.get("result")
+
+
+def _text_result(result: Any) -> Any:
+    parts = (result or {}).get("content") or []
+    text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+    if (result or {}).get("isError"):
+        raise ToolError(text or "the tool failed")
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_open_session_tools() -> dict[str, Any]:
+    """The tools of the session open in formwav's window (tracks, clips, effects, transcript, markers, loop, the command
+    catalogue): names, descriptions and input schemas. They run inside the open window, so formwav must be open with a
+    session; call formwav_open_session_call with a name from this list."""
+    result = await _window("tools/list", {})
+    tools = (result or {}).get("tools") or []
+    if not tools:
+        raise ToolError("formwav's window is not open, so the open session's tools are unavailable. Open formwav (./formwav), then retry.")
+    return {"tools": tools}
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False), structured_output=True)
+async def formwav_open_session_call(tool: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Runs one tool of the open session (from formwav_open_session_tools), for example get_session, set_track_gain,
+    split_clip or apply_effect_to_clip. Every change is one undoable step in the window."""
+    return {"result": _text_result(await _window("tools/call", {"name": tool, "arguments": arguments or {}}))}
+
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_list_commands(group: str = "", text: str = "") -> dict[str, Any]:
+    """The open session's command catalogue: every menu, key and button action, with its id and group. Filter by group
+    or by words in text. Needs formwav's window open."""
+    q = urlencode({k: v for k, v in (("group", group), ("text", text)) if v})
+    out = (await _call("GET", f"/api/commands{'?' + q if q else ''}")).json()
+    return out if isinstance(out, dict) else {"commands": out}
+
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_describe_command(command_id: str) -> dict[str, Any]:
+    """One catalogue command's parameters, defaults and what it does, before running it with formwav_run_command."""
+    out = (await _call("GET", f"/api/commands/{quote(command_id)}")).json()
+    return out if isinstance(out, dict) else {"command": out}
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False), structured_output=True)
+async def formwav_run_command(command_id: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Runs one catalogue command on the open session with its params (see formwav_describe_command). One undo step."""
+    return (await _post(f"/api/commands/{quote(command_id)}", {"params": params or {}})).json()
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False), structured_output=True)
+async def formwav_run_commands(commands: list[dict[str, Any]]) -> dict[str, Any]:
+    """Runs several catalogue commands in order, each {"id": ..., "params": {...}}; stops at the first that fails and
+    takes back everything the batch did, so the session is never left half-edited."""
+    return {"result": _text_result(await _window("tools/call", {"name": "run_commands", "arguments": {"commands": commands}}))}
+
+
+@mcp.prompt()
+def formwav_edit_session_workflow(goal: str = "tighten the edit and balance the tracks") -> str:
+    """How to edit the session open in formwav's window, step by step."""
+    return (
+        f"Edit the open formwav session to {goal}. 1) formwav_status, then formwav_open_session_tools (formwav must be "
+        "open). 2) formwav_open_session_call with get_session to read tracks, clips and their ids. 3) Find the action: "
+        "a named session tool, or formwav_list_commands with a word (split, fade, quantize, surround, marker) then "
+        "formwav_describe_command. 4) Change it with formwav_open_session_call, formwav_run_command, or formwav_run_commands "
+        "for several steps that must succeed together. 5) Read get_session again to confirm, and render with "
+        "formwav_render_session after the user saves. Every step is undoable in the window."
+    )
 
 
 @mcp.prompt()

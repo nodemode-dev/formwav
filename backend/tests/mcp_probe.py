@@ -34,7 +34,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         tools = (await s.list_tools()).tools
-        record("lists its tools", len(tools) == 28, f"{len(tools)} tools")
+        record("lists its tools", len(tools) == 34, f"{len(tools)} tools")
 
         async def call(name, args=None):
             res = await s.call_tool(name, args or {})
@@ -129,6 +129,10 @@ async def main():
         record("formwav_render_session a range as AIFF, normalized", not err and out.get("seconds") == 2.0 and path.read_bytes()[8:12] == b"AIFF" and abs(float(out.get("peak_dbfs") or "nan") + 1.0) < 0.01, text[:160])
         err, out, text = await call("formwav_render_session", {"name": "MCP check", "path": str(OUT / "range.wav"), "what": "adm", "start": 1.0})
         record("formwav_render_session refuses a range for ADM", says(err, text, "whole session"), text[:140])
+        err, out, text = await call("formwav_open_session_tools")
+        record("formwav_open_session_tools without a window", says(err, text, "window is not open"), text[:140])
+        err, out, text = await call("formwav_run_commands", {"commands": [{"id": "transport.play"}]})
+        record("formwav_run_commands without a window", says(err, text, "window is not open", "not open"), text[:140])
 
 
 asyncio.run(main())
