@@ -15,6 +15,9 @@ export interface MediaRef {
   video?: string;
   /** DS-14: a catalogue recording's credit (title, author, licence and source), kept with the session. */
   credit?: string;
+  /** S17: the CLAP plug-in that made this audio and its state after the render (base64), saved with the session and
+   *  loaded into the plug-in when it is applied to this clip again. */
+  plugin?: { name: string; state: string };
 }
 
 /** Fade shape names and the core's codes for them (native/formwav-dsp/src/render.rs `fade_curve`). */

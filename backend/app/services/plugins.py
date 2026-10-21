@@ -172,21 +172,36 @@ def params(name: str) -> list[dict]:
 
 def apply(media_id: str, name: str, params: dict | None = None) -> dict:
     """Renders a stored media file through the plugin `name` (plugin:<format>:<path>, as listed) into new media, with
-    any parameter values chosen in its controls (p<id>) set at its first sample."""
+    any parameter values chosen in its controls (p<id>) set at its first sample. S17, CLAP plugins: `state` (base64,
+    as a previous render returned it) is loaded before the render, `automation` ({"p<id>": [[seconds, value], ...]})
+    moves parameters along the clip, and the plugin and its state after the render come back as `plugin` ({"name",
+    "state"}), which the interface keeps on the media it made, so the session saves it."""
     fmt, path, plugin = _installed(name)
     values = {k[1:]: float(v) for k, v in (params or {}).items() if k.startswith("p") and k[1:].isdigit()}
     tail = max(0.0, min(10.0, float((params or {}).get("tail", 0) or 0)))
+    state = (params or {}).get("state")
+    automation = (params or {}).get("automation") or {}
+    if (state or automation) and fmt != "clap":
+        raise media.MediaError(f"{plugin['name']}: automation and saved state are kept for CLAP plugins only")
     info = media.media_info(media_id)
+    rate = int(info.get("sampleRate") or 48000)
     source = media.media_dir() / f"{media_id}.wav"
     with tempfile.TemporaryDirectory(prefix="formwav-plugin-") as tmp:
         out = Path(tmp) / "out.wav"
+        saved = Path(tmp) / "out.state"
         try:
             if fmt == "lv2":  # AU-27: fwlv2, controls by port index, the tail as seconds of silence after the clip
                 command = [lv2_binary(), "run", path, str(source), str(out), "--tail", f"{tail:g}"] + [f"{k}={v:g}" for k, v in values.items()]
             else:
-                command = [host_binary(), "process", fmt, path, str(source), str(out), f"{tail:g}"]
-                if values:
-                    command.append(json.dumps(values))
+                command = [host_binary(), "process", fmt, path, str(source), str(out), f"{tail:g}", json.dumps(values)]
+                if fmt == "clap":
+                    lines = [f"{max(0, round(float(t) * rate))} {k[1:]} {float(v):g}" for k, pts in automation.items() if k.startswith("p") and k[1:].isdigit() for t, v in pts]
+                    auto_file = Path(tmp) / "automation.txt"
+                    auto_file.write_text("\n".join(lines))
+                    state_file = Path(tmp) / "in.state"
+                    if state:
+                        state_file.write_bytes(base64.b64decode(state))
+                    command += [str(auto_file) if lines else "-", str(state_file) if state else "-", str(saved)]
             done = subprocess.run(command, capture_output=True, timeout=900)
         except subprocess.TimeoutExpired as err:
             raise media.MediaError(f"{plugin['name']} did not finish within 15 minutes") from err
@@ -196,7 +211,10 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
                 reason = [f"the plugin crashed (signal {-done.returncode}); formwav is unaffected"]
             raise media.MediaError(f"{plugin['name']} failed: {reason[0][:300]}")
         stem = str(info.get("name", "clip")).rsplit(".", 1)[0]
-        return media.import_wav(f"{stem} ({plugin['name']}).wav", out.read_bytes())
+        made = media.import_wav(f"{stem} ({plugin['name']}).wav", out.read_bytes())
+        if saved.is_file() and saved.stat().st_size:
+            made = {**made, "plugin": {"name": name, "state": base64.b64encode(saved.read_bytes()).decode()}}
+        return made
 
 
 # PT-24: ARA plug-ins, hosted through their CLAP binding by formwav-host (fwhost ara-check, ara-store, ara-render)

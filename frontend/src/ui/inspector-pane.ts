@@ -1457,7 +1457,10 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const inRange = rangeClip && r ? r : null;
       if (inRange && retiming.has(name)) throw new Error(`${label} changes timing, so it applies to whole clips: clear the range first`);
       const noise = noiseParams(target.clip.mediaId, name);
-      const params = { ...(action === "apply" ? currentParams() : {}), ...noise };
+      // S17: a CLAP plug-in applied again to audio it made starts from the state it kept, the chosen controls over it
+      const made = engine.get("document").media[target.clip.mediaId]?.plugin;
+      const kept = name.startsWith("plugin:clap:") && made?.name === name ? { state: made.state } : {};
+      const params = { ...kept, ...(action === "apply" ? currentParams() : {}), ...noise };
       const withNoise = Object.keys(noise).length ? " with the learned noise profile" : "";
       // AU-31: a range drawn with a frequency band limits any effect to that band (the effects made for a band set
       // their own limits from it)
