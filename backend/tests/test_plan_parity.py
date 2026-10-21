@@ -163,7 +163,9 @@ def browser_plans() -> dict:
 
 
 def _export_plan(doc: dict) -> dict:
-    _, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, _, bus_auto = render.plan(doc)
+    routes: list = []  # C7: a track's own bus into the user bus it is routed to
+    _, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, _, bus_auto = render.plan(doc, None, routes)
+    outs = dict(render.bus_outs(doc) + routes)
     media_of = {v: k for k, v in sources.items()}
 
     def env(i: int) -> list | None:
@@ -183,7 +185,7 @@ def _export_plan(doc: dict) -> dict:
             for i, c in enumerate(clips)
         ],
         "buses": [
-            {"gain": g, "pan": p, "out": dict(render.bus_outs(doc)).get(k + 1, 0), "stages": [list(ch[2:]) for ch in chains if ch[0] == 1 and ch[1] == k], "fxAuto": [[s, prm, env(e)] for bi, s, prm, e in bus_auto if bi == k]}
+            {"gain": g, "pan": p, "out": outs.get(k + 1, 0), "stages": [list(ch[2:]) for ch in chains if ch[0] == 1 and ch[1] == k], "fxAuto": [[s, prm, env(e)] for bi, s, prm, e in bus_auto if bi == k]}
             for k, (_, g, p) in enumerate(buses)
         ],
         "master": [list(s) for s in (render._stage(f) for f in (doc.get("masterFx") or [])) if s],

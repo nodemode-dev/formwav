@@ -214,8 +214,12 @@ def _fade_code(clip: dict) -> int:
     return a if b == a else a + 16 * (b + 1)
 
 
-def plan(doc: object, own_buses: list | None = None) -> tuple[int, dict[str, int], list[tuple], int, int]:
+def plan(doc: object, own_buses: list | None = None, routes: list | None = None) -> tuple[int, dict[str, int], list[tuple], int, int]:
+    """The session as the core's lists. `own_buses` collects each placed track's own bus (its core id, the track's
+    index); `routes` each own bus of a track routed to a user bus (its core id, the user bus's), C7: pass them to the
+    core with bus_outs."""
     own_buses = [] if own_buses is None else own_buses
+    routes = [] if routes is None else routes
     if not isinstance(doc, dict) or not isinstance(doc.get("tracks"), list) or not isinstance(doc.get("media"), dict):
         raise RenderError("not a session document")
     rate = doc.get("sampleRate")
@@ -269,12 +273,16 @@ def plan(doc: object, own_buses: list | None = None) -> tuple[int, dict[str, int
         track_pan = 0.0 if pan_env else float(track.get("pan") or 0)
 
         stages = [s for s in (_stage(f) for f in (track.get("fx") or [])) if s]
-        if bus_index == 0 and any(s[0] in ON_THE_SUM for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency), a processor
+        if any(s[0] in ON_THE_SUM for s in stages):  # a compressor, a reverb's tail (PT-22), the stages that delay their signal (RX-16: buses are where the core cancels latency), a processor
             # A compressor is nonlinear, so it must see the track's sum: the track plays through a bus of its own
-            # (unity gain, centre) whose chain is the track's whole chain, in order.
+            # (unity gain, centre) whose chain is the track's whole chain, in order; C7: a track routed to a user bus
+            # has one too, playing into that bus.
+            user_bus = bus_index
             buses[f"__track:{track.get('id')}"] = (len(buses) + 1, 1.0, 0.0)
             bus_index = len(buses)
-            if isinstance(track.get("surround"), dict):
+            if user_bus:
+                routes.append((bus_index, user_bus))
+            elif isinstance(track.get("surround"), dict):
                 own_buses.append((bus_index, tracks.index(track)))
             chains.extend((1, bus_index - 1, *s) for s in stages)
             # the filters' automation (PT-19) goes with them onto the bus, numbered by the bus chain's stages
@@ -289,8 +297,7 @@ def plan(doc: object, own_buses: list | None = None) -> tuple[int, dict[str, int
                         bus_auto.append((bus_index - 1, si, param, len(envelopes)))
             stages = []
         else:
-            # Filters are linear and run per clip; a compressor, a reverb or a dialogue isolate on a track routed to a
-            # user bus is not placed yet, as the browser's flatFx leaves them out.
+            # Only filters are left here: linear, they run per clip.
             stages = [s[:4] for s in stages if s[0] not in (6, 8, 16, 20)]
         # The filters' parameter automation (PT-19), numbered by the clip stages above (bypassed, unknown, compressor,
         # reverb and dialogue isolate entries skipped, as the browser's flatFxAuto does); each becomes one envelope
@@ -406,7 +413,8 @@ def render(doc: object, start: int = 0, stop: int | None = None) -> dict:
     the buses' tails, then silence."""
     native = media._require_core()
     own_buses: list = []
-    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = plan(doc, own_buses)
+    routes: list = []
+    rate, sources, clips, end, skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = plan(doc, own_buses, routes)
     if start < 0 or (stop is not None and stop <= start):
         raise RenderError("the range must start at 0 or later and end after it starts")
     length = max(1, end) if stop is None or len(doc.get("timeTrack") or []) >= 2 else max(1, end, int(stop))
@@ -433,7 +441,7 @@ def render(doc: object, start: int = 0, stop: int | None = None) -> dict:
     master_db, master_pts = master_lane(doc)
     if master_pts:
         envelopes.append((master_pts, True))
-    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, bus_outs(doc), on_buses)
+    interleaved, peak_left, peak_right = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, bool(places), spatial, processors, bus_auto, PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, bus_outs(doc) + routes, on_buses)
     frames = length
     curve = [(float(p.get("at", 0)), float(p.get("speed", 1))) for p in (doc.get("timeTrack") or [])]
     if len(curve) >= 2:

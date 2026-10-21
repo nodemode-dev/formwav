@@ -326,14 +326,16 @@ export function planClips(doc: SessionDoc, sources: Map<string, number>): ClipPl
     const off = track.autoOff === true;
     let fxFlat = flatFx(track.fx);
     let fxAuto = off ? [] : flatFxAuto(track.fx);
-    if (bus === 0 && (track.fx ?? []).some((f) => !FILTERS.has(f.kind) && !f.bypass)) {
+    if ((track.fx ?? []).some((f) => !FILTERS.has(f.kind) && !f.bypass)) {
       // Every stage but the five filters runs on the track's sum, as in exports: a compressor or a gate must see the
       // sum, a reverb's or an echo's tail rings on past each clip's end, and a stage that delays its signal is read
       // ahead only on a bus (RX-16); its own bus (unity, centre) carries the whole chain and the filters' automation.
       // S16: a placed track's own bus plays at the track's place in the surround bus (the core's bus places).
+      // C7: a track routed to a user bus has one too, playing into that bus.
+      const user = bus;
       bus = buses.length + 1;
-      buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx, processors), ...(off ? {} : { fxAuto: flatStagesAuto(track.fx) }) });
-      if (doc.surroundFold && track.surround) busPlaces.push(bus, ...placeRecord(track.surround));
+      buses.push({ id: bus, gain: 1, pan: 0, stages: flatStages(track.fx, processors), ...(off ? {} : { fxAuto: flatStagesAuto(track.fx) }), ...(user ? { out: user } : {}) });
+      if (!user && doc.surroundFold && track.surround) busPlaces.push(bus, ...placeRecord(track.surround));
       // flatStages adds one spec per live processor, in the chain's order
       (track.fx ?? []).forEach((f, i) => {
         if (f.kind === "processor" && !f.bypass) processorTracks.push({ trackId: track.id, fx: i });

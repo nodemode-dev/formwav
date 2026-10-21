@@ -31,10 +31,11 @@ fn a_bus_played_into_another_takes_that_bus_level() {
 }
 
 #[test]
-fn an_unrouted_bus_or_one_routed_backwards_plays_into_the_master() {
+fn an_unrouted_bus_plays_into_the_master_and_a_route_holds_whichever_bus_was_added_first() {
     let plain = mix(1, 2, 0.0, None);
     assert!(plain[4800].abs() > 0.1);
-    assert_eq!(mix(2, 1, 0.0, Some((1, 2))), mix(2, 1, 0.0, None));
+    // C7: a bus added after the bus it plays into (a track's own bus into a user bus) runs before it all the same
+    assert_eq!(mix(2, 1, 0.0, Some((1, 2))), mix(1, 2, 0.0, Some((1, 2))));
     assert_eq!(mix(1, 2, 0.0, Some((1, 0))), plain);
     assert_eq!(mix(1, 2, 0.0, Some((1, 9))), plain);
 }

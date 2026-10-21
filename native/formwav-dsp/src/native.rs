@@ -79,6 +79,9 @@ struct MixBus {
     stages: Option<Vec<f32>>,
     #[serde(default, rename = "fxAuto")]
     fx_auto: Option<Vec<FxAuto>>,
+    /// S10, C7: the id of the bus this one plays into (absent for the master), as the worklet receives it.
+    #[serde(default)]
+    out: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -308,6 +311,11 @@ impl NativeOutput {
                     if env > 0 {
                         p.add_bus_fx_auto(a.stage, a.param, env);
                     }
+                }
+            }
+            for b in &mix.buses {
+                if let Some(out) = b.out {
+                    p.set_bus_out(b.id, out);
                 }
             }
             p.set_pan_law(mix.pan_law);

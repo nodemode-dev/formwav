@@ -116,14 +116,16 @@ pub fn chain_latency(chain: &[crate::fx::Stage]) -> usize {
 }
 
 /// S17: how far bus `k` reads its clips ahead: its own chain's latency, each bus's it plays into on the way to the
-/// master, and the master chain's (`lm`), so the bus's sound reaches the master's output on time. Buses play only into
-/// buses added after them, so the walk ends.
+/// master, and the master chain's (`lm`), so the bus's sound reaches the master's output on time. Routes never loop
+/// (set_bus_out refuses one), and the walk is bounded besides.
 fn bus_ahead(bus_fx: &[Vec<crate::fx::Stage>], outs: &[Option<usize>], k: usize, lm: usize) -> usize {
     let mut ahead = lm;
     let mut at = Some(k);
+    let mut hops = 0;
     while let Some(j) = at {
         ahead += bus_fx.get(j).map_or(0, |c| chain_latency(c));
-        at = outs.get(j).copied().flatten().filter(|&next| next > j);
+        hops += 1;
+        at = if hops > bus_fx.len() { None } else { outs.get(j).copied().flatten() };
     }
     ahead
 }
@@ -155,6 +157,8 @@ pub struct Player {
     bus_peaks: Vec<(f32, f32)>,
     /// S10: each bus's output (bus index to the index of the bus it plays into), absent for the master.
     bus_outs: Vec<Option<usize>>,
+    /// The order the buses run in (indices into `buses`), each before every bus it plays into.
+    bus_run: Vec<usize>,
     /// What earlier buses played into each bus this block.
     bus_in: Vec<[Vec<f32>; 2]>,
     /// The session's sample rate, for designing filters (48 kHz when unset).
@@ -978,17 +982,53 @@ impl Player {
         self.bus_fx_spec.clear();
         self.bus_fx_auto.clear();
         self.bus_outs.clear();
+        self.bus_run.clear();
         self.bus_places.clear();
         self.bus_lfe.clear();
         self.primed = false;
     }
 
-    /// S10: bus `id` plays into bus `out` (0, or an id not added, for the master). Buses run in the order they were
-    /// added, so a bus must come after every bus that plays into it; one that would not plays into the master.
+    /// S10: bus `id` plays into bus `out` (0, or an id not added, for the master), in whatever order the two were
+    /// added (C7: a track's own bus added after the user bus it plays into); a route that would close a loop plays into
+    /// the master. The buses then run each before every bus it plays into.
     pub fn set_bus_out(&mut self, id: u32, out: u32) {
         let Some(k) = self.buses.iter().position(|b| b.id == id) else { return };
         self.bus_outs.resize(self.buses.len(), None);
-        self.bus_outs[k] = if out == 0 { None } else { self.buses.iter().position(|b| b.id == out).filter(|&j| j > k) };
+        let target = if out == 0 { None } else { self.buses.iter().position(|b| b.id == out).filter(|&j| j != k) };
+        // a loop: the target already plays, by some way, into this bus
+        let mut at = target;
+        let mut hops = 0;
+        while let Some(j) = at {
+            if j == k || hops > self.buses.len() {
+                self.bus_outs[k] = None;
+                return self.order_buses();
+            }
+            at = self.bus_outs.get(j).copied().flatten();
+            hops += 1;
+        }
+        self.bus_outs[k] = target;
+        self.order_buses();
+    }
+
+    /// The buses' run order: the longest way to the master first, the order they were added among equals, so every
+    /// bus runs before the buses it plays into.
+    fn order_buses(&mut self) {
+        let depth = |k: usize| {
+            let (mut d, mut at) = (0usize, self.bus_outs.get(k).copied().flatten());
+            while let Some(j) = at {
+                d += 1;
+                if d > self.buses.len() {
+                    break;
+                }
+                at = self.bus_outs.get(j).copied().flatten();
+            }
+            d
+        };
+        let depths: Vec<usize> = (0..self.buses.len()).map(depth).collect();
+        let mut run: Vec<usize> = (0..self.buses.len()).collect();
+        run.sort_by_key(|&k| std::cmp::Reverse(depths[k]));
+        self.bus_run = run;
+        self.primed = false;
     }
 
     pub fn add_bus(&mut self, bus: Bus) {
@@ -996,6 +1036,7 @@ impl Player {
         self.bus_fx.push(Vec::new());
         self.bus_fx_spec.push(Vec::new());
         self.bus_fx_auto.push(Vec::new());
+        self.bus_run.push(self.buses.len() - 1);
     }
 
     /// A bus chain over a block of its input starting at session time `at`: stage by stage, and where a filter is
@@ -1102,7 +1143,9 @@ impl Player {
                 ch.resize(n, 0.0);
             }
         }
-        for (k, bus) in self.buses.iter().enumerate() {
+        let run = std::mem::take(&mut self.bus_run);
+        for &k in &run {
+            let bus = self.buses[k];
             scratch_left[..n].fill(0.0);
             scratch_right[..n].fill(0.0);
             let id = bus.id;
@@ -1155,6 +1198,7 @@ impl Player {
                 peak.1 = peak.1.max(r.abs());
             }
         }
+        self.bus_run = run;
         self.bus_in = bus_in;
         self.bus_fx = bus_fx;
         self.bus_peaks = bus_peaks;

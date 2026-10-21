@@ -143,7 +143,8 @@ def _bus(doc: dict, fmt: int, start: int = 0, stop: int | None = None) -> tuple[
     native = media._require_core()
     unfolded = {k: v for k, v in doc.items() if k != "surroundFold"}
     own_buses: list = []
-    rate, sources, clips, end, _skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = render.plan(unfolded, own_buses)
+    routes: list = []
+    rate, sources, clips, end, _skipped, buses, envelopes, fx, chains, fx_auto, comps, owners, bus_auto = render.plan(unfolded, own_buses, routes)
     loaded = []
     for media_id, source in sources.items():
         media._check_id(media_id)
@@ -163,7 +164,7 @@ def _bus(doc: dict, fmt: int, start: int = 0, stop: int | None = None) -> tuple[
     master_db, master_pts = render.master_lane(doc)
     if master_pts:
         envelopes.append((master_pts, True))
-    interleaved, _, _ = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, False, fmt, processors, bus_auto, render.PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, render.bus_outs(doc), on_buses)
+    interleaved, _, _ = native.render(loaded, clips, length, buses, envelopes, master_db, float(rate), fx, [], chains, fx_auto, comps, places, False, fmt, processors, bus_auto, render.PAN_LAWS.get(doc.get("panLaw"), 0), len(envelopes) if master_pts else 0, render.bus_outs(doc) + routes, on_buses)
     out = np.frombuffer(bytes(interleaved), dtype="<f4").reshape(-1, native.surround_channels(fmt)).astype(np.float64)
     if start >= len(out):
         raise render.RenderError("the range starts after the session ends")

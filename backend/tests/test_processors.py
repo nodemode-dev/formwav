@@ -134,12 +134,12 @@ def test_a_bypassed_processor_and_one_given_to_a_clip_leave_the_export_as_it_was
     assert np.array_equal(_export(ref, [], clip_fx=[_proc("gain", gain=-12)]), plain)
 
 
-def test_a_delaying_processor_is_on_time_on_a_track_and_late_by_its_latency_on_the_master(store):
+def test_a_delaying_processor_is_on_time_on_a_track_on_a_bus_and_on_the_master(store):
     rng = np.random.default_rng(7)
     x = 0.3 * rng.standard_normal(RATE // 2)
     ref = store(x)
     lookahead = [_proc("compressor", threshold=0, ratio=1, lookahead=5, knee=0)]
     assert _lag(_export(ref, lookahead, "track"), x) == 0
     assert _lag(_export(ref, lookahead, "bus"), x) == 0
-    # the master chain is not read ahead yet (PLAN_v13 S17): 5 ms of lookahead plays 240 samples late there
-    assert _lag(_export(ref, lookahead, "master"), x) == 240
+    # PLAN_v13 S17: the master chain reads the mix ahead too, so 5 ms of lookahead plays on time there
+    assert _lag(_export(ref, lookahead, "master"), x) == 0
