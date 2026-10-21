@@ -134,7 +134,10 @@ def _url() -> str:
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
         log = open(_folder() / "server.log", "ab")  # noqa: SIM115 - held open by the server process
-        proc = subprocess.Popen([str(_binary()), "--models", str(_folder() / "models"), "--host", "127.0.0.1", "--port", str(port)], stdout=log, stderr=log, stdin=subprocess.DEVNULL)
+        # VAE tiles of 256 latent frames (about 10 s) instead of its 1024: at 1024 the encoder of a 30 s clip took 5.5 GB
+        # and an 8 GB machine killed it
+        proc = subprocess.Popen([str(_binary()), "--models", str(_folder() / "models"), "--host", "127.0.0.1", "--port", str(port), "--vae-chunk", "256", "--vae-overlap", "32"],
+                                stdout=log, stderr=log, stdin=subprocess.DEVNULL)
         _server.update(process=proc, port=port)
     base = f"http://127.0.0.1:{port}"
     for _ in range(120):
@@ -187,6 +190,41 @@ def _first_audio(body: bytes, ctype: str) -> bytes:
         if sep and b"audio/" in head.lower():
             return data[:-2] if data.endswith(b"\r\n") else data
     raise ProviderError(502, "ACE-Step's result had no audio")
+
+
+FADE_S = 0.05
+
+
+def _splice(media_id: str, made: bytes, start: float, end: float) -> bytes:
+    """A repaint with the source's own samples outside [start, end] and 50 ms crossfades at the two edges. ace-server
+    decodes the whole clip again from its latents, so its untouched range comes back near, not equal (-35.7 dB from the
+    source measured): this keeps it the source's, sample for sample, and only the repainted range new."""
+    import numpy as np
+
+    from .aup_project import _wav_bytes
+
+    def decode(args: list[str]) -> np.ndarray:
+        raw = subprocess.run([media._tool("ffmpeg"), "-v", "error", "-nostdin", *args, "-ar", "48000", "-ac", "2", "-f", "f32le", "-"], capture_output=True, check=True, timeout=600).stdout
+        return np.frombuffer(raw, "<f4").reshape(-1, 2)
+
+    done = subprocess.run([media._tool("ffmpeg"), "-v", "error", "-nostdin", "-i", "pipe:0", "-ar", "48000", "-ac", "2", "-f", "f32le", "-"], input=made, capture_output=True, check=True, timeout=600)
+    y = np.frombuffer(done.stdout, "<f4").reshape(-1, 2).copy()
+    x = decode(["-i", str(media.media_dir() / f"{media_id}.wav")])
+    rate, fade = 48000, int(FADE_S * 48000)
+    a, b = int(round(start * rate)), int(round(end * rate)) if end > start else len(y)
+    n = min(len(x), len(y))
+    keep = np.ones(len(y), np.float32)  # 1 where the source is kept, 0 where the repaint is
+    keep[max(0, a): min(len(y), b)] = 0.0
+    ramp = np.linspace(1.0, 0.0, fade, dtype=np.float32)
+    if a > 0:
+        keep[max(0, a - fade): a] = ramp[-min(fade, a):]
+    if b < n:
+        keep[b: b + fade] = ramp[::-1][: len(keep[b: b + fade])]
+    keep[n:] = 0.0  # past the source's end (an extension): all new
+    src = np.zeros_like(y)
+    src[:n] = x[:n]
+    out = src * keep[:, None] + y * (1.0 - keep[:, None])
+    return _wav_bytes([out[:, 0], out[:, 1]], rate)
 
 
 def track_from(prompt: str) -> str:
@@ -243,5 +281,8 @@ def generate(task: str, prompt: str = "", lyrics: str = "", seconds: float | Non
         src = (str(info.get("name") or "clip").rsplit(".", 1)[0] + ".wav", (media.media_dir() / f"{media_id}.wav").read_bytes(), "audio/wav")
         audio_body, ctype = _multipart({}, {"request": ("request.json", json.dumps(req).encode(), "application/json"), "audio": src})
     raw, rtype = _job(base, "synth", audio_body, ctype, max_wait_s)
+    audio = _first_audio(raw, rtype)
+    if task == "repaint":  # the untouched range kept as it was, sample for sample
+        audio = _splice(media_id, audio, float(req["repainting_start"]), float(req["repainting_end"]))
     label = {"text2music": "Song", "cover": "Cover", "repaint": "Repainted", "lego": f"With {track.replace('_', ' ')}", "extract": f"{track.replace('_', ' ').capitalize()} extracted", "complete": "Completed"}[task]
-    return media.import_audio(f"{label} (ACE-Step, this machine) - {(prompt or task)[:40].strip()}.wav", _first_audio(raw, rtype))
+    return media.import_audio(f"{label} (ACE-Step, this machine) - {(prompt or task)[:40].strip()}.wav", audio)
