@@ -1,0 +1,10 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "根据提示词和歌词生成歌曲（ACE-Step，本机）：需要在本机安装 ACE-Step（在本机安装模型），或位于 http://{0}.{1}:{2} 的 ACE-Step 服务器（uv run acestep-api）",
+"Cover a clip in another style (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "以另一种风格翻唱片段（ACE-Step）：需要在本机安装 ACE-Step（在本机安装模型），或位于 http://{0}.{1}:{2} 的 ACE-Step 服务器（uv run acestep-api）",
+"Repaint part of a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "重绘片段的一部分（ACE-Step）：需要在本机安装 ACE-Step（在本机安装模型），或位于 http://{0}.{1}:{2} 的 ACE-Step 服务器（uv run acestep-api）",
+"Add a layer to a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "为片段添加一层（ACE-Step）：需要在本机安装 ACE-Step（在本机安装模型），或位于 http://{0}.{1}:{2} 的 ACE-Step 服务器（uv run acestep-api）",
+"Extract a part of a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "提取片段的一部分（ACE-Step）：需要在本机安装 ACE-Step（在本机安装模型），或位于 http://{0}.{1}:{2} 的 ACE-Step 服务器（uv run acestep-api）",
+"Complete a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "补全片段（ACE-Step）：需要在本机安装 ACE-Step（在本机安装模型），或位于 http://{0}.{1}:{2} 的 ACE-Step 服务器（uv run acestep-api）",
+"Songs and music editing (ACE-Step): built here with CMake and a C++ compiler, and 4.7 GB of weights; MIT (ACE-Step 1.5's weights; acestep.cpp)": "歌曲与音乐编辑（ACE-Step）：在本机用 CMake 和 C++ 编译器构建，另有 4.7 GB 权重；MIT（ACE-Step 1.5 的权重；acestep.cpp）",
+"Songs and music editing (ACE-Step)": "歌曲与音乐编辑（ACE-Step）"
+}

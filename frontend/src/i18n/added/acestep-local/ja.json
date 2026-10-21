@@ -1,0 +1,10 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "プロンプトと歌詞から曲を作成（ACE-Step、このマシン）：このマシンへの ACE-Step のインストール（このマシンにモデルをインストール）、または http://{0}.{1}:{2} の ACE-Step サーバーが必要です（uv run acestep-api）",
+"Cover a clip in another style (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "クリップを別のスタイルでカバー（ACE-Step）：このマシンへの ACE-Step のインストール（このマシンにモデルをインストール）、または http://{0}.{1}:{2} の ACE-Step サーバーが必要です（uv run acestep-api）",
+"Repaint part of a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "クリップの一部を再生成（ACE-Step）：このマシンへの ACE-Step のインストール（このマシンにモデルをインストール）、または http://{0}.{1}:{2} の ACE-Step サーバーが必要です（uv run acestep-api）",
+"Add a layer to a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "クリップにレイヤーを追加（ACE-Step）：このマシンへの ACE-Step のインストール（このマシンにモデルをインストール）、または http://{0}.{1}:{2} の ACE-Step サーバーが必要です（uv run acestep-api）",
+"Extract a part of a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "クリップの一部を抽出（ACE-Step）：このマシンへの ACE-Step のインストール（このマシンにモデルをインストール）、または http://{0}.{1}:{2} の ACE-Step サーバーが必要です（uv run acestep-api）",
+"Complete a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "クリップを補完（ACE-Step）：このマシンへの ACE-Step のインストール（このマシンにモデルをインストール）、または http://{0}.{1}:{2} の ACE-Step サーバーが必要です（uv run acestep-api）",
+"Songs and music editing (ACE-Step): built here with CMake and a C++ compiler, and 4.7 GB of weights; MIT (ACE-Step 1.5's weights; acestep.cpp)": "曲と音楽の編集（ACE-Step）：CMake と C++ コンパイラでここでビルド、ウェイト 4.7 GB。MIT（ACE-Step 1.5 のウェイト、acestep.cpp）",
+"Songs and music editing (ACE-Step)": "曲と音楽の編集（ACE-Step）"
+}

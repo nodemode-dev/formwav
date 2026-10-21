@@ -1,0 +1,10 @@
+{
+"A song from a prompt and lyrics (ACE-Step, this machine): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "프롬프트와 가사로 노래 만들기(ACE-Step, 이 컴퓨터): 이 컴퓨터에 설치된 ACE-Step(이 컴퓨터에 모델 설치) 또는 http://{0}.{1}:{2}의 ACE-Step 서버가 필요합니다(uv run acestep-api)",
+"Cover a clip in another style (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "클립을 다른 스타일로 커버(ACE-Step): 이 컴퓨터에 설치된 ACE-Step(이 컴퓨터에 모델 설치) 또는 http://{0}.{1}:{2}의 ACE-Step 서버가 필요합니다(uv run acestep-api)",
+"Repaint part of a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "클립의 일부 다시 그리기(ACE-Step): 이 컴퓨터에 설치된 ACE-Step(이 컴퓨터에 모델 설치) 또는 http://{0}.{1}:{2}의 ACE-Step 서버가 필요합니다(uv run acestep-api)",
+"Add a layer to a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "클립에 레이어 추가(ACE-Step): 이 컴퓨터에 설치된 ACE-Step(이 컴퓨터에 모델 설치) 또는 http://{0}.{1}:{2}의 ACE-Step 서버가 필요합니다(uv run acestep-api)",
+"Extract a part of a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "클립의 일부 추출(ACE-Step): 이 컴퓨터에 설치된 ACE-Step(이 컴퓨터에 모델 설치) 또는 http://{0}.{1}:{2}의 ACE-Step 서버가 필요합니다(uv run acestep-api)",
+"Complete a clip (ACE-Step): needs ACE-Step installed on this machine (Install a model on this machine), or its server at http://{0}.{1}:{2} (uv run acestep-api)": "클립 이어 만들기(ACE-Step): 이 컴퓨터에 설치된 ACE-Step(이 컴퓨터에 모델 설치) 또는 http://{0}.{1}:{2}의 ACE-Step 서버가 필요합니다(uv run acestep-api)",
+"Songs and music editing (ACE-Step): built here with CMake and a C++ compiler, and 4.7 GB of weights; MIT (ACE-Step 1.5's weights; acestep.cpp)": "곡과 음악 편집(ACE-Step): CMake와 C++ 컴파일러로 여기서 빌드, 가중치 4.7 GB, MIT(ACE-Step 1.5 가중치, acestep.cpp)",
+"Songs and music editing (ACE-Step)": "곡과 음악 편집(ACE-Step)"
+}
