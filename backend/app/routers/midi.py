@@ -268,6 +268,32 @@ def midi_from_audio(media_id: str, mode: str = "melodic", start: float = 0.0, le
     return {"notes": notes, "tempo": 120.0, "duration": duration, "media": _render(notes, rate, Patch(), name)}
 
 
+@router.post("/vocal-to-notes", status_code=201)
+def vocal_to_notes(media_id: str, start: float = 0.0, length: float | None = None, rate: int = 48000) -> dict:
+    """L5: a sung clip as notes (melodic), its pitch curve every 20 ms (MIDI, kept beside the notes so a resung clip can
+    follow it) and its words with their times (Whisper), all timed from the span's start, and the notes' rendering; the
+    interface puts the words' syllables on the notes."""
+    from ..services import transcript, vocal_notes
+
+    try:
+        notes, curve = vocal_notes.to_notes(media_id, start, length)
+    except KeyError as err:
+        raise HTTPException(status_code=404, detail="no media with that id") from err
+    except media.MediaError as err:
+        raise HTTPException(status_code=422, detail=str(err)) from err
+    if not notes:
+        raise HTTPException(status_code=422, detail="no sung notes were found in this clip")
+    end = start + length if length is not None else float("inf")
+    try:
+        heard = transcript.transcript(media_id)
+    except ImportError as err:
+        raise HTTPException(status_code=409, detail="the words need transcripts installed: pip install -r requirements_transcript.txt") from err
+    words = [{"text": w["text"], "start": round(w["start"] - start, 3), "end": round(w["end"] - start, 3)} for w in heard["words"] if start - 0.05 <= w["start"] < end]
+    name = f"{media.media_info(media_id)['name'].rsplit('.', 1)[0]} (notes and lyrics)"
+    duration = max(n["start"] + n["length"] for n in notes)
+    return {"notes": notes, "curve": curve, "words": words, "language": heard.get("language", "en"), "tempo": 120.0, "duration": duration, "media": _render(notes, rate, Patch(), name)}
+
+
 @router.post("/render", status_code=201)
 def render_notes(body: RenderRequest) -> dict:
     """Edited notes rendered again by the built-in instrument, as new media (S7: at least `length` seconds long, and
