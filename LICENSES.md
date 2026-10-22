@@ -19,6 +19,7 @@ formwav is Apache-2.0 (LICENSE, NOTICE). This ledger covers what the desktop app
 | pywinpty | 3.0.5 | MIT | the engine sidecar on Windows only: the embedded terminal's ConPTY |
 | formwav-dsp (the native audio core) | formwav's version | Apache-2.0 (formwav's own) | the engine sidecar |
 | formwav-studio (the studio processors, native/formwav-studio) | 0.1.0 | Apache-2.0 (formwav's own) | inside the audio core, in the engine sidecar and the interface |
+| The CMU Pronouncing Dictionary | commit 74790861 (2025-10-24) | BSD-style (Carnegie Mellon University; its LICENSE kept beside it) | the engine sidecar: backend/app/services/cmudict, the phonemes of sung lyrics |
 
 ## On the user's machine, never bundled (tier 1)
 

@@ -25,6 +25,13 @@ It includes third-party components under their own licences:
   frontend/src/ui/icons-agent.ts, so Claude Code looks the same in both apps.
   The vendored formvis and formcut icon sets had their sparkle icons removed
   (the sparkle is banned in formwav).
+- The CMU Pronouncing Dictionary (cmudict.dict at commit 74790861 of
+  github.com/cmusphinx/cmudict), Copyright (C) 1993-2015 Carnegie Mellon University,
+  under its BSD-style licence, kept beside it unmodified in
+  backend/app/services/cmudict/LICENSE: the dictionary copied unmodified into
+  backend/app/services/cmudict/, read by backend/app/services/g2p.py for the
+  phonemes of sung lyrics. Shipped in the desktop app's engine, where that licence
+  file travels with it.
 - Inter and JetBrains Mono fonts, installed through @fontsource: SIL Open Font
   License 1.1 for the fonts, MIT for the packaging. Bundled into the built interface.
 - The formwav logomark and favicons in assets/ and frontend/public/ are the

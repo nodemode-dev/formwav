@@ -92,6 +92,18 @@ async def midi_stream(device: str, request: Request):
     )
 
 
+class Words(BaseModel):
+    words: list[str] = Field(default_factory=list, max_length=2000)
+
+
+@router.post("/phonemes")
+def lyric_phonemes(body: Words) -> dict:
+    """L2: each lyric word's ARPAbet phonemes and where they came from (dictionary, derived or guess)."""
+    from ..services import g2p
+
+    return {"words": g2p.pronounce_all(body.words)}
+
+
 @router.post("/test")
 def midi_test(payload: dict) -> dict:
     """AU-37 tests only: a message for the test keyboard, present when the engine runs with FORMWAV_MIDI_TEST=1."""
