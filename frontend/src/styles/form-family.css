@@ -183,3 +183,8 @@ dialog::backdrop { background: var(--bg-scrim); }
 .fw-piano { position: relative; }
 .fw-piano-lyric { position: absolute; box-sizing: border-box; margin: 0; padding: 0 var(--space-1); border: 1px solid var(--accent-color); border-radius: var(--radius-xs); background: var(--surface-0); color: var(--text-primary); font: inherit; font-size: var(--fs-12); }
 .fw-piano-lyric[hidden] { display: none; }
+.fw-piano-lyric[aria-invalid="true"] { border-color: var(--danger, var(--accent-color)); }
+.fw-piano-lyric[data-mode="phonemes"] { font-family: var(--font-mono); }
+/* L2: the event list's timing cell, one line of phonemes and milliseconds */
+.fw-piano-timing { min-inline-size: 24ch; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-muted); }
+.fw-piano-list input[data-f="phonemes"] { min-inline-size: 16ch; font-family: var(--font-mono); }

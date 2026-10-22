@@ -44,6 +44,7 @@ const ITEMS: [string, string, string?][] = [
   ["scale", "Scale the tempo across the selection…"],
   ["stretch", "Stretch the selection's tempo…"],
   ["lyric", "Edit lyric", "⌘E"],
+  ["pronunciation", "Edit pronunciation", "⌥⌘E"],
   ["lyrics-forward", "Move lyrics forward", "⌥]"],
   ["lyrics-backward", "Move lyrics backward", "⌥["],
 ];
@@ -362,6 +363,11 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
         openEditor();
         editor.editLyric();
       }
+    } else if (id === "pronunciation") {
+      if (scope()) {
+        openEditor();
+        editor.editPronunciation();
+      }
     } else if (id === "lyrics-forward" || id === "lyrics-backward") editor.shiftLyrics(id === "lyrics-forward" ? 1 : -1);
     else if (id === "sing-da" || id === "sing-la") engine.dispatch({ type: "set-sing-syllable", syllable: id === "sing-da" ? "da" : "la" });
     else if (id === "list") {
@@ -379,7 +385,7 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
   let order: number[] = [];
   const makeRow = () => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><input type="text" data-f="start" aria-label="Start" spellcheck="false"></td><td><input type="text" data-f="pitch" aria-label="Note" spellcheck="false"></td><td><input type="number" data-f="length" min="1" step="1" aria-label="Length in ticks"></td><td><input type="number" data-f="velocity" min="1" max="127" step="1" aria-label="Velocity"></td><td><button type="button" class="fw-ibtn fw-icon-btn" data-f="remove" aria-label="Remove this note" title="Remove this note">${icon("close", 14)}</button></td>`;
+    tr.innerHTML = `<td><input type="text" data-f="start" aria-label="Start" spellcheck="false"></td><td><input type="text" data-f="pitch" aria-label="Note" spellcheck="false"></td><td><input type="number" data-f="length" min="1" step="1" aria-label="Length in ticks"></td><td><input type="number" data-f="velocity" min="1" max="127" step="1" aria-label="Velocity"></td><td><input type="text" data-f="lyric" aria-label="Lyric" spellcheck="false" translate="no"></td><td><input type="text" data-f="phonemes" aria-label="Phonemes" spellcheck="false" translate="no"></td><td class="fw-piano-timing" data-f="timing" translate="no"></td><td><button type="button" class="fw-ibtn fw-icon-btn" data-f="remove" aria-label="Remove this note" title="Remove this note">${icon("close", 14)}</button></td>`;
     return tr;
   };
   const refresh = (force = false) => {
@@ -388,6 +394,9 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
     const ctx = timeContext(engine.get("document"));
     const t = tickFrames();
     order = v.notes.map((_, i) => i).sort((a, b) => v.notes[a].at - v.notes[b].at || v.notes[a].pitch - v.notes[b].pitch);
+    const sung = editor.sung();
+    const rate = engine.get("document").sampleRate;
+    const ms = (frames: number) => Math.round((frames / rate) * 1000);
     order.forEach((i, k) => {
       let tr = rows[k];
       if (!tr) {
@@ -399,11 +408,19 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
       if (tr.dataset.i !== String(i)) tr.dataset.i = String(i);
       const on = String(v.selected.has(i));
       if (tr.getAttribute("aria-selected") !== on) tr.setAttribute("aria-selected", on);
-      const values: Record<string, string> = { start: formatPosition(n.at, "bars_beats", ctx), pitch: noteName(n.pitch), length: String(Math.max(1, Math.round(n.length / t))), velocity: String(n.velocity) };
+      const derived = (sung.phonemes[i] ?? []).join(" ");
+      const values: Record<string, string> = { start: formatPosition(n.at, "bars_beats", ctx), pitch: noteName(n.pitch), length: String(Math.max(1, Math.round(n.length / t))), velocity: String(n.velocity), lyric: n.lyric ?? "", phonemes: n.phonemes?.join(" ") ?? "" };
       for (const input of tr.querySelectorAll<HTMLInputElement>("input[data-f]")) {
         const text = values[input.dataset.f ?? ""];
         if (input.value !== text && (force || document.activeElement !== input)) input.value = text;
       }
+      const lyricField = tr.querySelector<HTMLInputElement>('[data-f="lyric"]');
+      const sungSyllable = engine.get("document").singSyllable ?? DEFAULT_SYLLABLE;
+      if (lyricField && lyricField.placeholder !== sungSyllable) lyricField.placeholder = sungSyllable;
+      const phonemeField = tr.querySelector<HTMLInputElement>('[data-f="phonemes"]');
+      if (phonemeField && phonemeField.placeholder !== derived) phonemeField.placeholder = derived;
+      const timing = (sung.pieces[i] ?? []).map((p) => `${p.phoneme} ${ms(p.at - n.at)}+${ms(p.length)}`).join(" · ");
+      setText(tr.querySelector<HTMLElement>('[data-f="timing"]'), timing);
     });
     while (rows.length > order.length) rows.pop()?.remove();
   };
@@ -419,6 +436,17 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
     const v = editor.view();
     const n = v.notes[i];
     if (!n || !input.dataset.f) return;
+    if (input.dataset.f === "lyric") {
+      editor.setLyric(i, input.value);
+      return;
+    }
+    if (input.dataset.f === "phonemes") {
+      if (!editor.setPhonemes(i, input.value)) {
+        say("Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back");
+        refresh(true);
+      }
+      return;
+    }
     const next = v.notes.map((x) => ({ ...x }));
     let label = "";
     if (input.dataset.f === "start") {
