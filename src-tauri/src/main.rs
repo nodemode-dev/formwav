@@ -1,8 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod menu;
+mod reveal;
+mod text_edit;
+mod traffic_lights;
+
 use std::sync::Mutex;
 
-use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -48,9 +53,34 @@ fn open_session(handle: &tauri::AppHandle, path: String) {
     }
 }
 
+fn close_splash(handle: &tauri::AppHandle) {
+    if let Some(splash) = handle.get_webview_window("splash") {
+        let _ = splash.close();
+    }
+}
+
 fn main() {
+    reveal::mark_launch();
     let launched_with = std::env::args().nth(1).filter(|arg| arg.ends_with(".fmw"));
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(|handle| menu::build(handle)).on_menu_event(menu::on_event);
+    let app = builder
+        .on_window_event(|window, event| {
+            if window.label() == "main"
+                && matches!(
+                    event,
+                    WindowEvent::Resized(_) | WindowEvent::Focused(_) | WindowEvent::ThemeChanged(_) | WindowEvent::ScaleFactorChanged { .. }
+                )
+            {
+                traffic_lights::place(window);
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            traffic_lights::set_window_title,
+            reveal::app_ready,
+            text_edit::text_edit
+        ])
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(Backend(Mutex::new(None)))
@@ -60,6 +90,7 @@ fn main() {
         })
         .setup(|app| {
             let handle = app.handle().clone();
+            reveal::round_splash(&handle);
             let (mut rx, child) = app
                 .shell()
                 .sidecar("formwav-engine")
@@ -116,18 +147,40 @@ fn main() {
                                 )
                             })
                             .unwrap_or(FALLBACK_LOGICAL);
-                        let _ = WebviewWindowBuilder::new(
+                        let builder = WebviewWindowBuilder::new(
                             &handle,
                             "main",
                             WebviewUrl::External(with_open(&base, pending.as_deref())),
                         )
                         .title("formwav")
+                        .visible(reveal::BUILD_VISIBLE)
+                        .background_color(reveal::BACKGROUND)
                         .inner_size(width, height)
                         .min_inner_size(MIN_LOGICAL.0, MIN_LOGICAL.1)
                         .center()
-                        .build();
+                        // Files dropped on the window reach the page as ordinary DOM drop events.
+                        .disable_drag_drop_handler();
+                        // macOS: the page's 40 px title row is the title bar (traffic lights over it, native title hidden).
+                        #[cfg(target_os = "macos")]
+                        let builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
+                        // Windows and Linux: the page draws its own caption buttons (frontend/src/ui/desktop.ts).
+                        #[cfg(not(target_os = "macos"))]
+                        let builder = builder.decorations(false);
+                        let builder = builder.on_page_load(|window, payload| {
+                            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                                traffic_lights::place(&window.as_ref().window());
+                            }
+                        });
+                        match builder.build() {
+                            Ok(window) => {
+                                reveal::conceal(&window);
+                                traffic_lights::place(&window.as_ref().window());
+                            }
+                            Err(_) => close_splash(&handle),
+                        }
                     }
                     None => {
+                        close_splash(&handle);
                         handle
                             .dialog()
                             .message("The formwav engine failed to start. Please relaunch formwav.")

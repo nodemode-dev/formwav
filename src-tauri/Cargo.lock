@@ -853,8 +853,10 @@ dependencies = [
 
 [[package]]
 name = "formwav-desktop"
-version = "2.20.0"
+version = "2.20.1"
 dependencies = [
+ "objc2",
+ "objc2-app-kit",
  "regex",
  "tauri",
  "tauri-build",

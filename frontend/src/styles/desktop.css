@@ -1,0 +1,18 @@
+/* The desktop app's window chrome (src/ui/desktop.ts); inert in a plain browser, where neither class is ever set. */
+
+/* macOS: the traffic lights sit over the title bar's left end (14 px in, three buttons) */
+.has-overlay-titlebar .fw-topbar { padding-inline-start: 78px; }
+
+/* Windows and Linux: caption buttons at the end of the title bar's actions */
+.fw-caption { display: flex; align-items: center; gap: 0; margin-inline-start: var(--space-2); }
+.fw-cap-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  inline-size: 28px; block-size: 28px; padding: 0; border: 0; border-radius: var(--radius);
+  background: transparent; color: var(--text-secondary); cursor: default;
+}
+.fw-cap-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.fw-cap-btn:focus-visible { outline: 2px solid var(--accent-line); outline-offset: -2px; }
+.fw-cap-close:hover { background: var(--danger-fill); color: var(--text-on-accent); }
+.fw-cap-btn .fw-cap-restore { display: none; }
+.fw-cap-btn[data-maximized="1"] .fw-cap-max { display: none; }
+.fw-cap-btn[data-maximized="1"] .fw-cap-restore { display: block; }

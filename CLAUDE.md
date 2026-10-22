@@ -43,7 +43,9 @@ Invariants worth repeating, because breaking them is silent:
 - The engine binds 127.0.0.1. Only Settings > Devices on this network opens a listener, off by default, for paired
   devices; keep it that way. Its link for guests from anywhere (also off by default) opens a second one on 127.0.0.1
   only, for the user's cloudflared to tunnel to, and it admits pairing and the recording room and nothing else
-  (`remote.GUEST_PATHS`); never widen that set.
+  (`remote.GUEST_PATHS`); never widen that set. In the desktop app the page may call only the named commands
+  `app_ready`, `set_window_title` and `text_edit`, the window calls the caption buttons need and event listening
+  (`src-tauri/capabilities/default.json`, `remote.urls` `http://127.0.0.1:*`); never add to that list.
 
 Claude Code runs inside formwav (PLAN_v14 W1): `backend/app/services/claude_code.py` finds the user's `claude` and its
 environment, `backend/app/routers/claude.py` streams the Agent column's chat and serves `POST /mcp` on the engine, whose
