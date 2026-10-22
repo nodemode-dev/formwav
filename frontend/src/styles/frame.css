@@ -6,11 +6,9 @@
  */
 
 :root {
-  --fw-titlebar-h: 44px;
   --fw-options-h: 40px;
   --fw-transport-h: 44px;
   --fw-status-h: 58px;
-  --fw-group-head-h: 36px;
   --fw-resizer-w: 6px;
 }
 

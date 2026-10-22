@@ -2,6 +2,7 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/700.css";
 import "./styles/tokens.css";
 import "./styles/fonts.css";
 import "./styles/light-mode.css";
@@ -46,6 +47,7 @@ import { mountLatencyProbe } from "./ui/latency-probe";
 import { mountStatusBar } from "./ui/status-bar";
 import { mountFileMenu } from "./ui/file-menu";
 import { mountThemeMenu } from "./ui/theme-menu";
+import { mountTitleTools } from "./ui/title-tools";
 import { mountLanguage, startI18n } from "./ui/i18n";
 import { mountEditorTabs } from "./ui/editor-tabs";
 import { mountClipTab } from "./ui/clip-tab";
@@ -172,6 +174,7 @@ if (host) {
   mountOutputSelect(host, player);
   mountFileMenu(host);
   mountThemeMenu(host);
+  mountTitleTools(host);
   mountLanguage(host);
   mountClipTab(host, engine);
   mountEditorTabs(host, engine, player);
@@ -199,6 +202,6 @@ activateAll(engine);
 // The suite's faces are requested by name before the reveal: fonts.ready alone resolved before Inter had been asked
 // for, so on a slow network the app showed in a fallback face and shifted when Inter swapped in. Never longer than 4 s.
 Promise.race([
-  Promise.all(["400 13px Inter", "500 13px Inter", "600 13px Inter", '400 12px "JetBrains Mono"'].map((face) => document.fonts.load(face))).then(() => document.fonts.ready).then(() => i18nReady),
+  Promise.all(["400 13px Inter", "500 13px Inter", "600 13px Inter", '400 12px "JetBrains Mono"', '700 24px "JetBrains Mono"'].map((face) => document.fonts.load(face))).then(() => document.fonts.ready).then(() => i18nReady),
   new Promise((done) => setTimeout(done, 4000)),
 ]).then(revealApp, revealApp);

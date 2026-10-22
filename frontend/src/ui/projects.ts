@@ -229,7 +229,15 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
     const doc = engine.get("document");
     const time = savedAt ? savedAt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
     setText(docState, unsaved() ? (known ? "Unsaved changes" : "Not saved yet") : known ? (time ? `Saved at ${time}` : "No changes since opening") : doc.tracks.length ? "Not saved yet" : "Nothing to save yet");
+    writeTitle();
   };
+  // the window's title as the family writes it: the session's name, a dot while it has unsaved changes, then the app
+  const writeTitle = () => {
+    const name = nameField?.value.trim() || "Untitled session";
+    const next = `${unsaved() && engine.get("document").tracks.length ? "• " : ""}${name} - formwav`;
+    if (document.title !== next) document.title = next;
+  };
+  nameField?.addEventListener("input", writeTitle);
   engine.subscribe("document", writeState);
   writeState();
 

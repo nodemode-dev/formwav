@@ -1,7 +1,7 @@
 /* The agreed canvas (formwav redesign target), region by region */
 
 :root {
-  --cv-head-h: 44px;
+  --cv-head-h: var(--fw-titlebar-h);
   --cv-foot-h: 58px;
   --cv-browser-w: 240px;
   --cv-agent-w: 296px;
@@ -25,18 +25,18 @@ body.theme-light { --cv-chip-bg: color-mix(in srgb, var(--bg-secondary) 80%, tra
 .fw-topbar {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--space-3);
   block-size: var(--cv-head-h);
-  padding: 0 14px;
-  background: var(--bg-secondary);
-  border-block-end: 1px solid var(--border-color);
+  padding: 0 var(--space-3);
+  background: linear-gradient(to bottom, var(--surface-2), var(--surface-1));
+  border-block-end: 1px solid var(--line-0);
 }
-.fw-titlebar-left { flex: 0 1 auto; display: flex; align-items: center; gap: 14px; min-inline-size: 0; }
-.fw-topbar .fw-identity { display: flex; align-items: center; gap: 8px; color: var(--accent-color); }
-.fw-topbar .fw-logo { inline-size: 22px; block-size: 22px; }
-.fw-topbar .fw-name { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; color: var(--text-primary); }
+.fw-titlebar-left { flex: 0 1 auto; display: flex; align-items: center; gap: var(--space-3); min-inline-size: 0; }
+.fw-topbar .fw-identity { display: flex; align-items: center; gap: var(--space-2); color: var(--accent-color); }
+.fw-topbar .fw-logo { inline-size: 20px; block-size: 20px; }
+.fw-topbar .fw-name { font-size: var(--fs-13); font-weight: 600; letter-spacing: 0.2px; color: var(--text-primary); }
 .fw-topbar .fw-tools { display: flex; align-items: center; gap: 0; }
-.fw-topbar .fw-menu-btn { block-size: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-13); }
+.fw-topbar .fw-menu-btn { block-size: var(--ctl-md); padding: 0 var(--space-2); border: 0; border-radius: var(--radius); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-12); }
 .fw-topbar .fw-menu-btn:hover,
 .fw-topbar .fw-menu-btn[aria-expanded="true"] { background: var(--bg-tertiary); color: var(--text-primary); }
 .fw-doc { display: flex; flex: 0 1 220px; flex-direction: column; justify-content: center; min-inline-size: 96px; }
@@ -103,7 +103,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
   block-size: auto;
   padding: 4px 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--text-primary);
   font: inherit;
@@ -115,7 +115,9 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-topbar .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]) > span:not(.fw-check, .icon) { grid-column: 2; grid-row: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .fw-topbar .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]) > .fw-check { grid-column: 1; grid-row: 1; }
 .fw-topbar .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]) > kbd { grid-column: 3; grid-row: 1; padding-inline-start: 12px; }
-.fw-topbar .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]):is(:hover, :focus-visible) { background: var(--accent-soft); color: var(--accent-ink); outline: none; }
+.fw-topbar .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]):is(:hover, :focus-visible):not(:disabled) { background: color-mix(in srgb, var(--text-primary) 10%, transparent); color: var(--text-primary); outline: none; }
+.fw-topbar .fw-menu-pop kbd { color: color-mix(in srgb, var(--text-primary) 45%, transparent); font-size: var(--fs-12); letter-spacing: 0.04em; }
+.fw-topbar .fw-menu-pop .fw-menu-sep { block-size: 1px; margin: 6px 10px; background: color-mix(in srgb, var(--text-primary) 12%, transparent); }
 .fw-topbar .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]):disabled { color: var(--text-muted); background: transparent; }
 .fw-menu-sep { display: block; block-size: 1px; margin: 5px 6px; background: var(--border-color); }
 .fw-menu-pop .fw-menu-label { padding: 8px 10px 4px; }
@@ -492,7 +494,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-dock-more > .fw-menu-pop { min-inline-size: 200px; }
 .fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]) { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; column-gap: 10px; inline-size: 100%; min-block-size: 30px; block-size: auto; padding: 4px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-13); text-align: start; }
 .fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]) > span:last-child { grid-column: 2; }
-.fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]):is(:hover, :focus-visible) { background: var(--accent-soft); color: var(--accent-ink); outline: none; }
+.fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--text-primary) 10%, transparent); color: var(--text-primary); outline: none; }
 .fw-dock-context { margin-inline-start: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; align-content: flex-start; min-inline-size: 0; block-size: 18px; overflow: hidden; font-size: var(--fs-12); line-height: 18px; color: var(--text-secondary); white-space: nowrap; }
 .fw-dock-context::before { content: ""; flex: none; inline-size: 1px; block-size: 18px; }
 .fw-dock-who { flex: none; display: flex; align-items: center; gap: 6px; }
