@@ -95,6 +95,10 @@ function shellHtml(): string {
     </div>
     <div class="fw-topbar-mid"></div>
     <div class="fw-topbar-actions">
+      <span class="fw-title-tools" role="group" aria-label="Theme and commands">
+        <button class="fw-tt-btn" type="button" data-action="theme-toggle" aria-label="Switch to a light theme" title="Switch to a light theme"></button>
+        <button class="fw-tt-btn" type="button" data-action="search-commands" aria-label="Search commands" title="Search commands (Cmd or Ctrl K)"></button>
+      </span>
       <span class="fw-history" role="group" aria-label="Undo and redo">
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="undo" aria-label="Undo" title="Undo (Cmd or Ctrl Z)" disabled>${icon("undo", ICON_SIZE.control)}</button>
         <button class="fw-ibtn fw-ibtn-icon" type="button" data-action="redo" aria-label="Redo" title="Redo (Cmd or Ctrl Shift Z)" disabled>${icon("redo", ICON_SIZE.control)}</button>

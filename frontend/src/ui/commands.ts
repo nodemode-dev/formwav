@@ -242,6 +242,8 @@ export function mountPalette(host: HTMLElement, engine: Engine): void {
     runAt(rows.indexOf(li as HTMLLIElement));
   });
   input.addEventListener("blur", () => window.setTimeout(close, 0));
+  // the title bar's search button (ui/title-tools.ts) opens the palette as Cmd or Ctrl K does
+  host.addEventListener("fw-palette", () => (box.hidden ? open() : input.focus()));
   window.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
       e.preventDefault();
