@@ -5,7 +5,7 @@ import { describeCommand } from "./describe";
  *  by hand: positions and lengths in samples at the session's rate, levels in dB, pans -1 to 1, ticks at 960 a quarter.
  *  Typed against the Command union, so a new command type does not build until it is listed here. */
 export const COMMAND_PARAMS: Record<Command["type"], string> = {
-  "import-media": `media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[]; controllers?: readonly ControlEvent[]; midiChannel?: number; stem?: { of: string; part: string }; by?: "agent"`,
+  "import-media": `media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[]; controllers?: readonly ControlEvent[]; midiChannel?: number; pitchCurve?: [number, number][]; stem?: { of: string; part: string }; by?: "agent"`,
   "add-track": "name?: string; channels?: number",
   "set-synth": "patch: Partial<SynthPatch>",
   "set-clip-take": "trackId: string; clipId: string; take: number",

@@ -158,6 +158,9 @@ export interface Clip {
   /** S8: a note clip's controllers and MIDI channel (0 to 15, 9 the drums), as a MIDI file brought them. */
   controllers?: readonly ControlEvent[];
   midiChannel?: number;
+  /** L5: a note clip read from singing keeps the singer's pitch as it was sung, [at, MIDI pitch with cents] pairs, `at`
+   *  in the clip's source samples like its notes' (every 20 ms, unvoiced frames left out); the notes are its rounding. */
+  pitchCurve?: readonly (readonly [number, number])[];
   /** Written by the clip launcher (a launched loop's repeat); Stop ends only clips so marked. */
   launched?: boolean;
   /** A palette key for this clip alone, over its track's colour; absent follows the track. */
@@ -825,7 +828,7 @@ export interface SessionView {
 }
 
 export type Command =
-  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[]; controllers?: readonly ControlEvent[]; midiChannel?: number; stem?: { of: string; part: string }; by?: "agent" }
+  | { type: "import-media"; media: MediaRef; at: number; trackId?: string; clip?: { sourceIn: number; length: number; takes?: number[]; take?: number }; notes?: readonly NoteEvent[]; controllers?: readonly ControlEvent[]; midiChannel?: number; pitchCurve?: readonly (readonly [number, number])[]; stem?: { of: string; part: string }; by?: "agent" }
   | { type: "add-track"; name?: string; channels?: number }
   | { type: "set-synth"; patch: Partial<SynthPatch> }
   | { type: "set-clip-take"; trackId: string; clipId: string; take: number }
@@ -1973,6 +1976,7 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           ? { controllers: cmd.controllers.map((e) => ({ at: Math.max(0, Math.round(e.at)), kind: e.kind, number: Math.min(127, Math.max(0, Math.round(e.number))), value: Math.round(e.kind === "bend" ? Math.min(8191, Math.max(-8192, e.value)) : Math.min(127, Math.max(0, e.value))) })) }
           : {}),
         ...(cmd.notes && cmd.midiChannel !== undefined ? { midiChannel: Math.min(15, Math.max(0, Math.round(cmd.midiChannel))) } : {}),
+        ...(cmd.notes && cmd.pitchCurve?.length ? { pitchCurve: cmd.pitchCurve.filter(([t, m]) => Number.isFinite(t) && Number.isFinite(m)).map(([t, m]) => [Math.max(0, Math.round(t)), Math.round(Math.min(127, Math.max(0, m)) * 100) / 100] as const) } : {}),
         gainDb: 0,
         ...(cmd.by === "agent" ? { by: "agent" as const } : {}),
       };

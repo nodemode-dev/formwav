@@ -6,6 +6,7 @@ import { formatClock, parseTimecodeSeconds, timecodeRate } from "./shell";
 import { PALETTE, SPATIAL_FORMATS, type SpatialFormat } from "../engine/document";
 import { LAYOUT_IDS, layoutTable, type LayoutRow } from "../audio/surround";
 import { fitToRange } from "../engine/editing";
+import { assignLyrics } from "../engine/align-lyrics";
 import { PROCESSOR_BY_ID, PROCESSORS, processorValues } from "../engine/processors";
 import { INSTRUMENT_PARAMS, instrumentValues, isInstrumentKind, WAVE_NAMES, type InstrumentKind } from "../engine/instruments";
 
@@ -71,7 +72,7 @@ const BODY = `
   <div class="fw-insp-head" title="The clip's sung or played notes; drag one up or down to retune it">Notes</div>
   <canvas class="fw-notes-canvas" data-notes width="512" height="160" aria-label="The clip's notes on a pitch grid; drag a note up or down to retune it a semitone at a time"></canvas>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-notes-act="find" title="Track the clip's pitch and show its notes">Find notes</button><label class="fw-sam-opt" title="Find every note inside played chords, so one can be moved without the others"><input type="checkbox" data-notes-poly> In chords</label><button type="button" class="fw-ibtn" data-notes-act="apply" title="Retune the notes you moved, everything else left as it is, one undo step">Apply note changes</button><label class="fw-sam-opt" title="Keep the voice's character (its formants) where it was as the notes move"><input type="checkbox" data-notes-formants checked> Keep formants</label></div>
-  <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Audio to MIDI</span><select data-a2m="mode" aria-label="How to read the clip's notes"><option value="melodic">Melodic (one line)</option><option value="polyphonic">Polyphonic (chords)</option><option value="rhythmic">Rhythmic (drums)</option></select></label><button type="button" class="fw-ibtn" data-clip-act="to-midi" title="Read the clip's notes as MIDI onto a new note track at the clip's place">Convert to MIDI</button></div>
+  <div class="fw-analyze-buttons"><label class="fw-sam-opt"><span>Audio to MIDI</span><select data-a2m="mode" aria-label="How to read the clip's notes"><option value="melodic">Melodic (one line)</option><option value="polyphonic">Polyphonic (chords)</option><option value="rhythmic">Rhythmic (drums)</option><option value="sung">Sung (notes and lyrics)</option></select></label><button type="button" class="fw-ibtn" data-clip-act="to-midi" title="Read the clip's notes as MIDI onto a new note track at the clip's place">Convert to MIDI</button></div>
   <div class="fw-insp-head" title="Pin a point in the clip's audio, then drag its marker on the clip to re-time the audio on either side">Warp markers</div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-warp="add" title="Put a warp marker on the selected clip at the playhead">Add warp marker at playhead</button><button type="button" class="fw-ibtn" data-warp="clear" title="Remove the clip's warp markers and play its original timing">Clear warp</button></div>
   <div class="fw-insp-head">Draw samples</div>
@@ -2296,18 +2297,35 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         return;
       }
       const mode = body.querySelector<HTMLSelectElement>('[data-a2m="mode"]')?.value ?? "melodic";
-      setText(notice, `Converting to MIDI (${mode})...`);
-      const query = new URLSearchParams({ media_id: hit.clip.mediaId, mode, start: String(hit.clip.sourceIn / media.sampleRate), length: String(hit.clip.length / doc.sampleRate), rate: String(doc.sampleRate) });
-      const res = await fetch(`/api/midi/from-audio?${query}`, { method: "POST" });
-      const out = (await res.json().catch(() => ({}))) as { detail?: unknown; media?: MediaRef; notes?: { start: number; length: number; pitch: number; velocity: number }[] };
+      // L5, sung: the voice's notes (cleaned of vibrato breaks and slips), the words heard in it set on them syllable by
+      // syllable (assignLyrics), and the pitch as sung kept on the note clip
+      const sung = mode === "sung";
+      setText(notice, sung ? "Reading the notes and words sung..." : `Converting to MIDI (${mode})...`);
+      const query = new URLSearchParams({ media_id: hit.clip.mediaId, ...(sung ? {} : { mode }), start: String(hit.clip.sourceIn / media.sampleRate), length: String(hit.clip.length / doc.sampleRate), rate: String(doc.sampleRate) });
+      const res = await fetch(`/api/midi/${sung ? "vocal-to-notes" : "from-audio"}?${query}`, { method: "POST" });
+      const out = (await res.json().catch(() => ({}))) as {
+        detail?: unknown;
+        media?: MediaRef;
+        notes?: { start: number; length: number; pitch: number; velocity: number }[];
+        words?: { text: string; start: number; end: number }[];
+        curve?: [number, number][];
+      };
       if (!res.ok || !out.media) {
         setText(notice, `Could not convert to MIDI: ${typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`}`);
         return;
       }
       const rate = out.media.sampleRate;
-      const notes = (out.notes ?? []).map((n) => ({ at: n.start * rate, length: n.length * rate, pitch: n.pitch, velocity: n.velocity }));
-      engine.dispatch({ type: "import-media", media: out.media, at: hit.clip.start, notes });
-      setText(notice, `Converted to ${notes.length} MIDI note${notes.length === 1 ? "" : "s"} (${mode}) on a new track at the clip's place`);
+      const found = out.notes ?? [];
+      const lyrics = sung ? assignLyrics(found, out.words ?? []) : [];
+      const notes = found.map((n, i) => ({ at: n.start * rate, length: n.length * rate, pitch: n.pitch, velocity: n.velocity, ...(lyrics[i] ? { lyric: lyrics[i] } : {}) }));
+      const pitchCurve = sung ? (out.curve ?? []).map(([t, m]) => [t * rate, m] as const) : undefined;
+      engine.dispatch({ type: "import-media", media: out.media, at: hit.clip.start, notes, ...(pitchCurve?.length ? { pitchCurve } : {}) });
+      setText(
+        notice,
+        sung
+          ? `Sung notes and words on a new track at the clip's place (notes: ${notes.length}, words: ${(out.words ?? []).length})`
+          : `Converted to ${notes.length} MIDI note${notes.length === 1 ? "" : "s"} (${mode}) on a new track at the clip's place`,
+      );
     } else if (b.dataset.clipAct === "align") {
       // AA-12: this replacement take re-timed to follow the chosen guide word for word, then set exactly in the
       // guide's place, as one change
