@@ -48,6 +48,8 @@ INFO = {"id": "soulx-singer", "name": "Singing (SoulX-Singer)", "license": "Apac
         "size": "PyTorch's CPU build and 2.82 GB of SoulX-Singer's model"}
 _state = {"installing": ""}
 _known: dict[str, bool] = {}
+# one render at a time: the model is 2.82 GB, and two at once ran an 8 GB machine out of memory (the worker killed)
+_render = threading.Lock()
 
 WORKER = """
 import json,os,sys
@@ -57,9 +59,11 @@ import numpy as np,torch
 torch.set_num_threads(max(1,os.cpu_count() or 1))
 from soulxsinger.utils.file_utils import load_config
 from soulxsinger.utils.data_processor import DataProcessor
-from cli.inference import build_model
+from soulxsinger.models.soulxsinger import SoulXSinger
 config=load_config("soulxsinger/config/soulxsinger.yaml")
-model=build_model(a["model"],config,device="cpu")
+model=SoulXSinger(config)
+model.load_state_dict(torch.load(a["model"],map_location="cpu",mmap=True,weights_only=False)["state_dict"],strict=True,assign=True)
+model.eval()
 dp=DataProcessor(hop_size=config.audio.hop_size,sample_rate=config.audio.sample_rate,phoneset_path="soulxsinger/utils/phoneme/phone_set.json",device="cpu")
 prompt=dp.process(json.load(open(a["prompt_meta"]))[0],a["prompt_wav"])
 for job in a["jobs"]:
@@ -70,8 +74,101 @@ sys.stdout.flush();sys.stderr.flush();os._exit(0)
 """
 
 
+PROMPT_WORKER = """
+import json,sys
+import numpy as np,librosa,soundfile as sf
+a=json.load(sys.stdin)
+SR,HOP,MAX_S,MIN_NOTE=24000,480,6.0,0.12
+y,_=librosa.load(a["input"],sr=SR,mono=True,offset=a["offset"],duration=a["duration"])
+f0,voiced,_=librosa.pyin(y,fmin=70,fmax=1100,sr=SR,frame_length=1920,hop_length=HOP,center=True)
+n=len(f0)
+if not voiced.any():
+    print(json.dumps({"error":"no sung pitch was found in the recording"}));sys.exit(0)
+midi=np.where(voiced,np.round(librosa.hz_to_midi(np.where(voiced,f0,1.0))),0).astype(int)
+start=max(0,int(np.argmax(voiced))-10)
+end=min(n,start+int(MAX_S*SR/HOP))
+gaps=[i for i in range(start+int(2*SR/HOP),end) if not voiced[i]]
+if gaps and end<n:
+    end=gaps[-1]+1
+runs=[];i=start
+while i<end:
+    j=i
+    while j<end and midi[j]==midi[i]:
+        j+=1
+    runs.append([int(midi[i]),i,j]);i=j
+merged=[]
+for p,s,e in runs:
+    if merged and ((e-s)*HOP/SR<MIN_NOTE or merged[-1][0]==p):
+        merged[-1][2]=e
+    else:
+        merged.append([p,s,e])
+dur,pitch,ph,kind,text=[],[],[],[],[];sung=False
+for p,s,e in merged:
+    sec=round((e-s)*HOP/SR,2)
+    if p==0:
+        dur.append(sec);pitch.append(0);ph.append("<SP>");kind.append(1);text.append("<SP>");sung=False
+    else:
+        dur.append(sec);pitch.append(p);ph.append("en_AA1");kind.append(3 if sung else 2);text.append("a");sung=True
+sf.write(a["stem"]+".wav",y[start*HOP:end*HOP],SR,subtype="PCM_16")
+meta=[{"index":a["id"],"language":"English","time":[0,int(round((end-start)*HOP/SR*1000))],"duration":" ".join(map(str,dur)),"text":" ".join(text),"phoneme":" ".join(ph),
+       "note_pitch":" ".join(map(str,pitch)),"note_type":" ".join(map(str,kind)),"f0":" ".join(f"{v:.1f}" for v in np.where(voiced[start:end],f0[start:end],0.0))}]
+json.dump(meta,open(a["stem"]+".json","w"))
+sung_pitches=[p for p in pitch if p]
+print(json.dumps({"seconds":round((end-start)*HOP/SR,2),"notes":len(sung_pitches),"low":min(sung_pitches),"high":max(sung_pitches)}))
+"""
+
+
 def _folder() -> Path:
     return Path(__file__).resolve().parents[2] / "models" / "soulx-singer"
+
+
+def _voices() -> Path:
+    return _folder() / "voices"
+
+
+def _prompt(singer: str) -> tuple[Path, Path] | None:
+    """A singer's prompt recording and metadata: a stock singer's beside this file, a person's own in the voices folder."""
+    if singer in STOCK:
+        return SINGERS / f"{singer}.wav", SINGERS / f"{singer}.json"
+    if singer.startswith("own_") and singer[4:].isalnum() and (_voices() / f"{singer}.json").exists():
+        return _voices() / f"{singer}.wav", _voices() / f"{singer}.json"
+    return None
+
+
+def _own() -> list[dict]:
+    out = []
+    for path in sorted(_voices().glob("own_*.permission.json")) if _voices().exists() else []:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        out.append({"id": record["id"], "name": record["name"], "low": record["low"], "high": record["high"], "own": True, "permission": record["permission"]})
+    return out
+
+
+def make_singer(media_id: str, name: str, permission: bool, offset: float = 0.0, duration: float | None = None) -> dict:
+    """L4c: a singer from a person's own recording (best a few notes sung on "ah"), only with their permission confirmed:
+    the first six seconds of singing kept as the prompt, its metadata made as for the stock singers, and the confirmation
+    kept beside it (who, when, from which media)."""
+    if not permission:
+        raise ProviderError(403, "a singer is made from a voice only with the permission of the person it belongs to: confirm it first")
+    name = " ".join(str(name).split())[:60]
+    if not name:
+        raise ProviderError(422, "name the singer")
+    try:
+        info = media.media_info(media_id)
+    except KeyError as err:
+        raise ProviderError(404, "no media with that id") from err
+    if not installed():
+        raise ProviderError(409, f"singing on this machine needs SoulX-Singer installed ({INFO['size']}): install it first (Install a model on this machine)")
+    singer = "own_" + hashlib.sha256(f"{media_id}:{offset}:{duration}:{name}".encode()).hexdigest()[:16]
+    _voices().mkdir(parents=True, exist_ok=True)
+    args = {"input": str(media.media_dir() / f"{media_id}.wav"), "offset": max(0.0, float(offset)), "duration": float(duration) if duration else None, "stem": str(_voices() / singer), "id": singer}
+    done = subprocess.run([str(local_speech._python()), "-c", PROMPT_WORKER], input=json.dumps(args).encode(), capture_output=True, timeout=600)
+    found = json.loads((done.stdout.decode().strip().splitlines() or ["{}"])[-1]) if done.returncode == 0 else {"error": local_speech._last_line(done)}
+    if "error" in found:
+        raise ProviderError(422, f"no singer made: {found['error']}")
+    record = {"id": singer, "name": name, "low": found["low"], "high": found["high"], "seconds": found["seconds"], "notes": found["notes"],
+              "permission": {"confirmed": True, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "media": info.get("name", media_id), "media_id": media_id}}
+    (_voices() / f"{singer}.permission.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
+    return record
 
 
 def _model() -> Path:
@@ -93,7 +190,7 @@ def status() -> dict:
 
 
 def singers() -> list[dict]:
-    return [{"id": k, **v} for k, v in STOCK.items()]
+    return [{"id": k, **v} for k, v in STOCK.items()] + _own()
 
 
 def install() -> dict:
@@ -199,8 +296,10 @@ def _key(meta: dict, singer: str) -> str:
 def sing(notes: list[dict], singer: str = DEFAULT_SINGER, rate: int | None = None, name: str = "Singing") -> dict:
     """Notes ({start, length in seconds, pitch, phonemes or lyric}) sung by a stock singer as new media; start is where
     the media's first sample belongs, in the notes' seconds. Only phrases not in the cache are rendered."""
-    if singer not in STOCK:
-        raise ProviderError(422, f"no singer {singer}: one of {', '.join(STOCK)}")
+    prompt = _prompt(singer)
+    if prompt is None:
+        raise ProviderError(422, f"no singer {singer}: one of {', '.join(s['id'] for s in singers())}")
+    singer_name = STOCK[singer]["name"] if singer in STOCK else next(s["name"] for s in _own() if s["id"] == singer)
     if not notes:
         raise ProviderError(422, "no notes to sing")
     if not installed():
@@ -208,6 +307,14 @@ def sing(notes: list[dict], singer: str = DEFAULT_SINGER, rate: int | None = Non
     began = time.monotonic()
     parts = [(p, phrase_meta(p)) for p in phrases(notes)]
     _cache().mkdir(parents=True, exist_ok=True)
+    with _render:
+        rendered = _render_missing(parts, singer, prompt)
+    return _assemble(parts, singer, singer_name, rate, name, rendered, began)
+
+
+def _render_missing(parts: list, singer: str, prompt: tuple[Path, Path]) -> int:
+    """The phrases not in the cache, rendered by one worker (under _render, so a phrase another request just sang is
+    found in the cache here)."""
     jobs = []
     for _, meta in parts:
         out = _cache() / f"{_key(meta, singer)}.npy"
@@ -216,13 +323,18 @@ def sing(notes: list[dict], singer: str = DEFAULT_SINGER, rate: int | None = Non
     if jobs:
         with tempfile.TemporaryDirectory(prefix="formwav-sing-") as tmp:
             staged = [{"meta": j["meta"], "out": str(Path(tmp) / f"{i}.npy"), "final": j["out"]} for i, j in enumerate(jobs)]
-            args = {"code": str(_folder() / "code"), "model": str(_model()), "prompt_wav": str(SINGERS / f"{singer}.wav"), "prompt_meta": str(SINGERS / f"{singer}.json"),
+            args = {"code": str(_folder() / "code"), "model": str(_model()), "prompt_wav": str(prompt[0]), "prompt_meta": str(prompt[1]),
                     "jobs": [{"meta": s["meta"], "out": s["out"]} for s in staged]}
             done = subprocess.run([str(local_speech._python()), "-c", WORKER], input=json.dumps(args).encode(), capture_output=True, timeout=7200, env={**os.environ, "TOKENIZERS_PARALLELISM": "false"})
             if done.returncode != 0 or not all(Path(s["out"]).exists() for s in staged):
                 raise ProviderError(502, f"SoulX-Singer failed: {local_speech._last_line(done)}")
             for s in staged:
                 os.replace(s["out"], s["final"])
+    return len(jobs)
+
+
+def _assemble(parts: list, singer: str, singer_name: str, rate: int | None, name: str, rendered: int, began: float) -> dict:
+    """The sung phrases, from the cache, placed in one mono buffer and imported as media."""
     from .aup_project import _wav_bytes
 
     origin = float(parts[0][0][0]["start"]) - LEAD_S
@@ -237,5 +349,6 @@ def sing(notes: list[dict], singer: str = DEFAULT_SINGER, rate: int | None = Non
     if origin < 0:
         mix = mix[int(round(-origin * SR)):]
         origin = 0.0
-    made = media.import_audio(f"{name} ({STOCK[singer]['name']}, sung by SoulX-Singer).wav", _wav_bytes([mix], SR), rate)
-    return {"media": made, "start": origin, "phrases": len(parts), "rendered": len(jobs), "cached": len(parts) - len(jobs), "seconds": round(time.monotonic() - began, 1)}
+    voice = singer_name if singer in STOCK else f"{singer_name}'s own voice, generated"
+    made = media.import_audio(f"{name} ({voice}, sung by SoulX-Singer).wav", _wav_bytes([mix], SR), rate)
+    return {"media": made, "start": origin, "phrases": len(parts), "rendered": rendered, "cached": len(parts) - rendered, "seconds": round(time.monotonic() - began, 1)}

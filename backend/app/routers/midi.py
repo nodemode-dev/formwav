@@ -127,6 +127,26 @@ def lyric_singers() -> dict:
     return {"singers": singing.singers(), "engine": singing.status()}
 
 
+class NewSinger(BaseModel):
+    media_id: str
+    name: str
+    permission: bool = False
+    offset: float = 0.0
+    duration: float | None = None
+
+
+@router.post("/singers", status_code=201)
+def lyric_new_singer(body: NewSinger) -> dict:
+    """L4c: a singer from a person's own recording, made only when their permission is confirmed."""
+    from ..services import singing
+    from ..services.providers import ProviderError
+
+    try:
+        return singing.make_singer(body.media_id, body.name, body.permission, body.offset, body.duration)
+    except ProviderError as err:
+        raise HTTPException(status_code=err.status, detail=str(err)) from err
+
+
 @router.post("/sing", status_code=201)
 def lyric_sing(body: Sing) -> dict:
     """L4: notes sung by SoulX-Singer as new media, phrase by phrase, unchanged phrases from the cache."""
