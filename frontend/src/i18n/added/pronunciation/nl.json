@@ -1,0 +1,10 @@
+{
+"Phonemes": "Fonemen",
+"Timing (ms)": "Timing (ms)",
+"Edit pronunciation": "Uitspraak bewerken",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, klinkers met een klemtoonsijfer (T W IH1 NG); leeg voor die van de tekst",
+"Each phoneme's start and length in milliseconds from the note's start": "Begin en lengte van elk foneem in milliseconden vanaf het begin van de noot",
+"Changed a note's pronunciation on {a}": "Uitspraak van een noot gewijzigd op {a}",
+"Changed a note's pronunciation": "Uitspraak van een noot gewijzigd",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "Fonemen zijn ARPAbet, klinkers met een klemtoonsijfer, zoals T W IH1 NG: de lijst zet het terug"
+}

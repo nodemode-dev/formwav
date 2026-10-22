@@ -1,0 +1,10 @@
+{
+"Phonemes": "Sesbirimler",
+"Timing (ms)": "Zamanlama (ms)",
+"Edit pronunciation": "Telaffuzu düzenle",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, ünlüler vurgu rakamıyla (T W IH1 NG); sözün kendi telaffuzu için boş",
+"Each phoneme's start and length in milliseconds from the note's start": "Her sesbirimin notanın başından itibaren milisaniye cinsinden başlangıcı ve uzunluğu",
+"Changed a note's pronunciation on {a}": "{a} üzerinde bir notanın telaffuzu değiştirildi",
+"Changed a note's pronunciation": "Bir notanın telaffuzu değiştirildi",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "Sesbirimler ARPAbet ile yazılır, ünlüler vurgu rakamıyla, örneğin T W IH1 NG: liste değeri geri alır"
+}

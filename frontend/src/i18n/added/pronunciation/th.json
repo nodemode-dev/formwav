@@ -1,0 +1,10 @@
+{
+"Phonemes": "หน่วยเสียง",
+"Timing (ms)": "จังหวะเวลา (ms)",
+"Edit pronunciation": "แก้ไขการออกเสียง",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet สระมีตัวเลขเน้นเสียง (T W IH1 NG) เว้นว่างเพื่อใช้ตามเนื้อร้อง",
+"Each phoneme's start and length in milliseconds from the note's start": "จุดเริ่มและความยาวของแต่ละหน่วยเสียงเป็นมิลลิวินาทีนับจากต้นโน้ต",
+"Changed a note's pronunciation on {a}": "เปลี่ยนการออกเสียงของโน้ตบน {a}",
+"Changed a note's pronunciation": "เปลี่ยนการออกเสียงของโน้ต",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "หน่วยเสียงเขียนเป็น ARPAbet สระมีตัวเลขเน้นเสียง เช่น T W IH1 NG รายการจะคืนค่าเดิม"
+}

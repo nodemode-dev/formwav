@@ -1,0 +1,10 @@
+{
+"Phonemes": "Foneemit",
+"Timing (ms)": "Ajoitus (ms)",
+"Edit pronunciation": "Muokkaa ääntämistä",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, vokaaleissa painonumero (T W IH1 NG); tyhjä sanojen omalle",
+"Each phoneme's start and length in milliseconds from the note's start": "Kunkin foneemin alku ja pituus millisekunteina nuotin alusta",
+"Changed a note's pronunciation on {a}": "Nuotin ääntämistä muutettu kohteessa {a}",
+"Changed a note's pronunciation": "Nuotin ääntämistä muutettu",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "Foneemit kirjoitetaan ARPAbetillä, vokaaleissa painonumero, esim. T W IH1 NG: luettelo palauttaa arvon"
+}

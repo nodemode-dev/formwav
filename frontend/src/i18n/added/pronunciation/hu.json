@@ -1,0 +1,10 @@
+{
+"Phonemes": "Fonémák",
+"Timing (ms)": "Időzítés (ms)",
+"Edit pronunciation": "Kiejtés szerkesztése",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, a magánhangzók hangsúlyszámmal (T W IH1 NG); üresen a dalszöveg sajátja",
+"Each phoneme's start and length in milliseconds from the note's start": "Minden fonéma kezdete és hossza ezredmásodpercben a hang kezdetétől",
+"Changed a note's pronunciation on {a}": "Egy hang kiejtése módosítva: {a}",
+"Changed a note's pronunciation": "Egy hang kiejtése módosítva",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "A fonémák ARPAbetben vannak, a magánhangzók hangsúlyszámmal, például T W IH1 NG: a lista visszaállítja"
+}

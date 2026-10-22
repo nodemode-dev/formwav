@@ -1,0 +1,10 @@
+{
+"Phonemes": "Fonem",
+"Timing (ms)": "Waktu (ms)",
+"Edit pronunciation": "Edit pelafalan",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, vokal dengan angka tekanan (T W IH1 NG); kosong untuk pelafalan liriknya",
+"Each phoneme's start and length in milliseconds from the note's start": "Awal dan panjang setiap fonem dalam milidetik dari awal not",
+"Changed a note's pronunciation on {a}": "Pelafalan sebuah not diubah di {a}",
+"Changed a note's pronunciation": "Pelafalan sebuah not diubah",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "Fonem ditulis dalam ARPAbet, vokal dengan angka tekanan, seperti T W IH1 NG: daftar mengembalikannya"
+}

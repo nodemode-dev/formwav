@@ -1,0 +1,10 @@
+{
+"Phonemes": "Âm vị",
+"Timing (ms)": "Thời điểm (ms)",
+"Edit pronunciation": "Sửa cách phát âm",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, nguyên âm kèm chữ số trọng âm (T W IH1 NG); để trống để theo lời",
+"Each phoneme's start and length in milliseconds from the note's start": "Điểm bắt đầu và độ dài của mỗi âm vị tính bằng mili giây từ đầu nốt",
+"Changed a note's pronunciation on {a}": "Đã đổi cách phát âm một nốt trên {a}",
+"Changed a note's pronunciation": "Đã đổi cách phát âm một nốt",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "Âm vị viết bằng ARPAbet, nguyên âm kèm chữ số trọng âm, như T W IH1 NG: danh sách sẽ khôi phục giá trị"
+}

@@ -1,0 +1,10 @@
+{
+"Phonemes": "Фонемы",
+"Timing (ms)": "Тайминг (мс)",
+"Edit pronunciation": "Изменить произношение",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, гласные с цифрой ударения (T W IH1 NG); пусто для произношения текста",
+"Each phoneme's start and length in milliseconds from the note's start": "Начало и длина каждой фонемы в миллисекундах от начала ноты",
+"Changed a note's pronunciation on {a}": "Изменено произношение ноты на {a}",
+"Changed a note's pronunciation": "Изменено произношение ноты",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "Фонемы пишутся в ARPAbet, гласные с цифрой ударения, например T W IH1 NG: список вернёт значение"
+}

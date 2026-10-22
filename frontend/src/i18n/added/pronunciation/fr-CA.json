@@ -1,0 +1,10 @@
+{
+"Phonemes": "Phonèmes",
+"Timing (ms)": "Placement (ms)",
+"Edit pronunciation": "Modifier la prononciation",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, voyelles avec un chiffre d'accent (T W IH1 NG) ; vide pour celle des paroles",
+"Each phoneme's start and length in milliseconds from the note's start": "Début et durée de chaque phonème en millisecondes depuis le début de la note",
+"Changed a note's pronunciation on {a}": "Prononciation d'une note modifiée sur {a}",
+"Changed a note's pronunciation": "Prononciation d'une note modifiée",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "Les phonèmes s'écrivent en ARPAbet, voyelles avec un chiffre d'accent, par exemple T W IH1 NG : la liste rétablit la valeur"
+}

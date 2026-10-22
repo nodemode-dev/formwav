@@ -1,0 +1,10 @@
+{
+"Phonemes": "Fonemer",
+"Timing (ms)": "Timing (ms)",
+"Edit pronunciation": "Rediger uttale",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, vokaler med et trykksiffer (T W IH1 NG); tom for tekstens egen",
+"Each phoneme's start and length in milliseconds from the note's start": "Hvert fonems start og lengde i millisekunder fra notens start",
+"Changed a note's pronunciation on {a}": "Endret uttalen til en note på {a}",
+"Changed a note's pronunciation": "Endret uttalen til en note",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "Fonemer skrives i ARPAbet, vokaler med et trykksiffer, som T W IH1 NG: listen setter verdien tilbake"
+}

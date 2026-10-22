@@ -1,0 +1,10 @@
+{
+"Phonemes": "음소",
+"Timing (ms)": "타이밍 (ms)",
+"Edit pronunciation": "발음 편집",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, 모음에는 강세 숫자 (T W IH1 NG). 비우면 가사 그대로",
+"Each phoneme's start and length in milliseconds from the note's start": "노트 시작부터 각 음소의 시작과 길이 (밀리초)",
+"Changed a note's pronunciation on {a}": "{a}의 노트 발음을 바꿈",
+"Changed a note's pronunciation": "노트 발음을 바꿈",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "음소는 ARPAbet으로, 모음에는 강세 숫자를 붙입니다 (예: T W IH1 NG). 목록이 되돌립니다"
+}

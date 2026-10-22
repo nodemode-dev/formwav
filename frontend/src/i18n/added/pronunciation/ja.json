@@ -1,0 +1,10 @@
+{
+"Phonemes": "音素",
+"Timing (ms)": "タイミング (ms)",
+"Edit pronunciation": "発音を編集",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet、母音には強勢の数字 (T W IH1 NG)。空欄なら歌詞どおり",
+"Each phoneme's start and length in milliseconds from the note's start": "ノートの開始から各音素の開始と長さ (ミリ秒)",
+"Changed a note's pronunciation on {a}": "{a} のノートの発音を変更しました",
+"Changed a note's pronunciation": "ノートの発音を変更しました",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "音素は ARPAbet で、母音には強勢の数字を付けます (例: T W IH1 NG)。一覧は元に戻します"
+}

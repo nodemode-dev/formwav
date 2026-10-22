@@ -1,0 +1,10 @@
+{
+"Phonemes": "音素",
+"Timing (ms)": "時值 (毫秒)",
+"Edit pronunciation": "編輯發音",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet，母音帶重音數字 (T W IH1 NG)；留空則依歌詞",
+"Each phoneme's start and length in milliseconds from the note's start": "每個音素從音符開頭算起的開始與長度 (毫秒)",
+"Changed a note's pronunciation on {a}": "已變更 {a} 上一個音符的發音",
+"Changed a note's pronunciation": "已變更一個音符的發音",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "音素使用 ARPAbet，母音帶重音數字，例如 T W IH1 NG：清單會還原數值"
+}

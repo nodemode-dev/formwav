@@ -1,0 +1,10 @@
+{
+"Phonemes": "Fonémy",
+"Timing (ms)": "Časování (ms)",
+"Edit pronunciation": "Upravit výslovnost",
+"ARPAbet, vowels with a stress digit (T W IH1 NG); empty for the lyric's own": "ARPAbet, samohlásky s číslicí přízvuku (T W IH1 NG); prázdné pro výslovnost textu",
+"Each phoneme's start and length in milliseconds from the note's start": "Začátek a délka každé fonémy v milisekundách od začátku noty",
+"Changed a note's pronunciation on {a}": "Změněna výslovnost noty na {a}",
+"Changed a note's pronunciation": "Změněna výslovnost noty",
+"Phonemes are ARPAbet, vowels with a stress digit, such as T W IH1 NG: the list puts it back": "Fonémy se píší v ARPAbetu, samohlásky s číslicí přízvuku, například T W IH1 NG: seznam hodnotu vrací"
+}
