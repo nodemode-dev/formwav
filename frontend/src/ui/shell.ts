@@ -2,6 +2,7 @@ import type { Engine, LinkState, SessionDoc, TransportState } from "../engine";
 import { formatPosition, frameRate, parseTimecode, timeContext, timecodeToFrames, type FrameRate, type FrameRateId, type TimeContext, type TimeFormat } from "../engine/timebase";
 import { delayedIndicator, mountOnce, setText } from "../vendor/nodemode/dom-stable";
 import { ICON_SIZE, icon, type IconName } from "./icons";
+import { HOME_HTML } from "./home";
 
 const TRANSPORT: { name: IconName; label: string; action: string; built: boolean }[] = [
   { name: "skipBack", label: "Go to start", action: "to-start", built: true },
@@ -28,10 +29,10 @@ function shellHtml(): string {
 <div class="fw-shell">
   <header class="fw-topbar">
     <div class="fw-titlebar-left">
-      <div class="fw-identity">
-        <svg class="fw-logo" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4"></path><path d="M8 6v12"></path><path d="M12 3v18"></path><path d="M16 7v10"></path><path d="M20 10v4"></path></svg>
+      <button type="button" class="fw-identity" aria-label="Home" title="Home: start a session or open a recent one">
+        <img class="fw-logo" src="/logo-64.png" width="22" height="22" alt="" draggable="false">
         <span class="fw-name">formwav</span>
-      </div>
+      </button>
       <div class="fw-tools" role="group" aria-label="Menus">
         <div class="fw-menu">
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">File</button>
@@ -60,6 +61,7 @@ function shellHtml(): string {
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-panel-toggle[data-pane="media"]'><span>Browser</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-panel-toggle[data-pane="editor"]'><span>Editor</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='[data-action="agent"]'><span>Agent</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-proxy=".fw-identity"><span>Home</span></button>
           </div>
         </div>
         <div class="fw-menu">
@@ -136,7 +138,7 @@ function shellHtml(): string {
       <div class="fw-tool-tray" role="toolbar" aria-label="Arrangement" data-tool="select"><button type="button" class="fw-tb-btn" data-add-track title="A new empty track, to record into or to fill from the browser">Add a track</button><div class="fw-seg fw-tools-seg" role="group" aria-label="Tool"><button type="button" class="fw-seg-btn" data-label="Select" data-tool="select" aria-pressed="true" title="Select, move and trim clips; drag in a clip's upper half to select a range">Select</button><button type="button" class="fw-seg-btn" data-label="Split" data-tool="split" aria-pressed="false" title="Click a clip where it should split">Split</button><button type="button" class="fw-seg-btn" data-label="Fade" data-tool="fade" aria-pressed="false" title="Drag in from a clip's start or end to fade it in or out">Fade</button><button type="button" class="fw-seg-btn" data-label="Zoom" data-tool="zoom" aria-pressed="false" title="Click to zoom in there, Alt-click to zoom out, drag across a span to fill the view with it">Zoom</button></div><div class="fw-zoom" role="group" aria-label="Zoom"><button type="button" class="fw-tb-icon" data-zoom="out" aria-label="Zoom out" title="Zoom out (-)">−</button><button type="button" class="fw-tb-icon" data-zoom="in" aria-label="Zoom in" title="Zoom in (=)">+</button><button type="button" class="fw-tb-btn fw-tb-quiet" data-zoom="fit" title="Fit the whole session in view">Fit</button><button type="button" class="fw-tb-btn fw-tb-quiet fw-follow" data-follow aria-pressed="true" title="Keep the playhead in view while playing">Follow</button></div><span class="fw-tool-hint" aria-live="polite"></span><span class="fw-st-hint"><span class="fw-st-hint-text"></span></span><div class="fw-sel-box"><div class="fw-sel" role="group" aria-label="Selection" title="The selection's start, end and length in the main counter's timebase; the playhead when nothing is selected"><span class="fw-sel-cell" data-sel="start"><span class="fw-sel-label">Start</span><output class="fw-sel-value"></output></span><span class="fw-sel-cell" data-sel="end"><span class="fw-sel-label">End</span><output class="fw-sel-value"></output></span><span class="fw-sel-cell" data-sel="length"><span class="fw-sel-label">Length</span><output class="fw-sel-value"></output></span></div></div><div class="fw-tray-store" aria-hidden="true"><div class="fw-opt-group" data-group="edit" data-label="Edit" role="group" aria-label="Edit"></div><div class="fw-opt-group fw-opt-view" data-group="view" data-label="View" role="group" aria-label="View"><button type="button" class="fw-mode" data-inspector aria-pressed="false" title="Show the Inspector: the selected clip's and the session's settings">Inspector</button><button type="button" class="fw-mode" data-transcript aria-pressed="false">Transcript</button><button type="button" class="fw-mode" data-labels aria-pressed="false">Labels</button></div></div></div>
       <main class="fw-stage" data-view="empty" tabindex="-1">
         <section class="fw-empty">
-          <span class="fw-empty-mark">${icon("waveform", ICON_SIZE.mark)}</span>
+          <span class="fw-empty-mark"><img class="fw-brand-mark" src="/logo-256.png" width="${ICON_SIZE.mark}" height="${ICON_SIZE.mark}" alt="" draggable="false"></span>
           <h1 class="fw-empty-title">No session open</h1>
           <p class="fw-empty-body">Import any audio or video file, drop one here, or press Record to start a session.</p>
           <div class="fw-empty-actions"><button type="button" class="fw-ibtn fw-empty-import" data-empty-act="import">Import audio</button><button type="button" class="fw-ibtn" data-empty-act="open">Open a session</button><button type="button" class="fw-ibtn" data-empty-act="record" title="Start recording from the microphone into a new track">Record</button><button type="button" class="fw-ibtn" data-empty-act="demo" title="A sixteen-bar session made in code: drums, bass, pad and keys with a reverb bus">Try the demo</button></div>
@@ -155,6 +157,7 @@ function shellHtml(): string {
     <div class="fw-pane-divider" data-side="inspector" role="separator" aria-orientation="vertical" aria-label="Resize the agent column" tabindex="0"></div>
     <aside class="fw-pane fw-pane-agent" aria-label="Agent"><div class="fw-agent-anchor"></div></aside>
   </div>
+  ${HOME_HTML}
   <footer class="fw-status" aria-label="Transport and status">
     <div class="fw-transport" role="group" aria-label="Transport and meters">
       <div class="fw-transport-controls" role="group" aria-label="Transport">${transportButtons()}</div>

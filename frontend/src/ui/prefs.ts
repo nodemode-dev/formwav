@@ -1,0 +1,216 @@
+import { icon as fvIcon } from "../vendor/formvis/icons";
+import { DEFAULT_ACCENT, readChoice, setAccent, setIntensity, setTheme, THEMES } from "../vendor/formvis/themes";
+import { homeAtLaunch, setHomeAtLaunch } from "./home";
+import { language, LANGUAGES, onLanguage, setLanguage } from "./i18n";
+
+const MOTION_KEY = "formwav.reduceMotion";
+const SYSTEM_KEY = "formwav.followSystem";
+const DARK_KEY = "formwav.darkTheme";
+const LIGHT = new Set(["light", "sand"]);
+
+const read = (key: string) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+const write = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage blocked: this visit only */
+  }
+};
+
+const SECTIONS: [id: string, label: string, icon: string][] = [
+  ["general", "General", "settings"],
+  ["interface", "Interface", "theme"],
+  ["audio", "Audio", "sliders"],
+  ["editing", "Editing", "penTool"],
+  ["agents", "Agents and devices", "link"],
+];
+
+const row = (label: string, hint: string, control: string) =>
+  `<div class="fw-prefs-row"><div class="fw-prefs-row-text"><span class="fw-prefs-row-label">${label}</span><span class="fw-prefs-row-hint">${hint}</span></div><div class="fw-prefs-row-ctl">${control}</div></div>`;
+const check = (key: string, label: string) => `<label class="fw-prefs-check"><input type="checkbox" data-pref="${key}"><span>${label}</span></label>`;
+const num = (key: string, min: number, max: number, step: number, unit: string, label: string) =>
+  `<label class="fw-prefs-num"><input type="number" data-pref="${key}" min="${min}" max="${max}" step="${step}" aria-label="${label}"><span>${unit}</span></label>`;
+const btn = (act: string, label: string) => `<button type="button" class="fw-prefs-btn" data-prefs-act="${act}">${label}</button>`;
+
+/**
+ * Preferences (formvis's SettingsDialog, the SETTINGS map): one dialog built once at start, a rail of sections on the
+ * left and their cards stacked on the right, the rail following the scroll (scroll spy) and a tab scrolling its card
+ * into view. Opened by Settings > Preferences, Cmd or Ctrl comma, Home's Preferences, and the desktop app's menu.
+ * Rows read the setting each time the dialog opens and write it at once: the theme and accent through the family's
+ * theme store, the language through i18n, Home at launch, reduced motion and following the system's appearance as
+ * formwav keys; the recording rows are the transport's own fields (latency, pre-roll, post-roll), written there so
+ * there is one path; the agents and devices rows open their dialogs.
+ */
+export function mountPreferences(host: HTMLElement): void {
+  const dialog = document.createElement("dialog");
+  dialog.className = "fw-prefs";
+  dialog.setAttribute("aria-label", "Preferences");
+  const themeOptions = Object.entries(THEMES)
+    .map(([id, p]) => `<option value="${id}">${p.label}</option>`)
+    .join("");
+  const langOptions = LANGUAGES.map(([code, name]) => `<option value="${code}">${name}</option>`).join("");
+  const cards: Record<string, string> = {
+    general:
+      row("Home at launch", "Show Home when formwav starts with no session open", check("home", "Show Home at launch")) +
+      row("Reset all preferences", "Theme, language, layout, recording and every other setting of this window go back to their defaults; sessions are kept", btn("reset", "Reset…")),
+    interface:
+      row("Theme", "The colours of every surface", `<select data-pref="theme" aria-label="Theme" translate="no">${themeOptions}</select>`) +
+      row("Follow the system", "Switch between the light theme and your dark one with the computer's appearance", check("system", "Follow the system's appearance")) +
+      row("Accent colour", "Buttons, selection and focus", `<span class="fw-prefs-accent"><input type="color" data-pref="accent" aria-label="Accent colour">${btn("accent-default", "Default")}</span>`) +
+      row("Accent strength", "How strongly the accent tints surfaces", `<input type="range" data-pref="intensity" min="0" max="150" step="5" aria-label="Accent strength">`) +
+      row("Language", "The language of the interface; English is the default", `<select data-pref="language" aria-label="Language" translate="no">${langOptions}</select>`) +
+      row("Reduce motion", "Turn off transitions and animations", check("motion", "Reduce motion")),
+    audio:
+      row("Recording latency", "How far a take is moved back to line up with what was playing", num("latency", 0, 500, 1, "ms", "Recording latency in milliseconds")) +
+      row("Pre-roll", "How long recording rolls before the punch point", num("preroll", 0, 10, 0.5, "s", "Pre-roll in seconds")) +
+      row("Post-roll", "How long a punch keeps rolling after its out point", num("postroll", 0, 10, 0.5, "s", "Post-roll in seconds")) +
+      row("Output", "Where playback is heard: choose it in the status bar's output menu", ""),
+    editing:
+      row("Keyboard shortcuts", "Every command with a key, by menu", btn("shortcuts", "Show shortcuts")) +
+      row("Commands", "Find and run any command by name (Cmd or Ctrl K)", btn("palette", "Search commands")),
+    agents:
+      row("Agents", "Connect an AI agent to formwav's MCP server", btn("agents", "Agents…")) +
+      row("Devices on this network", "Pair a phone or tablet as a remote or a microphone; off until you turn it on", btn("devices", "Devices…")),
+  };
+  dialog.innerHTML = `<div class="fw-prefs-head"><h2 class="fw-prefs-title">Preferences</h2><button type="button" class="fw-prefs-done" data-prefs-act="done">Done</button></div>
+<div class="fw-prefs-body">
+  <nav class="fw-prefs-rail" aria-label="Sections">${SECTIONS.map(([id, label, ic], i) => `<button type="button" class="fw-prefs-tab${i ? "" : " is-current"}" data-prefs-tab="${id}">${fvIcon(ic, 16)}<span>${label}</span></button>`).join("")}</nav>
+  <div class="fw-prefs-pane">${SECTIONS.map(([id, label]) => `<section class="fw-prefs-sec" data-prefs-sec="${id}"><h3 class="fw-prefs-sec-title">${label}</h3>${cards[id]}</section>`).join("")}</div>
+</div>`;
+  host.append(dialog);
+  const pref = <T extends HTMLElement = HTMLInputElement>(k: string) => dialog.querySelector<T>(`[data-pref="${k}"]`);
+  const pane = dialog.querySelector<HTMLElement>(".fw-prefs-pane")!;
+  const field = (sel: string) => host.querySelector<HTMLInputElement>(sel);
+
+  const applyMotion = () => document.body.classList.toggle("animations-disabled", read(MOTION_KEY) === "1");
+  const system = window.matchMedia?.("(prefers-color-scheme: light)");
+  const followSystem = () => {
+    if (read(SYSTEM_KEY) !== "1" || !system) return;
+    const now = readChoice().theme;
+    if (system.matches && !LIGHT.has(now)) {
+      write(DARK_KEY, now);
+      setTheme("light");
+    } else if (!system.matches && LIGHT.has(now)) setTheme(read(DARK_KEY) || "studio");
+  };
+  system?.addEventListener?.("change", followSystem);
+  applyMotion();
+  followSystem();
+
+  const sync = () => {
+    const choice = readChoice();
+    const set = (k: string, v: string | boolean) => {
+      const el = pref(k);
+      if (!el) return;
+      if (typeof v === "boolean") {
+        if ((el as HTMLInputElement).checked !== v) (el as HTMLInputElement).checked = v;
+      } else if ((el as HTMLInputElement).value !== v) (el as HTMLInputElement).value = v;
+    };
+    set("home", homeAtLaunch());
+    set("theme", choice.theme);
+    set("system", read(SYSTEM_KEY) === "1");
+    set("accent", choice.accentColor);
+    set("intensity", String(Math.round((choice.intensity ?? 1) * 100)));
+    set("language", language());
+    set("motion", read(MOTION_KEY) === "1");
+    set("latency", field("[data-latency]")?.value ?? "0");
+    set("preroll", field("[data-preroll]")?.value ?? "0");
+    set("postroll", field("[data-postroll]")?.value ?? "0");
+  };
+  const open = () => {
+    sync();
+    if (!dialog.open) dialog.showModal();
+  };
+  const toField = (sel: string, value: string) => {
+    const f = field(sel);
+    if (!f) return;
+    f.value = value;
+    f.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  dialog.addEventListener("change", (e) => {
+    const el = e.target as HTMLInputElement;
+    const k = el.dataset.pref;
+    if (k === "home") setHomeAtLaunch(el.checked);
+    else if (k === "theme") setTheme(el.value);
+    else if (k === "system") {
+      write(SYSTEM_KEY, el.checked ? "1" : "0");
+      followSystem();
+    } else if (k === "accent") setAccent(el.value);
+    else if (k === "language") void setLanguage(el.value);
+    else if (k === "motion") {
+      write(MOTION_KEY, el.checked ? "1" : "0");
+      applyMotion();
+    } else if (k === "latency") toField("[data-latency]", el.value);
+    else if (k === "preroll") toField("[data-preroll]", el.value);
+    else if (k === "postroll") toField("[data-postroll]", el.value);
+    sync();
+  });
+  dialog.addEventListener("input", (e) => {
+    const el = e.target as HTMLInputElement;
+    if (el.dataset.pref === "intensity") setIntensity(Number(el.value) / 100);
+  });
+  dialog.addEventListener("click", (e) => {
+    const t = e.target as HTMLElement;
+    if (t === dialog) return dialog.close();
+    const tab = t.closest<HTMLElement>("[data-prefs-tab]")?.dataset.prefsTab;
+    // the pane alone scrolls (scrollIntoView would scroll the dialog's own clipped box too and hide its head)
+    const sec = tab ? dialog.querySelector<HTMLElement>(`[data-prefs-sec="${tab}"]`) : null;
+    if (sec) return pane.scrollTo({ top: pane.scrollTop + sec.getBoundingClientRect().top - pane.getBoundingClientRect().top - 16 });
+    const act = t.closest<HTMLElement>("[data-prefs-act]")?.dataset.prefsAct;
+    if (!act) return;
+    if (act === "done") dialog.close();
+    else if (act === "accent-default") {
+      setAccent(DEFAULT_ACCENT);
+      sync();
+    } else if (act === "reset") {
+      if (!window.confirm("Reset every preference of this window to its default? Saved sessions are kept.")) return;
+      try {
+        for (const key of Object.keys(localStorage)) if (key.startsWith("formwav.") || key === "nodemode_ui_settings") localStorage.removeItem(key);
+      } catch {
+        /* storage blocked: nothing kept to reset */
+      }
+      location.reload();
+    } else {
+      dialog.close();
+      if (act === "shortcuts") host.dispatchEvent(new CustomEvent("fw-shortcuts"));
+      else if (act === "palette") host.dispatchEvent(new CustomEvent("fw-palette"));
+      else if (act === "agents" || act === "devices") host.querySelector<HTMLElement>(`.fw-settings-pop [data-action="${act}"]`)?.click();
+    }
+  });
+  // scroll spy: the rail marks the card whose top has passed the pane's top third
+  pane.addEventListener("scroll", () => {
+    const top = pane.getBoundingClientRect().top + pane.clientHeight / 3;
+    let current = SECTIONS[0][0];
+    for (const sec of pane.querySelectorAll<HTMLElement>("[data-prefs-sec]")) if (sec.getBoundingClientRect().top <= top) current = sec.dataset.prefsSec!;
+    if (pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 2) current = SECTIONS[SECTIONS.length - 1][0];
+    for (const b of dialog.querySelectorAll<HTMLElement>("[data-prefs-tab]")) b.classList.toggle("is-current", b.dataset.prefsTab === current);
+  });
+  document.addEventListener("nm:ui-settings-changed", () => dialog.open && sync());
+  onLanguage(() => dialog.open && sync());
+
+  // Settings > Preferences…, first in the Settings menu
+  const item = document.createElement("button");
+  item.className = "fw-ibtn";
+  item.type = "button";
+  item.setAttribute("role", "menuitem");
+  item.dataset.action = "preferences";
+  item.title = "Theme, language, recording and every other setting (Cmd or Ctrl comma)";
+  item.innerHTML = "<span>Preferences…</span><kbd>⌘,</kbd>";
+  host.querySelector(".fw-settings-pop")?.prepend(item);
+  item.addEventListener("click", open);
+  host.addEventListener("fw-preferences", open);
+  host.addEventListener("fw-desktop-menu", (e) => {
+    if ((e as CustomEvent<string>).detail === "preferences") open();
+  });
+  window.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key === ",") {
+      e.preventDefault();
+      open();
+    }
+  });
+}

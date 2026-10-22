@@ -1,0 +1,44 @@
+/* Preferences (formvis's .cv-prefs-dlg): one dialog, the section rail inside its left edge (formvis floats it outside
+ * the frame; inside, the native dialog keeps Escape, focus return and the top layer), the section cards stacked on the
+ * right. Every value from a token; the frame, scrim and radius come from form-family.css's dialog rules. */
+
+dialog.fw-prefs { position: fixed; inset: 0; margin: auto; inline-size: min(860px, calc(100vw - 48px)); block-size: min(86vh, 720px); max-block-size: calc(100vh - 32px); padding: 0; color: var(--text-primary); overflow: hidden; }
+dialog.fw-prefs[open] { display: grid; grid-template-rows: 48px minmax(0, 1fr); }
+.fw-prefs-head { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) 0 var(--space-5); border-block-end: 1px solid var(--line-1); }
+.fw-prefs-title { flex: 1; margin: 0; font-size: var(--fs-16); font-weight: 600; }
+.fw-prefs-done { block-size: 30px; padding: 0 16px; border: 1px solid var(--cta-bg); border-radius: 9px; background: var(--cta-bg); color: var(--cta-text); font: inherit; font-size: var(--fs-13); cursor: pointer; }
+.fw-prefs-done:hover { background: var(--cta-bg-hover); }
+.fw-prefs-body { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-block-size: 0; }
+.fw-prefs-rail { display: flex; flex-direction: column; gap: 2px; padding: var(--space-3) var(--space-2); background: var(--surface-0); border-inline-end: 1px solid var(--line-0); overflow-y: auto; }
+.fw-prefs-tab { display: flex; align-items: center; gap: 10px; flex: none; block-size: 40px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-13); text-align: start; cursor: pointer; }
+.fw-prefs-tab > .icon { flex: none; color: var(--accent-color); }
+.fw-prefs-tab > span:not(.icon) { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-prefs-tab:hover { background: var(--surface-1); color: var(--text-primary); }
+.fw-prefs-tab.is-current { border-color: var(--line-2); background: var(--surface-2); color: var(--text-primary); }
+.fw-prefs-tab:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.fw-prefs-pane { display: flex; flex-direction: column; gap: var(--space-4); min-block-size: 0; padding: var(--space-4) var(--space-5) var(--space-8); overflow-y: auto; overscroll-behavior: contain; }
+.fw-prefs-sec { flex: none; padding: var(--space-2) var(--space-4) var(--space-3); border: 1px solid var(--line-1); border-radius: 12px; background: var(--bg-secondary); box-shadow: var(--shadow-sm); scroll-margin-block-start: var(--space-4); }
+.fw-prefs-sec-title { margin: var(--space-2) 0 var(--space-1); font-size: var(--fs-14); font-weight: 600; }
+.fw-prefs-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 44%); align-items: center; gap: var(--space-4); min-block-size: 44px; padding-block: var(--space-2); border-block-start: 1px solid var(--line-0); }
+.fw-prefs-sec-title + .fw-prefs-row { border-block-start: 0; }
+.fw-prefs-row-text { display: grid; gap: 2px; min-inline-size: 0; }
+.fw-prefs-row-label { font-size: 12.5px; color: var(--text-primary); }
+.fw-prefs-row-hint { font-size: var(--fs-11); line-height: 1.4; color: var(--text-muted); }
+.fw-prefs-row-ctl { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); min-inline-size: 0; }
+.fw-prefs-row-ctl select { inline-size: 100%; block-size: 30px; }
+.fw-prefs-row-ctl input[type="range"] { inline-size: 100%; }
+.fw-prefs-check { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--fs-12); color: var(--text-secondary); cursor: pointer; }
+.fw-prefs-check > span { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.fw-prefs-num { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--fs-12); color: var(--text-muted); }
+.fw-prefs-num input { inline-size: 84px; block-size: 30px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-field); color: var(--text-primary); font: inherit; font-variant-numeric: tabular-nums; }
+.fw-prefs-num input:focus { border-color: var(--accent-color); outline: none; }
+.fw-prefs-accent { display: inline-flex; align-items: center; gap: var(--space-2); }
+.fw-prefs-accent input[type="color"] { inline-size: 40px; block-size: 30px; padding: 2px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-field); cursor: pointer; }
+.fw-prefs-btn { block-size: 30px; padding: 0 14px; border: 1px solid var(--line-3); border-radius: var(--radius); background: var(--surface-2); color: var(--text-primary); font: inherit; font-size: var(--fs-12); white-space: nowrap; cursor: pointer; }
+.fw-prefs-btn:hover { background: var(--surface-raised); }
+.fw-prefs-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+@media (max-width: 900px) {
+  .fw-prefs-body { grid-template-columns: 64px minmax(0, 1fr); }
+  .fw-prefs-tab { justify-content: center; padding: 0; }
+  .fw-prefs-tab > span:not(.icon) { display: none; }
+}

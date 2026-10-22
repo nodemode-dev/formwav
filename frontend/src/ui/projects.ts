@@ -290,6 +290,11 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
     const row = (e.target as HTMLElement).closest<HTMLElement>(".fw-recent-row");
     if (row?.dataset.name) open(row.dataset.name);
   });
+  // the Home screen (ui/home.ts) opens a saved session through the same path, unsaved-changes guard included
+  host.addEventListener("fw-open-project", (e) => {
+    const name = (e as CustomEvent<string>).detail;
+    if (name) void open(name);
+  });
   let wasEmpty = true;
   engine.subscribe("document", (doc) => {
     const isEmpty = doc.tracks.length === 0;

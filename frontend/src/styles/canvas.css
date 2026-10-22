@@ -33,7 +33,7 @@ body.theme-light { --cv-chip-bg: color-mix(in srgb, var(--bg-secondary) 80%, tra
 }
 .fw-titlebar-left { flex: 0 1 auto; display: flex; align-items: center; gap: var(--space-3); min-inline-size: 0; }
 .fw-topbar .fw-identity { display: flex; align-items: center; gap: var(--space-2); color: var(--accent-color); }
-.fw-topbar .fw-logo { inline-size: 20px; block-size: 20px; }
+.fw-topbar .fw-logo { inline-size: 22px; block-size: 22px; border-radius: 5px; }
 .fw-topbar .fw-name { font-size: var(--fs-13); font-weight: 600; letter-spacing: 0.2px; color: var(--text-primary); }
 .fw-topbar .fw-tools { display: flex; align-items: center; gap: 0; }
 .fw-topbar .fw-menu-btn { block-size: var(--ctl-md); padding: 0 var(--space-2); border: 0; border-radius: var(--radius); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-12); }
@@ -369,13 +369,13 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-status {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-4);
   min-block-size: var(--cv-foot-h);
-  padding: 0 14px;
+  padding: 0 var(--space-4);
   overflow: hidden;
   white-space: nowrap;
   background: var(--bg-secondary);
-  border-block-start: 1px solid var(--border-color);
+  border-block-start: 1px solid var(--line-0);
   color: var(--text-primary);
   font-size: var(--fs-13);
 }
@@ -419,15 +419,14 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-status .fw-lufs { flex: none; inline-size: auto; min-inline-size: 10ch; margin-inline-start: -8px; font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-primary); white-space: pre; text-align: end; }
 .fw-status .fw-transport > .fw-meter-label, .fw-status .fw-transport > .fw-meter { display: none; }
 .fw-status.is-armed .fw-transport > .fw-meter-label, .fw-status.is-armed .fw-transport > .fw-meter { display: block; }
-.fw-status .fw-st-info { flex: 0 1 340px; display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; max-inline-size: 340px; padding: 0 0 0 16px; border-inline-start: 1px solid var(--border-light); }
+.fw-status .fw-st-info { flex: 0 1 340px; display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; max-inline-size: 340px; padding: 0 0 0 var(--space-4); border-inline-start: 1px solid var(--line-0); }
 .fw-status .fw-notice { flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-box-pack: end; -webkit-line-clamp: 2; line-clamp: 2; block-size: 2.5em; line-height: 1.25; font-size: var(--fs-12); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: normal; overflow-wrap: anywhere; }
-.fw-status .fw-st-line { display: flex; align-items: center; gap: 10px; min-inline-size: 0; overflow: hidden; font-size: var(--fs-11); color: var(--text-secondary); }
-.fw-status .fw-engine { flex: none; inline-size: 112px; min-inline-size: 0; display: inline-flex; align-items: center; gap: 5px; overflow: hidden; font-size: var(--fs-11); color: var(--text-secondary); }
-.fw-status .fw-engine-dot { flex: none; inline-size: 7px; block-size: 7px; }
+.fw-status .fw-st-line { display: flex; align-items: center; gap: var(--space-3); min-inline-size: 0; overflow: hidden; font-size: var(--fs-11); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.fw-status .fw-engine { flex: none; inline-size: 112px; min-inline-size: 0; display: inline-flex; align-items: center; gap: 5px; overflow: hidden; font-size: var(--fs-11); color: var(--text-muted); }.fw-status .fw-engine-dot { flex: none; inline-size: 7px; block-size: 7px; }
 .fw-status .fw-engine[data-state="stale"] .fw-engine-dot { background: var(--warn); }
 .fw-status .fw-st-rate { flex: none; min-inline-size: 7ch; }
 .fw-status .fw-st-output { display: flex; min-inline-size: 0; }
-.fw-status .fw-st-output select { field-sizing: content; max-inline-size: 170px; block-size: 18px; padding: 0; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-11); cursor: pointer; }
+.fw-status .fw-st-output select { field-sizing: content; max-inline-size: 170px; block-size: 18px; padding: 0; border: 0; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--fs-11); cursor: pointer; }
 .fw-status .fw-st-output select:hover { color: var(--text-primary); }
 @media (max-width: 1439px) {
   .fw-status .fw-transport { gap: 14px; }

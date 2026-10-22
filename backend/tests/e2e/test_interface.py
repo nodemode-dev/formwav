@@ -116,6 +116,9 @@ def _open(page, url: str) -> None:
     page.goto(url)
     page.wait_for_function("document.body.classList.contains('app-ready')")
     page.wait_for_function("document.querySelector('.fw-engine')?.dataset.state === 'ready'")
+    # v2.20.1: Home shows at launch with no session open, over the panes; the person steps back to the session first
+    # (through the element itself: the recovery dialog a test answers next may already be open over it)
+    page.evaluate("document.querySelector('.fw-home:not([hidden]) [data-home-act=\"back\"]')?.click()")
 
 
 def _import_speech(page) -> None:

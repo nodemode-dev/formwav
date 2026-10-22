@@ -13,6 +13,9 @@ import "./styles/surfaces.css";
 import "./styles/canvas.css";
 import "./styles/scrollbars.css";
 import "./styles/terminal-dock.css";
+import "./styles/home.css";
+import "./styles/prefs.css";
+import "./styles/desktop.css";
 import "./styles/form-family.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
@@ -48,6 +51,9 @@ import { mountStatusBar } from "./ui/status-bar";
 import { mountFileMenu } from "./ui/file-menu";
 import { mountThemeMenu } from "./ui/theme-menu";
 import { mountTitleTools } from "./ui/title-tools";
+import { mountHome } from "./ui/home";
+import { mountPreferences } from "./ui/prefs";
+import { desktopReady, mountDesktop } from "./ui/desktop";
 import { mountLanguage, startI18n } from "./ui/i18n";
 import { mountEditorTabs } from "./ui/editor-tabs";
 import { mountClipTab } from "./ui/clip-tab";
@@ -175,6 +181,7 @@ if (host) {
   mountFileMenu(host);
   mountThemeMenu(host);
   mountTitleTools(host);
+  mountDesktop(host); // the desktop app's chrome; nothing in a browser
   mountLanguage(host);
   mountClipTab(host, engine);
   mountEditorTabs(host, engine, player);
@@ -185,10 +192,12 @@ if (host) {
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();
   bindInputs(engine); // track inputs live in the session (Track.input)
   mountProjects(host, engine, player);
+  mountHome(host, engine); // formvis's Home: at launch with no session, from the brand and View > Home
   mountCloud(host, engine);
   mountRoom(host, engine);
   mountShare(host, engine);
   mountAgents(host);
+  mountPreferences(host); // formvis's Preferences: Settings > Preferences…, Cmd or Ctrl comma
   mountMusical(host, engine);
   mountToolbar(host, engine);
   mountEditing(host, engine, player);
@@ -199,9 +208,14 @@ if (host) {
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
 activateAll(engine);
+// the desktop app's splash ends once the page has painted (app_ready, two frames after app-ready is set)
+const reveal = () => {
+  revealApp();
+  requestAnimationFrame(() => requestAnimationFrame(desktopReady));
+};
 // The suite's faces are requested by name before the reveal: fonts.ready alone resolved before Inter had been asked
 // for, so on a slow network the app showed in a fallback face and shifted when Inter swapped in. Never longer than 4 s.
 Promise.race([
   Promise.all(["400 13px Inter", "500 13px Inter", "600 13px Inter", '400 12px "JetBrains Mono"', '700 24px "JetBrains Mono"'].map((face) => document.fonts.load(face))).then(() => document.fonts.ready).then(() => i18nReady),
   new Promise((done) => setTimeout(done, 4000)),
-]).then(revealApp, revealApp);
+]).then(reveal, reveal);
