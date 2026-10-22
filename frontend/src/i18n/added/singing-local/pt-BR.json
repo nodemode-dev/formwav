@@ -1,0 +1,7 @@
+{
+"SoulX-Singer (Soul AI Lab)": "SoulX-Singer (Soul AI Lab)",
+"Singing (SoulX-Singer)": "Canto (SoulX-Singer)",
+"(singing written notes and lyrics): runs on this machine; nothing leaves it. Code Apache{0}; weights Apache{1}. stock singers from VocalSet (Northwestern University), Creative Commons Attribution; the credit is in NOTICE": "(canto de notas escritas e letra): roda neste computador; nada sai dele. Código Apache{0}; pesos Apache{1}. cantores padrão do VocalSet (Northwestern University), Creative Commons Attribution; o crédito está em NOTICE",
+"Singing (SoulX-Singer): PyTorch's CPU build and 2.82 GB of SoulX-Singer's model; Apache-2.0 code and weights (SoulX-Singer); stock singers from VocalSet, CC BY 4.0": "Canto (SoulX-Singer): a versão para CPU do PyTorch e 2.82 GB do modelo do SoulX-Singer; código e pesos Apache-2.0 (SoulX-Singer); cantores padrão do VocalSet, CC BY 4.0",
+"Singing (SoulX-Singer): PyTorch's CPU build and {0} GB of SoulX-Singer's model; Apache{1} code and weights (SoulX-Singer); stock singers from VocalSet, CC BY {2}": "Canto (SoulX-Singer): a versão para CPU do PyTorch e {0} GB do modelo do SoulX-Singer; código e pesos Apache{1} (SoulX-Singer); cantores padrão do VocalSet, CC BY {2}"
+}

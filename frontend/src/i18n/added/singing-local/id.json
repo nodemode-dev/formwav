@@ -1,0 +1,7 @@
+{
+"SoulX-Singer (Soul AI Lab)": "SoulX-Singer (Soul AI Lab)",
+"Singing (SoulX-Singer)": "Nyanyian (SoulX-Singer)",
+"(singing written notes and lyrics): runs on this machine; nothing leaves it. Code Apache{0}; weights Apache{1}. stock singers from VocalSet (Northwestern University), Creative Commons Attribution; the credit is in NOTICE": "(nyanyian not tertulis dan lirik): berjalan di komputer ini; tidak ada yang keluar. Kode Apache{0}; bobot Apache{1}. penyanyi bawaan dari VocalSet (Northwestern University), Creative Commons Attribution; kreditnya ada di NOTICE",
+"Singing (SoulX-Singer): PyTorch's CPU build and 2.82 GB of SoulX-Singer's model; Apache-2.0 code and weights (SoulX-Singer); stock singers from VocalSet, CC BY 4.0": "Nyanyian (SoulX-Singer): build CPU PyTorch dan 2.82 GB model SoulX-Singer; kode dan bobot Apache-2.0 (SoulX-Singer); penyanyi bawaan dari VocalSet, CC BY 4.0",
+"Singing (SoulX-Singer): PyTorch's CPU build and {0} GB of SoulX-Singer's model; Apache{1} code and weights (SoulX-Singer); stock singers from VocalSet, CC BY {2}": "Nyanyian (SoulX-Singer): build CPU PyTorch dan {0} GB model SoulX-Singer; kode dan bobot Apache{1} (SoulX-Singer); penyanyi bawaan dari VocalSet, CC BY {2}"
+}

@@ -1,0 +1,7 @@
+{
+"SoulX-Singer (Soul AI Lab)": "SoulX-Singer (Soul AI Lab)",
+"Singing (SoulX-Singer)": "歌唱 (SoulX-Singer)",
+"(singing written notes and lyrics): runs on this machine; nothing leaves it. Code Apache{0}; weights Apache{1}. stock singers from VocalSet (Northwestern University), Creative Commons Attribution; the credit is in NOTICE": "(書いた音符と歌詞の歌唱): このコンピューターで動作し、何も外に出ません. コード Apache{0}; 重み Apache{1}. 標準の歌手は VocalSet (Northwestern University) から、Creative Commons Attribution。クレジットは NOTICE に",
+"Singing (SoulX-Singer): PyTorch's CPU build and 2.82 GB of SoulX-Singer's model; Apache-2.0 code and weights (SoulX-Singer); stock singers from VocalSet, CC BY 4.0": "歌唱 (SoulX-Singer): PyTorch の CPU 版と SoulX-Singer のモデル 2.82 GB; Apache-2.0 のコードと重み (SoulX-Singer)。標準の歌手は VocalSet から、CC BY 4.0",
+"Singing (SoulX-Singer): PyTorch's CPU build and {0} GB of SoulX-Singer's model; Apache{1} code and weights (SoulX-Singer); stock singers from VocalSet, CC BY {2}": "歌唱 (SoulX-Singer): PyTorch の CPU 版と SoulX-Singer のモデル {0} GB; Apache{1} のコードと重み (SoulX-Singer)。標準の歌手は VocalSet から、CC BY {2}"
+}

@@ -1,0 +1,7 @@
+{
+"SoulX-Singer (Soul AI Lab)": "SoulX-Singer (Soul AI Lab)",
+"Singing (SoulX-Singer)": "Zpěv (SoulX-Singer)",
+"(singing written notes and lyrics): runs on this machine; nothing leaves it. Code Apache{0}; weights Apache{1}. stock singers from VocalSet (Northwestern University), Creative Commons Attribution; the credit is in NOTICE": "(zpěv zapsaných not a textu): běží na tomto počítači; nic jej neopouští. Kód Apache{0}; váhy Apache{1}. výchozí zpěváci z VocalSet (Northwestern University), Creative Commons Attribution; uvedení autorů je v NOTICE",
+"Singing (SoulX-Singer): PyTorch's CPU build and 2.82 GB of SoulX-Singer's model; Apache-2.0 code and weights (SoulX-Singer); stock singers from VocalSet, CC BY 4.0": "Zpěv (SoulX-Singer): CPU sestavení PyTorch a 2.82 GB modelu SoulX-Singer; kód a váhy Apache-2.0 (SoulX-Singer); výchozí zpěváci z VocalSet, CC BY 4.0",
+"Singing (SoulX-Singer): PyTorch's CPU build and {0} GB of SoulX-Singer's model; Apache{1} code and weights (SoulX-Singer); stock singers from VocalSet, CC BY {2}": "Zpěv (SoulX-Singer): CPU sestavení PyTorch a {0} GB modelu SoulX-Singer; kód a váhy Apache{1} (SoulX-Singer); výchozí zpěváci z VocalSet, CC BY {2}"
+}

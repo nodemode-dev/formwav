@@ -1,0 +1,7 @@
+{
+"SoulX-Singer (Soul AI Lab)": "SoulX-Singer (Soul AI Lab)",
+"Singing (SoulX-Singer)": "演唱 (SoulX-Singer)",
+"(singing written notes and lyrics): runs on this machine; nothing leaves it. Code Apache{0}; weights Apache{1}. stock singers from VocalSet (Northwestern University), Creative Commons Attribution; the credit is in NOTICE": "(演唱寫好的音符與歌詞): 在本機執行；資料不會離開本機. 程式碼 Apache{0}; 權重 Apache{1}. 內建歌手來自 VocalSet (Northwestern University)，Creative Commons Attribution；署名見 NOTICE",
+"Singing (SoulX-Singer): PyTorch's CPU build and 2.82 GB of SoulX-Singer's model; Apache-2.0 code and weights (SoulX-Singer); stock singers from VocalSet, CC BY 4.0": "演唱 (SoulX-Singer): PyTorch 的 CPU 版本與 2.82 GB 的 SoulX-Singer 模型; Apache-2.0 程式碼與權重 (SoulX-Singer)；內建歌手來自 VocalSet，CC BY 4.0",
+"Singing (SoulX-Singer): PyTorch's CPU build and {0} GB of SoulX-Singer's model; Apache{1} code and weights (SoulX-Singer); stock singers from VocalSet, CC BY {2}": "演唱 (SoulX-Singer): PyTorch 的 CPU 版本與 {0} GB 的 SoulX-Singer 模型; Apache{1} 程式碼與權重 (SoulX-Singer)；內建歌手來自 VocalSet，CC BY {2}"
+}

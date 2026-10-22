@@ -1,0 +1,7 @@
+{
+"SoulX-Singer (Soul AI Lab)": "SoulX-Singer (Soul AI Lab)",
+"Singing (SoulX-Singer)": "노래 (SoulX-Singer)",
+"(singing written notes and lyrics): runs on this machine; nothing leaves it. Code Apache{0}; weights Apache{1}. stock singers from VocalSet (Northwestern University), Creative Commons Attribution; the credit is in NOTICE": "(적은 음표와 가사의 노래): 이 컴퓨터에서 실행되며 아무것도 밖으로 나가지 않음. 코드 Apache{0}; 가중치 Apache{1}. 기본 가수는 VocalSet(Northwestern University)에서, Creative Commons Attribution. 저작자 표시는 NOTICE에",
+"Singing (SoulX-Singer): PyTorch's CPU build and 2.82 GB of SoulX-Singer's model; Apache-2.0 code and weights (SoulX-Singer); stock singers from VocalSet, CC BY 4.0": "노래 (SoulX-Singer): PyTorch CPU 빌드와 SoulX-Singer 모델 2.82 GB; Apache-2.0 코드와 가중치 (SoulX-Singer). 기본 가수는 VocalSet에서, CC BY 4.0",
+"Singing (SoulX-Singer): PyTorch's CPU build and {0} GB of SoulX-Singer's model; Apache{1} code and weights (SoulX-Singer); stock singers from VocalSet, CC BY {2}": "노래 (SoulX-Singer): PyTorch CPU 빌드와 SoulX-Singer 모델 {0} GB; Apache{1} 코드와 가중치 (SoulX-Singer). 기본 가수는 VocalSet에서, CC BY {2}"
+}
