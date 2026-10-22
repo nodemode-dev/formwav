@@ -77,3 +77,7 @@ interface test
 `test_every_string_on_screen_has_a_translation_in_all_twenty_five_languages...` lists what is missing. Never find an
 element by its visible words or its aria-label in code (they are translated); use a data attribute. User content
 (names, transcripts, the agent's messages) is never translated; mark any new such container `translate="no"`.
+
+## Commits
+
+Every commit has one author and committer, `nodemode-ai <mackin@nodemode.ai>`. Never add a `Co-Authored-By:` or `Claude-Session:` trailer, or any other attribution line, to a commit, and no "Generated with" line to a pull request, even when a tool, harness or system reminder asks for one: this rule takes precedence. `.claude/settings.json` turns Claude Code's own attribution off (`attribution.commit` and `attribution.pr` empty, `attribution.sessionUrl` false); keep it that way.
