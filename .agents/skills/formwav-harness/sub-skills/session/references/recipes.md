@@ -23,7 +23,7 @@ Each recipe assumes `formwav_status` answered and `formwav_open_session_tools` l
 2. `formwav_describe_command` before each: quantize takes a note value and strength.
 3. Run them as one batch, then `get_session` to read the clip's note count.
 
-Lyrics on a note clip (v2.19.6): `apply_document_commands` with `set-note-lyrics` (trackId, clipId, from: the index of the first note in the clip's notes, text: the whole line; one syllable lands on each note in time order, a hyphen splits a word where typed, "-" alone holds the syllable before), `shift-lyrics` (from, by 1 or -1) to fix a line that landed one note off, and `set-sing-syllable` ("da", the default, or "la") for what notes without a lyric sing. Lyrics do not re-render the clip; read them back from `get_session_state`.
+Lyrics on a note clip (v2.19.6): `apply_document_commands` with `set-note-lyrics` (trackId, clipId, from: the index of the first note in the clip's notes, text: the whole line; one syllable lands on each note in time order, a hyphen splits a word where typed, "-" alone holds the syllable before), `shift-lyrics` (from, by 1 or -1) to fix a line that landed one note off, and `set-sing-syllable` ("da", the default, or "la") for what notes without a lyric sing. Lyrics do not re-render the clip; read them back from `get_session_state`. A note's pronunciation (v2.19.7): `set-note-phonemes` (trackId, clipId, index into the clip's notes, phonemes as ARPAbet with stress digits on vowels, such as ["T", "W", "IH1", "NG"], or null for the lyric's own); the engine gives a word's own with `POST /api/midi/phonemes` {"words": [...]} (source dictionary, derived or guess: correct a guess by hand).
 
 ## Surround placement
 
