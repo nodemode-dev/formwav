@@ -56,7 +56,7 @@ backend/
     ├── mcp_probe.py             the MCP SDK's client against the server, run in the server's venv
     └── e2e/test_interface.py    the built interface in Chromium against a real engine
 
-../.github/workflows/            checks.yml on every push and pull request (three platforms); builds.yml the app's three builds
+../.github/workflows/            checks.yml on pushes to main and compile_v* and on pull requests (three platforms); builds are formcompiler's
 ```
 
 ---
@@ -2452,6 +2452,40 @@ What the release gate's interface run checked, kept. An engine serves the built 
 ---
 
 ## .github/workflows {#workflows}
+
+### .github/workflows/builds.yml removed · the app is built and released by formcompiler
+- refers-to: .github/workflows/builds.yml (removed), .github/workflows/checks.yml (push branches); build_macos_app, build_linux_app, build_windows_app.ps1
+- kind: removed-code
+- logged: v2.20.2 · 2026-10-22
+
+Every form* app is now built in one place, formcompiler (`nodemode-ai/formcompiler`), from a `compile_vX.Y.Z` branch cut from main's head; it drafts the release as `formwav-vX.Y.Z` on its own release page and holds the signing identities. builds.yml built on every `chore(release)` push to main and drafted a release here, so it goes; checks.yml keeps every job and gains `compile_v*` beside main, so the branch formcompiler builds has passed the same checks. Nothing builds-only is lost: each platform job ran this repository's own script (`./build_macos_app` with the Apple secrets, `./build_linux_app` with `BUNDLES=deb,rpm,appimage TARBALL=1`, `build_windows_app.ps1` with `FORMWAV_WINDOWS_SIGN_COMMAND`), after these tool steps, which formcompiler repeats: Python 3.12, Node 22, Rust with wasm32-unknown-unknown; macOS `brew install pkgconf libsndfile portaudio lilv`; Linux on ubuntu-22.04 (x86_64) and ubuntu-22.04-arm (arm64) `sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsndfile1-dev portaudio19-dev liblilv-dev libasound2-dev file`; Windows in MSYS2 UCRT64 `pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-libsndfile mingw-w64-ucrt-x86_64-portaudio mingw-w64-ucrt-x86_64-lilv`. Artifacts: `src-tauri/target/release/bundle/dmg/*.dmg`; `deb/*.deb`, `rpm/*.rpm`, `appimage/*.AppImage`, `tar/*.tar.gz`; `nsis/*.exe`.
+
+```text
+  release:
+    name: Release draft
+    needs: [macos, linux, windows]
+    if: startsWith(github.event.head_commit.message, 'chore(release)')
+      - name: checksums
+        working-directory: packages
+        run: |
+          find . -mindepth 2 -type f -exec mv -t . {} +
+          find . -mindepth 1 -type d -empty -delete
+          ls -1
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+      - name: the draft release
+        run: |
+          version=$(jq -r .version src-tauri/tauri.conf.json)
+          tag="v$version"
+          notes="formwav $version: the desktop app for macOS (Apple silicon), Linux (x86_64 and arm64: .deb, .rpm, AppImage, .tar.gz) and Windows (x64). What changed is in the README's Status. Check a download against SHA256SUMS: sha256sum -c SHA256SUMS --ignore-missing"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" packages/* --clobber
+          else
+            gh release create "$tag" packages/* --draft --target "$GITHUB_SHA" --title "formwav $version" --notes "$notes"
+          fi
+```
+
+Verified: actionlint on checks.yml. Not run on GitHub.
 
 ### .github/workflows/checks.yml and builds.yml · the repository's checks on every push, and the app built on each platform
 - refers-to: .github/workflows/checks.yml (jobs interface, engine, shell), .github/workflows/builds.yml (jobs macos, linux, windows); build_macos_app, build_linux_app, build_windows_app.ps1; frontend/oc_install; backend/oc_install
