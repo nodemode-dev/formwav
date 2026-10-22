@@ -60,7 +60,8 @@ export function syllablesOf(word: string): string[] {
 }
 
 /** A line as one syllable per note: words split by syllablesOf, a hyphen typed inside a word splits it there instead,
- *  and "-" or "_" standing alone holds the syllable before it. */
+ *  and "-" or "_" standing alone holds the syllable before it. A syllable that runs on into the next note's ends in
+ *  "-" (L2), so the word can be found again: "Twin-", "kle". */
 export function syllabify(line: string): string[] {
   const out: string[] = [];
   for (const raw of line.trim().split(/\s+/)) {
@@ -69,13 +70,11 @@ export function syllabify(line: string): string[] {
       for (let i = 0; i < raw.length; i++) out.push(HOLD);
       continue;
     }
-    if (raw.includes("-")) {
-      for (const part of raw.split("-")) if (part) out.push(part);
-      continue;
-    }
+    const parts = raw.includes("-") ? raw.split("-").filter(Boolean) : [];
     const word = raw.replace(/^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu, "");
-    if (!word) continue;
-    out.push(.../^[a-z']+$/i.test(word) ? syllablesOf(word) : [word]);
+    if (!parts.length && !word) continue;
+    const syllables = parts.length ? parts : /^[a-z']+$/i.test(word) ? syllablesOf(word) : [word];
+    syllables.forEach((s, k) => out.push(k < syllables.length - 1 ? `${s}-` : s));
   }
   return out;
 }

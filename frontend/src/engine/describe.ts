@@ -60,6 +60,7 @@ const WORDS: Record<Command["type"], Words> = {
   "set-note-lyrics": ["Edited lyrics on {t}", "Edited lyrics"],
   "shift-lyrics": ["Moved lyrics on {t}", "Moved lyrics"],
   "set-sing-syllable": ["Changed the sung syllable", "Changed the sung syllable"],
+  "set-note-phonemes": ["Changed a note's pronunciation on {t}", "Changed a note's pronunciation"],
   "clear-ranges": ["Cleared ranges", "Cleared ranges"],
   "set-range-media": ["Processed a range on {t}", "Processed a range"],
   "remove-marker": ["Removed a marker", "Removed a marker"],

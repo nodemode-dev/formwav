@@ -4,6 +4,7 @@ import type { KeyChange, MeterChange, TempoChange } from "./tempo";
 import { clipPiece } from "./editing";
 import { cleanInstrumentValues, type InstrumentKind } from "./instruments";
 import { DEFAULT_SYLLABLE, SING_SYLLABLES, shiftLyrics, withLyrics, type SingSyllable } from "./lyrics";
+import { isPhoneme } from "./pronounce";
 
 export interface MediaRef {
   id: string;
@@ -860,6 +861,7 @@ export type Command =
   | { type: "set-clip-notes"; trackId: string; clipId: string; notes: readonly NoteEvent[]; media: MediaRef }
   | { type: "set-note-lyrics"; trackId: string; clipId: string; from: number; text: string }
   | { type: "shift-lyrics"; trackId: string; clipId: string; from: number; by: 1 | -1 }
+  | { type: "set-note-phonemes"; trackId: string; clipId: string; index: number; phonemes: readonly string[] | null }
   | { type: "set-sing-syllable"; syllable: SingSyllable }
   | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean; smooth?: number; follow?: "tracks" | "session" }
   | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef; feather?: number }
@@ -1160,6 +1162,7 @@ function refusedByLock(doc: SessionDoc, cmd: Command): boolean {
     case "set-clip-notes":
     case "set-note-lyrics":
     case "shift-lyrics":
+    case "set-note-phonemes":
     case "set-clip-take":
     case "comp-range":
       return sealed(clip(cmd.trackId, cmd.clipId));
@@ -1351,6 +1354,21 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
         }),
       }));
       return next;
+    }
+    case "set-note-phonemes": {
+      // L2: a note's pronunciation by hand, ARPAbet only; null or an empty list returns it to its lyric's
+      const phonemes = cmd.phonemes?.map((p) => String(p).toUpperCase()) ?? [];
+      if (phonemes.some((p) => !isPhoneme(p))) return doc;
+      return mapTrack(doc, cmd.trackId, (t) => ({
+        ...t,
+        clips: t.clips.map((c) => {
+          const n = c.id === cmd.clipId ? c.notes?.[cmd.index] : undefined;
+          if (!c.notes || !n || JSON.stringify(n.phonemes ?? []) === JSON.stringify(phonemes)) return c;
+          const { phonemes: _old, ...rest } = n;
+          const notes = c.notes.map((x, i) => (i === cmd.index ? (phonemes.length ? { ...rest, phonemes } : rest) : x));
+          return { ...c, notes };
+        }),
+      }));
     }
     case "set-sing-syllable": {
       if (!SING_SYLLABLES.includes(cmd.syllable) || (doc.singSyllable ?? DEFAULT_SYLLABLE) === cmd.syllable) return doc;

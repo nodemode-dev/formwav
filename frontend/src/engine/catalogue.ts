@@ -49,6 +49,7 @@ export const COMMAND_PARAMS: Record<Command["type"], string> = {
   "set-note-lyrics": "trackId: string; clipId: string; from: number (index into the clip's notes); text: string (a line, one syllable per note from that note on in time order; hyphens split words, '-' alone holds; empty clears that note)",
   "shift-lyrics": "trackId: string; clipId: string; from: number (index into the clip's notes); by: 1 | -1 (every lyric from that note on, one note later or earlier)",
   "set-sing-syllable": "syllable: 'da' | 'la' (what a note without a lyric sings)",
+  "set-note-phonemes": "trackId: string; clipId: string; index: number (into the clip's notes); phonemes: string[] (ARPAbet, vowels with a stress digit: ['T', 'W', 'IH1', 'NG']) | null (back to the lyric's own)",
   "clear-ranges": `trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean; smooth?: number; follow?: "tracks" | "session"`,
   "set-range-media": "trackId: string; clipId: string; start: number; end: number; media: MediaRef; feather?: number",
   "remove-marker": "markerId: string",
