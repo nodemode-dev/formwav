@@ -1,0 +1,31 @@
+{
+ "commit": "81aeb3ae772c70093c3de74dc23c92d983801ae4",
+ "revision": "40493ad90286056c7a9095035164434a79daa8c9",
+ "code": {
+  "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+  "cli/inference.py": "15eb6a8d5467ec798b8f9a10df7dc785a7ed368530b958fa03f995cfb1a1f7ed",
+  "soulxsinger/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "soulxsinger/config/soulxsinger.yaml": "d164c978dde6f57e1075bc21ef5f9b7b27895267f35b735cebe863418492be38",
+  "soulxsinger/models/modules/convnext.py": "8aa5109a43499f38658f0b48a64302794d8b8df760e870118bd6a15360358a83",
+  "soulxsinger/models/modules/decoder.py": "e46bdbcb4be86ff6cc212e4d90788034e435070e7a18ab1ed73dabf183eb72dc",
+  "soulxsinger/models/modules/flow_matching.py": "c6aa218264e46c9c9ff95ee1274c994742169e2aabb17aa98f4ec347a72243e4",
+  "soulxsinger/models/modules/llama.py": "f033577faa1351cc80ec1ba263cb70d4741489a6139ade0a5442e77ed56abbc8",
+  "soulxsinger/models/modules/mel_transform.py": "d0bbc1907611e03f49f5756d7b4aa0f53340d309acdb1388d92bdfc959f2c015",
+  "soulxsinger/models/modules/vocoder.py": "ce8c1dd848a981eca42af4df78db01bd0da5eed8f27621e73eb2ea742757aa45",
+  "soulxsinger/models/soulxsinger.py": "7571a7baf845a02c5a2f4f4b891783e7dcbcad1d5772fa205685cf8e4e4a4405",
+  "soulxsinger/utils/audio_utils.py": "bc9c5dd6914702eca911b0845879b40849b3a6ee111ab6846e6ab837622f62cb",
+  "soulxsinger/utils/data_processor.py": "14baf4c7784cea85bd58f0c29bd504d3ae46809931c0d40b16183a39581290cb",
+  "soulxsinger/utils/file_utils.py": "92d85ccfba78b03a14dc8cbe4ebbcb24390ef0f21c0b74308fea2aae751f96d5",
+  "soulxsinger/utils/phoneme/phone_set.json": "1f28c4fdf8e9b68af42ef706b92b7fa86eb857555610ba271d84148776d5c3b8"
+ },
+ "weights": {
+  "pretrained_models/SoulX-Singer/model.pt": "447eaf41f91a6b6659d55e9ec3c9b809221724fb8592aebaec35a23751a5b500"
+ },
+ "packages": [
+  "transformers==4.46.3",
+  "accelerate==1.11.0",
+  "omegaconf==2.3.0",
+  "librosa==0.11.0",
+  "soundfile==0.13.1"
+ ]
+}

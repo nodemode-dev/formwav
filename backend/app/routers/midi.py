@@ -104,6 +104,41 @@ def lyric_phonemes(body: Words) -> dict:
     return {"words": g2p.pronounce_all(body.words)}
 
 
+class SungNote(BaseModel):
+    start: float
+    length: float
+    pitch: int = Field(ge=0, le=127)
+    lyric: str | None = None
+    phonemes: list[str] | None = None
+
+
+class Sing(BaseModel):
+    notes: list[SungNote] = Field(max_length=4000)
+    singer: str = "vocalset_f1"
+    rate: int | None = None
+    name: str = "Singing"
+
+
+@router.get("/singers")
+def lyric_singers() -> dict:
+    """L4: the stock singers and whether SoulX-Singer is installed."""
+    from ..services import singing
+
+    return {"singers": singing.singers(), "engine": singing.status()}
+
+
+@router.post("/sing", status_code=201)
+def lyric_sing(body: Sing) -> dict:
+    """L4: notes sung by SoulX-Singer as new media, phrase by phrase, unchanged phrases from the cache."""
+    from ..services import singing
+    from ..services.providers import ProviderError
+
+    try:
+        return singing.sing([n.model_dump() for n in body.notes], body.singer, body.rate, body.name[:80])
+    except ProviderError as err:
+        raise HTTPException(status_code=err.status, detail=str(err)) from err
+
+
 @router.post("/test")
 def midi_test(payload: dict) -> dict:
     """AU-37 tests only: a message for the test keyboard, present when the engine runs with FORMWAV_MIDI_TEST=1."""
