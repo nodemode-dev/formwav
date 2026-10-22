@@ -10,6 +10,7 @@ import { icon } from "../vendor/formvis/icons";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { fpsOf, INPUT_QUANTIZE_KEY, inputQuantize } from "./midi-input";
 import type { NoteEditor } from "./piano-roll";
+import { mountSinging } from "./sing";
 
 /**
  * PLAN_v13 S7: the Event menu (MIDI operations) and the note editor's event list. Each operation works on
@@ -47,6 +48,9 @@ const ITEMS: [string, string, string?][] = [
   ["pronunciation", "Edit pronunciation", "⌥⌘E"],
   ["lyrics-forward", "Move lyrics forward", "⌥]"],
   ["lyrics-backward", "Move lyrics backward", "⌥["],
+  ["sing", "Sing this clip"],
+  ["singer", "Singer…"],
+  ["new-singer", "New singer from a recording…"],
 ];
 
 export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteEditor | null): void {
@@ -54,6 +58,7 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   if (!pop || !editor) return;
   const say = (text: string) => setText(notice, text);
+  const singing = mountSinging(host, engine, editor, say);
   pop.innerHTML =
     ITEMS.map(([id, label, key]) => `<button class="fw-ibtn" type="button" role="menuitem" data-ev="${id}"><span>${label}</span>${key ? `<kbd>${key}</kbd>` : ""}</button>`).join("") +
     `<span class="fw-menu-sep" role="separator"></span><button class="fw-ibtn" type="button" role="menuitemcheckbox" aria-checked="false" data-ev="list"><span class="fw-check" aria-hidden="true"></span><span>Event list</span></button>` +
@@ -368,7 +373,11 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
         openEditor();
         editor.editPronunciation();
       }
-    } else if (id === "lyrics-forward" || id === "lyrics-backward") editor.shiftLyrics(id === "lyrics-forward" ? 1 : -1);
+    } else if (id === "sing") {
+      if (scope()) singing.sing();
+    } else if (id === "singer") void singing.chooseSinger();
+    else if (id === "new-singer") void singing.newSinger();
+    else if (id === "lyrics-forward" || id === "lyrics-backward") editor.shiftLyrics(id === "lyrics-forward" ? 1 : -1);
     else if (id === "sing-da" || id === "sing-la") engine.dispatch({ type: "set-sing-syllable", syllable: id === "sing-da" ? "da" : "la" });
     else if (id === "list") {
       const open = !editor.listOpen();
