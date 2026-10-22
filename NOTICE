@@ -32,6 +32,15 @@ It includes third-party components under their own licences:
   backend/app/services/cmudict/, read by backend/app/services/g2p.py for the
   phonemes of sung lyrics. Shipped in the desktop app's engine, where that licence
   file travels with it.
+- VocalSet: A Singing Voice Dataset, by Julia Wilkins, Prem Seetharaman, Alison Wahl
+  and Bryan Pardo (Northwestern University, 2018), version 1.2,
+  https://doi.org/10.5281/zenodo.1442513, licensed under the Creative Commons
+  Attribution 4.0 International licence (https://creativecommons.org/licenses/by/4.0/).
+  Two recordings, f1_scales_straight_a.wav and m1_scales_straight_a.wav, were
+  changed: trimmed to their first six seconds, resampled to 24 kHz mono 16-bit, and
+  given SoulX-Singer prompt metadata made by formwav (pitch, notes, phonemes); kept
+  as backend/app/services/singers/vocalset_f1 and vocalset_m1 (.wav, .json), the
+  stock singers of formwav's singing.
 - Inter and JetBrains Mono fonts, installed through @fontsource: SIL Open Font
   License 1.1 for the fonts, MIT for the packaging. Bundled into the built interface.
 - The formwav logomark and favicons in assets/ and frontend/public/ are the
