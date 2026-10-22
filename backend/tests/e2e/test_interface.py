@@ -747,7 +747,7 @@ def test_a_chosen_language_holds_after_a_reload_and_shows_from_the_first_frame(p
     assert _clean(page)["errors"] == []
 
 
-ROWS ="[...document.querySelectorAll('.fw-piano-list tbody tr')].map((r) => [...r.querySelectorAll('input')].map((i) => i.value))"
+ROWS ="[...document.querySelectorAll('.fw-piano-list tbody tr')].map((r) => [...r.querySelectorAll('input:is([data-f=start], [data-f=pitch], [data-f=length], [data-f=velocity])')].map((i) => i.value))"
 NOTES_STATE = "document.querySelector('.fw-piano .fw-piano-state').textContent"
 
 
