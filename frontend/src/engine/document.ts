@@ -545,6 +545,10 @@ export function cleanFx(fx: readonly TrackFx[]): TrackFx[] {
 export interface Track {
   /** A palette key (green, blue, amber, red, violet, cyan, pink, slate) for its header bar and clips; absent is green. */
   color?: string;
+  /** L4b: the note clip this track sings (its id), and what was sung (a key of its notes, lyrics, phonemes and singer),
+   *  so an edit to the clip sings it again and a sung track keeps one clip. */
+  sungFrom?: string;
+  sungSig?: string;
   /** Realtime effects in order; bypassed ones are skipped. */
   fx?: TrackFx[];
   /** Where this track records from; absent means the default input. */
@@ -739,6 +743,11 @@ export interface SessionDoc {
   synth?: SynthPatch;
   /** The syllable a note without a lyric sings ("da" or "la"); absent is "da". */
   singSyllable?: SingSyllable;
+  /** L4b: who sings this session's note clips (a stock singer's id or a person's own); absent is the soprano. */
+  singer?: string;
+  /** L4c: the singers made from people's own recordings, each with the permission confirmed for it: when, and from
+   *  which recording (USE_POLICY.md: a voice is used only with the permission of the person it belongs to). */
+  singers?: { id: string; name: string; permission: { at: string; media: string } }[];
   /** The time track: playback speed over session time, linear between points, held outside them (sample position, factor 0.25 to 4). */
   timeTrack?: readonly TimePoint[];
   /** AU-36: speed interpolated logarithmically between the time track's points (a steady ratio), not linearly. */
@@ -863,6 +872,9 @@ export type Command =
   | { type: "shift-lyrics"; trackId: string; clipId: string; from: number; by: 1 | -1 }
   | { type: "set-note-phonemes"; trackId: string; clipId: string; index: number; phonemes: readonly string[] | null }
   | { type: "set-sing-syllable"; syllable: SingSyllable }
+  | { type: "place-sung"; noteClipId: string; media: MediaRef; at: number; sig: string; name?: string }
+  | { type: "set-singer"; singer: string }
+  | { type: "add-singer"; id: string; name: string; permission: { at: string; media: string } }
   | { type: "clear-ranges"; trackIds: string[]; ranges: { start: number; end: number }[]; ripple: boolean; smooth?: number; follow?: "tracks" | "session" }
   | { type: "set-range-media"; trackId: string; clipId: string; start: number; end: number; media: MediaRef; feather?: number }
   | { type: "remove-marker"; markerId: string }
@@ -1369,6 +1381,36 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
           return { ...c, notes };
         }),
       }));
+    }
+    case "place-sung": {
+      // L4b: the note clip's singing on the track that sings it (made under the note clip's track the first time), as
+      // that track's one clip; the earlier singing's media leaves the list once nothing plays it
+      const noteTrack = doc.tracks.findIndex((t) => t.clips.some((c) => c.id === cmd.noteClipId));
+      if (noteTrack < 0) return doc;
+      const clip: Clip = { id: newId(), mediaId: cmd.media.id, start: Math.max(0, Math.round(cmd.at)), length: sessionLength(cmd.media, doc.sampleRate), sourceIn: 0, gainDb: 0 };
+      const media: Record<string, MediaRef> = { ...doc.media, [cmd.media.id]: cmd.media };
+      const sung = doc.tracks.find((t) => t.sungFrom === cmd.noteClipId);
+      if (sung) {
+        const previous = sung.clips.map((c) => c.mediaId).filter((id) => id !== cmd.media.id);
+        const tracks = doc.tracks.map((t) => (t.id === sung.id ? { ...t, clips: [clip], sungSig: cmd.sig } : t));
+        for (const id of previous) if (!tracks.some((t) => t.clips.some((c) => c.mediaId === id || c.pitchMediaId === id))) delete media[id];
+        return { ...doc, media, tracks };
+      }
+      const track: Track = { id: newId(), name: (cmd.name ?? "").trim().slice(0, 80) || "Sung", channels: cmd.media.channels === 1 ? 1 : 2, gainDb: 0, mute: false, solo: false, clips: [clip], sungFrom: cmd.noteClipId, sungSig: cmd.sig };
+      const tracks = [...doc.tracks];
+      tracks.splice(noteTrack + 1, 0, track);
+      return { ...doc, media, tracks };
+    }
+    case "set-singer": {
+      const singer = String(cmd.singer ?? "").slice(0, 40);
+      if (!/^(vocalset_[a-z0-9]+|own_[a-f0-9]{16})$/.test(singer) || (doc.singer ?? "vocalset_f1") === singer) return doc;
+      const { singer: _old, ...rest } = doc;
+      return singer === "vocalset_f1" ? rest : { ...rest, singer };
+    }
+    case "add-singer": {
+      if (!/^own_[a-f0-9]{16}$/.test(cmd.id) || !cmd.permission?.at || doc.singers?.some((s) => s.id === cmd.id)) return doc;
+      const entry = { id: cmd.id, name: String(cmd.name).trim().slice(0, 60), permission: { at: String(cmd.permission.at).slice(0, 40), media: String(cmd.permission.media).slice(0, 200) } };
+      return { ...doc, singers: [...(doc.singers ?? []), entry], singer: cmd.id };
     }
     case "set-sing-syllable": {
       if (!SING_SYLLABLES.includes(cmd.syllable) || (doc.singSyllable ?? DEFAULT_SYLLABLE) === cmd.syllable) return doc;
