@@ -20,7 +20,12 @@ Conventions this repository is built under:
 - No other product or company competing with formwav is named anywhere in the repository (code, comments, interface
   strings in every language, logs, docs, commit messages): describe a feature by what it does, and a file format by
   its extension (".aup", ".aup3"). Licence and copyright notices of vendored code and the model providers the engine
-  actually calls are the only names kept
+  actually calls are the only names kept. The same holds for other products' feature names: the clip-type section
+  is Clip sound, the voice clean Enhance spoken and the beat re-arrangement Remixer, and a new feature is named for
+  what it does. Never copy another product's help text, presets, sound effects or stock audio, and keep demo and
+  test voices synthetic or licensed
+- Every model, binary or data file the engine can install or fetch gets a line in NOTICE and LICENSES.md before it
+  is used, with its licence; gated or non-commercial weights are never bundled
 - Declined for patent risk, never to be added: content-aware scale (seam carving or any resize that removes or
   inserts low-energy paths) and skin protection (skin-tone detection that shields regions from an edit), in any form,
   under any name; see NOTICE
