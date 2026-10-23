@@ -143,6 +143,16 @@ async def formwav_debleed(media_id: str, reference_media_id: str, offset_samples
 
 
 @mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
+async def formwav_heal_selection(media_id: str, boxes: list[dict[str, float]]) -> dict[str, Any]:
+    """Heals a selection of spectrogram boxes in one explicit step and returns the new media (the source is kept). The
+    boxes are the selection: each has from and to (seconds of this media) and low and high (Hz), one box per event
+    (a click, a crackle burst, a whistle); 1 to 2000 boxes, all healed in one pass. The sound inside them is rebuilt
+    from the sound around them (a dropout is filled instead). Nothing is healed until this is called, and it is never a
+    brush stroke: choose the boxes from measurements, call this, then measure the result with formwav_analyze_media."""
+    return _media((await _call("POST", f"/api/media/{quote(media_id)}/heal-painted", content=json.dumps({"boxes": boxes}).encode(), headers={"content-type": "application/json"})).json())
+
+
+@mcp.tool(annotations=MAKES_MEDIA, structured_output=True)
 async def formwav_import_audio(path: str) -> dict[str, Any]:
     """Imports an audio or video file from this machine (any format ffmpeg reads) and returns its media. `path` is an
     absolute path or one starting with ~."""
