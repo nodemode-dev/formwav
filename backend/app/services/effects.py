@@ -7,12 +7,28 @@ chains, rendered as formcut renders them, by running the audio through ffmpeg. A
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 from pathlib import Path
 
 from ..core.paths import media_dir
 from . import media
+
+# Where Spot heal and the Heal command read the level a masked cell is brought down to. "surround" (the default) uses
+# the four unmasked frames either side of each masked run. "inside" is the ready alternative: it rebuilds masked cells
+# from the masked run alone (per frequency bin, capped to the HEAL_INSIDE_PERCENTILE-th percentile of that bin's
+# values across the run) and reads nothing outside the mask. The environment variable FORMWAV_HEAL_SOURCE overrides
+# this constant when it is "surround" or "inside"; any other value is ignored.
+HEAL_SOURCE = "surround"
+HEAL_INSIDE_PERCENTILE = 20
+
+
+def _heal_source() -> str:
+    chosen = os.environ.get("FORMWAV_HEAL_SOURCE", "").strip().lower()
+    if chosen not in ("surround", "inside"):
+        chosen = HEAL_SOURCE
+    return chosen if chosen in ("surround", "inside") else "surround"
 
 AUDIO_CHAINS = {
     "pitch_up": "aresample=48000,asetrate=60000,aresample=48000,atempo=0.8",
@@ -663,17 +679,22 @@ def _spot_heal(x, rate: int, v: dict):
         inside = np.nonzero((centre + half >= t0) & (centre - half <= t1))[0]
         if len(inside):
             f0, f1 = int(inside[0]), int(inside[-1])
-            left = np.abs(spec[max(0, f0 - 4) : f0, b0:b1])
-            right = np.abs(spec[f1 + 1 : f1 + 5, b0:b1])
-            ref_l = np.log(left.mean(axis=0) + 1e-12) if len(left) else None
-            ref_r = np.log(right.mean(axis=0) + 1e-12) if len(right) else None
-            ref_l = ref_r if ref_l is None else ref_l
-            ref_r = ref_l if ref_r is None else ref_r
-            for k in range(f0, f1 + 1):
-                w = (k - f0 + 1) / (f1 - f0 + 2)
-                ref = np.exp((1 - w) * ref_l + w * ref_r)
-                mag = np.abs(spec[k, b0:b1])
-                spec[k, b0:b1] *= np.minimum(1.0, ref / (mag + 1e-12))
+            if _heal_source() == "inside":
+                run = np.abs(spec[f0 : f1 + 1, b0:b1])
+                ref = np.percentile(run, HEAL_INSIDE_PERCENTILE, axis=0)
+                spec[f0 : f1 + 1, b0:b1] *= np.minimum(1.0, ref / (run + 1e-12))
+            else:
+                left = np.abs(spec[max(0, f0 - 4) : f0, b0:b1])
+                right = np.abs(spec[f1 + 1 : f1 + 5, b0:b1])
+                ref_l = np.log(left.mean(axis=0) + 1e-12) if len(left) else None
+                ref_r = np.log(right.mean(axis=0) + 1e-12) if len(right) else None
+                ref_l = ref_r if ref_l is None else ref_l
+                ref_r = ref_l if ref_r is None else ref_r
+                for k in range(f0, f1 + 1):
+                    w = (k - f0 + 1) / (f1 - f0 + 2)
+                    ref = np.exp((1 - w) * ref_l + w * ref_r)
+                    mag = np.abs(spec[k, b0:b1])
+                    spec[k, b0:b1] *= np.minimum(1.0, ref / (mag + 1e-12))
         back = np.fft.irfft(spec, n, axis=1) * win
         out = np.zeros(len(seg))
         for k in range(len(back)):
@@ -720,10 +741,15 @@ def _spot_heal_mask(x, rate: int, boxes: list):
         for t0, t1, b0, b1 in spans:
             mask[(centre + half >= t0) & (centre - half <= t1), b0:b1] = True
         mag = np.abs(spec)
+        inside_only = _heal_source() == "inside"
         for b in np.nonzero(mask.any(axis=0))[0]:
             col = mask[:, b]
             edges = np.diff(np.concatenate([[0], col.astype(np.int8), [0]]))
             for f0, f1 in zip(np.nonzero(edges == 1)[0], np.nonzero(edges == -1)[0] - 1):
+                if inside_only:
+                    ref = np.percentile(mag[f0 : f1 + 1, b], HEAL_INSIDE_PERCENTILE)
+                    spec[f0 : f1 + 1, b] *= np.minimum(1.0, ref / (mag[f0 : f1 + 1, b] + 1e-12))
+                    continue
                 left = [k for k in range(max(0, f0 - 4), f0) if not col[k]]
                 right = [k for k in range(f1 + 1, min(len(col), f1 + 5)) if not col[k]]
                 if not left and not right:
@@ -768,6 +794,7 @@ def heal_painted(media_id: str, boxes: list) -> dict:
     around = np.concatenate([mono[max(0, i0 - int(0.2 * rate)) : i0], mono[i1 : i1 + int(0.2 * rate)]])
     level = float(np.sqrt(np.mean(around**2))) if len(around) else 0.0
     filled = len(inner) > 0 and level > 1e-6 and float(np.sqrt((inner**2).mean(axis=1)).min()) < level * 10 ** (-30 / 20)
+    filled = filled and _heal_source() != "inside"
     if filled:
         y = _spectral_repair(x, rate, {"from": t0, "to": t1, "low": max(0.0, lo), "high": hi, "mode": 1, "resolution": 0})
     else:
