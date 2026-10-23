@@ -62,6 +62,25 @@ SAM-Audio (Isolate sound), which is licensed under Meta's SAM License and whose
 checkpoints are gated behind a manual access request on Hugging Face. Anyone
 installing a component accepts that component's licence, not formwav's.
 
+The local models formwav installs on this machine on request (Install a model on
+this machine), each into its own runtime and never bundled, with the licences
+their install descriptors in backend/app/services record:
+- DeepFilterNet3 by Hendrik Schroeter, through its deep-filter 0.5.6 release
+  binary, checked against pinned SHA-256s (services/deepfilter.py): MIT or
+  Apache-2.0.
+- Kokoro through kokoro-onnx 0.6.1 (services/local_speech.py): Apache-2.0.
+- Pocket TTS by Kyutai (services/local_speech.py): MIT code, weights under
+  Creative Commons Attribution 4.0 (credit: Kyutai).
+- Chatterbox by Resemble AI (services/local_speech.py): MIT; every output
+  carries Resemble AI's inaudible watermark.
+- TIGER, the speech, music and effects separator (services/tiger_dnr.py): MIT
+  code, Apache-2.0 weights.
+- EzAudio (services/local_sfx.py): MIT code and weights; FLAN-T5 large,
+  Apache-2.0.
+- SoulX-Singer (services/singing.py): Apache-2.0 code and weights.
+- ACE-Step 1.5 through acestep.cpp, built from source
+  (services/acestep_local.py): MIT.
+
 Declined features. Because of patent risk, formwav does not include and will not
 accept content-aware scale (seam carving, or any resize that removes or inserts
 low-energy paths through an image or a frame) or skin protection (detection of
