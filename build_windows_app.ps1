@@ -67,7 +67,6 @@ Run ".venv-package\Scripts\pyinstaller.exe" @("--clean", "--noconfirm", "--onefi
   "--collect-all", "uvicorn", "--collect-all", "formwav_dsp", "--collect-all", "app", "--hidden-import", "app.main", "--collect-all", "winpty",
   "--add-data", "..\frontend\dist;frontend_dist",
   "--add-data", "..\native\formwav-nyquist\runtime;nyquist_runtime",
-  "--add-data", "..\native\formwav-nyquist\plug-ins;nyquist_plugins",
   "desktop_entry.py")
 Run "dist\formwav-engine.exe" @("--selfcheck")
 Pop-Location
@@ -83,10 +82,13 @@ InMsys "native/formwav-nyquist/build_fwnyq && native/formwav-vamp/build_fwvamp &
 foreach ($pair in @(@("formwav-nyquist", "fwnyq"), @("formwav-vamp", "fwvamp"), @("formwav-lv2", "fwlv2"))) {
   Copy-Item (Join-Path $Root "native\$($pair[0])\$($pair[1]).exe") (Join-Path $Bin "$($pair[1])-$Triple.exe") -Force
 }
-# fwlv2 links lilv, serd, sord, sratom and zix as DLLs (MSYS2 ships no static ones); the installer places them beside
-# it (src-tauri\tauri.windows.conf.json), where Windows looks first. fwnyq and fwvamp are self-contained.
+# The helpers link libsndfile (LGPL-2.1, kept replaceable) and fwlv2 also lilv, serd, sord, sratom and zix as DLLs;
+# each build script copies what its .exe loads to its dlls\ folder, and the installer places every one beside the
+# helpers (src-tauri\tauri.windows.conf.json), where Windows looks first.
 New-Item -ItemType Directory -Force -Path (Join-Path $Bin "dlls") | Out-Null
-Copy-Item (Join-Path $Root "native\formwav-lv2\dlls\*.dll") (Join-Path $Bin "dlls") -Force
+foreach ($helper in @("formwav-nyquist", "formwav-vamp", "formwav-lv2")) {
+  Copy-Item (Join-Path $Root "native\$helper\dlls\*.dll") (Join-Path $Bin "dlls") -Force
+}
 Get-ChildItem $Bin | ForEach-Object { Write-Host "sidecar: src-tauri\binaries\$($_.Name)" }
 
 # the icons are committed in src-tauri\icons (regenerating them each build rewrote tracked files)

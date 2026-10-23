@@ -40,10 +40,13 @@ for s in $(grep -v '^#' "$here/sources.txt"); do
 done
 ar rcs "$build/libnyquist.a" $objs
 case "$(uname -s)" in
-  # Windows: one self-contained .exe. MSYS2's pkg-config files leave out the system libraries a static link needs
-  # (portaudio's declares none; FLAC's omits pthreads), found by cross-linking: named here
-  MINGW*|MSYS*) LINK="-static $(pkg-config --static --libs sndfile portaudio-2.0) -lstdc++ -lpthread -lwinmm -lole32 -luuid -lsetupapi -lksuser -ldsound -lshlwapi" ;;
+  # Windows: portaudio (MIT) static, libsndfile (LGPL-2.1) dynamic so it stays replaceable; its DLLs go to dlls/ for
+  # the installer to place beside fwnyq.exe. MSYS2's portaudio .pc declares no system libraries: named here
+  MINGW*|MSYS*) LINK="-Wl,-Bstatic $(pkg-config --static --libs portaudio-2.0) -Wl,-Bdynamic $(pkg-config --libs sndfile) -static-libgcc -static-libstdc++ -lstdc++ -lpthread -lwinmm -lole32 -luuid -lsetupapi -lksuser -ldsound -lshlwapi" ;;
   *) LINK="$LIBS -lsndfile -lportaudio $CXXLIB" ;;
 esac
 ${CC:-cc} -O2 -w "$here/fwnyq.c" -I"$here/libnyquist" $INC "$build/libnyquist.a" $LINK -lm -lpthread -o "$here/fwnyq"
+case "$(uname -s)" in
+  MINGW*|MSYS*) mkdir -p "$here/dlls" && ldd "$here/fwnyq.exe" | awk '$3 ~ /^\/(mingw64|ucrt64|clang64)\// {print $3}' | while read -r dll; do cp "$dll" "$here/dlls/"; done ;;
+esac
 echo "fwnyq built: $here/fwnyq"

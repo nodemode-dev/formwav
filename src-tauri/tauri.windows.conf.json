@@ -1,11 +1,7 @@
 {
   "bundle": {
     "resources": {
-      "binaries/dlls/liblilv-0.dll": "liblilv-0.dll",
-      "binaries/dlls/libserd-0.dll": "libserd-0.dll",
-      "binaries/dlls/libsord-0.dll": "libsord-0.dll",
-      "binaries/dlls/libsratom-0.dll": "libsratom-0.dll",
-      "binaries/dlls/libzix-0.dll": "libzix-0.dll"
+      "binaries/dlls/*.dll": "./"
     }
   }
 }

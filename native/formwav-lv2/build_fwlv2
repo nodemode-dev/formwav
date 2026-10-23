@@ -9,16 +9,15 @@ if ! pkg-config --exists lilv-0 sndfile; then
   exit 1
 fi
 case "$(uname -s)" in
-  # Windows: libsndfile static; lilv, serd, sord, sratom and zix dynamic (MSYS2 ships them as DLLs only), their DLLs
+  # Windows: libsndfile (LGPL-2.1) and lilv, serd, sord, sratom and zix all dynamic, their DLLs (and what they load)
   # copied to dlls/ for the installer to place beside fwlv2.exe
   MINGW*|MSYS*)
-    LINK="$(pkg-config --cflags lilv-0 sndfile) -Wl,-Bstatic $(pkg-config --static --libs sndfile) -lpthread -lshlwapi -Wl,-Bdynamic $(pkg-config --libs lilv-0) -static-libgcc"
-    mkdir -p "$here/dlls"
-    for dll in liblilv-0 libserd-0 libsord-0 libsratom-0 libzix-0; do
-      cp "$(pkg-config --variable=prefix lilv-0)/bin/$dll.dll" "$here/dlls/"
-    done
+    LINK="$(pkg-config --cflags --libs lilv-0 sndfile) -lpthread -lshlwapi -static-libgcc"
     ;;
   *) LINK="$(pkg-config --cflags --libs lilv-0 sndfile)" ;;
 esac
 ${CC:-cc} -O2 "$here/fwlv2.c" $LINK -lm -o "$here/fwlv2"
+case "$(uname -s)" in
+  MINGW*|MSYS*) mkdir -p "$here/dlls" && ldd "$here/fwlv2.exe" | awk '$3 ~ /^\/(mingw64|ucrt64|clang64)\// {print $3}' | while read -r dll; do cp "$dll" "$here/dlls/"; done ;;
+esac
 echo "fwlv2 built: $here/fwlv2"
