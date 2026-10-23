@@ -1076,19 +1076,46 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
   const nyqCode = body.querySelector<HTMLTextAreaElement>('[data-nyq="code"]');
   const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch] ?? ch);
   let nyqPlugins: { id: string; name: string; controls: NyqControl[] }[] = [];
-  fetch("/api/nyquist/plugins")
-    .then((r) => (r.ok ? r.json() : []))
-    .then((list: typeof nyqPlugins) => {
-      nyqPlugins = list;
-      for (const p of list) {
-        const o = document.createElement("option");
-        o.value = p.id;
-        o.textContent = p.name;
-        nyqSel?.append(o);
+  const nyqLoad = () =>
+    fetch("/api/nyquist/plugins")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: typeof nyqPlugins) => {
+        nyqPlugins = list;
+        nyqSel?.querySelector('[data-nyq-get]')?.remove();
+        for (const p of list) {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = p.name;
+          nyqSel?.append(o);
+        }
+        if (!list.length && nyqSel) {
+          const o = document.createElement("option");
+          o.value = "";
+          o.dataset.nyqGet = "1";
+          o.textContent = "Get the Nyquist plug-ins (GPL-2.0, downloaded from their publisher)";
+          nyqSel.append(o);
+        }
+      })
+      .catch(() => undefined);
+  void nyqLoad();
+  nyqSel?.addEventListener("change", async () => {
+    if (nyqSel.selectedOptions[0]?.dataset.nyqGet) {
+      nyqSel.value = "";
+      nyqSel.disabled = true;
+      setText(notice, "Downloading the Nyquist plug-ins...");
+      try {
+        const res = await fetch("/api/nyquist/plugins/install", { method: "POST" });
+        const out = (await res.json().catch(() => ({}))) as { installed?: number; detail?: unknown };
+        if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+        await nyqLoad();
+        setText(notice, `${out.installed ?? 0} Nyquist plug-ins installed`);
+      } catch (err) {
+        setText(notice, String((err as Error).message ?? err));
+      } finally {
+        nyqSel.disabled = false;
       }
-    })
-    .catch(() => undefined);
-  nyqSel?.addEventListener("change", () => {
+      return;
+    }
     const p = nyqPlugins.find((x) => x.id === nyqSel.value);
     if (nyqCode) nyqCode.hidden = !!p;
     if (!nyqControls) return;

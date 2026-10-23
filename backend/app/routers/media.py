@@ -406,6 +406,17 @@ def nyquist_plugins() -> list[dict]:
     return nyquist.list_plugins()
 
 
+@router.post("/nyquist/plugins/install")
+def nyquist_plugins_install() -> dict:
+    """The Nyquist plug-ins (GPL-2.0) are not part of formwav: this downloads them on the person's request, pinned."""
+    from ..services import nyquist
+
+    try:
+        return nyquist.install_plugins()
+    except media.MediaError as err:
+        raise HTTPException(502, str(err)) from err
+
+
 @router.post("/media/{media_id}/debleed-clicks", status_code=201)
 def media_debleed_clicks(media_id: str, amount: float = 100.0) -> dict:
     """RX-05 without a reference: a headphone click track found by its steady tempo and taken out (services/effects.py:

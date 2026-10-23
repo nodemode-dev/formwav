@@ -50,7 +50,6 @@ pyinstaller --clean --noconfirm --onefile --name formwav-engine \
   --hidden-import app.main \
   --add-data "../frontend/dist:frontend_dist" \
   --add-data "../native/formwav-nyquist/runtime:nyquist_runtime" \
-  --add-data "../native/formwav-nyquist/plug-ins:nyquist_plugins" \
   desktop_entry.py
 ./dist/formwav-engine --selfcheck
 deactivate

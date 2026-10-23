@@ -18,7 +18,8 @@
 ;; where "cc" is the quoted country code.
 ;;
 ;; formwav (AU-28): Audacity defines _ in C (its gettext) before loading this file; formwav has no translations, so
-;; the untranslated text is the identity. The only change formwav makes to Audacity 2.4.2's Nyquist runtime.
+;; the untranslated text is the identity. One of two changes formwav makes to Audacity 2.4.2's Nyquist runtime; the
+;; other is below, where aud-do-support.lsp is no longer loaded.
 (defun underscore (txt) txt)
 ;;
 (defun _(txt &aux newtxt)
@@ -88,4 +89,6 @@
 ;;; Load wrapper functions for aud-do commands.
 ;;; If commented out, "aud-do-support.lsp" may be loaded by a plug-in.
 ;;; Example: (lisp-loader (strcat *runtime-path* "aud-do-support.lsp"))
-(load "aud-do-support.lsp" :verbose nil)
+;; formwav: aud-do-support.lsp (GPL-2.0) wraps the host's aud-do scripting commands, which formwav does not have;
+;; it is not part of formwav's runtime, so it is not loaded.
+;;(load "aud-do-support.lsp" :verbose nil)

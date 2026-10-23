@@ -37,8 +37,81 @@ def runtime_dir() -> Path:
     return Path(os.environ.get("FORMWAV_NYQUIST_RUNTIME") or _bundled("nyquist_runtime") or _ROOT / "runtime")
 
 
+PLUGIN_SOURCE = "https://raw.githubusercontent.com/audacity/audacity/Audacity-2.4.2/plug-ins/"
+PLUGIN_PINS = {
+    "SilenceMarker.ny": "27163e80d0f2c0949f90176379662443dcfdcf2e4e827629b26c564ba3d4d0fd",
+    "SoundFinder.ny": "82945887fd3ed6ac74a2bfa001f6963d43dbdfb113e3b4ec24155a8e7b7b493b",
+    "SpectralEditMulti.ny": "f839c7dc005d389774614732f482c27124377de089f475a25fb20c32897ed1e2",
+    "SpectralEditParametricEQ.ny": "58a5cd8e11026edfdad225e1d72f14a014c2537e2ce5acab68b29004bd8edd90",
+    "SpectralEditShelves.ny": "d581d58cf5228426e72130c6b3498af03a716c55714a76b583e6ba2f1e596c78",
+    "StudioFadeOut.ny": "3758373e60cb0d892ddfd3c56c3747d8953c09d7d486bfa52cc1500f1b0386f3",
+    "adjustable-fade.ny": "f2971f2414ee6fca2e3cf939583c37c87b814654cbfd70750b58f423bb1ce986",
+    "beat.ny": "2effbf1ca5fee198c79942435c7c18058a086f41748366227d0394d40e0a92e4",
+    "clipfix.ny": "7dac6ddf8905bd35b5bf534ebafc53596cabe553562a9e5371bdeee5491edd50",
+    "crossfadeclips.ny": "3d8893cff7803f6d918c944b0f99389ce859fa0ec83b79b4d67056632fb3b2a9",
+    "crossfadetracks.ny": "0b03df1f672cef85c355310303f4036291954e02aa7093a1118f8d611d3ddf1d",
+    "delay.ny": "6219f82c9529a78c3df0771fd405e696007ecedfc90989fa0a1f670da510252d",
+    "eq-xml-to-txt-converter.ny": "1cc8e7d83d4042e05c17ea139326640c40724cf5ae862d4ec768ee1b5f851041",
+    "equalabel.ny": "322c87af4b834c8e38d13167e243c14ebc3d023cd607895c206229114248a28a",
+    "highpass.ny": "5f4f22e98ca1609128525bcbf8b61e5cacc50692c5bdd47b6652e768ae28aa78",
+    "limiter.ny": "2e87f3814b0e7a6ad722976f7c2a081c617d685fb4473be73b2bf352dd6fe451",
+    "lowpass.ny": "1e3beb91de75894b3f2e3380ae48a95b3dd1ab4dae9392c77c418f8d3628b401",
+    "noisegate.ny": "74d92281d527ae32cd13f32f9144e37d26511ed8b13d606e73c44aa6d5160c7c",
+    "notch.ny": "27fe135716bd7851f5a877aa64b71cbdc8c5cc990c4807a498ef7abf4b9548da",
+    "nyquist-plug-in-installer.ny": "df909cf00c352f9b4fbe8f950c4ecacc65c987ce656e4f33e2e167d262660cd3",
+    "pluck.ny": "3a14aff19896fe762d7fd69ad6b12cf6fae14a3630622fe22756e9018ab98f2d",
+    "rhythmtrack.ny": "4087db34b524f134089f1336845be6657f482e4a54dc4a025a49a21e94da217e",
+    "rissetdrum.ny": "c5aae37565d5d4bf15bd47376dd14a43e87fb17e9609f55167200dcdbff2a193",
+    "rms.ny": "e5c6733f2b313f1a0b05773948f6c2811b6cce12b6244c8bfbf93cbf39928869",
+    "sample-data-export.ny": "b3f449584b4d2b9f3ac5d71699ddaf552a7a2805f078674913eb4344361c1ea0",
+    "sample-data-import.ny": "da6b4d0feaae9097a3d8503a53b1103ebccda19da62e731fadfa9b812f7eae25",
+    "spectral-delete.ny": "0b3b6ef201aa5be62528cf98a4f27b02ee5c32831951d437a166d8eeebbcff22",
+    "tremolo.ny": "33d7cd8d198d09e604bb2d30bfde2a27fd47cfa444e427027632c4dc6fc9e507",
+    "vocalrediso.ny": "639d37b0e30d6ce7b6726c0fffc3f627ac95c3eafec67b987271016d9836d8df",
+    "vocoder.ny": "398c78eb560830f7551dc05d00f6b6702605cfd13c28af0075383aa947be9739",
+}
+
+
+def installed_dir() -> Path:
+    from ..core import paths
+
+    return paths.data_dir() / "nyquist-plugins"
+
+
 def plugins_dir() -> Path:
-    return Path(os.environ.get("FORMWAV_NYQUIST_PLUGINS") or _bundled("nyquist_plugins") or _ROOT / "plug-ins")
+    """The plug-ins are GPL-2.0 and never ship in the app: a person installs them (install_plugins); a checkout uses its own copy."""
+    if os.environ.get("FORMWAV_NYQUIST_PLUGINS"):
+        return Path(os.environ["FORMWAV_NYQUIST_PLUGINS"])
+    if any(installed_dir().glob("*.ny")) or _bundled("frontend_dist"):
+        return installed_dir()
+    return _ROOT / "plug-ins"
+
+
+def install_plugins() -> dict:
+    """Downloads the 30 plug-ins from their publisher's repository at the pinned tag, each checked against its SHA-256."""
+    import hashlib
+    import urllib.request
+
+    target = installed_dir()
+    target.mkdir(parents=True, exist_ok=True)
+    got = 0
+    for name, pin in PLUGIN_PINS.items():
+        path = target / name
+        if path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == pin:
+            got += 1
+            continue
+        try:
+            with urllib.request.urlopen(PLUGIN_SOURCE + name, timeout=60) as response:
+                data = response.read(2_000_000)
+        except OSError as err:
+            raise media.MediaError(f"the Nyquist plug-ins could not be downloaded ({name}: {err})") from err
+        if hashlib.sha256(data).hexdigest() != pin:
+            raise media.MediaError(f"{name} did not match its pinned checksum, so it was not installed")
+        temporary = path.with_suffix(".download")
+        temporary.write_bytes(data)
+        temporary.replace(path)
+        got += 1
+    return {"installed": got, "dir": str(target), "licence": "GPL-2.0", "source": PLUGIN_SOURCE}
 
 
 def _tokens(s: str) -> list[str]:
