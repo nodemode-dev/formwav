@@ -1,6 +1,6 @@
 # formwav's MCP tools
 
-Generated from the server's own listing (34 tools) by the harness's generator; regenerate after any tool change rather than editing by hand (the generator refuses when this grouping and the server disagree). Names are exact and case sensitive.
+Generated from the server's own listing (35 tools) by the harness's generator; regenerate after any tool change rather than editing by hand (the generator refuses when this grouping and the server disagree). Names are exact and case sensitive.
 
 ## Contents
 
@@ -73,6 +73,12 @@ Applies one effect or repair to a media and returns the new media (the source is
 Kind: makes new media or writes a file. Parameters: `media_id` (string), `reference_media_id` (string), `offset_samples` (integer, default 0), `amount` (number, default 100).
 
 Removes what leaked into a recording from another recording (headphone spill, a backing track, an amp in the vocal mic) and returns the new media. `reference_media_id` is the source of the leak; `offset_samples` is the reference's sample at the recording's first sample (0 when both start together); `amount` 0 to 100 percent.
+
+### `formwav_heal_selection`
+
+Kind: makes new media or writes a file. Parameters: `media_id` (string), `boxes` (array).
+
+Heals a selection of spectrogram boxes in one explicit step and returns the new media (the source is kept). The boxes are the selection: each has from and to (seconds of this media) and low and high (Hz), one box per event (a click, a crackle burst, a whistle); 1 to 2000 boxes, all healed in one pass. The sound inside them is rebuilt from the sound around them (a dropout is filled instead). Nothing is healed until this is called, and it is never a brush stroke: choose the boxes from measurements, call this, then measure the result with formwav_analyze_media.
 
 ### `formwav_separate_speech_music_ambience`
 

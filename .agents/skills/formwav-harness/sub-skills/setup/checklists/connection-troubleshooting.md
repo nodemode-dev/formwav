@@ -20,9 +20,9 @@ Work in order.
 - [ ] If that fails, the problem is the connection or the engine, and is recorded as such
 
 **5. Are the tool names right**
-- [ ] The client lists 34 tools whose names start with formwav_
+- [ ] The client lists 35 tools whose names start with formwav_
 - [ ] Every name used matches `sub-skills/tools/references/tools.md` exactly, case included
-- [ ] The client's tool list matches the reference's 34; a different count means the server changed and the reference needs regenerating
+- [ ] The client's tool list matches the reference's 35; a different count means the server changed and the reference needs regenerating
 
 **6. Only now, is it the workflow**
 - [ ] Each step's inputs come from an earlier step's results

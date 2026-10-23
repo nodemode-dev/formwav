@@ -5,7 +5,7 @@ description: "Drives formwav, the audio editor, through its MCP server (the form
 
 # formwav harness
 
-formwav's MCP server gives an agent 34 `formwav_*` tools that reach formwav's engine: media, repairs, speech, music, dubbing, separation, recording, sessions, renders and the cloud, and, with the window open, the open session itself (its tools and every menu, key and button command). Access is not judgment. Without this harness an agent calls a generator whose engine is not installed, edits before measuring, loses track of which media came from which, or stops dead at a missing key. This pack is the judgment: what to check first, which tool fits, the order of the steps, and what to tell the person when something they must do is missing.
+formwav's MCP server gives an agent 35 `formwav_*` tools that reach formwav's engine: media, repairs, speech, music, dubbing, separation, recording, sessions, renders and the cloud, and, with the window open, the open session itself (its tools and every menu, key and button command). Access is not judgment. Without this harness an agent calls a generator whose engine is not installed, edits before measuring, loses track of which media came from which, or stops dead at a missing key. This pack is the judgment: what to check first, which tool fits, the order of the steps, and what to tell the person when something they must do is missing.
 
 ## How this pack is laid out
 
@@ -15,8 +15,9 @@ formwav-harness/
   EVALS.json                    evaluations and trigger tests
   sub-skills/
     harness-director/           first look: is the engine up, what is installed, which workflow
-    tools/                      what each tool does; references/tools.md lists all 34, generated from the server
+    tools/                      what each tool does; references/tools.md lists all 35, generated from the server
     session/                    editing the open session: its tools, the command catalogue, batches, the headless CLI
+    clean-noises/               finding clicks and crackle, selecting each with a box, healing explicitly, checking
     workflows/                  every workflow step by step; references/workflows.md
     setup/                      connecting Claude Code, Codex, Cursor and Claude Desktop; the troubleshooting checklist
     development/                adding or changing a tool; the tool-change checklist
@@ -29,6 +30,7 @@ formwav-harness/
 | Any formwav job not covered below, or unclear which tool fits | `sub-skills/harness-director/SUB-SKILL.md` |
 | What a tool does, its parameters, which of two tools to use | `sub-skills/tools/SUB-SKILL.md` |
 | Changing a session: tracks, clips, effects on tracks, markers, MIDI, surround, any menu command, or a saved .fmw with no window | `sub-skills/session/SUB-SKILL.md` |
+| Clicks, crackle, pops or other short noises to find and heal in a recording, or "do what the heal brush does" | `sub-skills/clean-noises/SUB-SKILL.md` |
 | A job with several steps: cleanup, words, music, dubbing, delivery, recording, cloud | `sub-skills/workflows/SUB-SKILL.md` |
 | Connecting formwav's server to a client, or the tools do not appear | `sub-skills/setup/SUB-SKILL.md` |
 | Adding a tool to the server or changing one | `sub-skills/development/SUB-SKILL.md` |

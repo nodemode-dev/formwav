@@ -88,6 +88,7 @@ element by its visible words or its aria-label in code (they are translated); us
 The heal brush selects and Heal repairs, as two separate steps. Keep it that way, in the interface, the commands and the agent tools:
 
 - A brush stroke on the spectrogram only paints a selection (the range mask, like Paint select). Releasing a stroke never repairs anything, and nothing else repairs on its own: repair runs only from the Heal button, Edit > Heal selection or Alt Shift H. Box and lasso selections heal the same way.
+- An agent cleans clicks and noises through `formwav_heal_selection` (boxes are the selection, the call is the explicit Heal; the `clean-noises` sub-skill of `formwav-harness`). No agent tool or command heals on a brush stroke, and none paints a selection to heal it in one gesture.
 - The brush gets no opacity, strength or per-pixel amount, and no size that scales an effect; the mask stays boolean.
 - Fallback, off by default: `HEAL_SOURCE` in `backend/app/services/effects.py` ("surround" by default, "inside" to rebuild masked cells from the painted run alone, per bin capped to the 20th percentile of the run, nothing read from outside it), overridden by the environment variable `FORMWAV_HEAL_SOURCE`. Do not make "inside" the default without being asked.
 - The remixer (`backend/app/services/remix.py`) never updates transition costs or similarities after a jump is used, and never adds a duplication or repeat penalty to a used jump; its similarity matrix stays static for the whole plan.
