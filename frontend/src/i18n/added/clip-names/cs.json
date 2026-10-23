@@ -1,0 +1,7 @@
+{
+"Clip sound": "Zvuk klipu",
+"Enhance spoken": "Vylepšit řeč",
+"Remixer (fit to length)": "Remixer (na délku)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Naučit profil šumu z vybraného rozsahu (jen šum, nejméně {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind a Vylepšit řeč pak tento šum odstraní z celého klipu nebo jeho rozsahu",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Šum naučen od {0} do {1} s; odšumovače a Vylepšit řeč ho na tomto klipu používají, dokud není zapomenut (Naučit šum bez rozsahu)"
+}

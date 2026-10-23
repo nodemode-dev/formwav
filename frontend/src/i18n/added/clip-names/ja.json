@@ -1,0 +1,7 @@
+{
+"Clip sound": "クリップのサウンド",
+"Enhance spoken": "音声を強調",
+"Remixer (fit to length)": "Remixer（長さに合わせる）",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "選択範囲からノイズプロファイルを学習します（ノイズのみ、{0} s 以上）。ノイズ除去、ディープノイズ除去、ヒスカット、ギターのノイズ除去、風切り音除去、音声を強調は、そのノイズをクリップ全体またはその一部から取り除きます",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "{0} から {1} s のノイズを学習しました。忘れるまで、ノイズ除去と音声強調がこのクリップでそれを使います（範囲なしでノイズを学習すると忘れます）"
+}

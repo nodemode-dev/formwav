@@ -139,7 +139,7 @@ ALL_CHAINS = {**AUDIO_CHAINS, **FORMWAV_CHAINS}
 
 #: Menu groups for formwav's Inspector; every chain appears exactly once.
 GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
-    ("Clean up", [("voice-clean", "Enhance speech"), ("denoise", "Denoise"), ("noise-reduce", "Noise reduction..."), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess"), ("dialogue-isolate", "Dialogue isolate (neural)...")]),
+    ("Clean up", [("voice-clean", "Enhance spoken"), ("denoise", "Denoise"), ("noise-reduce", "Noise reduction..."), ("deep-denoise", "Deep denoise"), ("hiss-cut", "Hiss cut"), ("hum-remover", "Hum remover"), ("rumble-cut", "Rumble cut"), ("noise-gate", "Noise gate"), ("de-ess", "De-ess"), ("dialogue-isolate", "Dialogue isolate (neural)...")]),
     ("Dynamics", [("compress", "Compress"), ("normalize", "Normalize to -16 LUFS"), ("level-rider", "Level rider"), ("peak-limiter", "Peak limiter"), ("dynamics-curve", "Dynamics curve...")]),
     ("Tone", [("bass", "Bass boost"), ("treble", "Treble boost"), ("warm-lows", "Warm lows"), ("presence-lift", "Presence lift"), ("mid-scoop", "Mid scoop"), ("crisp-detail", "Crisp detail"), ("eq-3band", "Parametric EQ, 3 bands..."), ("graphic-eq-5", "Graphic EQ, 5 bands..."), ("graphic-eq", "Graphic EQ, 10 bands..."), ("filter-curve", "Filter curve EQ...")]),
     ("Space", [("reverb", "Reverb..."), ("room", "Room echo"), ("hall", "Hall echo"), ("cathedral", "Cathedral echo"), ("plate", "Plate echo"), ("echo", "Echo"), ("slapback", "Slapback"), ("long-tail", "Long tail"), ("tunnel", "Tunnel"), ("small-booth", "Small booth"), ("far-away", "Far away"), ("wide-stage", "Wide stage"), ("stereo-bloom", "Stereo bloom"), ("stereo-width", "Stereo width...")]),
@@ -203,7 +203,7 @@ def _filter_curve_chain(v: dict) -> str:
 
 
 #: Adjustable effects: each parameter is (label, min, max, default, unit); the builder makes the chain from clamped values.
-#: Enhance speech's strength follows formcut's own voice-clean strength control (noise floor and ratio scale with it).
+#: Enhance spoken's strength follows formcut's own voice-clean strength control (noise floor and ratio scale with it).
 PARAMS: dict[str, tuple[dict[str, tuple[str, float, float, float, str]], object]] = {
     "dialogue-isolate": ({"strength": ("Strength", 0, 100, 100, "%"), "amount": ("Amount", 0, 100, 100, "%"), "keep": ("Keep laughs", 0, 1, 0, "", 1)}, lambda v: f"apad=pad_len=480,arnndn=m={_rnnoise_model()}:mix={v['strength'] / 100:.2f},atrim=start_sample=480"),
     "voice-clean": ({"strength": ("Strength", 0, 100, 50, "%"), "amount": ("Amount", 0, 100, 100, "%"), "keep": ("Keep laughs", 0, 1, 0, "", 1)}, lambda v: f"highpass=f=90,afftdn=nf={-15 - 20 * v['strength'] / 100:.1f},acompressor=threshold=0.12:ratio={1.5 + 3 * v['strength'] / 100:.2f},alimiter"),
@@ -1796,7 +1796,7 @@ def _enhance_speech(x, rate: int, v: dict):
 def _controlled(x, y, rate: int, v: dict):
     """PLAN_v14 W3, the enhancers under control (the loudest complaint about speech enhancers
     and ElevenLabs' dubbing: laughter, breaths and word endings taken out, and no way to dial it back). The original is
-    first brought to the processed level (Enhance speech sets -16 LUFS). Keep laughter and breaths finds the moments
+    first brought to the processed level (Enhance spoken sets -16 LUFS). Keep laughter and breaths finds the moments
     the processing took down by more than 10 dB where the original stood more than 15 dB above its own noise floor (a
     sound, not background: the floor is the quietest tenth of 20 ms frames) and lets the original through there, faded
     in and out over about 80 ms. Amount then mixes the original back under the whole result, 100 % being the
@@ -2168,7 +2168,7 @@ def apply(media_id: str, name: str, params: dict | None = None) -> dict:
             f"asendcmd=c='0.0 afftdn sn start\\; {max(0.0, span - 0.05):.4f} afftdn sn stop',{chain},atrim=start={span:.4f},asetpts=PTS-STARTPTS"
         )
     elif noise:
-        raise media.MediaError(f"{LABELS.get(name, name)} does not take a learned noise profile; Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance speech do")
+        raise media.MediaError(f"{LABELS.get(name, name)} does not take a learned noise profile; Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken do")
     delay = (int(rate / 40) if "afftdn" in chain else 0) + (int(rate * 0.008) if "anlmdn=s=7:p=0.002:r=0.006" in chain else 0) + (int(rate * 0.005) - 1 if "alimiter" in chain else 0)
     if delay:
         chain += f",atrim=start_sample={delay},apad=pad_len={delay}"

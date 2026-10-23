@@ -1,0 +1,7 @@
+{
+"Clip sound": "Kliplyd",
+"Enhance spoken": "Forbedr tale",
+"Remixer (fit to length)": "Remixer (til længde)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Lær en støjprofil fra det valgte område (kun støj, mindst {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind og Forbedr tale fjerner så den støj fra hele klippet eller et område af det",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Lærte støj fra {0} til {1} s; denoiserne og Forbedr tale bruger den på dette klip, indtil den glemmes (Lær støj uden område)"
+}

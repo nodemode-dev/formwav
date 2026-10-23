@@ -1,0 +1,7 @@
+{
+"Clip sound": "Leikkeen ääni",
+"Enhance spoken": "Paranna puhetta",
+"Remixer (fit to length)": "Remixer (pituuteen)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Opi kohinaprofiili valitulta alueelta (vain kohinaa, vähintään {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind ja Paranna puhetta poistavat sitten sen kohinan koko klipistä tai sen alueelta",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Opittiin kohina väliltä {0}–{1} s; kohinanpoistajat ja Paranna puhetta käyttävät sitä tässä klipissä, kunnes se unohdetaan (Opi kohina ilman aluetta)"
+}

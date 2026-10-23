@@ -1,0 +1,7 @@
+{
+"Clip sound": "Звук кліпу",
+"Enhance spoken": "Покращення мовлення",
+"Remixer (fit to length)": "Remixer (під довжину)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Запам’ятати профіль шуму за вибраним діапазоном (лише шум, не коротше {0} s); потім «Шумопригнічення», «Глибоке шумопригнічення», «Зріз шипіння», «Шумопригнічення для гітари», «Видалення вітру» та «Покращення мовлення» прибирають цей шум з усього кліпу або його ділянки",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Шум запам’ятовано на відрізку від {0} до {1} s; шумопригнічувачі й «Покращення мовлення» використовують його на цьому кліпі, доки його не буде забуто (Запам’ятати шум без діапазону)"
+}

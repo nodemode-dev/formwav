@@ -1,0 +1,7 @@
+{
+"Clip sound": "Âm thanh của clip",
+"Enhance spoken": "Cải thiện giọng nói",
+"Remixer (fit to length)": "Remixer (theo độ dài)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Học một hồ sơ nhiễu từ phạm vi đã chọn (chỉ có nhiễu, ít nhất {0} s); Khử nhiễu, Khử nhiễu sâu, Cắt xì, Khử nhiễu guitar, Khử gió và Cải thiện giọng nói sẽ loại bỏ nhiễu đó khỏi cả clip hoặc một đoạn của nó",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Đã học nhiễu từ {0} đến {1} s; các bộ khử nhiễu và Cải thiện giọng nói dùng nó trên clip này cho đến khi bị quên (Học nhiễu khi không có phạm vi)"
+}

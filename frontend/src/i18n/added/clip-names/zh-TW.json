@@ -1,0 +1,7 @@
+{
+"Clip sound": "片段聲音",
+"Enhance spoken": "語音增強",
+"Remixer (fit to length)": "Remixer（到指定長度）",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "從所選範圍學習雜訊特徵（僅含雜訊，至少 {0} s）；降噪、深度降噪、嘶聲消除、吉他降噪、去風噪與語音增強隨後會從整個片段或其一部分中移除該雜訊",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "已從 {0} 到 {1} s 學習雜訊；降噪與語音增強會在此片段上使用它，直到被清除（無範圍時按學習雜訊）"
+}

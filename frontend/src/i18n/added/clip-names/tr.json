@@ -1,0 +1,7 @@
+{
+"Clip sound": "Klip sesi",
+"Enhance spoken": "Konuşmayı iyileştir",
+"Remixer (fit to length)": "Remixer (uzunluğa)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Seçili aralıktan bir gürültü profili öğren (yalnızca gürültü, en az {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind ve Konuşmayı iyileştir sonra bu gürültüyü tüm klipten ya da bir kısmından kaldırır",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Gürültü {0}–{1} s aralığından öğrenildi; denoiser'lar ve Konuşmayı iyileştir bu klipte unutulana kadar bunu kullanır (aralıksız Gürültü öğren)"
+}

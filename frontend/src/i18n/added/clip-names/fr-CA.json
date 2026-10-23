@@ -1,0 +1,7 @@
+{
+"Clip sound": "Son du clip",
+"Enhance spoken": "Améliorer la parole",
+"Remixer (fit to length)": "Remixer (à la durée)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Apprendre un profil de bruit à partir de la plage sélectionnée (bruit seul, au moins {0} s); Réduction de bruit, Réduction de bruit profonde, Coupe du souffle, Réduction de bruit pour guitare, De-wind et Améliorer la parole retirent ensuite ce bruit de tout le clip ou d'une partie",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Bruit appris de {0} à {1} s; les réducteurs de bruit et Améliorer la parole l'utilisent sur ce clip jusqu'à ce qu'il soit oublié (Apprendre le bruit sans plage)"
+}

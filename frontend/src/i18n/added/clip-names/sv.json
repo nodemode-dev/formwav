@@ -1,0 +1,7 @@
+{
+"Clip sound": "Klippljud",
+"Enhance spoken": "Förbättra tal",
+"Remixer (fit to length)": "Remixer (till längd)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Lär in en brusprofil från det valda området (bara brus, minst {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind och Förbättra tal tar sedan bort det bruset från hela klippet eller ett område av det",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Lärde in brus från {0} till {1} s; denoiserna och Förbättra tal använder det på det här klippet tills det glöms (Lär in brus utan område)"
+}

@@ -178,7 +178,7 @@ export interface Clip {
   envelope?: readonly { at: number; db: number }[];
   /** S13: the clip gain and its line set aside (the clip plays at 0 dB), both kept for when it is back on */
   gainBypass?: boolean;
-  /** AA-07, Essential Sound: what the clip is, which decides its tasks and presets. */
+  /** AA-07, Clip sound: what the clip is, which decides its tasks and presets. */
   soundType?: "dialogue" | "music" | "effects" | "ambience";
   fadeIn?: number;
   fadeOut?: number;

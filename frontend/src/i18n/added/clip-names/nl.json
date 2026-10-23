@@ -1,0 +1,7 @@
+{
+"Clip sound": "Clipgeluid",
+"Enhance spoken": "Spraak verbeteren",
+"Remixer (fit to length)": "Remixer (naar lengte)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Een ruisprofiel leren van het geselecteerde bereik (alleen ruis, minstens {0} s); Ruisonderdrukking, Diepe ruisonderdrukking, Sis-cut, Gitaar-ruisonderdrukking, De-wind en Spraak verbeteren verwijderen die ruis dan uit de hele clip of een deel ervan",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Ruis geleerd van {0} tot {1} s; de ruisonderdrukkers en Spraak verbeteren gebruiken het op deze clip tot het wordt vergeten (Ruis leren zonder bereik)"
+}

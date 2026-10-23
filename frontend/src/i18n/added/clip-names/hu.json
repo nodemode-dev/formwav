@@ -1,0 +1,7 @@
+{
+"Clip sound": "Klip hangja",
+"Enhance spoken": "Beszéd javítása",
+"Remixer (fit to length)": "Remixer (hosszra)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Zajprofil tanulása a kijelölt tartományból (csak zaj, legalább {0} s); a Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind és Beszéd javítása ezután eltávolítja ezt a zajt az egész klipből vagy egy részéből",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Zaj megtanulva {0}–{1} s közül; a denoiserek és a Beszéd javítása ezt használja ezen a klipen, amíg el nem felejtik (Zaj tanulása tartomány nélkül)"
+}

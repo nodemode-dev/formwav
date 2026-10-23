@@ -1,0 +1,7 @@
+{
+"Clip sound": "เสียงของคลิป",
+"Enhance spoken": "ปรับปรุงเสียงพูด",
+"Remixer (fit to length)": "Remixer (ให้ได้ความยาว)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "เรียนรู้โปรไฟล์นอยส์จากช่วงที่เลือก (นอยส์ล้วน อย่างน้อย {0} s); จากนั้นตัวลดสัญญาณรบกวน ลดสัญญาณรบกวนแบบลึก ตัดเสียงฟู่ ลดสัญญาณรบกวนกีตาร์ ลบเสียงลม และปรับปรุงเสียงพูด จะลบนอยส์นั้นออกจากทั้งคลิปหรือบางช่วงของคลิป",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "เรียนรู้นอยส์จาก {0} ถึง {1} s แล้ว ตัวลดนอยส์และการปรับปรุงเสียงพูดจะใช้นอยส์นี้กับคลิปนี้จนกว่าจะลืม (เรียนรู้นอยส์โดยไม่เลือกช่วง)"
+}

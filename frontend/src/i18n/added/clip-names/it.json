@@ -1,0 +1,7 @@
+{
+"Clip sound": "Suono della clip",
+"Enhance spoken": "Migliora voce",
+"Remixer (fit to length)": "Remixer (alla lunghezza)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Imparare un profilo di rumore dall'intervallo selezionato (solo rumore, almeno {0} s); Riduzione del rumore, Riduzione del rumore profonda, Taglio del fruscio, Riduzione del rumore per chitarra, De-wind e Migliora voce rimuovono poi quel rumore dall'intera clip o da un suo intervallo",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Rumore appreso da {0} a {1} s; i riduttori di rumore e Migliora voce lo usano su questa clip finché non viene dimenticato (Apprendi rumore senza intervallo)"
+}

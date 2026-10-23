@@ -1,0 +1,7 @@
+{
+"Clip sound": "Suara klip",
+"Enhance spoken": "Tingkatkan ucapan",
+"Remixer (fit to length)": "Remixer (ke panjang)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "Pelajari profil noise dari rentang terpilih (hanya noise, minimal {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind, dan Tingkatkan ucapan kemudian menghapus noise itu dari seluruh klip atau sebagian",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "Noise dipelajari dari {0} sampai {1} s; denoiser dan Tingkatkan ucapan memakainya pada klip ini sampai dilupakan (Pelajari noise tanpa rentang)"
+}

@@ -1,0 +1,7 @@
+{
+"Clip sound": "클립 사운드",
+"Enhance spoken": "음성 향상",
+"Remixer (fit to length)": "Remixer (길이에 맞춤)",
+"Learn a noise profile from the selected range (noise only, at least {0} s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it": "선택한 범위에서 노이즈 프로파일을 학습합니다(노이즈만, {0} s 이상). 이후 노이즈 제거, 딥 노이즈 제거, 히스 컷, 기타 노이즈 제거, 바람 소리 제거, 음성 향상이 클립 전체 또는 일부에서 그 노이즈를 제거합니다",
+"Learned noise from {0} to {1} s; the denoisers and Enhance spoken use it on this clip until it is forgotten (Learn noise with no range)": "{0}~{1} s에서 노이즈를 학습했습니다. 지울 때까지 노이즈 제거와 음성 향상이 이 클립에 이를 사용합니다(범위 없이 노이즈 학습을 누르면 지웁니다)"
+}

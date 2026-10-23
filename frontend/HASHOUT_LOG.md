@@ -180,6 +180,15 @@ frontend/
 
 ---
 
+## src/ui/inspector-pane.ts and src/i18n/added/clip-names · Clip sound, Enhance spoken, Remixer (v2.20.3) {#src-ui-clip-names}
+
+### Three labels renamed so no other product's feature name is on screen
+
+- refers-to: src/ui/inspector-pane.ts (the clip section head, the voice button, the effect list, the analyze row's remix button, two notices), backend/app/services/effects.py (`GROUPS`, the "Clean up" group), src/i18n/added/clip-names/<code>.json
+- The clip-type section is Clip sound, the one-click voice clean is Enhance spoken and the beat re-arrangement button is Remixer (fit to length); the family IP plan approved by the owner on 2026-10-23 chose the names. The effect id `voice-clean`, the action `remix-length`, `/api/media/{id}/remix`, `mountEssentialSound` and the file name `essential-sound.ts` stay, so sessions, presets and agent calls are unchanged.
+- The new strings are in `added/clip-names` in all 25 languages, as the i18n rule asks; the base tables keep their old entries, which nothing looks up any more. Enhance spoken reuses each language's existing words for the voice clean; Remixer is kept as a name.
+- Not run: the interface test that lists untranslated strings (it needs the browser rig).
+
 ## src/engine/timebase.ts · the five timebases and fifteen frame rates (PLAN_v13 S6) {#src-engine-timebase-s6}
 
 ### The timebases for formwav's one tempo and its timecode start in seconds
