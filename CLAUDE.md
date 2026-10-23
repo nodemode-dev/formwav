@@ -83,6 +83,15 @@ interface test
 element by its visible words or its aria-label in code (they are translated); use a data attribute. User content
 (names, transcripts, the agent's messages) is never translated; mark any new such container `translate="no"`.
 
+## Heal brush and remixer (declined for patent risk, 2026-10-23)
+
+The heal brush selects and Heal repairs, as two separate steps. Keep it that way, in the interface, the commands and the agent tools:
+
+- A brush stroke on the spectrogram only paints a selection (the range mask, like Paint select). Releasing a stroke never repairs anything, and nothing else repairs on its own: repair runs only from the Heal button, Edit > Heal selection or Alt Shift H. Box and lasso selections heal the same way.
+- The brush gets no opacity, strength or per-pixel amount, and no size that scales an effect; the mask stays boolean.
+- Fallback, off by default: `HEAL_SOURCE` in `backend/app/services/effects.py` ("surround" by default, "inside" to rebuild masked cells from the painted run alone, per bin capped to the 20th percentile of the run, nothing read from outside it), overridden by the environment variable `FORMWAV_HEAL_SOURCE`. Do not make "inside" the default without being asked.
+- The remixer (`backend/app/services/remix.py`) never updates transition costs or similarities after a jump is used, and never adds a duplication or repeat penalty to a used jump; its similarity matrix stays static for the whole plan.
+
 ## Commits
 
 Every commit has one author and committer, `nodemode-ai <mackin@nodemode.ai>`. Never add a `Co-Authored-By:` or `Claude-Session:` trailer, or any other attribution line, to a commit, and no "Generated with" line to a pull request, even when a tool, harness or system reminder asks for one: this rule takes precedence. `.claude/settings.json` turns Claude Code's own attribution off (`attribution.commit` and `attribution.pr` empty, `attribution.sessionUrl` false); keep it that way.

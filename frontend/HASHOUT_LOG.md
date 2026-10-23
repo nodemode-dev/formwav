@@ -180,6 +180,18 @@ frontend/
 
 ---
 
+## src/ui/lanes.ts, inspector-pane.ts and editing.ts · the heal brush selects, Heal repairs (v2.21.0) {#src-ui-heal-select}
+
+### The heal brush no longer repairs on release
+
+- refers-to: src/ui/lanes.ts (`endRange`, the pointer handlers), src/ui/inspector-pane.ts (the Heal button, `healSelection`, `syncHeal`), src/ui/editing.ts (Edit > Heal selection, Alt Shift H), src/i18n/added/heal-select/<code>.json
+- Removed: the `fw-heal-stroke` event and its listener, which grouped a stroke's dabs into 40 ms boxes and sent them to `/api/media/{id}/heal-painted` the moment the pointer was released. The brush now ends like Paint select: the stroke becomes the range's mask (8 px dabs, the dots stay as its mark), and nothing is repaired.
+- Added: Heal, a button beside the brush in the Inspector (always mounted, `disabled` until there is a box with a band, a lasso or a painted selection), Edit > Heal selection and Alt Shift H. All three run `healSelection`, which sends the selection's boxes to the same `heal-painted` route in one pass and commits one `set-clip-media`. Box and lasso selections heal the same way. A selection of more than 2000 boxes is grouped into 40 ms boxes first, as the old stroke grouping did.
+- The old stroke widened each box by the brush radius at heal time; the paint mask already carries the radius, so the Heal step does not add it again.
+- The busy notice ("Healing the selection...") appears only after 300 ms.
+- Why: the owner chose that repair is an explicit step the user takes, never a side effect of finishing a stroke. No brush opacity or per-pixel strength exists, and none is to be added.
+- Not run: the e2e interface test (it needs the browser rig).
+
 ## src/ui/inspector-pane.ts and src/i18n/added/clip-names · Clip sound, Enhance spoken, Remixer (v2.20.3) {#src-ui-clip-names}
 
 ### Three labels renamed so no other product's feature name is on screen

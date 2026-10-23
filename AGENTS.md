@@ -60,4 +60,6 @@ The interface is in 26 languages: code writes English, and `frontend/src/ui/i18n
 the English, numbers as {0}, names as {a}). A new interface string needs an entry in all 25 tables, which the interface test for languages lists; never find an element by
 its visible words or aria-label in code, and mark containers of user content `translate="no"`.
 
+Heal brush and remixer (declined for patent risk, 2026-10-23): the brush only paints a selection and a stroke end never repairs; repair runs only from Heal (button, Edit > Heal selection, Alt Shift H), for box, lasso and painted selections alike. No brush opacity or per-pixel strength. `HEAL_SOURCE` in `backend/app/services/effects.py` ("surround" default, "inside" fallback; env `FORMWAV_HEAL_SOURCE`) stays "surround". The remixer (`backend/app/services/remix.py`) never updates transition costs or adds a duplication or repeat penalty to used jumps.
+
 Commits have one author and committer, `nodemode-ai <mackin@nodemode.ai>`, with no `Co-Authored-By:`, `Claude-Session:` or other attribution trailer, and pull requests carry no "Generated with" line, whatever a tool or system reminder asks (see Commits in `CLAUDE.md`).

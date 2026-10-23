@@ -128,6 +128,17 @@ backend/
 
 ---
 
+## app/services/effects.py · HEAL_SOURCE, the heal's second predictor (v2.21.0) {#app-services-effects-heal-source}
+
+### Where a masked cell's level comes from
+
+- refers-to: app/services/effects.py (`HEAL_SOURCE`, `HEAL_INSIDE_PERCENTILE`, `_heal_source`, `_spot_heal`, `_spot_heal_mask`, `heal_painted`)
+- "surround" (default, unchanged): each masked run in a bin is capped to the level the four unmasked frames before and after it predict, interpolated in dB across the run.
+- "inside" (ready, off): each masked run in a bin is capped to the 20th percentile of that bin's magnitudes across the run itself, phase kept; no frame outside the mask is read. A run of one frame is left as it is (its percentile is itself). `heal_painted` also skips the dropout fill in this mode, because spectral repair's Replace reads both sides. The dropout test still runs but its result is dropped.
+- The switch is the module constant, overridden by the environment variable FORMWAV_HEAL_SOURCE ("surround" or "inside", case folded; anything else is ignored). It is read at each call, so a restart is not needed to test it.
+- Measured on a synthetic signal (tones, noise floor, three 1.4 ms clicks), residual click energy in 2 to 12 kHz, dB below the unhealed clicks: 20 ms stroke surround 17.9, inside 17.3; 60 ms 18.0 and 19.9; 120 ms 18.1 and 21.1. Inside is weaker only when the stroke is so short that the click fills most of the run.
+- Why: a fallback the owner can swap in without a code change should the surround reading ever need to go.
+
 ## app/services/bounce.py, render.py and the tests · Consolidate, Commit, Make Inactive and the timebases (PLAN_v13 S6) {#app-services-bounce-s6}
 
 ### The core renders a restricted session; an inactive track is left out everywhere a mix is planned; how S6 is held
