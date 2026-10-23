@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "ซ่อมส่วนที่เลือกไม่ได้: {a}",
+"Heal": "ซ่อม",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "แปรงซ่อม: ระบายทับเสียงในมุมมองสเปกโทรแกรมเพื่อเลือก แล้วกด ซ่อม",
+"Heal selection": "ซ่อมส่วนที่เลือก",
+"Healed the selection: {0} patch": "ซ่อมส่วนที่เลือกแล้ว: {0} จุด",
+"Healed the selection: {0} patches": "ซ่อมส่วนที่เลือกแล้ว: {0} จุด",
+"Healing the selection...": "กำลังซ่อมส่วนที่เลือก...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "ระบายทับเสียงในมุมมองสเปกโทรแกรมเพื่อเลือก จะไม่มีการซ่อมจนกว่าคุณจะกด ซ่อม",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "ซ่อมเสียงที่เลือก (กรอบ บ่วงบาศ หรือส่วนที่ระบายในสเปกโทรแกรม) เป็นการย้อนกลับหนึ่งขั้น และใช้ได้จาก แก้ไข > ซ่อมส่วนที่เลือก, Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "ซ่อมเสียงที่เลือกในสเปกโทรแกรม (กรอบ บ่วงบาศ หรือส่วนที่ระบาย) จะไม่มีการซ่อมจนกว่าคุณจะเลือกคำสั่งนี้",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "เลือกเสียงที่จะซ่อม: วาดกรอบหรือบ่วงบาศ หรือระบายทับในสเปกโทรแกรม แล้วกด ซ่อม"
+}

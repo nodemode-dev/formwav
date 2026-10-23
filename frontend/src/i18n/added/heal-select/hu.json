@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "A kijelölést nem sikerült javítani: {a}",
+"Heal": "Javítás",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Javítóecset: fesse át a hangot a spektrogramnézetben a kijelöléshez, majd nyomja meg a Javítás gombot",
+"Heal selection": "Kijelölés javítása",
+"Healed the selection: {0} patch": "Kijelölés kijavítva: {0} folt",
+"Healed the selection: {0} patches": "Kijelölés kijavítva: {0} folt",
+"Healing the selection...": "Kijelölés javítása...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Fesse át a hangot a spektrogramnézetben a kijelöléshez; semmi nem javul, amíg meg nem nyomja a Javítás gombot",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Kijavítja a kijelölt hangot (téglalap, lasszó vagy festett kijelölés a spektrogramon), egy visszavonási lépés; még: Szerkesztés > Kijelölés javítása, Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Kijavítja a spektrogramon kijelölt hangot (téglalap, lasszó vagy festett kijelölés); semmi nem javul, amíg ezt a parancsot nem választja",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Jelölje ki a javítandó hangot: rajzoljon téglalapot vagy lasszót, vagy fesse át a spektrogramon, majd nyomja meg a Javítás gombot"
+}

@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "Tidak dapat memperbaiki pilihan: {a}",
+"Heal": "Perbaiki",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Kuas perbaikan: lukis di atas suara pada tampilan spektrogram untuk memilihnya, lalu tekan Perbaiki",
+"Heal selection": "Perbaiki pilihan",
+"Healed the selection: {0} patch": "Pilihan diperbaiki: {0} bagian",
+"Healed the selection: {0} patches": "Pilihan diperbaiki: {0} bagian",
+"Healing the selection...": "Memperbaiki pilihan...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Lukis di atas suara pada tampilan spektrogram untuk memilihnya; tidak ada yang diperbaiki sampai Anda menekan Perbaiki",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Memperbaiki suara yang dipilih (kotak, lasso, atau pilihan yang dilukis pada spektrogram), satu langkah urungkan; juga Edit > Perbaiki pilihan, Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Memperbaiki suara yang dipilih pada spektrogram (kotak, lasso, atau pilihan yang dilukis); tidak ada yang diperbaiki sampai Anda memilih perintah ini",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Pilih suara yang akan diperbaiki: gambar kotak atau lasso, atau lukis di atasnya, pada spektrogram, lalu tekan Perbaiki"
+}

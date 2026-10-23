@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "De selectie kon niet worden hersteld: {a}",
+"Heal": "Herstel",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Herstelpenseel: schilder in het spectrogram over een geluid om het te selecteren en druk dan op Herstel",
+"Heal selection": "Selectie herstellen",
+"Healed the selection: {0} patch": "Selectie hersteld: {0} plek",
+"Healed the selection: {0} patches": "Selectie hersteld: {0} plekken",
+"Healing the selection...": "Selectie wordt hersteld...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Schilder in het spectrogram over een geluid om het te selecteren; er wordt niets hersteld tot u op Herstel drukt",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Herstelt het geselecteerde geluid (een kader, een lasso of een geschilderde selectie in een spectrogram), in één ongedaanmakingsstap; ook Bewerken > Selectie herstellen, Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Herstelt het geluid dat in een spectrogram is geselecteerd (een kader, een lasso of een geschilderde selectie); er wordt niets hersteld tot u dit commando kiest",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Selecteer een geluid om te herstellen: teken een kader of een lasso, of schilder erover, in een spectrogram en druk op Herstel"
+}

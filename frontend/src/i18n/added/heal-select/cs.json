@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "Výběr se nepodařilo opravit: {a}",
+"Heal": "Opravit",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Opravný štětec: přemalujte zvuk ve spektrogramu, aby se vybral, a stiskněte Opravit",
+"Heal selection": "Opravit výběr",
+"Healed the selection: {0} patch": "Výběr opraven: {0} místo",
+"Healed the selection: {0} patches": "Výběr opraven: míst {0}",
+"Healing the selection...": "Opravuje se výběr...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Přemalujte zvuk ve spektrogramu, aby se vybral; nic se neopraví, dokud nestisknete Opravit",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Opraví vybraný zvuk (rámeček, laso nebo namalovaný výběr ve spektrogramu), jeden krok zpět; také Úpravy > Opravit výběr, Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Opraví zvuk vybraný ve spektrogramu (rámeček, laso nebo namalovaný výběr); nic se neopraví, dokud nezvolíte tento příkaz",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Vyberte zvuk k opravě: ve spektrogramu nakreslete rámeček nebo laso, nebo zvuk přemalujte, a stiskněte Opravit"
+}

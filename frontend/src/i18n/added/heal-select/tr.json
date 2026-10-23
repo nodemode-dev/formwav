@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "Seçim onarılamadı: {a}",
+"Heal": "Onar",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Onarım fırçası: bir sesi seçmek için spektrogram görünümünde üzerini boyayın, sonra Onar'a basın",
+"Heal selection": "Seçimi onar",
+"Healed the selection: {0} patch": "Seçim onarıldı: {0} bölge",
+"Healed the selection: {0} patches": "Seçim onarıldı: {0} bölge",
+"Healing the selection...": "Seçim onarılıyor...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Bir sesi seçmek için spektrogram görünümünde üzerini boyayın; Onar'a basana kadar hiçbir şey onarılmaz",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Seçili sesi onarır (spektrogramda bir kutu, kement veya boyanmış seçim), tek geri alma adımı; ayrıca Düzenle > Seçimi onar, Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Spektrogramda seçili sesi onarır (kutu, kement veya boyanmış seçim); bu komutu seçene kadar hiçbir şey onarılmaz",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Onarılacak sesi seçin: spektrogramda bir kutu ya da kement çizin veya üzerini boyayın, sonra Onar'a basın"
+}

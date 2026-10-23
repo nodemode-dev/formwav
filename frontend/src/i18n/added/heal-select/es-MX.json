@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "No se pudo reparar la selección: {a}",
+"Heal": "Reparar",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Pincel de reparación: pinta sobre un sonido en el espectrograma para seleccionarlo y presiona Reparar",
+"Heal selection": "Reparar selección",
+"Healed the selection: {0} patch": "Selección reparada: {0} zona",
+"Healed the selection: {0} patches": "Selección reparada: {0} zonas",
+"Healing the selection...": "Reparando la selección...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Pinta sobre un sonido en el espectrograma para seleccionarlo; no se repara nada hasta que presiones Reparar",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Repara el sonido seleccionado (un recuadro, un lazo o una selección pintada en un espectrograma), un solo paso de deshacer; también Edición > Reparar selección, Alt+Mayús+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Repara el sonido seleccionado en un espectrograma (un recuadro, un lazo o una selección pintada); no se repara nada hasta que elijas este comando",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Selecciona un sonido por reparar: dibuja un recuadro o un lazo, o pinta sobre él, en un espectrograma y presiona Reparar"
+}

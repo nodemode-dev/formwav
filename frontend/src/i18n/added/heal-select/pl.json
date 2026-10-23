@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "Nie udało się naprawić zaznaczenia: {a}",
+"Heal": "Napraw",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Pędzel naprawy: zamaluj dźwięk w widoku spektrogramu, aby go zaznaczyć, a następnie naciśnij Napraw",
+"Heal selection": "Napraw zaznaczenie",
+"Healed the selection: {0} patch": "Zaznaczenie naprawione: {0} fragment",
+"Healed the selection: {0} patches": "Zaznaczenie naprawione: fragmenty: {0}",
+"Healing the selection...": "Naprawianie zaznaczenia...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Zamaluj dźwięk w widoku spektrogramu, aby go zaznaczyć; nic nie zostanie naprawione, dopóki nie naciśniesz Napraw",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Naprawia zaznaczony dźwięk (ramkę, lasso lub zamalowane zaznaczenie w spektrogramie), jeden krok cofania; także Edycja > Napraw zaznaczenie, Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Naprawia dźwięk zaznaczony w spektrogramie (ramkę, lasso lub zamalowane zaznaczenie); nic nie zostanie naprawione, dopóki nie wybierzesz tego polecenia",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Zaznacz dźwięk do naprawy: narysuj ramkę lub lasso albo zamaluj go w spektrogramie, a następnie naciśnij Napraw"
+}

@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "Không thể sửa vùng chọn: {a}",
+"Heal": "Sửa",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Cọ sửa: tô lên một âm thanh trong chế độ xem phổ để chọn nó, rồi nhấn Sửa",
+"Heal selection": "Sửa vùng chọn",
+"Healed the selection: {0} patch": "Đã sửa vùng chọn: {0} đoạn",
+"Healed the selection: {0} patches": "Đã sửa vùng chọn: {0} đoạn",
+"Healing the selection...": "Đang sửa vùng chọn...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Tô lên một âm thanh trong chế độ xem phổ để chọn nó; không có gì được sửa cho đến khi bạn nhấn Sửa",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Sửa âm thanh đã chọn (khung, thòng lọng hoặc vùng tô trên phổ), một bước hoàn tác; cũng có trong Chỉnh sửa > Sửa vùng chọn, Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Sửa âm thanh được chọn trên phổ (khung, thòng lọng hoặc vùng tô); không có gì được sửa cho đến khi bạn chọn lệnh này",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Chọn âm thanh cần sửa: vẽ khung hoặc thòng lọng, hoặc tô lên nó, trên phổ rồi nhấn Sửa"
+}

@@ -89,7 +89,7 @@ const BODY = `
   <div class="fw-analyze-buttons"><select data-eqm="ref" aria-label="Reference clip for EQ match"></select><button type="button" class="fw-ibtn" data-eqm="go" title="Give this clip (or the selected range) the tonal balance of the reference">Match EQ</button><button type="button" class="fw-ibtn" data-eqm="learn" title="Use the selected range as the EQ match reference">Learn reference</button></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="apply">Apply to this clip</button><button type="button" class="fw-ibtn" data-fx-preview aria-pressed="false" title="Hear the picked effect or plugin at its current settings on 5 s of the clip from the playhead, looped, without changing the session; while it plays, a changed setting is heard again">Preview</button><button type="button" class="fw-ibtn" data-fx="apply-all">Apply to all clips</button><button type="button" class="fw-ibtn" data-fx="insert" disabled title="Put the picked CLAP plug-in live on this clip's track, at its current settings: it plays through native output (Settings) and in exports, with every track lined up for its delay; the browser's engine plays the track without it">Insert on track</button><button type="button" class="fw-ibtn" data-fx="learn-noise" title="Learn a noise profile from the selected range (noise only, at least 0.1 s); Denoise, Deep denoise, Hiss cut, Guitar de-noise, De-wind and Enhance spoken then remove that noise from the whole clip or a range of it">Learn noise</button><label class="fw-sam-opt" title="When an effect is applied to a selected range, the rendered piece overlaps its neighbours by this much on each side with complementary fades, so the edges of the range are not heard; 0 keeps hard edges"><span>Feather</span><input type="number" data-feather min="0" max="500" step="1" value="0" aria-label="Feather at the edges of a range render in milliseconds"> ms</label></div>
   <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-rt="learn" title="Learn the room's background from the selected range (quiet, at least 0.1 s)">Learn room tone</button><button type="button" class="fw-ibtn" data-rt="fill" title="Replace the selected range with fresh background matched to the learned room tone's spectrum and level, crossfaded at its edges">Fill with room tone</button></div>
-  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="heal-brush" aria-pressed="false" title="Paint over a sound in the spectrogram view to heal it as you go: Spot heal under the stroke, one undo step per stroke">Heal brush</button><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select><button type="button" class="fw-ibtn" data-fx="chain-files" hidden title="Run this chain on audio files from the computer, outside the session, and download the results as a zip">Run chain on files...</button><input type="file" data-chain="files" accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff" multiple hidden><button type="button" class="fw-ibtn" data-fx="detect-silences" title="Mark this track's silences (over 0.3 s) as regions on the timeline, to see them before stripping or splitting">Detect silences</button><button type="button" class="fw-ibtn" data-fx="split-silences" title="Split this track's clips where sound starts and stops (silences over 0.3 s)">Split at silences</button><button type="button" class="fw-ibtn" data-fx="similar" title="Mark every event like the one in the selected range (draw a range over one event first)">Find similar</button><button type="button" class="fw-ibtn" data-fx="restore" title="Put the clip's original audio back in the selected range, or the whole clip without a range">Restore original</button><button type="button" class="fw-ibtn" data-video="write" title="For a clip imported from a video: the video with the session's mix as its sound, the picture copied untouched, downloaded as MP4">Write into its video</button></div>
+  <div class="fw-analyze-buttons"><button type="button" class="fw-ibtn" data-fx="heal-brush" aria-pressed="false" title="Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal">Heal brush</button><button type="button" class="fw-ibtn" data-fx="heal-selection" disabled title="Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H">Heal</button><button type="button" class="fw-ibtn" data-fx="chain-add">Add to chain</button><button type="button" class="fw-ibtn" data-fx="chain-apply" hidden>Apply chain</button><button type="button" class="fw-ibtn" data-fx="chain-clear" hidden>Clear chain</button><button type="button" class="fw-ibtn" data-fx="chain-save" hidden title="Save this chain, its effects and their settings in order, as a preset">Save chain</button><select data-chain="saved" aria-label="Saved module chains"><option value="">Saved chains</option></select><button type="button" class="fw-ibtn" data-fx="chain-files" hidden title="Run this chain on audio files from the computer, outside the session, and download the results as a zip">Run chain on files...</button><input type="file" data-chain="files" accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a,.aif,.aiff" multiple hidden><button type="button" class="fw-ibtn" data-fx="detect-silences" title="Mark this track's silences (over 0.3 s) as regions on the timeline, to see them before stripping or splitting">Detect silences</button><button type="button" class="fw-ibtn" data-fx="split-silences" title="Split this track's clips where sound starts and stops (silences over 0.3 s)">Split at silences</button><button type="button" class="fw-ibtn" data-fx="similar" title="Mark every event like the one in the selected range (draw a range over one event first)">Find similar</button><button type="button" class="fw-ibtn" data-fx="restore" title="Put the clip's original audio back in the selected range, or the whole clip without a range">Restore original</button><button type="button" class="fw-ibtn" data-video="write" title="For a clip imported from a video: the video with the session's mix as its sound, the picture copied untouched, downloaded as MP4">Write into its video</button></div>
   <ol class="fw-chain" hidden></ol>
   <details class="fw-macro"><summary title="Write a chain as text: one effect per line, its name (as in the Effects menu's ids) and any setting=value; # starts a comment">Macro script</summary>
     <textarea class="fw-macro-text" data-macro rows="4" spellcheck="false" aria-label="Macro script: one effect per line, its name and any setting=value pairs; # starts a comment" placeholder="amplify-up db=-3&#10;# comments start with #"></textarea>
@@ -468,10 +468,16 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       }
     }
   };
+  const healButton = body.querySelector<HTMLButtonElement>('[data-fx="heal-selection"]');
+  let healing = false;
+  const syncHeal = () => {
+    if (healButton) healButton.disabled = healing || !(range?.mask?.length || range?.band);
+  };
   host.addEventListener("fw-range", (e) => {
     range = (e as CustomEvent<{ trackId: string; start: number; end: number; band?: { lowHz: number; highHz: number }; mask?: { from: number; to: number; low: number; high: number }[] } | null>).detail;
     render();
     syncBand();
+    syncHeal();
   });
   pick?.addEventListener("change", showControls);
   // PT-10: the note editor. Find notes tracks the selected clip's pitch (the engine's notes within the clip's span); the
@@ -1992,39 +1998,59 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
     toggle.setAttribute("aria-pressed", String(on));
     if (on) document.body.dataset.healBrush = "on";
     else delete document.body.dataset.healBrush;
-    setText(notice, on ? "Heal brush: paint over a sound in the spectrogram view to heal it" : "Heal brush off");
+    setText(notice, on ? "Heal brush: paint over a sound in the spectrogram view to select it, then press Heal" : "Heal brush off");
   });
-  document.addEventListener("fw-heal-stroke", async (e) => {
-    const { trackId, dabs, radiusSamples } = (e as CustomEvent<{ trackId: string; dabs: { at: number; hz: number; low: number; high: number }[]; radiusSamples: number }>).detail;
+  // The Heal step: the brush, lasso or box selection is repaired only when the user chooses Heal (this button, Edit >
+  // Heal selection, Alt Shift H). The selection's boxes go to the engine in one pass and come back as one media change.
+  const healSelection = async () => {
+    const r = range;
     const doc = engine.get("document");
-    const track = doc.tracks.find((t) => t.id === trackId);
-    const clip = track?.clips.find((c) => dabs[0].at >= c.start && dabs[0].at < c.start + c.length);
+    const track = r ? doc.tracks.find((t) => t.id === r.trackId) : undefined;
+    const clip = r && track ? track.clips.find((c) => c.start < r.end && r.start < c.start + c.length) : undefined;
     const media = clip ? doc.media[clip.mediaId] : undefined;
-    if (!track || !clip || !media) return;
+    const picked = r?.mask?.length ? r.mask : r?.band ? [{ from: r.start, to: r.end, low: r.band.lowHz, high: r.band.highHz }] : [];
+    if (healing) return;
+    if (!r || !track || !clip || !media || !picked.length) {
+      setText(notice, "Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal");
+      return;
+    }
     const rate = media.sampleRate;
-    const boxes: { from: number; to: number; low: number; high: number }[] = [];
-    for (const d of [...dabs].sort((a, b) => a.at - b.at)) {
-      const cur = boxes[boxes.length - 1];
-      if (cur && d.at - cur.from <= 0.04 * rate) {
-        cur.to = Math.max(cur.to, d.at);
-        cur.low = Math.min(cur.low, d.low);
-        cur.high = Math.max(cur.high, d.high);
-      } else boxes.push({ from: d.at, to: d.at, low: d.low, high: d.high });
+    let boxes = [...picked].sort((a, b) => a.from - b.from);
+    if (boxes.length > 2000) {
+      const grouped: typeof boxes = [];
+      for (const m of boxes) {
+        const cur = grouped[grouped.length - 1];
+        if (cur && m.from - cur.from <= 0.04 * rate) {
+          cur.to = Math.max(cur.to, m.to);
+          cur.low = Math.min(cur.low, m.low);
+          cur.high = Math.max(cur.high, m.high);
+        } else grouped.push({ ...m });
+      }
+      boxes = grouped;
     }
     const seconds = (at: number) => Math.max(0, (at - clip.start + clip.sourceIn) / rate);
-    const steps = boxes.map((b) => ({ from: seconds(b.from - radiusSamples), to: seconds(b.to + radiusSamples), low: Math.max(20, b.low), high: Math.min(rate / 2, b.high) }));
+    const steps = boxes.map((b) => ({ from: seconds(b.from), to: seconds(b.to), low: Math.max(20, b.low), high: Math.min(rate / 2, b.high) }));
+    healing = true;
+    syncHeal();
+    const busy = window.setTimeout(() => setText(notice, "Healing the selection..."), 300);
     try {
-      // the whole stroke in one pass, each bin predicted from the frames outside the stroke
-      setText(notice, "Healing the stroke...");
       const res = await fetch(`/api/media/${clip.mediaId}/heal-painted`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ boxes: steps }) });
       const out = (await res.json().catch(() => ({}))) as { detail?: unknown };
       if (!res.ok) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
-      engine.dispatch({ type: "set-clip-media", trackId, clipId: clip.id, media: out as unknown as MediaRef });
-      setText(notice, `Healed the stroke: ${steps.length} patch${steps.length === 1 ? "" : "es"} under the brush`);
+      engine.dispatch({ type: "set-clip-media", trackId: track.id, clipId: clip.id, media: out as unknown as MediaRef });
+      setText(notice, `Healed the selection: ${steps.length} patch${steps.length === 1 ? "" : "es"}`);
     } catch (err) {
-      setText(notice, `Could not heal the stroke: ${err instanceof Error ? err.message : String(err)}`);
+      setText(notice, `Could not heal the selection: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      window.clearTimeout(busy);
+      healing = false;
+      syncHeal();
     }
+  };
+  body.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest('[data-fx="heal-selection"]')) void healSelection();
   });
+  host.addEventListener("fw-heal-selection", () => void healSelection());
 
   // Music separation: the clip's trimmed range split into four stems on
   // new tracks at the clip's start, the original track muted, all one undo step.

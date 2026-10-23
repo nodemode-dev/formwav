@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "Не удалось исправить выделение: {a}",
+"Heal": "Исправить",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Кисть исправления: закрасьте звук на спектрограмме, чтобы выделить его, затем нажмите «Исправить»",
+"Heal selection": "Исправить выделение",
+"Healed the selection: {0} patch": "Выделение исправлено: участков {0}",
+"Healed the selection: {0} patches": "Выделение исправлено: участков {0}",
+"Healing the selection...": "Исправление выделения...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Закрасьте звук на спектрограмме, чтобы выделить его; ничего не исправляется, пока вы не нажмёте «Исправить»",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Исправляет выделенный звук (рамка, лассо или закрашенное выделение на спектрограмме), один шаг отмены; также Правка > Исправить выделение, Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Исправляет звук, выделенный на спектрограмме (рамка, лассо или закрашенное выделение); ничего не исправляется, пока вы не выберете эту команду",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Выделите звук для исправления: нарисуйте рамку или лассо либо закрасьте его на спектрограмме, затем нажмите «Исправить»"
+}

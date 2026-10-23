@@ -1162,7 +1162,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
   let rangeBand: { top: number; height: number } | null = null;
   let rangeDrag: { trackId: string; body: HTMLElement; x0: number; moved: boolean; y0: number; clipTop: number; clipHeight: number; bodyTop: number; nyquist: number; spectral: boolean; dabs?: { at: number; hz: number; low: number; high: number; x: number; y: number }[] } | null = null;
   // AA-06: with the heal brush on (the Inspector sets body[data-heal-brush]), a drag in the spectrogram view paints dabs
-  // instead of drawing a box; each dab covers BRUSH_PX either way, and the stroke goes to the Inspector on release
+  // instead of drawing a box; each dab covers BRUSH_PX either way, and the stroke only selects: on release it becomes
+  // the range's mask, the dots stay as its mark, and nothing is repaired until the user chooses Heal
   const BRUSH_PX = 8;
   const brushDots: HTMLElement[] = [];
   // A track shows a spectrogram when the session's view is the spectrogram or its own view is (AU-30); there a drag
@@ -1448,9 +1449,8 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     if (d.dabs) {
       const tool = document.body.dataset.healBrush === "on" ? "heal" : document.body.dataset.spectralTool;
       const radiusSamples = Math.abs(rangeAt(d.body, d.x0 + BRUSH_PX) - rangeAt(d.body, d.x0));
-      if (tool === "heal" || !apply || !d.dabs.length) {
+      if (!apply || !d.dabs.length) {
         for (const dot of brushDots.splice(0)) dot.remove();
-        if (apply && d.dabs.length && tool === "heal") lanes.dispatchEvent(new CustomEvent("fw-heal-stroke", { bubbles: true, detail: { trackId: d.trackId, dabs: d.dabs, radiusSamples } }));
         return;
       }
       // AA-05: a paint selection is its dabs' patches; a lasso is its outline cut into 3 px columns, each column's spans
@@ -1459,7 +1459,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
       const hzAt = (py: number) => spectralHz(1 - (Math.min(d.clipTop + d.clipHeight, Math.max(d.clipTop, py)) - d.clipTop) / d.clipHeight, d.nyquist);
       const mask: { from: number; to: number; low: number; high: number }[] = [];
       const pts = d.dabs;
-      if (tool === "paint") {
+      if (tool === "paint" || tool === "heal") {
         for (const p of pts) mask.push({ from: Math.max(0, p.at - radiusSamples), to: p.at + radiusSamples, low: p.low, high: p.high });
       } else {
         const xs = pts.map((p) => p.x);

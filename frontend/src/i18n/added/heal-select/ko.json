@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "선택 영역을 복구하지 못했습니다: {a}",
+"Heal": "복구",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "복구 브러시: 스펙트로그램 보기에서 소리 위를 칠해 선택한 다음 복구를 누르세요",
+"Heal selection": "선택 영역 복구",
+"Healed the selection: {0} patch": "선택 영역 복구됨: {0}개 구간",
+"Healed the selection: {0} patches": "선택 영역 복구됨: {0}개 구간",
+"Healing the selection...": "선택 영역을 복구하는 중...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "스펙트로그램 보기에서 소리 위를 칠해 선택하세요. 복구를 누르기 전에는 아무것도 복구되지 않습니다",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "선택한 소리(스펙트로그램의 상자, 올가미 또는 칠한 선택)를 복구합니다. 실행 취소는 한 단계입니다. 편집 > 선택 영역 복구, Alt+Shift+H로도 실행합니다",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "스펙트로그램에서 선택한 소리(상자, 올가미 또는 칠한 선택)를 복구합니다. 이 명령을 선택하기 전에는 아무것도 복구되지 않습니다",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "복구할 소리를 선택하세요: 스펙트로그램에서 상자나 올가미를 그리거나 위를 칠한 다음 복구를 누르세요"
+}

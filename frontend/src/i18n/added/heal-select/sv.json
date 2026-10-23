@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "Det gick inte att reparera markeringen: {a}",
+"Heal": "Reparera",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Reparationspensel: måla över ett ljud i spektrogramvyn för att markera det och tryck sedan på Reparera",
+"Heal selection": "Reparera markering",
+"Healed the selection: {0} patch": "Markeringen reparerad: {0} område",
+"Healed the selection: {0} patches": "Markeringen reparerad: {0} områden",
+"Healing the selection...": "Repararar markeringen...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Måla över ett ljud i spektrogramvyn för att markera det; inget repareras förrän du trycker på Reparera",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Reparerar det markerade ljudet (en ruta, ett lasso eller en målad markering i ett spektrogram), ett ångrasteg; även Redigera > Reparera markering, Alt+Skift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Reparerar ljudet som är markerat i ett spektrogram (en ruta, ett lasso eller en målad markering); inget repareras förrän du väljer detta",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Markera ett ljud att reparera: rita en ruta eller ett lasso, eller måla över det, i ett spektrogram och tryck på Reparera"
+}

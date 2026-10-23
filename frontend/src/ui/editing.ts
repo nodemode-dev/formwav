@@ -358,6 +358,7 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
     sep(),
     item("Separate on the grid", "", "Split the selected clips, or those in the range, at every grid line", separateGrid),
     item("Heal separation", "", "Join clips split from one another back into one (in the range, the selected clips, or at the playhead)", () => run(healSeparations(engine.get("document"), target(), playhead()), "Healed the separation", "No split clips to heal there")),
+    item("Heal selection", "⌥⇧H", "Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this", () => host.dispatchEvent(new CustomEvent("fw-heal-selection", { bubbles: true }))),
     item("Consolidate", "⌥⇧3", "Render what plays in the range, or across the selected clips, into one clip in their place", () => void consolidateSelection()),
     item("Strip silence...", "", "Remove the silent stretches from the selected clips or the range, with a threshold, minimum length and pads", () => void stripSilence()),
     sep(),
@@ -502,6 +503,9 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
       if (e.code === "KeyR") void repeat();
       else if (e.code === "KeyH") void shift();
       else needRange((r) => trimToRange(engine.get("document"), r), "Trimmed to the selection", "No clip crosses the range's edges")();
+    } else if (e.altKey && e.shiftKey && !mod && e.code === "KeyH") {
+      e.preventDefault();
+      host.dispatchEvent(new CustomEvent("fw-heal-selection", { bubbles: true }));
     } else if (e.key === "Tab" && !mod && !e.altKey && stage && document.activeElement === stage) {
       e.preventDefault();
       void tabTo(e.shiftKey ? -1 : 1);

@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "Valinnan korjaus epäonnistui: {a}",
+"Heal": "Korjaa",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "Korjaussivellin: maalaa äänen päälle spektrogrammissa valitaksesi sen ja paina sitten Korjaa",
+"Heal selection": "Korjaa valinta",
+"Healed the selection: {0} patch": "Valinta korjattu: {0} kohta",
+"Healed the selection: {0} patches": "Valinta korjattu: {0} kohtaa",
+"Healing the selection...": "Korjataan valintaa...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "Maalaa äänen päälle spektrogrammissa valitaksesi sen; mitään ei korjata ennen kuin painat Korjaa",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "Korjaa valitun äänen (ruutu, lasso tai maalattu valinta spektrogrammissa), yksi kumoamisvaihe; myös Muokkaa > Korjaa valinta, Alt+Vaihto+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "Korjaa spektrogrammissa valitun äänen (ruutu, lasso tai maalattu valinta); mitään ei korjata ennen kuin valitset tämän",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "Valitse korjattava ääni: piirrä ruutu tai lasso tai maalaa sen päälle spektrogrammissa ja paina Korjaa"
+}

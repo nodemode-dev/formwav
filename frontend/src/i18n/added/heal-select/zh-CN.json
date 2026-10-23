@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "无法修复所选内容：{a}",
+"Heal": "修复",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "修复画笔：在频谱图视图中涂抹声音以选中它，然后点按“修复”",
+"Heal selection": "修复所选内容",
+"Healed the selection: {0} patch": "已修复所选内容：{0} 处",
+"Healed the selection: {0} patches": "已修复所选内容：{0} 处",
+"Healing the selection...": "正在修复所选内容...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "在频谱图视图中涂抹声音以选中它；点按“修复”之前不会修复任何内容",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "修复所选声音（频谱图中的方框、套索或涂抹选区），一步撤销；也可用 编辑 > 修复所选内容，Alt+Shift+H",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "修复在频谱图中选中的声音（方框、套索或涂抹选区）；选择此命令之前不会修复任何内容",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "请选择要修复的声音：在频谱图中画方框或套索，或涂抹其上，然后点按“修复”"
+}

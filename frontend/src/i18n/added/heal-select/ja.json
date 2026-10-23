@@ -1,0 +1,13 @@
+{
+"Could not heal the selection: {a}": "選択範囲を修復できませんでした: {a}",
+"Heal": "修復",
+"Heal brush: paint over a sound in the spectrogram view to select it, then press Heal": "修復ブラシ: スペクトログラム表示で音の上をなぞって選択し、「修復」を押します",
+"Heal selection": "選択範囲を修復",
+"Healed the selection: {0} patch": "選択範囲を修復しました: {0} 箇所",
+"Healed the selection: {0} patches": "選択範囲を修復しました: {0} 箇所",
+"Healing the selection...": "選択範囲を修復しています...",
+"Paint over a sound in the spectrogram view to select it; nothing is repaired until you press Heal": "スペクトログラム表示で音の上をなぞって選択します。「修復」を押すまで何も修復されません",
+"Repair the selected sound (a box, a lasso or a painted selection in a spectrogram), one undo step; also Edit > Heal selection, Alt Shift H": "選択した音(スペクトログラム上の矩形、投げ縄、またはなぞった選択)を修復します。取り消しは1段階です。編集 > 選択範囲を修復、Alt+Shift+H でも実行できます",
+"Repair the sound selected in a spectrogram (a box, a lasso or a painted selection); nothing is repaired until you choose this": "スペクトログラムで選択した音(矩形、投げ縄、またはなぞった選択)を修復します。このコマンドを選ぶまで何も修復されません",
+"Select a sound to heal: draw a box or a lasso, or paint over it, in a spectrogram, then press Heal": "修復する音を選択してください: スペクトログラムで矩形か投げ縄を描くか、上をなぞってから「修復」を押します"
+}
