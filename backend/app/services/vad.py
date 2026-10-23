@@ -17,7 +17,7 @@ import numpy as np
 
 from . import media
 
-URL = "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx"
+URL = "https://github.com/snakers4/silero-vad/raw/5cd7945676eb32225748052e2e6a0580e4686a08/src/silero_vad/data/silero_vad.onnx"
 SHA256 = "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3"
 RATE = 16000
 CHUNK = 512  # Silero VAD's window at 16 kHz

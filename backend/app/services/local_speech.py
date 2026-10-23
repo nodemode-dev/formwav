@@ -30,6 +30,10 @@ KOKORO_FILES = {
     "kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx",
     "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin",
 }
+KOKORO_SHA256 = {
+    "kokoro-v1.0.onnx": "beb0d1848dee9a49da392cc3df26958d46cfa35d321edf434f52949153f0df3a",
+    "voices-v1.0.bin": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+}
 POCKET_VOICES = ["alba", "marius", "javert", "jean", "fantine", "cosette", "eponine", "azelma"]
 REFERENCE_SECONDS = 20
 #: The PyTorch the cloning engines run on (Chatterbox 0.1.7 pins these; TIGER-DnR's runtime shares torch 2.6.0)
@@ -179,6 +183,13 @@ def install(engine: str) -> dict:
                         tmp = _models() / f".{name}.part"
                         with urllib.request.urlopen(url, timeout=600) as res, open(tmp, "wb") as out:
                             shutil.copyfileobj(res, out)
+                        import hashlib
+
+                        with open(tmp, "rb") as got:
+                            digest = hashlib.file_digest(got, "sha256").hexdigest()
+                        if digest != KOKORO_SHA256[name]:
+                            tmp.unlink(missing_ok=True)
+                            raise RuntimeError(f"{name} did not match its pinned checksum")
                         tmp.replace(_models() / name)
             _known.pop(engine, None)
             _installing[engine] = ""

@@ -28,6 +28,10 @@ LANGS = {"es": ("Spanish", "es", "e", "https://argos-net.com/v1/translate-en_es-
          "fr": ("French", "fr-fr", "f", "https://argos-net.com/v1/translate-en_fr-1_9.argosmodel"),
          "it": ("Italian", "it", "i", "https://argos-net.com/v1/translate-en_it-1_0.argosmodel"),
          "pt": ("Portuguese (Brazil)", "pt-br", "p", "https://argos-net.com/v1/translate-en_pt-1_9.argosmodel")}
+MODEL_SHA256 = {"es": "d698d0ef87ad70d5d184b7fa6965905bf4368f09a2bb9ffb165a79bac96af0c4",
+                "fr": "3a65ed83364f4e7b06e30f9dd823db1934899ed3ce839e63f46dc7b09dc797b4",
+                "it": "dde2180001a47904ecbbd688a41e35db8a040e4fd5b52e4f29b4bb499516ab32",
+                "pt": "0c5350a2fa5b923de1346edc0d42e08e38bab2e33cede3a0b9a48eb4281ad8a9"}
 MAX_SPEED = 1.35
 _installing: dict[str, str] = {}
 
@@ -89,6 +93,11 @@ def install(lang: str) -> dict:
                     request = urllib.request.Request(LANGS[lang][3], headers={"User-Agent": f"formwav/{VERSION}"})
                     with urllib.request.urlopen(request, timeout=600) as res, open(pkg, "wb") as out:
                         shutil.copyfileobj(res, out)
+                    import hashlib
+
+                    with open(pkg, "rb") as got:
+                        if hashlib.file_digest(got, "sha256").hexdigest() != MODEL_SHA256[lang]:
+                            raise RuntimeError(f"the English to {LANGS[lang][0]} model did not match its pinned checksum")
                     with zipfile.ZipFile(pkg) as z:
                         for name in z.namelist():
                             rel = name.split("/", 1)[1] if "/" in name else ""

@@ -162,7 +162,8 @@ def _lin(db: float) -> float:
     return 10 ** (db / 20)
 
 
-RNNOISE_URL = "https://raw.githubusercontent.com/GregorR/rnnoise-models/master/beguiling-drafter-2018-08-30/bd.rnnn"
+RNNOISE_URL = "https://raw.githubusercontent.com/GregorR/rnnoise-models/3eee541a283fd3b8f81b85b1748e3b9ccbefa04d/beguiling-drafter-2018-08-30/bd.rnnn"
+RNNOISE_SHA256 = "ae3f7411e1e6a884f839a4a145c394408398f09854dbc1216ee02faafc98a17b"
 
 
 def _rnnoise_model() -> str:
@@ -177,8 +178,10 @@ def _rnnoise_model() -> str:
             data = urllib.request.urlopen(RNNOISE_URL, timeout=60).read()
         except OSError as err:
             raise media.MediaError(f"dialogue isolation needs its RNNoise model, which could not be fetched ({err}); place bd.rnnn in {path.parent}") from err
-        if not data.startswith(b"rnnoise"):
-            raise media.MediaError("the fetched RNNoise model is not a model file")
+        import hashlib
+
+        if hashlib.sha256(data).hexdigest() != RNNOISE_SHA256:
+            raise media.MediaError("the fetched RNNoise model did not match its pinned checksum; not used")
         path.write_bytes(data)
     return str(path)
 
