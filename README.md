@@ -286,4 +286,4 @@ v2.15.3 (small): PLAN_v14's fourth phase, sessions that do not lose work: autosa
 
 ## Licensing
 
-Apache License 2.0, in [`LICENSE`](LICENSE). Third-party pieces & their licences are in [`NOTICE`](NOTICE); responsible use is in [`USE_POLICY.md`](USE_POLICY.md).
+Apache License 2.0, in [`LICENSE`](LICENSE). Copyright 2026 NodeAgentc, Inc. Third-party pieces & their licences are in [`NOTICE`](NOTICE); responsible use is in [`USE_POLICY.md`](USE_POLICY.md).
