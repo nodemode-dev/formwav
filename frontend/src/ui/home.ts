@@ -25,7 +25,7 @@ export function setHomeAtLaunch(on: boolean): void {
 
 export const HOME_HTML = `<section class="fw-home" aria-label="Home" hidden>
   <nav class="fw-home-nav" aria-label="Home pages">
-    <div class="fw-home-brand"><span class="fw-home-logo"><img src="/logo-64.png" width="24" height="24" alt="" draggable="false"></span><span><b>formwav</b> <span class="fw-home-by">by NodeMode</span></span></div>
+    <div class="fw-home-brand"><span class="fw-home-logo"><img src="/logo-64.png" width="24" height="24" alt="" draggable="false"></span><span><b>formwav</b> <span class="fw-home-by">by nodemode.ai</span></span></div>
     <div class="fw-home-group">
       <button type="button" class="fw-home-item is-active" data-home-page="start">${fvIcon("menu", 16)}<span>Start</span></button>
       <button type="button" class="fw-home-item" data-home-page="recent">${fvIcon("history", 16)}<span>Recent</span><span class="fw-home-count" data-home-count translate="no"></span></button>
