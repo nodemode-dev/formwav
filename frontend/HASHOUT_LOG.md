@@ -97,6 +97,7 @@ frontend/
 
 ## Table of contents
 
+- [package.json · vite 8.3.5 and source-map-js 1.2.2 clear the audit findings (v2.21.3)](#package-vite-audit)
 - [src/engine/timebase.ts · the five timebases and fifteen frame rates (PLAN_v13 S6)](#src-engine-timebase-s6)
 - [src/engine/document.ts and src/engine/editing.ts · the frame rate, Make Inactive, Commit and Consolidate (PLAN_v13 S6)](#src-engine-document-s6)
 - [src/ui/counters.ts and src/ui/shell.ts · the counters, the selection and the timecode rate (PLAN_v13 S6)](#src-ui-counters-s6)
@@ -179,6 +180,16 @@ frontend/
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
+
+## package.json · vite 8.3.5 and source-map-js 1.2.2 clear the audit findings (v2.21.3) {#package-vite-audit}
+
+### The frontend installs with zero npm audit findings
+
+- refers-to: frontend/package.json (the exact `vite` pin), frontend/package-lock.json (vite and the transitive `source-map-js`)
+- Changed: `"vite": "8.3.0"` to `"vite": "8.3.5"`, exact as before. Family rule from `FAMILY_DEV_PLAN.md` v0.4.x Phase 2b (formai_dev sidecar): every frontend installs with zero `npm audit` findings. Vite 8.3.0 carries a `launch-editor` with two command-injection advisories in the dev server (ledger FB-004); 8.3.5 clears them.
+- Changed: the transitive `source-map-js` (a high finding, ledger FB-005, reached through vite's postcss) is moved to 1.2.2 by `npm update source-map-js`, which rewrites only the lockfile; `package.json` carries no entry for it.
+- Dev dependencies only, nothing in the shipped bundle changed.
+- Verified: `npm install` then `npm audit` reports 0 vulnerabilities; `npm ls source-map-js` shows 1.2.2; `npm run typecheck` passes; `vite build` completes into a directory outside the repo; the dev server started on localhost, answered 200 and printed no Network address. Not run: the e2e interface test, the backend, the window.
 
 ## src/ui/lanes.ts, inspector-pane.ts and editing.ts · the heal brush selects, Heal repairs (v2.21.0) {#src-ui-heal-select}
 
