@@ -16,6 +16,7 @@ Refusals are 403 with a JSON reason; a refused WebSocket is closed before it is 
 from __future__ import annotations
 
 import re
+from urllib.parse import urlsplit
 
 _HOST = re.compile(r"^(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[::1\])(:\d+)?$", re.IGNORECASE)
 _MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
@@ -24,6 +25,31 @@ LOCAL_HEADER = "x-formwav-local"
 
 def _loopback(client: str) -> bool:
     return client.startswith("127.") or client in ("::1", "localhost", "testclient")
+
+
+def _origin_key(value: str) -> tuple[str, str, int | None] | None:
+    try:
+        parts = urlsplit(value.strip())
+        port = parts.port
+    except ValueError:
+        return None
+    if not parts.scheme or not parts.hostname:
+        return None
+    if port is None:
+        port = {"http": 80, "https": 443}.get(parts.scheme)
+    return parts.scheme.lower(), parts.hostname.lower(), port
+
+
+def window_origin(origin: str, host: str) -> bool:
+    from .config import cors_origins
+
+    key = _origin_key(origin)
+    if key is None:
+        return False
+    if key in {k for k in (_origin_key(o) for o in [*cors_origins(), "tauri://localhost", "http://tauri.localhost"]) if k is not None}:
+        return True
+    own = _origin_key(f"{key[0]}://{host}")
+    return key[0] == "http" and own is not None and own == key
 
 
 def ws_allowed(origin: str | None, host: str | None) -> bool:
@@ -59,6 +85,8 @@ class LocalOnly:
             reason = "unexpected Host header"
         elif headers.get("origin") is None and headers.get("sec-fetch-site", "").strip().lower() == "cross-site":
             reason = "a request from another site"
+        elif headers.get("origin") is not None and not window_origin(headers["origin"], headers.get("host", "")):
+            reason = "an origin that is not this app's window"
         if reason is None and scope["type"] == "http" and scope["method"] in _MUTATING and scope["path"].startswith("/api/") and headers.get(LOCAL_HEADER) != "1":
             reason = f"a change needs the {LOCAL_HEADER} header"
         if reason and through_network and scope["type"] == "http" and scope["method"] == "GET" and not scope["path"].startswith("/api/"):

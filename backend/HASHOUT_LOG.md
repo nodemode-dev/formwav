@@ -63,6 +63,7 @@ backend/
 
 ## Table of contents
 
+- [app/core/security.py · LocalOnly admits only this app's own window Origins (v2.21.6)](#app-core-security-origin-exact)
 - [app/core/security.py · LocalOnly refuses cross-site requests that carry no Origin (v2.21.5)](#app-core-security-cross-site)
 - [app/routers/claude.py · /mcp compares the Origin's host, not its prefix (v2.21.4)](#app-routers-claude-mcp-origin)
 - [app/services/bounce.py, render.py and the tests · Consolidate, Commit, Make Inactive and the timebases (PLAN_v13 S6)](#app-services-bounce-s6)
@@ -129,6 +130,17 @@ backend/
 - [.github/workflows](#workflows)
 
 ---
+
+## app/core/security.py · LocalOnly admits only this app's own window Origins (v2.21.6) {#app-core-security-origin-exact}
+
+### Why a foreign Origin on a plain request was never judged
+- refers-to: app/core/security.py :: window_origin, _origin_key and the new branch in LocalOnly.__call__ (the loopback reason chain); the `formwav.remote` network branch, the local header rule and `ws_allowed` are unchanged
+- kind: fix
+- logged: v2.21.6 · 2026-10-25
+
+The family agent-stack standard, rule G2 (`AGENT_STACK_STANDARD.md` v0.2.0, ledger FB-036, formai_dev sidecar). LocalOnly never looked at an HTTP request's Origin, so a page on any site could send a simple GET to the engine with its own Origin and be answered (only mutating calls were held back, by the `x-formwav-local` header). On the loopback path, a present Origin must now be one of the window's origins: the engine's own (an `http` origin whose scheme, host and port equal the request's Host), `tauri://localhost`, `http://tauri.localhost`, or one of `config.cors_origins()` (the dev and preview windows on 3060 and 3061, or `FORMWAV_CORS_ORIGINS`). The comparison parses scheme, host and port (`_origin_key`, modelled on formpdf's) and never compares a prefix, so `http://localhost.evil.com`, `http://localhost:3060.evil.com` and `null` fail. A request with no Origin is decided as before (rule G4). WebSockets pass through the same chain, so a socket from a foreign Origin is now closed one step earlier, and `ws_allowed` still applies on top.
+
+Checked on the running engine (port 9151, the built window served through FORMWAV_DIST) with `/api/health`: `Origin: http://evil.example`, `http://localhost.evil.com`, `http://localhost:3060.evil.com` and `null` 403; the engine's own origin (127.0.0.1 and localhost), `http://localhost:3060`, `http://127.0.0.1:3061`, `tauri://localhost`, `http://tauri.localhost`, no Origin, and cross-site with the dev Origin 200; cross-site without an Origin and a foreign Host still 403. The same origins give the same answers on `/api/commands` (409 with no window open for the allowed ones, 403 for the foreign ones). `POST /mcp` initialize with no Origin 200; the stdio server lists 35 tools. The built window at 4x CPU and slow network, two shift runs and one throttle run: layout shift 0, no refusal from the window (403 lines in the log 17 before and 17 after; the only errors are the two 503s of `/api/vamp/plugins`, Vamp not built here).
 
 ## app/core/security.py · LocalOnly refuses cross-site requests that carry no Origin (v2.21.5) {#app-core-security-cross-site}
 
