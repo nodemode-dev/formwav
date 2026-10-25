@@ -21,6 +21,7 @@ import os
 import subprocess
 import threading
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -239,7 +240,8 @@ def _rpc(id_: Any, result: Any = None, error: tuple[int, str] | None = None) -> 
 @router.post("/mcp")
 async def mcp(request: Request) -> Response:
     origin = request.headers.get("origin")
-    if origin and not origin.startswith(("http://127.0.0.1", "http://localhost", "http://[::1]", "tauri://", "http://tauri.localhost")):
+    parts = urllib.parse.urlsplit(origin or "")
+    if origin and not ((parts.scheme == "tauri" and parts.hostname == "localhost") or (parts.scheme == "http" and parts.hostname in ("127.0.0.1", "localhost", "::1", "tauri.localhost"))):
         raise HTTPException(status_code=403, detail="formwav's MCP server answers local agents only")
     try:
         msg = await request.json()

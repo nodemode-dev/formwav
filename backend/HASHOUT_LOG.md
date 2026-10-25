@@ -63,6 +63,7 @@ backend/
 
 ## Table of contents
 
+- [app/routers/claude.py · /mcp compares the Origin's host, not its prefix (v2.21.4)](#app-routers-claude-mcp-origin)
 - [app/services/bounce.py, render.py and the tests · Consolidate, Commit, Make Inactive and the timebases (PLAN_v13 S6)](#app-services-bounce-s6)
 - [tests/test_editing_depth.py and render.py · editing depth (PLAN_v13 S5)](#tests-editing-depth-s5)
 - [tests/test_editing.py · editing commands (PLAN_v13 S4)](#tests-editing-s4)
@@ -127,6 +128,19 @@ backend/
 - [.github/workflows](#workflows)
 
 ---
+
+## app/routers/claude.py · /mcp compares the Origin's host, not its prefix (v2.21.4) {#app-routers-claude-mcp-origin}
+
+### Why a prefix let foreign pages in
+- refers-to: app/routers/claude.py :: mcp (the Origin check); app/core/security.py :: LocalOnly (unchanged)
+- kind: fix + removed
+- logged: v2.21.4 · 2026-10-25
+
+The family stabilization plan's Phase 3a (`FAMILY_DEV_PLAN.md` v0.4.2, formai_dev sidecar), ledger FB-029. LocalOnly holds the Host to loopback, which stops DNS rebinding, and it asks mutating `/api/` calls for the local header, which a foreign page cannot send without a preflight; `/mcp` is outside `/api/`, so its own Origin check was the only gate. That check was `origin.startswith(("http://127.0.0.1", "http://localhost", ...))`, and a page on a name that merely begins that way passes it: `http://localhost.evil.com` and `http://127.0.0.1.evil.com` are real hostnames anyone can register under a domain. `request.json()` reads a `text/plain` body, which needs no preflight, so such a page could run `tools/call` against the open session. Reproduced on the engine before the change: both names got a JSON-RPC result, `http://evil.com` was refused. The check now parses the Origin and compares its scheme and host exactly: `http` on 127.0.0.1, localhost, ::1 or tauri.localhost, or `tauri://localhost`. The module docstring's line that the Host lockdown alone keeps web pages out is wrong for simple requests; the docstring was left as it is and this entry stands for it. Removed:
+```python
+    if origin and not origin.startswith(("http://127.0.0.1", "http://localhost", "http://[::1]", "tauri://", "http://tauri.localhost")):
+```
+Checked against the engine with a `text/plain` `tools/list`: refused `localhost.evil.com`, `127.0.0.1.evil.com`, `evil.com`, `null` and `tauri://evil.com`; answered `localhost:5060`, `127.0.0.1:8060`, `[::1]:8060`, `tauri://localhost`, `http://tauri.localhost` and no Origin.
 
 ## app/services/effects.py · HEAL_SOURCE, the heal's second predictor (v2.21.0) {#app-services-effects-heal-source}
 
