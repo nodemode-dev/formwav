@@ -2,7 +2,7 @@
 <h1 align="center">formwav</h1>
 <p align="center"><b>Local-first audio editing, the audio member of the form family.</b></p>
 <p align="center">
-<img src="https://img.shields.io/badge/version-2.21.2-f97316" alt="version 2.21.2">
+<img src="https://img.shields.io/badge/version-2.21.3-f97316" alt="version 2.21.3">
 <img src="https://img.shields.io/badge/node-20.19%2B-339933" alt="node 20.19+">
 <img src="https://img.shields.io/badge/python-3.12-3776AB" alt="python 3.12">
 <img src="https://img.shields.io/badge/rust-stable-B7410E" alt="rust stable">
@@ -191,6 +191,8 @@ Each side keeps a `HASHOUT_LOG.md` at its root: a map of its files & the reasoni
 Tests: the audio core's run with `cargo test` in `native/formwav-dsp`. The engine's & the interface's run from `backend` in the engine's venv after `pip install -r tests/requirements.txt` & `python -m playwright install chromium`: `python -m pytest tests` (the interface tests in `tests/e2e` need `npm run build` in `frontend` first; `FORMWAV_TEST_BROWSER=firefox` runs them in Firefox; `python tests/fetch_models.py` first fetches the models some tests judge with, through formwav's own installers, so those run instead of skipping). The tests make their own audio & sessions, start their own engine on a free port with its own data folder, & never reach a paid service: ElevenLabs, ACE-Step & the agent's model are answered by stand-ins that check each request against the service's own API document. A test that needs a model, a renderer or a key skips & says what to install. Every push to `main` & every pull request runs them on macOS, Windows & Linux (`.github/workflows/checks.yml`), & builds the app for all three as downloadable artifacts (`.github/workflows/builds.yml`).
 
 ## Status
+
+v2.21.3 (small, dependencies): the frontend's vite moves to 8.3.5 and its transitive source-map-js to 1.2.2, so `npm audit` reports no findings. Dev dependencies only; nothing in the shipped bundle changed.
 
 v2.21.2 (legal and credit): the copyright holder in LICENSE, NOTICE and this README is NodeAgentc, Inc., and the Home screen credit reads "by nodemode.ai" in every language.
 
