@@ -63,6 +63,7 @@ backend/
 
 ## Table of contents
 
+- [app/core/security.py · LocalOnly refuses cross-site requests that carry no Origin (v2.21.5)](#app-core-security-cross-site)
 - [app/routers/claude.py · /mcp compares the Origin's host, not its prefix (v2.21.4)](#app-routers-claude-mcp-origin)
 - [app/services/bounce.py, render.py and the tests · Consolidate, Commit, Make Inactive and the timebases (PLAN_v13 S6)](#app-services-bounce-s6)
 - [tests/test_editing_depth.py and render.py · editing depth (PLAN_v13 S5)](#tests-editing-depth-s5)
@@ -128,6 +129,17 @@ backend/
 - [.github/workflows](#workflows)
 
 ---
+
+## app/core/security.py · LocalOnly refuses cross-site requests that carry no Origin (v2.21.5) {#app-core-security-cross-site}
+
+### Why an image or a link still reached the engine
+- refers-to: app/core/security.py :: LocalOnly.__call__ (the loopback branch of the reason chain); the `formwav.remote` network branch is unchanged
+- kind: fix
+- logged: v2.21.5 · 2026-10-25
+
+The family agent-stack standard, rule G4 (`AGENT_STACK_STANDARD.md` v0.2.0, owner decision D4, ledger FB-035, formai_dev sidecar). LocalOnly admitted a request with no Origin once its Host was loopback, so a web page could make the engine answer a GET by pointing an `<img>` or a link at `http://127.0.0.1:<port>/...`: browsers send no Origin on those, and any GET route with a side effect would run. Browsers label every request with `Sec-Fetch-Site`, and only a page on another site gets `cross-site`. The loopback branch now refuses (403, `refused: a request from another site`) a request with no Origin whose `Sec-Fetch-Site` is `cross-site`, compared trimmed and case-insensitively. A request that carries an Origin is decided as before, and `same-site` stays allowed on purpose: a dev window on `localhost:3060` loading straight from `localhost:8060` is same-site, and no outside page can be same-site with localhost. The CLI, the MCP server over stdio and Claude Code's MCP client send neither header and pass. The paired-device listener (`formwav.remote`) is not touched. WebSockets always carry an Origin and keep `ws_allowed`.
+
+Checked on the running engine (port 9121) with `/api/health`: no Origin with `cross-site`, `  Cross-Site ` 403; `same-site`, `same-origin`, `none`, no header, and `cross-site` with the dev Origin `http://localhost:3060` 200; a foreign Host 403. An `Origin: http://evil.example` GET answers 200, as before this change: LocalOnly has never judged an HTTP Origin (the local header guards mutating calls, `/mcp` has its own Origin check, WebSockets use `ws_allowed`), and the rule leaves that as it is. In Chromium, a page served from `http://127.0.0.2:9903` with an `<img>` and a clicked link pointing at `/api/health` got 403 for both, shown in the engine log. The built window served by the engine (`FORMWAV_DIST`) in Chromium at 4x CPU and slow network, two shift runs and one throttle run: layout shift 0, no refusals from the window (403 count 6 before and 6 after the runs; the six are the probes above), the only console errors two 503s from `GET /api/vamp/plugins`, the engine's own answer when the Vamp plug-in host is not installed. `POST /mcp` initialize with no Origin 200; the stdio server (`mcp/formwav_mcp.py`) initializes and lists 35 tools.
 
 ## app/routers/claude.py · /mcp compares the Origin's host, not its prefix (v2.21.4) {#app-routers-claude-mcp-origin}
 

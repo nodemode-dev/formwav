@@ -57,6 +57,8 @@ class LocalOnly:
             reason = "the engine answers this machine only"
         elif not _HOST.match(headers.get("host", "")):
             reason = "unexpected Host header"
+        elif headers.get("origin") is None and headers.get("sec-fetch-site", "").strip().lower() == "cross-site":
+            reason = "a request from another site"
         if reason is None and scope["type"] == "http" and scope["method"] in _MUTATING and scope["path"].startswith("/api/") and headers.get(LOCAL_HEADER) != "1":
             reason = f"a change needs the {LOCAL_HEADER} header"
         if reason and through_network and scope["type"] == "http" and scope["method"] == "GET" and not scope["path"].startswith("/api/"):
