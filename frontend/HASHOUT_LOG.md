@@ -97,6 +97,7 @@ frontend/
 
 ## Table of contents
 
+- [tests/window/test_window.py · the window smoke, F7 (v2.21.7)](#tests-window-smoke)
 - [public/splash.html · the logo no longer moves when the lines under it arrive (v2.21.7)](#public-splash-shift)
 - [package.json · vite 8.3.5 and source-map-js 1.2.2 clear the audit findings (v2.21.3)](#package-vite-audit)
 - [src/engine/timebase.ts · the five timebases and fifteen frame rates (PLAN_v13 S6)](#src-engine-timebase-s6)
@@ -181,6 +182,20 @@ frontend/
 - [src/vendor/nodemode/](#src-vendor-nodemode)
 
 ---
+
+## tests/window/test_window.py · the window smoke, F7 (v2.21.7) {#tests-window-smoke}
+
+### What the script loads, and what it needs built
+
+- refers-to: frontend/tests/window/test_window.py; the `window` job in .github/workflows/checks.yml; FAMILY_TEST_PLAN section 4 (F7)
+- kind: tests
+- logged: v2.21.7 · 2026-10-26
+
+The built window (`npm run build`, with the WebAssembly core in `public/core`) is served by the engine through `FORMWAV_DIST` on a free port, with an empty data folder and home, and opened in Chromium at 4x CPU slowdown and 150 ms, 1.6 Mbps. Two pages: `/` and `/splash.html` (the desktop shell's first page). Layout shift must be 0, with no console error, no failed request and nothing refused by the guard. `IGNORED_REQUESTS` is empty.
+
+The window never reaches network idle: `/api/bridge/next` is a 20 s long poll the page keeps open. The script waits for idle for 15 s, ignores that timeout, settles for 3 s, measures, and stops listening before it closes the browser, so the poll aborted by the close is not counted.
+
+On load the page asks `/api/vamp/plugins`; with `native/formwav-vamp/fwvamp` not built the engine answers 503 and the browser logs a console error. The script therefore needs fwvamp built as the app's own scripts build it (`native/formwav-vamp/build_fwvamp`, libsndfile's development files), and so does the CI job. A checkout without it shows that error on every load; left for the owner.
 
 ## public/splash.html · the logo no longer moves when the lines under it arrive (v2.21.7) {#public-splash-shift}
 
