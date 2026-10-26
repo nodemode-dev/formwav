@@ -2516,6 +2516,13 @@ What the release gate's interface run checked, kept. An engine serves the built 
 
 ## .github/workflows {#workflows}
 
+### checks.yml · the window job and npm audit (v2.21.7)
+- refers-to: .github/workflows/checks.yml (the `interface` job's audit step, the new `window` job)
+- kind: ci
+- logged: v2.21.7 · 2026-10-26
+
+The family layers F1, F2 and F9 are files in backend/tests, so the `engine` job's existing `pytest tests` runs them on all three systems; no second test job. `npm audit --audit-level=low` runs after `npm ci` in the `interface` job (0 findings locally). The `window` job (Linux) builds what the window needs as the app's own scripts do: the audio core as a Python wheel (the engine reports it), the Vamp host (`build_fwvamp`, libsndfile), the WebAssembly core and the interface, then runs `frontend/tests/window` with Playwright 1.63.0's Chromium.
+
 ### .github/workflows/builds.yml removed · the app is built and released by formcompiler
 - refers-to: .github/workflows/builds.yml (removed), .github/workflows/checks.yml (push branches); build_macos_app, build_linux_app, build_windows_app.ps1
 - kind: removed-code

@@ -42,9 +42,49 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
+      - run: npm audit --audit-level=low
+        working-directory: frontend
       # tsc, then vite: the dev server does not type-check, so this is where a type error stops a change
       - run: npm run build
         working-directory: frontend
+
+  window:
+    name: window smoke (F7)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: system packages
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libsndfile1-dev pkg-config
+      - name: the engine, with the audio core built into it, and the Vamp host
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt pytest==9.1.1 playwright==1.63.0
+          maturin build --release --auditwheel skip -m native/formwav-dsp/Cargo.toml -o native-dist
+          python -m pip install native-dist/*.whl
+          sh native/formwav-vamp/build_fwvamp
+      - name: the window, with its audio core
+        env:
+          CARGO_PROFILE_RELEASE_STRIP: debuginfo
+        run: |
+          cargo build --release --locked --target wasm32-unknown-unknown --lib --manifest-path native/formwav-dsp/Cargo.toml
+          mkdir -p frontend/public/core
+          cp native/formwav-dsp/target/wasm32-unknown-unknown/release/formwav_dsp.wasm frontend/public/core/formwav_dsp.wasm
+          cd frontend && npm ci && npm run build
+      - run: python -m playwright install --with-deps chromium
+      - name: window smoke (F7)
+        run: python -m pytest frontend/tests/window -q -p no:cacheprovider
 
   engine:
     name: engine and interface tests (${{ matrix.os }})
