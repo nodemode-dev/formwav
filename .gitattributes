@@ -1,4 +1,7 @@
+* text=auto eol=lf
 *.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
 formwav text eol=lf
 formwav_oc_install text eol=lf
 oc_install text eol=lf
