@@ -102,10 +102,17 @@ if ($env:FORMWAV_WINDOWS_SIGN_COMMAND) {
   $Override = @{ bundle = @{ windows = @{ signCommand = $env:FORMWAV_WINDOWS_SIGN_COMMAND } } } | ConvertTo-Json -Depth 4 -Compress
   $SignArgs = @("--config", $Override)
 }
+# formcompiler's Tauri settings (the updater) arrive as FORMCOMPILER_CONFIG_ARG, "--config FILE" or empty; the file
+# path is kept whole, spaces and all
+$ConfigArgs = @()
+if ($env:FORMCOMPILER_CONFIG_ARG) {
+  if ($env:FORMCOMPILER_CONFIG_ARG -notmatch '^--config (.+)$') { throw "FORMCOMPILER_CONFIG_ARG must be --config FILE, not: $env:FORMCOMPILER_CONFIG_ARG" }
+  $ConfigArgs = @("--config", $Matches[1])
+}
 
 Say "Building the app bundle (this compiles Rust; the first run takes a while)"
 Push-Location (Join-Path $Root "src-tauri")
-Run $Tauri[0] (@($Tauri[1..($Tauri.Length - 1)]) + @("build", "--bundles", "nsis") + $SignArgs)
+Run $Tauri[0] (@($Tauri[1..($Tauri.Length - 1)]) + @("build", "--bundles", "nsis") + $SignArgs + $ConfigArgs)
 Pop-Location
 
 Say "Done"

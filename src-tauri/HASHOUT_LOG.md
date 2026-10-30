@@ -2,6 +2,13 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### ../build_macos_app, ../build_linux_app, ../build_windows_app.ps1 · formcompiler's --config reaches every desktop build
+- refers-to: ../build_macos_app, ../build_linux_app (the positional `--config FILE` before `tauri build`); ../build_windows_app.ps1 :: `$ConfigArgs`
+- kind: warning-context
+- logged: v2.21.8 · 2026-10-30
+
+formcompiler writes its Tauri settings to a file (the updater's artifacts, public key and feed when it holds the updater key; on macOS with no Apple identity, `bundle.macOS.signingIdentity "-"`, the ad hoc seal) and hands every build `FORMCOMPILER_CONFIG_ARG`, `--config FILE` or empty (scripts/run_build.py). The macOS script ran `cargo tauri build` without it, and Linux and Windows did not pass it either, so none of those settings reached a formwav build. Each script now takes the path after `--config ` whole (spaces kept, rather than splitting the variable on words), refuses any other shape, and passes `--config FILE` to `tauri build`; empty passes nothing, as before. Not run here: no build was run.
+
 ### ../build_macos_app, ../build_linux_app, ../build_windows_app.ps1 · the Tauri CLI pinned to 2.12.1
 - refers-to: ../build_macos_app (TAURI_CLI_VERSION); ../build_linux_app :: `tauri`; ../build_windows_app.ps1 :: `$Tauri`
 - kind: rationale
