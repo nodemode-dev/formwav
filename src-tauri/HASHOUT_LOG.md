@@ -2,6 +2,22 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### ../build_windows_app.ps1, ../README.md · FORMWAV_WINDOWS_SIGN_COMMAND removed; formcompiler signs Windows
+- refers-to: ../build_windows_app.ps1 (the S18 `$SignArgs` block, removed); ../README.md (Desktop app)
+- kind: removed-code
+- logged: v2.21.8 · 2026-10-30
+
+S18's hook read FORMWAV_WINDOWS_SIGN_COMMAND and passed it to Tauri as an inline `--config` with `bundle.windows.signCommand`. formcompiler never sets that variable: it merges `bundle.windows.signCommand` into `tauri.windows.conf.json` itself (scripts/windows_signing.py, keeping the file's `resources`, the helpers' DLLs) or puts a certificate's thumbprint in its `--config` file, and the family rule is that an app adds no Windows signing of its own (a second signCommand from the app would override formcompiler's). The block is gone and README's Desktop app section says where Windows signing comes from. Removed code, for the record:
+
+```powershell
+$SignArgs = @()
+if ($env:FORMWAV_WINDOWS_SIGN_COMMAND) {
+  Write-Host "Signing with: $env:FORMWAV_WINDOWS_SIGN_COMMAND"
+  $Override = @{ bundle = @{ windows = @{ signCommand = $env:FORMWAV_WINDOWS_SIGN_COMMAND } } } | ConvertTo-Json -Depth 4 -Compress
+  $SignArgs = @("--config", $Override)
+}
+```
+
 ### ../build_macos_app, ../build_linux_app, ../build_windows_app.ps1 · formcompiler's --config reaches every desktop build
 - refers-to: ../build_macos_app, ../build_linux_app (the positional `--config FILE` before `tauri build`); ../build_windows_app.ps1 :: `$ConfigArgs`
 - kind: warning-context
