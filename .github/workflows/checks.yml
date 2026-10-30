@@ -17,9 +17,11 @@ on:
       - "!**/*.md"
   workflow_dispatch:
 
+# A pull request's newer push cancels its older run. Runs on main and compile_v* are never cancelled: formcompiler
+# releases a commit only when this workflow passed on that exact commit.
 concurrency:
-  group: checks-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -65,6 +67,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            native/formwav-dsp
+            src-tauri
       - name: system packages
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libsndfile1-dev pkg-config
       - name: the engine, with the audio core built into it, and the Vamp host
@@ -112,6 +119,11 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
           components: clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            native/formwav-dsp
+            src-tauri
       # the tests make and read media through ffmpeg, and the core's native audio builds against ALSA on Linux
       - name: system packages (Linux)
         if: runner.os == 'Linux'
@@ -208,6 +220,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            native/formwav-dsp
+            src-tauri
       - name: system packages
         run: sudo apt-get update && sudo apt-get install -y ffmpeg libasound2-dev pkg-config
       - name: the engine, with the audio core built into it
@@ -242,6 +259,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            native/formwav-dsp
+            src-tauri
       - name: system libraries for tauri
         run: |
           sudo apt-get update
