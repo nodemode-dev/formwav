@@ -19,7 +19,8 @@ case "$(cargo tauri --version 2>/dev/null)" in
 esac
 command -v ffmpeg >/dev/null || echo "Note: formwav reads and writes most formats through ffmpeg, which it finds on your PATH and never bundles: brew install ffmpeg"
 command -v rubberband >/dev/null || echo "Note: time-stretch and pitch features use the rubberband command on your PATH: brew install rubberband"
-# the native helpers link Homebrew's libraries: libsndfile and portaudio (Nyquist, Vamp), lilv (LV2), found by pkg-config
+# the native helpers build against Homebrew's libraries: libsndfile and portaudio (Nyquist, Vamp), lilv (LV2), found by
+# pkg-config; src-tauri/gather_macos_libs then copies them into the app, so the app itself needs no Homebrew
 command -v pkg-config >/dev/null || { echo "pkg-config is required to find the helpers' libraries: brew install pkgconf"; exit 1; }
 for lib in sndfile portaudio-2.0 lilv-0; do
   pkg-config --exists "$lib" || { echo "The native helpers need $lib: brew install libsndfile portaudio lilv"; exit 1; }
@@ -70,8 +71,8 @@ echo "sidecar: src-tauri/binaries/formwav-engine-$TRIPLE"
 cargo build --release --manifest-path native/formwav-host/Cargo.toml
 cp native/formwav-host/target/release/fwhost "src-tauri/binaries/fwhost-$TRIPLE"
 echo "sidecar: src-tauri/binaries/fwhost-$TRIPLE"
-# AU-28: Nyquist's runner (libnyquist, vendored); it needs libsndfile and portaudio (brew install libsndfile
-# portaudio), linked from Homebrew, so this app runs on Macs that have them
+# AU-28: Nyquist's runner (libnyquist, vendored); it builds against libsndfile and portaudio (brew install libsndfile
+# portaudio), which the app carries in Contents/Frameworks (below)
 native/formwav-nyquist/build_fwnyq
 cp native/formwav-nyquist/fwnyq "src-tauri/binaries/fwnyq-$TRIPLE"
 echo "sidecar: src-tauri/binaries/fwnyq-$TRIPLE"
@@ -84,6 +85,13 @@ echo "sidecar: src-tauri/binaries/fwvamp-$TRIPLE"
 native/formwav-lv2/build_fwlv2
 cp native/formwav-lv2/fwlv2 "src-tauri/binaries/fwlv2-$TRIPLE"
 echo "sidecar: src-tauri/binaries/fwlv2-$TRIPLE"
+
+say "Placing the helpers' libraries in the app"
+# fwnyq, fwvamp and fwlv2 load libsndfile, portaudio, lilv and their own libraries from Homebrew; a signed app with the
+# hardened runtime may not load them from there, and users do not have Homebrew. Each one is copied to
+# src-tauri/Frameworks (Contents/Frameworks in the app, through bundle.macOS.frameworks below), the helpers and the copies
+# are pointed at @executable_path/../Frameworks and signed again, and nothing may be left loading from outside the app.
+src-tauri/gather_macos_libs src-tauri/binaries src-tauri/Frameworks "fwnyq-$TRIPLE" "fwvamp-$TRIPLE" "fwlv2-$TRIPLE"
 
 # the icons are committed in src-tauri/icons (regenerating them each build rewrote tracked files)
 
@@ -100,17 +108,38 @@ fi
 
 # formcompiler's Tauri settings (the updater, and the ad hoc seal when it has no Apple identity) arrive as
 # FORMCOMPILER_CONFIG_ARG, "--config FILE" or empty; the file path is kept whole, spaces and all
-set --
+CONFIG_FILE=""
 case "${FORMCOMPILER_CONFIG_ARG:-}" in
   "") ;;
-  "--config "*) set -- --config "${FORMCOMPILER_CONFIG_ARG#--config }" ;;
+  "--config "*) CONFIG_FILE=${FORMCOMPILER_CONFIG_ARG#--config } ;;
   *) echo "FORMCOMPILER_CONFIG_ARG must be --config FILE, not: $FORMCOMPILER_CONFIG_ARG" >&2; exit 1 ;;
 esac
+# one --config for tauri build: formcompiler's file (if any) with bundle.macOS.frameworks, the libraries gathered above
+BUILD_CONFIG="$(pwd -P)/src-tauri/binaries/macos-build.conf.json"
+python3 -I - "$BUILD_CONFIG" "$CONFIG_FILE" src-tauri/Frameworks/*.dylib <<'PY'
+import json
+import os
+import sys
+
+out, base, libs = sys.argv[1], sys.argv[2], [os.path.abspath(p) for p in sys.argv[3:] if os.path.isfile(p)]
+config = {}
+if base:
+    with open(base, encoding="utf-8") as handle:
+        config = json.load(handle)
+macos = config.setdefault("bundle", {}).setdefault("macOS", {})
+macos["frameworks"] = list(macos.get("frameworks", [])) + sorted(libs)
+with open(out, "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2)
+print(f"tauri config: {out} ({len(libs)} libraries for Contents/Frameworks)")
+PY
 
 say "Building the app bundle (this compiles Rust; the first run takes a while)"
 cd src-tauri
-cargo tauri build "$@"
+cargo tauri build --config "$BUILD_CONFIG"
 cd ..
+if [ -d src-tauri/target/release/bundle/macos/formwav.app/Contents/Frameworks ]; then
+  echo "frameworks: $(ls -1 src-tauri/target/release/bundle/macos/formwav.app/Contents/Frameworks | tr '\n' ' ')"
+fi
 
 say "Done"
 echo "App:  src-tauri/target/release/bundle/macos/formwav.app"

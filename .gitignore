@@ -29,6 +29,8 @@ Icon?
 src-tauri/target/
 src-tauri/gen/
 src-tauri/binaries/
+# the helpers' libraries, gathered by src-tauri/gather_macos_libs for Contents/Frameworks
+src-tauri/Frameworks/
 
 # the EBU ADM Renderer's own venv, which the ADM tests run (backend/tests/requirements_ear.txt)
 backend/tests/.venv-ear/

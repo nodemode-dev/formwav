@@ -67,6 +67,18 @@ native/
 - [The mixer basics in the core (PLAN_v13 S2)](#mixer-s2)
 - [The true peak, 4x oversampled (PLAN_v13 S3)](#true-peak-s3)
 - [The logarithmic fade and a shape for each fade (PLAN_v13 S5)](#fades-s5)
+- [The macOS helpers' header room (v2.21.8)](#macos-headerpad)
+
+---
+
+## The macOS helpers' header room (v2.21.8) {#macos-headerpad}
+
+### formwav-nyquist/build_fwnyq, formwav-vamp/build_fwvamp, formwav-lv2/build_fwlv2 · -headerpad_max_install_names on macOS
+- refers-to: each script's `Darwin)` LINK; ../src-tauri/gather_macos_libs; ../build_macos_app
+- kind: rationale
+- logged: v2.21.8 · 2026-10-30
+
+On macOS the three helpers linked Homebrew's libsndfile, portaudio and lilv by their /opt/homebrew paths, so the app ran only where Homebrew had them, and a signed app with the hardened runtime may not load them from there at all. The desktop build now copies those libraries into formwav.app/Contents/Frameworks and rewrites each reference to `@executable_path/../Frameworks/<name>` with install_name_tool (src-tauri/gather_macos_libs). A new name can be longer than the old one (`@executable_path/../Frameworks/libportaudio.2.dylib` against `/opt/homebrew/opt/portaudio/lib/libportaudio.2.dylib`), and ld leaves little room in a Mach-O header by default, so the helpers are linked with `-Wl,-headerpad_max_install_names` on Darwin (Homebrew's own libraries already are). Linux and Windows links are unchanged. Not run here: no macOS machine.
 
 ---
 

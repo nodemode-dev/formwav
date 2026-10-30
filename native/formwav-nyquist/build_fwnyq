@@ -43,6 +43,8 @@ case "$(uname -s)" in
   # Windows: portaudio (MIT) static, libsndfile (LGPL-2.1) dynamic so it stays replaceable; its DLLs go to dlls/ for
   # the installer to place beside fwnyq.exe. MSYS2's portaudio .pc declares no system libraries: named here
   MINGW*|MSYS*) LINK="-Wl,-Bstatic $(pkg-config --static --libs portaudio-2.0) -Wl,-Bdynamic $(pkg-config --libs sndfile) -static-libgcc -static-libstdc++ -lstdc++ -lpthread -lwinmm -lole32 -luuid -lsetupapi -lksuser -ldsound -lshlwapi" ;;
+  # macOS: room in the header for src-tauri/gather_macos_libs to point the libraries at the app's Frameworks
+  Darwin) LINK="$LIBS -lsndfile -lportaudio $CXXLIB -Wl,-headerpad_max_install_names" ;;
   *) LINK="$LIBS -lsndfile -lportaudio $CXXLIB" ;;
 esac
 ${CC:-cc} -O2 -w "$here/fwnyq.c" -I"$here/libnyquist" $INC "$build/libnyquist.a" $LINK -lm -lpthread -o "$here/fwnyq"

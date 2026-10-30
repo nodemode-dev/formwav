@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- The hardened runtime's entitlements for the app and its sidecars (Tauri signs every executable with them).
+       The engine is a PyInstaller onefile build: the Python libraries it unpacks are not signed with the app's team,
+       so library validation is off and their executable pages are allowed. formwav records into its tracks, which
+       the hardened runtime refuses without audio-input (Info.plist says why it records). -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+</dict>
+</plist>

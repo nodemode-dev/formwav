@@ -14,6 +14,8 @@ case "$(uname -s)" in
   MINGW*|MSYS*)
     LINK="$(pkg-config --cflags --libs lilv-0 sndfile) -lpthread -lshlwapi -static-libgcc"
     ;;
+  # macOS: room in the header for src-tauri/gather_macos_libs to point the libraries at the app's Frameworks
+  Darwin) LINK="$(pkg-config --cflags --libs lilv-0 sndfile) -Wl,-headerpad_max_install_names" ;;
   *) LINK="$(pkg-config --cflags --libs lilv-0 sndfile)" ;;
 esac
 ${CC:-cc} -O2 "$here/fwlv2.c" $LINK -lm -o "$here/fwlv2"
