@@ -10,7 +10,13 @@ command -v python3 >/dev/null || { echo "python3 is required (https://python.org
 command -v npm >/dev/null || { echo "npm is required (https://nodejs.org)"; exit 1; }
 command -v cargo >/dev/null || { echo "Rust is required: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"; exit 1; }
 xcode-select -p >/dev/null 2>&1 || { echo "Xcode command line tools are required: xcode-select --install"; exit 1; }
-cargo tauri --version >/dev/null 2>&1 || { say "Installing tauri-cli"; cargo install tauri-cli --version '^2' --locked; }
+# the Tauri CLI at the version of the tauri crate in src-tauri/Cargo.lock (2.12.1); installed only when it is missing or
+# another version, so a runner whose cargo bin folder is cached does not compile it again on every build
+TAURI_CLI_VERSION=2.12.1
+case "$(cargo tauri --version 2>/dev/null)" in
+  "tauri-cli $TAURI_CLI_VERSION") ;;
+  *) say "Installing tauri-cli $TAURI_CLI_VERSION"; cargo install tauri-cli --version "=$TAURI_CLI_VERSION" --locked --force ;;
+esac
 command -v ffmpeg >/dev/null || echo "Note: formwav reads and writes most formats through ffmpeg, which it finds on your PATH and never bundles: brew install ffmpeg"
 command -v rubberband >/dev/null || echo "Note: time-stretch and pitch features use the rubberband command on your PATH: brew install rubberband"
 # the native helpers link Homebrew's libraries: libsndfile and portaudio (Nyquist, Vamp), lilv (LV2), found by pkg-config

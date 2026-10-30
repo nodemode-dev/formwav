@@ -31,7 +31,7 @@ done
 if cargo tauri --version >/dev/null 2>&1; then
   tauri() { cargo tauri "$@"; }
 else
-  tauri() { npx --yes @tauri-apps/cli@^2 "$@"; }
+  tauri() { npx --yes @tauri-apps/cli@2.12.1 "$@"; }
 fi
 command -v ffmpeg >/dev/null || echo "Note: formwav reads and writes most formats through ffmpeg, which it finds on your PATH and never bundles: sudo apt install ffmpeg"
 command -v rubberband >/dev/null || echo "Note: time-stretch and pitch features use the rubberband command on your PATH: sudo apt install rubberband-cli"
