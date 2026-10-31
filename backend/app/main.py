@@ -1,3 +1,4 @@
+import mimetypes
 import os
 
 from fastapi import FastAPI
@@ -8,6 +9,10 @@ from .core.config import cors_origins
 from .core.security import LocalOnly
 from .core.version import VERSION
 from .routers import agent, agents, claude, cloud, health, remote, room, share, media, midi, native_audio, presets, projects, providers, render, terminal
+
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
 
 trust.install()
 app = FastAPI(title="formwav engine", version=VERSION)
