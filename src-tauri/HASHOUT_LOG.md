@@ -2,6 +2,13 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### tauri.conf.json · the Linux packages pull in the media plugins (v2.21.9)
+- refers-to: tauri.conf.json :: bundle.linux (deb.recommends, rpm.recommends, appimage.bundleMediaFramework); formcompiler apps/formwav.json :: toolchain.linux_packages
+- kind: rationale
+- logged: v2.21.9 · 2026-10-31
+
+The window plays and decodes audio through WebKitGTK on Linux (`frontend/src/audio/player.ts` AudioContext, OfflineAudioContext and AudioWorklet; `ui/media-pane.ts` audio element), which decodes with GStreamer. The deb and rpm keep their depends and now also recommend `gstreamer1.0-plugins-base`, `gstreamer1.0-plugins-good` and `gstreamer1.0-libav` (deb) and `gstreamer1-plugins-base` and `gstreamer1-plugins-good` (rpm), and the AppImage bundles the media framework, as formdeck does. formcompiler installs the base and good sets on the Linux runner so the AppImage step finds them. apt and dnf install recommends by default; `dpkg -i` and `--no-install-recommends` skip them. On Ubuntu 24.04 `libwebkit2gtk-4.1-0` already depends on base and good but only suggests `gstreamer1.0-libav` (the AAC and H.264 decoders), so the deb recommends it. The AppImage carries base and good only, since libav would copy the runner's own FFmpeg into the app. Checked: the config parses and formcompiler's `registry.py check` passes; no Linux build was run here.
+
 ### gather_macos_libs, entitlements.plist, tauri.conf.json, ../build_macos_app · the macOS app carries its helpers' libraries
 - refers-to: gather_macos_libs (new); entitlements.plist (new); tauri.conf.json :: bundle.macOS.entitlements; ../build_macos_app (the gather step, macos-build.conf.json with bundle.macOS.frameworks); ../.gitignore (src-tauri/Frameworks/)
 - kind: warning-context
