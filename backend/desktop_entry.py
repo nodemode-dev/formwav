@@ -124,6 +124,7 @@ def main() -> int:
     data.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("FORMWAV_DATA_DIR", str(data))
     load_env(data / ".env")
+    os.environ.setdefault("FORMWAV_MODELS_ROOT", str(data / "models"))
     os.environ.setdefault("FORMWAV_DIST", os.path.join(resource_dir(), "frontend_dist"))
     import uvicorn
 

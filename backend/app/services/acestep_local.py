@@ -54,7 +54,7 @@ _known: dict[str, bool] = {}
 
 
 def _folder() -> Path:
-    return Path(__file__).resolve().parents[2] / "models" / "acestep-cpp"
+    return Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "acestep-cpp"
 
 
 def _binary() -> Path:

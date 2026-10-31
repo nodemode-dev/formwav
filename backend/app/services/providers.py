@@ -31,7 +31,7 @@ from pathlib import Path
 
 from . import media, provenance
 
-LOCAL_FILE = Path(__file__).resolve().parents[2] / "models" / "local_models.json"
+LOCAL_FILE = Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "local_models.json"
 FAL_PRESETS = [
     {"model": "fal-ai/ace-step-1.5", "label": "ACE-Step 1.5: song from a prompt and lyrics", "fields": ["prompt", "lyrics", "duration"]},
     {"model": "fal-ai/ace-step/prompt-to-audio", "label": "ACE-Step: music from a prompt", "fields": ["prompt", "duration"]},

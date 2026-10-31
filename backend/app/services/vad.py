@@ -9,6 +9,7 @@ once from Silero's repository and checked against the hash it had when this was 
 
 import hashlib
 import json
+import os
 import subprocess
 import urllib.request
 from pathlib import Path
@@ -26,7 +27,7 @@ _session = None
 
 
 def model_path() -> Path:
-    path = Path(__file__).resolve().parents[2] / "models" / "vad" / "silero_vad.onnx"
+    path = Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "vad" / "silero_vad.onnx"
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         try:

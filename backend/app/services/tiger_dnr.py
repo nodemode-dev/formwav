@@ -72,7 +72,7 @@ sys.stdout.flush();sys.stderr.flush();os._exit(0)
 
 
 def _folder() -> Path:
-    return Path(__file__).resolve().parents[2] / "models" / "tiger-dnr"
+    return Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "tiger-dnr"
 
 
 def _sha(path: Path) -> str:

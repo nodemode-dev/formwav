@@ -9,6 +9,7 @@ corpora); it states no licence for the model, and none is claimed here.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -59,7 +60,7 @@ for i,t in enumerate(a["texts"]):
 
 
 def _base(lang: str) -> Path:
-    return Path(__file__).resolve().parents[2] / "models" / "translate" / f"en_{lang}"
+    return Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "translate" / f"en_{lang}"
 
 
 def _runtime_ready() -> bool:

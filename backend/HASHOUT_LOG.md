@@ -65,6 +65,7 @@ backend/
 
 ## Table of contents
 
+- [desktop_entry.py and the model folders · downloaded models outlive the onefile engine (v2.21.9)](#models-root)
 - [tests/test_f1_guard.py, test_f2_consent.py, test_f9_release_profiles.py · the family layers F1, F2 and F9 (v2.21.7)](#tests-family-layers)
 - [app/core/security.py · LocalOnly admits only this app's own window Origins (v2.21.6)](#app-core-security-origin-exact)
 - [app/core/security.py · LocalOnly refuses cross-site requests that carry no Origin (v2.21.5)](#app-core-security-cross-site)
@@ -133,6 +134,15 @@ backend/
 - [.github/workflows](#workflows)
 
 ---
+
+## desktop_entry.py and the model folders · downloaded models outlive the onefile engine (v2.21.9) {#models-root}
+
+### desktop_entry.py main, services/{vad,local_speech,effects,providers,acestep_local,local_sfx,separate,singing,local_dub,tiger_dnr}.py · FORMWAV_MODELS_ROOT everywhere
+- refers-to: desktop_entry.py :: main (after load_env); vad.py :: model_path; local_speech.py :: _models; effects.py :: _rnnoise_model; providers.py :: LOCAL_FILE; acestep_local.py, local_sfx.py, singing.py, tiger_dnr.py :: _folder; separate.py :: TORCH_HOME default; local_dub.py :: _base
+- kind: rationale
+- logged: v2.21.9 · 2026-10-31
+
+The desktop engine is a PyInstaller onefile, so `Path(__file__).resolve().parents[2] / "models"` is inside the temporary folder the bootloader unpacks to and deletes on exit: every model the engine fetched (Silero VAD, Kokoro at about 340 MB, RNNoise, the ACE-Step, EzAudio, SoulX-Singer, TIGER and translation weights, torch's cache) went with it, so the next launch downloaded it again and an offline launch had none. `dnsmos.py`, `deepfilter.py`, `transcript.py` and `voice/engine/config.py` already read `FORMWAV_MODELS_ROOT`; the other ten sites now read it the same way, with the same fallback, and `desktop_entry.main` sets it to `<data folder>/models` after `load_env`, so a value in the environment or the data folder's `.env` still wins. A checkout is unchanged: with the variable unset the folder stays `backend/models`. Checked: `py_compile` on the eleven files; ruff's CI selection (E9, F63, F7, F82) passes; a sweep finds no `parents[...] / "models"` left that ignores the variable; `vad.py`'s unused `json` import was there before. Not run in a built desktop app.
 
 ## tests/test_f1_guard.py, test_f2_consent.py, test_f9_release_profiles.py · the family layers F1, F2 and F9 (v2.21.7) {#tests-family-layers}
 

@@ -17,7 +17,7 @@ from pathlib import Path
 from ..core.paths import media_dir
 from . import media
 
-os.environ.setdefault("TORCH_HOME", str(Path(__file__).resolve().parents[2] / "models" / "torch"))
+os.environ.setdefault("TORCH_HOME", str(Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "torch"))
 MODEL = "htdemucs"
 _model = None
 _lock = threading.Lock()

@@ -119,7 +119,7 @@ print(json.dumps({"seconds":round((end-start)*HOP/SR,2),"notes":len(sung_pitches
 
 
 def _folder() -> Path:
-    return Path(__file__).resolve().parents[2] / "models" / "soulx-singer"
+    return Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "soulx-singer"
 
 
 def _voices() -> Path:

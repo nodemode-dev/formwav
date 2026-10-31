@@ -134,7 +134,7 @@ def _python() -> Path:
 
 
 def _models() -> Path:
-    return Path(__file__).resolve().parents[2] / "models" / "kokoro"
+    return Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "kokoro"
 
 
 def installed(engine: str) -> bool:

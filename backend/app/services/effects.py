@@ -185,7 +185,7 @@ RNNOISE_SHA256 = "ae3f7411e1e6a884f839a4a145c394408398f09854dbc1216ee02faafc98a1
 def _rnnoise_model() -> str:
     """The RNNoise model (voice amid noise, from GregorR/rnnoise-models) for ffmpeg's arnndn, fetched once into the
     git-ignored backend/models/rnnoise."""
-    path = Path(__file__).resolve().parents[2] / "models" / "rnnoise" / "bd.rnnn"
+    path = Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "rnnoise" / "bd.rnnn"
     if not path.exists():
         import urllib.request
 
