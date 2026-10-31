@@ -60,6 +60,13 @@ It includes third-party components under their own licences:
 - The Nyquist plug-ins are GPL-2.0 and are not part of formwav: the Nyquist list
   offers to download the 30 of the 2.4.2 release from their publisher's
   repository, each checked against a pinned SHA-256, into the data folder.
+- FFmpeg 7.1.5 (ffmpeg and ffprobe, LGPL-2.1-or-later, built with --disable-gpl
+  --disable-nonfree; libopus and libvpx inside it under BSD-3-Clause) is not part
+  of formwav: an ffmpeg on PATH is used, and when none is found the engine
+  downloads this build from the nodemode-dev/formcut-binaries release on first
+  run, checks every file against the SHA-256 in backend/app/ffmpeg_record.py, and
+  runs it as a separate program from the data folder. Its source is attached to
+  that release.
 - The desktop shell links cssparser, selectors, dtoa-short and option-ext
   (MPL-2.0) unmodified, their source at crates.io, and r-efi under MIT; the Linux
   AppImage carries WebKitGTK, GTK and GLib (LGPL-2.1-or-later) as shared libraries.

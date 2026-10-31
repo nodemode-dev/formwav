@@ -35,7 +35,7 @@ formwav is Apache-2.0 (LICENSE, NOTICE). This ledger covers what the desktop app
 
 | Component | Licence | Why it stays outside |
 | --- | --- | --- |
-| ffmpeg | LGPL-2.1-or-later, or GPL depending on its build | found on PATH at run time (`brew install ffmpeg`); bundling a GPL build would bind the app, and even an LGPL build carries relinking duties |
+| ffmpeg 7.1.5, ffprobe | LGPL-2.1-or-later for the downloaded build; an installed one keeps its own licence | an ffmpeg on PATH is used as before; when none is found, the engine downloads the LGPL build (`--disable-gpl --disable-nonfree`; libopus and libvpx BSD-3-Clause) from the nodemode-dev/formcut-binaries release on first run, checks every file's SHA-256 against `backend/app/ffmpeg_record.py` and runs it as a separate program, so nothing is bundled and the program stays replaceable; its source is attached to that release. That build has no librubberband, so the tempo and pitch effects still need an ffmpeg built with it |
 | rubberband (command line) | GPL-2.0-or-later (or Breakfast Quay's commercial licence) | found on PATH at run time (`brew install rubberband`); GPL cannot go inside an Apache-2.0 bundle |
 | The system web view (WKWebView on macOS, WebView2 on Windows, WebKitGTK on Linux) | the operating system's | the platform's own, never shipped |
 | The 30 Nyquist plug-ins (`*.ny`) from the 2.4.2 release of their publisher's repository, each pinned to its SHA-256 (`services/nyquist.py`, `PLUGIN_PINS`) | GPL-2.0 (each file's own header) | downloaded on the person's request (the Nyquist list's "Get the Nyquist plug-ins", `POST /api/nyquist/plugins/install`) into the data folder; never in the bundle. A checkout keeps its copy in `native/formwav-nyquist/plug-ins` for development |

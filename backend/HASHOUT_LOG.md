@@ -20,6 +20,8 @@ backend/
 ├── boot_backend / .bat          loads .env, runs uvicorn on 127.0.0.1:8060
 ├── data/                        runtime data (never committed): media/ holds imported audio and its JSON
 ├── app/
+│   ├── ffmpeg_fetch.py          first-run download of the pinned LGPL ffmpeg, PATH order
+│   ├── ffmpeg_record.py         release and per-file SHA-256 pins for that download
 │   ├── main.py                  FastAPI app, CORS, router mounts under /api
 │   ├── core/
 │   │   ├── config.py            env-driven settings (CORS origins)
@@ -510,6 +512,13 @@ The build scripts gate on `--selfcheck`, which imported fastapi, uvicorn, numpy 
 ---
 
 ## app/main.py {#app-main}
+
+### app/main.py, app/ffmpeg_fetch.py, app/ffmpeg_record.py · ffmpeg arrives on first run, from formcut-binaries
+- refers-to: app/main.py :: ffmpeg_fetch.start() after the MIME lines; app/ffmpeg_fetch.py (new); app/ffmpeg_record.py (new)
+- kind: rationale
+- logged: v2.21.9 · 2026-10-31
+
+The two modules are new and identical in formvis, formvfx, formwav, formlit, formpromo and formDAM. ffmpeg stays external, as formcut's does: nothing is bundled. When no ffmpeg is on PATH, the frozen engine downloads, in a background thread, the LGPL build pinned in `ffmpeg_record.py` (release 7.1.5-2, the record formcut carries) from `nodemode-dev/formcut-binaries`, checks every file for the host triple against its SHA-256 before placing any, and installs it in the shared per-person folder `formcut-binaries/ffmpeg-7.1.5-2` (Application Support on macOS, LOCALAPPDATA on Windows, XDG_DATA_HOME or ~/.local/share on Linux), so the family downloads it once. The programs get their plain names and the folder goes first on PATH, so `services/media.py` `_tool` (FORMWAV_<NAME>, then PATH) finds them with no change. An ffmpeg already on PATH is used and nothing is fetched. Outside a frozen build nothing is fetched unless `FORM_FFMPEG_AUTO=1`, so tests never reach the network; `FORM_FFMPEG_AUTO=0` turns it off in a desktop build, and `FORMCUT_FFMPEG_RELEASE` points at a mirror. The LGPL build has no librubberband, so the tempo and pitch effects (`remix.py`, `effects.py`) still need an ffmpeg built with it; that is the open item. Checked against the real release in the formvis copy of the module (byte-identical): pins equal the record, the Linux archive downloaded, verified and ran from the new PATH entry (7.1.5, LGPL), a tampered hash installed nothing, and the background start fetched only when no ffmpeg was on PATH. Not run in a built desktop app.
 
 ### app/main.py · .js, .mjs and .css keep their types on Windows
 - refers-to: app/main.py :: the three mimetypes.add_type calls after the last import

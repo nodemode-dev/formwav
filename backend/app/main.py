@@ -4,6 +4,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import ffmpeg_fetch
 from .core import trust
 from .core.config import cors_origins
 from .core.security import LocalOnly
@@ -13,6 +14,7 @@ from .routers import agent, agents, claude, cloud, health, remote, room, share, 
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("text/javascript", ".mjs")
 mimetypes.add_type("text/css", ".css")
+ffmpeg_fetch.start()
 
 trust.install()
 app = FastAPI(title="formwav engine", version=VERSION)
