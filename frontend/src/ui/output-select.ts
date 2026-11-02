@@ -1,6 +1,12 @@
 import type { Player } from "../audio/player";
 import { nativeChoice, setOutputChoice } from "../audio/native-node";
 
+let outputs: string[] = [];
+
+export function outputDeviceNames(): string[] {
+  return outputs;
+}
+
 /**
  * The status bar's Output: the browser's own audio (the worklet), or the engine's native output on the system's
  * default device or a named one, listed from /api/audio/devices (only when the engine has native output). Switching
@@ -21,6 +27,7 @@ export function mountOutputSelect(host: HTMLElement, player: Player): void {
     .then((res) => (res.ok ? res.json() : { native: false, devices: [] }))
     .then((d: { native: boolean; devices: string[] }) => {
       if (!d.native) return;
+      outputs = [...d.devices];
       select.append(option("native:", "Native · system default"), ...d.devices.map((name) => option(`native:${name}`, `Native · ${name}`)));
       select.value = current === null ? "browser" : `native:${current}`;
       if (select.selectedIndex < 0) select.value = "browser";

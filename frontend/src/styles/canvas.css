@@ -422,7 +422,8 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-status .fw-st-info { flex: 0 1 340px; display: flex; flex-direction: column; gap: 2px; min-inline-size: 0; max-inline-size: 340px; padding: 0 0 0 var(--space-4); border-inline-start: 1px solid var(--line-0); }
 .fw-status .fw-notice { flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-box-pack: end; -webkit-line-clamp: 2; line-clamp: 2; block-size: 2.5em; line-height: 1.25; font-size: var(--fs-12); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: normal; overflow-wrap: anywhere; }
 .fw-status .fw-st-line { display: flex; align-items: center; gap: var(--space-3); min-inline-size: 0; overflow: hidden; font-size: var(--fs-11); color: var(--text-muted); font-variant-numeric: tabular-nums; }
-.fw-status .fw-engine { flex: none; inline-size: 112px; min-inline-size: 0; display: inline-flex; align-items: center; gap: 5px; overflow: hidden; font-size: var(--fs-11); color: var(--text-muted); }.fw-status .fw-engine-dot { flex: none; inline-size: 7px; block-size: 7px; }
+.fw-status .fw-engine { flex: none; inline-size: 112px; min-inline-size: 0; display: inline-grid; grid-template-columns: 7px minmax(0, 1fr); justify-content: start; align-items: center; column-gap: 5px; overflow: hidden; font-size: var(--fs-11); color: var(--text-muted); }.fw-status .fw-engine-dot { flex: none; inline-size: 7px; block-size: 7px; }
+.fw-status .fw-engine-text { min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .fw-status .fw-engine[data-state="stale"] .fw-engine-dot { background: var(--warn); }
 .fw-status .fw-st-rate { flex: none; min-inline-size: 7ch; }
 .fw-status .fw-st-output { display: flex; min-inline-size: 0; }

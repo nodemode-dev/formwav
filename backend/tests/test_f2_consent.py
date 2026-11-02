@@ -8,6 +8,7 @@ import pytest
 from app.core.paths import data_dir
 from app.routers import claude as bridge
 from app.services import claude_code
+from conftest import serve_engine
 
 HEADERS = {"host": "127.0.0.1:8060"}
 TOOLS = [{"name": "get_session", "description": "reads"}, {"name": "set_tempo", "description": "changes"}]
@@ -135,9 +136,15 @@ class Window:
         return thread, out
 
 
+@pytest.fixture(scope="module")
+def window_engine():
+    with serve_engine("engine-consent.log") as url:
+        yield url
+
+
 @pytest.fixture
-def window(engine_url):
-    w = Window(engine_url)
+def window(window_engine):
+    w = Window(window_engine)
     yield w
     w.http.post("/api/agents/outside", json={"outside": "ask"})
     AGENTS.unlink(missing_ok=True)

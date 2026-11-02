@@ -22,7 +22,7 @@ new PerformanceObserver((list) => {
   for (const e of list.getEntries()) {
     if (e.hadRecentInput) continue;
     window.__fw.shift += e.value;
-    window.__fw.shifts.push((e.sources || []).map((s) => (s.node ? s.node.className || s.node.nodeName : '?')));
+    window.__fw.shifts.push((e.sources || []).map((s) => `${s.node ? s.node.className || s.node.nodeName : '?'} ${Math.round(e.startTime)}ms ${[s.previousRect.x, s.previousRect.y, s.previousRect.width, s.previousRect.height].map(Math.round).join(',')} to ${[s.currentRect.x, s.currentRect.y, s.currentRect.width, s.currentRect.height].map(Math.round).join(',')}`));
   }
 }).observe({ type: 'layout-shift', buffered: true });
 """
@@ -81,21 +81,26 @@ def app_url(model, tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def browser():
+def playwright():
     sync_api = pytest.importorskip("playwright.sync_api", reason="needs Playwright: pip install -r backend/tests/requirements.txt")
+    with sync_api.sync_playwright() as p:
+        yield p
+
+
+@pytest.fixture(scope="module")
+def browser(playwright):
     # PLAN_v12 C6: FORMWAV_TEST_BROWSER=firefox runs the same tests in Firefox (CI's second interface job); Chromium
     # otherwise. Tests that need Chromium's stand-in microphone launch their own Chromium either way.
     name = os.environ.get("FORMWAV_TEST_BROWSER", "chromium")
-    with sync_api.sync_playwright() as p:
-        try:
-            if name == "firefox":
-                chromium = p.firefox.launch(firefox_user_prefs={"media.autoplay.default": 0, "media.autoplay.blocking_policy": 0})
-            else:
-                chromium = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
-        except Exception as err:  # noqa: BLE001 - any launch failure means the browser is not installed here
-            pytest.skip(f"needs Playwright's {name} (python -m playwright install {name}): {str(err)[:200]}")
-        yield chromium
-        chromium.close()
+    try:
+        if name == "firefox":
+            chromium = playwright.firefox.launch(firefox_user_prefs={"media.autoplay.default": 0, "media.autoplay.blocking_policy": 0})
+        else:
+            chromium = playwright.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
+    except Exception as err:  # noqa: BLE001 - any launch failure means the browser is not installed here
+        pytest.skip(f"needs Playwright's {name} (python -m playwright install {name}): {str(err)[:200]}")
+    yield chromium
+    chromium.close()
 
 
 @pytest.fixture
@@ -129,13 +134,18 @@ def _import_speech(page) -> None:
     page.wait_for_function("document.querySelector('.fw-notice').textContent.startsWith('Imported')")
 
 
+def _slow_cpu(page) -> None:
+    if page.context.browser.browser_type.name == "chromium":
+        page.context.new_cdp_session(page).send("Emulation.setCPUThrottlingRate", {"rate": 4})
+
+
 def _clean(page) -> dict:
     fw = page.evaluate("({ errors: window.__fw.errors, shift: window.__fw.shift, shifts: window.__fw.shifts })")
     return {"errors": fw["errors"] + page.console_errors, "shift": fw["shift"], "shifts": fw["shifts"]}
 
 
 def test_the_app_boots_on_a_slow_machine_without_an_error_or_a_shift(page, app_url):
-    page.context.new_cdp_session(page).send("Emulation.setCPUThrottlingRate", {"rate": 4})
+    _slow_cpu(page)
     _open(page, app_url)
     page.wait_for_timeout(1500)
     assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
@@ -294,6 +304,7 @@ def _range(page, a: float, b: float) -> None:
     """A Smart Tool range on the first clip from a to b seconds (100 px a second at the first zoom)."""
     body = page.locator(".fw-lane-body").first.bounding_box()
     clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    assert body["x"] + b * 100 <= page.viewport_size["width"], "the drag would end outside the window, where Firefox drops the release"
     y = clip["y"] + clip["height"] * 0.42
     page.mouse.move(body["x"] + a * 100, y)
     page.mouse.down()
@@ -739,13 +750,14 @@ def test_a_chosen_language_holds_after_a_reload_and_shows_from_the_first_frame(p
     page.keyboard.press("Escape")
     page.wait_for_function("document.documentElement.lang === 'ja'")
     assert page.evaluate("document.querySelector('.fw-menu-btn').textContent") != "File"
-    page.context.new_cdp_session(page).send("Emulation.setCPUThrottlingRate", {"rate": 4})
+    _slow_cpu(page)
     page.reload()
     page.wait_for_function("document.body.classList.contains('app-ready')")
     first = page.evaluate("[...document.querySelectorAll('.fw-menu-btn')].map((b) => b.textContent)")
     assert "File" not in first and "Settings" not in first and page.evaluate("document.documentElement.lang") == "ja"
     page.wait_for_timeout(1500)
-    assert _clean(page)["shift"] == 0
+    clean = _clean(page)
+    assert clean["shift"] == 0, clean["shifts"]
     page.evaluate("window.__fwI18n.setLanguage('en')")
     assert _clean(page)["errors"] == []
 
@@ -1310,11 +1322,11 @@ def test_commands_focus_keys_shortcuts_window_clip_gain_paste_special_templates_
     # Paste Special: the copied clip repeated across a range
     page.locator(".fw-lane .fw-clip").first.click(position={"x": 40, "y": box["height"] * 0.8})
     page.keyboard.press("ControlOrMeta+c")
-    _range(page, 4, 10)
+    _range(page, 3.5, 8.5)
     _menu(page, "Edit", "Paste special: repeat to fill selection")
     _step(page, "Repeated to fill the selection")
     filled = page.evaluate("document.querySelectorAll('.fw-lane')[0].querySelectorAll('.fw-clip').length")
-    assert filled >= 4 and page.text_content(".fw-notice").startswith("Filled 6.00 s with")
+    assert filled >= 4 and page.text_content(".fw-notice").startswith("Filled 5.00 s with")
     # Save, change, revert; save as a template and start a session from it
     page.fill("input.fw-session-name", "Workflow")
     _menu(page, "File", "Save")
@@ -1399,7 +1411,7 @@ def test_playlists_as_lanes_comp_merge_notes_clips_files_and_window_configuratio
     assert _clean(page)["errors"] == []
 
 
-def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_and_out_on_the_fly(browser, app_url):
+def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_and_out_on_the_fly(playwright, app_url):
     import json
 
     req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
@@ -1409,7 +1421,7 @@ def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_
         {"id": "t1", "name": "Vox", "channels": ref["channels"], "gainDb": 0, "mute": False, "solo": False, "clips": [{"id": "c1", "mediaId": ref["id"], "start": 0, "sourceIn": 0, "length": 8 * rate, "gainDb": 0}]},
     ]}
     # a browser of its own with Chromium's stand-in microphone (a tone), allowed without asking
-    mic = browser.browser_type.launch(args=["--autoplay-policy=no-user-gesture-required", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
+    mic = playwright.chromium.launch(args=["--autoplay-policy=no-user-gesture-required", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
     context = mic.new_context(viewport=SMALLEST, permissions=["microphone"])
     page = context.new_page()
     page.add_init_script(WATCH)
@@ -1442,8 +1454,11 @@ def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_
         page.locator(".fw-ruler-canvas").first.click(position={"x": 400, "y": 10})
         page.keyboard.press("Space")
         page.wait_for_timeout(700)
+        before = page.evaluate(clock)
         page.keyboard.press("r")
-        page.wait_for_timeout(1200)
+        page.wait_for_timeout(100)
+        after = page.evaluate(clock)
+        page.wait_for_timeout(1100)
         page.keyboard.press("r")
         try:
             page.wait_for_function("document.querySelectorAll('.fw-lane[data-key=\"t1\"] .fw-lane-body > .fw-clip').length >= 4", timeout=30000)
@@ -1454,7 +1469,8 @@ def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_
         assert page.evaluate(clock) != a, "playback stopped at the punch out"
         page.keyboard.press("Space")
         lefts = page.evaluate(clips)
-        assert any(450 < x < 700 for x in lefts), lefts
+        px = lambda c: (int(c[3:5]) * 60 + float(c[6:])) * 100
+        assert any(px(before) - 1 <= x <= px(after) + 1 for x in lefts[3:]), (before, after, lefts)
         assert page.console_errors == []
     finally:
         context.close()

@@ -66,7 +66,7 @@ import { mountAutosave } from "./ui/autosave";
 import { mountToolbar } from "./ui/toolbar";
 import { mountEditing } from "./ui/editing";
 import { mountDock } from "./ui/dock";
-import { mountOutputSelect } from "./ui/output-select";
+import { mountOutputSelect, outputDeviceNames } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
 import { mountPianoRoll } from "./ui/piano-roll";
 import { mountNoteEvents } from "./ui/note-events";
@@ -75,7 +75,7 @@ import { mountScore } from "./ui/score";
 import { mountEnvelopeEdit } from "./ui/envelope-edit";
 import { mountProjects } from "./ui/projects";
 import { mountCloud } from "./ui/cloud";
-import { bindInputs } from "./ui/inputs";
+import { bindInputs, inputDeviceNames } from "./ui/inputs";
 import { mountRoom } from "./ui/room";
 import { mountShare } from "./ui/share";
 import { mountAgents } from "./ui/agents";
@@ -111,6 +111,8 @@ const i18nReady = startI18n(() => {
     ...doc.markers.map((m) => m.label),
     ...(doc.regions ?? []).map((r) => r.label),
     document.querySelector<HTMLInputElement>(".fw-session-name")?.value ?? "",
+    ...inputDeviceNames(),
+    ...outputDeviceNames(),
   ];
 });
 if (host) {

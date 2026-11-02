@@ -226,7 +226,13 @@ jobs:
             native/formwav-dsp
             src-tauri
       - name: system packages
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libasound2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libasound2-dev pkg-config pulseaudio
+      # the runner has no sound card; the playback tests that pass in Firefox on macOS time out here without a sound server
+      - name: a silent sound server
+        run: |
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=silent
+          pactl set-default-sink silent
       - name: the engine, with the audio core built into it
         run: |
           python -m pip install --upgrade pip
