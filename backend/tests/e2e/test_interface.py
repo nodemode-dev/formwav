@@ -304,6 +304,7 @@ def _range(page, a: float, b: float) -> None:
     """A Smart Tool range on the first clip from a to b seconds (100 px a second at the first zoom)."""
     body = page.locator(".fw-lane-body").first.bounding_box()
     clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
+    assert body["x"] + b * 100 <= page.viewport_size["width"], "the drag would end outside the window, where Firefox drops the release"
     y = clip["y"] + clip["height"] * 0.42
     page.mouse.move(body["x"] + a * 100, y)
     page.mouse.down()
@@ -1321,11 +1322,11 @@ def test_commands_focus_keys_shortcuts_window_clip_gain_paste_special_templates_
     # Paste Special: the copied clip repeated across a range
     page.locator(".fw-lane .fw-clip").first.click(position={"x": 40, "y": box["height"] * 0.8})
     page.keyboard.press("ControlOrMeta+c")
-    _range(page, 4, 10)
+    _range(page, 3.5, 8.5)
     _menu(page, "Edit", "Paste special: repeat to fill selection")
     _step(page, "Repeated to fill the selection")
     filled = page.evaluate("document.querySelectorAll('.fw-lane')[0].querySelectorAll('.fw-clip').length")
-    assert filled >= 4 and page.text_content(".fw-notice").startswith("Filled 6.00 s with")
+    assert filled >= 4 and page.text_content(".fw-notice").startswith("Filled 5.00 s with")
     # Save, change, revert; save as a template and start a session from it
     page.fill("input.fw-session-name", "Workflow")
     _menu(page, "File", "Save")
