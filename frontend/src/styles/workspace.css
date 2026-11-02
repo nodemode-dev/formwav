@@ -276,11 +276,12 @@
 .fw-export-opt input[type="number"] { inline-size: 64px; flex: none; }
 .fw-export-dialog [data-off="true"] { opacity: 0.45; }
 .fw-ask-dialog { margin: auto; }
-.fw-ask-note { margin: 0; font-size: var(--fs-12); color: var(--text-secondary); }
+.fw-ask-note { margin: 0; font-size: var(--fs-12); line-height: 1.25; color: var(--text-secondary); }
 .fw-ask-fields { display: grid; gap: 8px; }
 .fw-ask-field { display: grid; grid-template-columns: minmax(0, 1fr) 96px 24px; align-items: center; column-gap: 8px; font-size: var(--fs-12); color: var(--text-secondary); }
 .fw-ask-field:has(select, input[type="text"]) { grid-template-columns: auto minmax(0, 1fr) 0; }
-.fw-dialog-title { margin: 0; font-size: 15px; font-weight: 600; }
+.fw-ask-field select { block-size: var(--ctl-md); }
+.fw-dialog-title { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.25; }
 .fw-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .fw-speaker { flex-basis: 100%; margin-block-start: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent-color); }
 

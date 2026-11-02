@@ -39,12 +39,24 @@ export function mountAutosave(host: HTMLElement, engine: Engine): void {
 
   const ask = (title: string, note: string, fields: Field[], ok: string) =>
     new Promise<Record<string, unknown> | null>((done) => host.dispatchEvent(new CustomEvent("fw-ask", { detail: { title, note, fields, ok, done } })));
+  const revealed = () =>
+    new Promise<void>((done) => {
+      if (document.body.classList.contains("app-ready")) return done();
+      const watch = new MutationObserver(() => {
+        if (!document.body.classList.contains("app-ready")) return;
+        watch.disconnect();
+        done();
+      });
+      watch.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    });
   void (async () => {
     try {
       const res = await fetch("/api/autosave");
       const found = (await res.json()) as { exists: boolean; name?: string; savedAt?: number; tracks?: number; clips?: number };
       if (!found.exists || !found.clips || engine.get("document").tracks.length) return;
       const when = new Date((found.savedAt ?? 0) * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      await revealed();
+      await document.fonts.ready;
       const answer = await ask(
         "Recover unsaved work",
         `formwav closed with unsaved changes to "${found.name}" (${found.tracks} track${found.tracks === 1 ? "" : "s"}, ${found.clips} clip${found.clips === 1 ? "" : "s"}), kept at ${when}. Cancel asks again next time.`,
