@@ -1,6 +1,6 @@
 import type { Engine } from "../engine";
 /** A browser input, or (native) an interface the engine captures in full: a browser takes at most two channels of one. */
-export type InputDevice = { id: string; label: string; channels?: number; native?: boolean };
+export type InputDevice = { id: string; label: string; name?: string; channels?: number; native?: boolean };
 
 const chosen = new Map<string, string>();
 let devices: InputDevice[] = [];
@@ -87,6 +87,10 @@ export function inputDevices(): InputDevice[] {
   return devices;
 }
 
+export function inputDeviceNames(): string[] {
+  return devices.flatMap((d) => (d.name ? [d.name] : []));
+}
+
 export function inputSignature(): string {
   return signature;
 }
@@ -110,12 +114,12 @@ export async function refreshInputs(askPermission = false): Promise<InputDevice[
   let n = 0;
   const next: InputDevice[] = all
     .filter((d) => d.kind === "audioinput" && d.deviceId !== "default" && d.deviceId !== "communications")
-    .map((d) => ({ id: d.deviceId, label: d.label || `Input ${++n}` }));
+    .map((d) => ({ id: d.deviceId, label: d.label || `Input ${++n}`, name: d.label || undefined }));
   try {
     const listed = (await (await fetch("/api/audio/inputs")).json()) as { native: boolean; inputs: { name: string; channels: number }[] };
     for (const i of listed.native ? listed.inputs : []) {
       if (i.name.startsWith("Discard all samples")) continue; // ALSA's null device is no input
-      next.push({ id: `native:${i.name}`, label: `${i.name} · ${i.channels} in, through the engine`, channels: i.channels, native: true });
+      next.push({ id: `native:${i.name}`, label: `${i.name} · ${i.channels} in, through the engine`, name: i.name, channels: i.channels, native: true });
     }
   } catch {
     /* an engine without native capture, or away: browser inputs only */
