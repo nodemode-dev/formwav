@@ -1,3 +1,4 @@
+import contextlib
 import os
 import shutil
 import socket
@@ -81,11 +82,11 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-@pytest.fixture(scope="session")
-def engine_url():
+@contextlib.contextmanager
+def serve_engine(log_name: str = "engine.log"):
     port = _free_port()
     env = {**os.environ, "FORMWAV_DIST": str(ROOT / "frontend" / "dist")}
-    log = open(Path(os.environ["FORMWAV_DATA_DIR"]) / "engine.log", "wb")
+    log = open(Path(os.environ["FORMWAV_DATA_DIR"]) / log_name, "wb")
     proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port)], cwd=BACKEND, env=env, stdout=log, stderr=subprocess.STDOUT)
     url = f"http://127.0.0.1:{port}"
     deadline = time.monotonic() + 60
@@ -99,10 +100,18 @@ def engine_url():
             proc.kill()
             pytest.fail(f"the engine did not start on port {port}; its log is {log.name}")
         time.sleep(0.2)
-    yield url
-    proc.terminate()
     try:
-        proc.wait(10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-    log.close()
+        yield url
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        log.close()
+
+
+@pytest.fixture(scope="session")
+def engine_url():
+    with serve_engine() as url:
+        yield url
