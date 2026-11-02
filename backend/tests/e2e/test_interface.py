@@ -22,7 +22,7 @@ new PerformanceObserver((list) => {
   for (const e of list.getEntries()) {
     if (e.hadRecentInput) continue;
     window.__fw.shift += e.value;
-    window.__fw.shifts.push((e.sources || []).map((s) => (s.node ? s.node.className || s.node.nodeName : '?')));
+    window.__fw.shifts.push((e.sources || []).map((s) => `${s.node ? s.node.className || s.node.nodeName : '?'} ${Math.round(e.startTime)}ms ${[s.previousRect.x, s.previousRect.y, s.previousRect.width, s.previousRect.height].map(Math.round).join(',')} to ${[s.currentRect.x, s.currentRect.y, s.currentRect.width, s.currentRect.height].map(Math.round).join(',')}`));
   }
 }).observe({ type: 'layout-shift', buffered: true });
 """
@@ -1454,8 +1454,11 @@ def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_
         page.locator(".fw-ruler-canvas").first.click(position={"x": 400, "y": 10})
         page.keyboard.press("Space")
         page.wait_for_timeout(700)
+        before = page.evaluate(clock)
         page.keyboard.press("r")
-        page.wait_for_timeout(1200)
+        page.wait_for_timeout(100)
+        after = page.evaluate(clock)
+        page.wait_for_timeout(1100)
         page.keyboard.press("r")
         try:
             page.wait_for_function("document.querySelectorAll('.fw-lane[data-key=\"t1\"] .fw-lane-body > .fw-clip').length >= 4", timeout=30000)
@@ -1466,7 +1469,8 @@ def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_
         assert page.evaluate(clock) != a, "playback stopped at the punch out"
         page.keyboard.press("Space")
         lefts = page.evaluate(clips)
-        assert any(450 < x < 700 for x in lefts), lefts
+        px = lambda c: (int(c[3:5]) * 60 + float(c[6:])) * 100
+        assert any(px(before) - 1 <= x <= px(after) + 1 for x in lefts[3:]), (before, after, lefts)
         assert page.console_errors == []
     finally:
         context.close()
