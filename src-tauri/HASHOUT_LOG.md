@@ -2,6 +2,13 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### tauri.conf.json, src/menu.rs · the bundle and the About panel name NodeAgentc, Inc. and the licence (v2.22.0)
+- refers-to: tauri.conf.json :: bundle.publisher, bundle.copyright, bundle.license, bundle.licenseFile; Cargo.toml :: authors; src/menu.rs :: build (AboutMetadata)
+- kind: decision
+- logged: v2.22.0 · 2026-11-03
+
+The launch punch list (2026-11-03): the About of a downloaded app says NodeAgentc, Inc., not nodemode-ai, and lists the licence. formwav's About is the macOS application menu's panel, built in `menu.rs` with only the name, so the panel showed what Info.plist carried. The metadata now passes `copyright` ("Copyright 2026 NodeAgentc, Inc. Apache-2.0") and `license` as well. The bundle names the publisher, carries the SPDX id in its copyright line as formMCP and formskills already did, and sets `license` and `licenseFile` (`../LICENSE` from `src-tauri`); `authors` in Cargo.toml is the company, which is the .deb's Maintainer, and tauri-build writes `CompanyName` from `bundle.publisher` into the Windows version resource. The CLAP host and plugin descriptors under `native/` still say `nodemode-ai` as their vendor; they are not the desktop app's About and were left for a native change of their own. Checked here: the JSON parses; no build was run.
+
 ### tauri.conf.json · the Linux packages pull in the media plugins (v2.21.9)
 - refers-to: tauri.conf.json :: bundle.linux (deb.recommends, rpm.recommends, appimage.bundleMediaFramework); formcompiler apps/formwav.json :: toolchain.linux_packages
 - kind: rationale
