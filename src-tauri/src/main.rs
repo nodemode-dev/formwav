@@ -152,7 +152,7 @@ fn main() {
                             "main",
                             WebviewUrl::External(with_open(&base, pending.as_deref())),
                         )
-                        .title("formwav")
+                        .title("FormWav")
                         .visible(reveal::BUILD_VISIBLE)
                         .background_color(reveal::BACKGROUND)
                         .inner_size(width, height)
