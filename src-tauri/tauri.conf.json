@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "formwav",
+  "productName": "FormWav",
   "version": "2.21.9",
   "identifier": "ai.nodemode.formwav",
   "build": {
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "splash",
-        "title": "formwav",
+        "title": "FormWav",
         "url": "splash.html",
         "width": 360,
         "height": 200,

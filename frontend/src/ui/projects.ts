@@ -234,7 +234,7 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
   // the window's title as the family writes it: the session's name, a dot while it has unsaved changes, then the app
   const writeTitle = () => {
     const name = nameField?.value.trim() || "Untitled session";
-    const next = `${unsaved() && engine.get("document").tracks.length ? "• " : ""}${name} - formwav`;
+    const next = `${unsaved() && engine.get("document").tracks.length ? "• " : ""}${name} - FormWav`;
     if (document.title !== next) document.title = next;
   };
   nameField?.addEventListener("input", writeTitle);
