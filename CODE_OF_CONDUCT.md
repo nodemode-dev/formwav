@@ -35,7 +35,9 @@ accepted.
 
 Report anything that breaks this code by opening an
 [issue](https://github.com/nodemode-dev/formwav/issues), or by reaching the
-maintainers on GitHub at [@nodemode-ai](https://github.com/nodemode-ai).
+maintainers on GitHub: the [nodemode-dev](https://github.com/nodemode-dev)
+organisation, [@nodemode-ai](https://github.com/nodemode-ai) and
+[@gbarnai](https://github.com/gbarnai).
 
 ## What happens next
 

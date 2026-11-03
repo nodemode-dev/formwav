@@ -65,7 +65,7 @@ with `cargo check --locked --manifest-path src-tauri/Cargo.toml`.
 
 - Keep each pull request to one change, with tests for what it adds or fixes.
 - Write commit subjects the way the history does, in Conventional Commits with the
-  version in parentheses. Leave the version alone; the maintainer bumps every version
+  version in parentheses. Leave the version alone; a maintainer bumps every version
   site together when releasing.
 - Edits are by hand, one region at a time, with no flash or layout shift; every colour
   and size comes from a token in `frontend/src/styles/tokens.css`, and icons are inline
@@ -85,18 +85,30 @@ with `cargo check --locked --manifest-path src-tauri/Cargo.toml`.
 - Every model, binary or data file the engine can install or fetch gets a line in
   `NOTICE` and `LICENSES.md` before it is used. Gated or non-commercial weights are never
   bundled.
-- Some features were declined for patent risk (content-aware scale, skin protection,
-  and parts of the heal brush and the remixer); CLAUDE.md says what must never come
-  back.
+- Some features were declined for patent risk and will not come back: content-aware
+  scale (seam carving, or any resize that removes or inserts low-energy paths) and
+  skin protection, in any form; a heal brush that repairs when the stroke ends or has
+  an opacity or strength (the brush only selects, and Heal repairs as its own step);
+  and a remixer that changes its costs or penalises a jump after using it.
+
+## Maintainers
+
+FormWav is maintained by:
+
+- the [nodemode-dev](https://github.com/nodemode-dev) organisation on GitHub
+- [@nodemode-ai](https://github.com/nodemode-ai)
+- [@gbarnai](https://github.com/gbarnai)
+
+Reach them through issues and pull requests.
 
 ## How changes land
 
-Only the maintainer pushes to `main`. Everyone else forks the repository and opens a pull request into `main`. A pull request merges when all five CI jobs pass (the interface and engine jobs run on Linux, macOS and Windows; the Firefox job is reported, not blocking) on an up-to-date branch and the maintainer has approved it after its last push.
+Only a maintainer pushes to `main`. Everyone else forks the repository and opens a pull request into `main`. A pull request merges when all five CI jobs pass (the interface and engine jobs run on Linux, macOS and Windows; the Firefox job is reported, not blocking) on an up-to-date branch and a maintainer has approved it after its last push.
 
 ## Releases
 
-A release is a version, and only the maintainer makes one: after the version is bumped on
-`main`, the maintainer cuts a `compile_vX.Y.Z` branch, and formcompiler
+A release is a version, and only a maintainer makes one: after the version is bumped on
+`main`, a maintainer cuts a `compile_vX.Y.Z` branch, and formcompiler
 (`nodemode-dev/formcompiler`) builds every platform and publishes them together. No push
 from a contributor starts a release.
 
