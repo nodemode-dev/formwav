@@ -27,9 +27,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/formwav-hero.png" alt="FormWav with four tracks, pad, arp, bass and drums, drawn as colored waveforms over a 30 second timeline, and the mixer below with a fader and meter for each track" width="100%">
+  <img src="docs/images/formwav-hero.jpg" alt="FormWav with a Final scene session: Dialogue and Music tracks drawn as waveforms, the effects browser on the left, and a Compressor and De-Esser chain with knobs on the Effects tab below" width="100%">
   <br>
-  <sub>Four stems on four tracks, with the mixer open under the timeline.</sub>
+  <sub>A dialogue and music scene with a compressor and de-esser chain on the voice track.</sub>
 </p>
 
 <p align="center">
