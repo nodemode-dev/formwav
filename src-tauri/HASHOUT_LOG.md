@@ -2,6 +2,13 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### tauri.conf.json, src/menu.rs · the app is FormWav and the README is the Form family template (v2.22.1)
+- refers-to: tauri.conf.json :: productName, app.windows[splash].title; src/menu.rs :: build (AboutMetadata.name)
+- kind: decision
+- logged: v2.22.1 · 2026-11-04
+
+README in the Form family template (Mackin's #6), merged with main. The branch named the compiled app FormWav (productName, the splash and main window titles); main had just given the bundle and the About panel the publisher and the licence. Both are kept, and the About panel's name follows the product name, so the panel reads FormWav rather than formwav.
+
 ### tauri.conf.json, src/menu.rs · the bundle and the About panel name NodeAgentc, Inc. and the licence (v2.22.0)
 - refers-to: tauri.conf.json :: bundle.publisher, bundle.copyright, bundle.license, bundle.licenseFile; Cargo.toml :: authors; src/menu.rs :: build (AboutMetadata)
 - kind: decision

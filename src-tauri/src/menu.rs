@@ -11,7 +11,7 @@ pub const EVENT: &str = "fw-menu";
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let about = AboutMetadata {
-        name: Some("formwav".into()),
+        name: Some("FormWav".into()),
         copyright: Some("Copyright 2026 NodeAgentc, Inc. Apache-2.0".into()),
         license: Some("Apache-2.0".into()),
         ..Default::default()
