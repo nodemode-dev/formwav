@@ -47,13 +47,14 @@ extern "C" {
 #define OFFTYPE		long
 /* #define SAVERESTORE */
 #define XL_LITTLE_ENDIAN 
-#ifdef __MINGW32__
-#define _longjmp(b, v) longjmp(b, v)
-#define _setjmp(b) setjmp(b)
-#else
-#define _longjmp longjmp
-#define _setjmp setjmp
 #endif
+
+#ifdef WIN32
+#define xl_setjmp setjmp
+#define xl_longjmp longjmp
+#else
+#define xl_setjmp _setjmp
+#define xl_longjmp _longjmp
 #endif
 
 /* for the Turbo C compiler - MS-DOS, large model */

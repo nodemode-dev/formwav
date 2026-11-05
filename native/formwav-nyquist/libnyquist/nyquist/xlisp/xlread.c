@@ -183,7 +183,7 @@ int xlload(const char *fname, int vflag, int pflag)
 
     /* read, evaluate and possibly print each expression in the file */
     xlbegin(&cntxt,CF_ERROR,s_true);
-    if (_setjmp(cntxt.c_jmpbuf))
+    if (xl_setjmp(cntxt.c_jmpbuf))
         sts = FALSE;
         #ifdef DEBUG_INPUT
             if (read_by_xlisp) {

@@ -850,7 +850,7 @@ nyx_rval nyx_eval_expression(const char *expr_string)
    xlbegin(&nyx_cntxt, CF_TOPLEVEL|CF_CLEANUP|CF_BRKLEVEL|CF_ERROR, s_true);
 
    // Set the context jump destination
-   if (_setjmp(nyx_cntxt.c_jmpbuf)) {
+   if (xl_setjmp(nyx_cntxt.c_jmpbuf)) {
       // If the script is cancelled or some other condition occurs that causes
       // the script to exit and return to this level, then we don't need to
       // restore the previous context.
@@ -971,7 +971,7 @@ int nyx_get_audio(nyx_audio_callback callback, void *userdata)
    xlbegin(&nyx_cntxt, CF_TOPLEVEL|CF_CLEANUP|CF_BRKLEVEL|CF_ERROR, s_true);
 
    // Set the context jump destination
-   if (_setjmp(nyx_cntxt.c_jmpbuf)) {
+   if (xl_setjmp(nyx_cntxt.c_jmpbuf)) {
       // If the script is cancelled or some other condition occurs that causes
       // the script to exit and return to this level, then we don't need to
       // restore the previous context.
