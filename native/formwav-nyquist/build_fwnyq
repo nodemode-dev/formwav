@@ -32,8 +32,9 @@ for s in $(grep -v '^#' "$here/sources.txt"); do
   extra=""
   # Apple's clang (and clang 16 on) refuses C's old implicit int, which three K&R definitions here use (midifile.c,
   # handlers.c): allowed again, they mean int as they always did. Implicit function declarations stay errors (they
-  # truncate returned pointers); security.c's getcwd gets its prototype (it includes unistd.h only for __APPLE__ or UNIX)
-  case "$s" in *.c) extra="-Wno-error=implicit-int" ;; esac
+  # truncate returned pointers); security.c's getcwd gets its prototype (it includes unistd.h only for __APPLE__ or UNIX).
+  # gnu17: GCC 15 on defaults to C23, where the K&R declarations' empty () means no arguments
+  case "$s" in *.c) extra="-std=gnu17 -Wno-error=implicit-int" ;; esac
   case "$s" in */xlisp/security.c) extra="$extra -include unistd.h" ;; esac
   [ "$o" -nt "$here/libnyquist/$s" ] || $cc -O2 -fPIC -w -DCMTSTUFF -DEXT $INC $extra -c "$here/libnyquist/$s" -o "$o"
   objs="$objs $o"

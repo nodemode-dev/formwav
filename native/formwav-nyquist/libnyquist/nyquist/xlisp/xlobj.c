@@ -402,7 +402,7 @@ LOCAL LVAL evmethod(LVAL obj, LVAL msgcls, LVAL method)
         xlbegin(&cntxt,CF_RETURN,name);
 
     /* execute the block */
-    if (name && _setjmp(cntxt.c_jmpbuf))
+    if (name && xl_setjmp(cntxt.c_jmpbuf))
         val = xlvalue;
     else
         for (cptr = getbody(method); consp(cptr); cptr = cdr(cptr))
