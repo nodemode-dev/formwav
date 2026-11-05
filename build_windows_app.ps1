@@ -32,7 +32,8 @@ function InMsys($command) {
     if ($LASTEXITCODE -ne 0) { throw "MSYS2 step failed: $command" }
   } finally { Pop-Location }
 }
-InMsys ('for lib in sndfile portaudio-2.0 lilv-0; do pkg-config --exists "$lib" || { echo "MSYS2 lacks $lib: pacman -S --needed ' + $Packages + '"; exit 1; }; done')
+if ($env:CI) { InMsys ("pacman -Sy --needed --noconfirm " + $Packages) }
+InMsys ('for lib in sndfile portaudio-2.0 lilv-0; do pkg-config --exists $lib || { echo MSYS2 lacks $lib, run: pacman -S --needed ' + $Packages + '; exit 1; }; done')
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { Write-Host "Note: formwav reads and writes most formats through ffmpeg, which it finds on your PATH and never bundles: winget install ffmpeg" }
 # the Tauri CLI: cargo's if installed (cargo-tauri.exe), else the npm package (prebuilt, no compile)
 $Tauri = if (Get-Command cargo-tauri -ErrorAction SilentlyContinue) { @("cargo", "tauri") } else { @("npx", "--yes", "@tauri-apps/cli@2.12.1") }
