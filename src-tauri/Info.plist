@@ -6,5 +6,9 @@
        app that does not say why it records: formwav records into its tracks. -->
   <key>NSMicrophoneUsageDescription</key>
   <string>formwav records audio from your microphone or audio interface into its tracks.</string>
+  <!-- macOS asks before an app talks to other devices on the network. formwav does only when the room or phone
+       pairing is turned on in Settings; this is the reason shown then. -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>FormWav uses your local network only when you turn on the room or phone pairing in Settings.</string>
 </dict>
 </plist>

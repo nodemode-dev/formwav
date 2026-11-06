@@ -117,3 +117,29 @@ def test_the_real_listener_marks_its_requests_even_from_this_machine(tmp_path, m
         assert json.loads(remote._store().read_text())["enabled"] is True
     finally:
         desk.put("/api/remote", json={"enabled": False})
+
+
+def test_settings_with_the_listener_off_never_looks_up_addresses(tmp_path, monkeypatch):
+    """macOS shows its Local Network prompt when an app resolves its own name through Bonjour. With phone pairing
+    off, the Settings panel's status call must not touch the network at all."""
+    monkeypatch.setenv("FORMWAV_DATA_DIR", str(tmp_path))
+    looked = []
+    monkeypatch.setattr(remote, "addresses", lambda: looked.append(1) or ["192.168.1.5"])
+    state = desk.get("/api/remote").json()
+    assert state["enabled"] is False and state["addresses"] == [] and looked == []
+
+
+def test_addresses_never_resolve_the_machines_own_name(monkeypatch):
+    def refuse(*_args):
+        raise AssertionError("hostname resolution goes through Bonjour and raises the macOS prompt")
+
+    monkeypatch.setattr(socket, "gethostbyname_ex", refuse)
+    monkeypatch.setattr(socket, "gethostbyname", refuse)
+    assert all(not a.startswith("127.") for a in remote.addresses())
+
+
+def test_the_mac_app_says_why_it_uses_the_local_network():
+    from pathlib import Path
+
+    plist = (Path(__file__).resolve().parents[2] / "src-tauri" / "Info.plist").read_text(encoding="utf-8")
+    assert "<key>NSLocalNetworkUsageDescription</key>" in plist
