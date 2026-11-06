@@ -73,7 +73,8 @@ jobs:
             native/formwav-dsp
             src-tauri
       - name: system packages
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libsndfile1-dev pkg-config
+        timeout-minutes: 10
+        run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update && sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y libasound2-dev libsndfile1-dev pkg-config
       - name: the engine, with the audio core built into it, and the Vamp host
         run: |
           python -m pip install --upgrade pip
@@ -127,7 +128,8 @@ jobs:
       # the tests make and read media through ffmpeg, and the core's native audio builds against ALSA on Linux
       - name: system packages (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libasound2-dev pkg-config
+        timeout-minutes: 10
+        run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update && sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends ffmpeg libasound2-dev pkg-config
       - name: system packages (macOS)
         if: runner.os == 'macOS'
         run: brew install ffmpeg
@@ -226,7 +228,8 @@ jobs:
             native/formwav-dsp
             src-tauri
       - name: system packages
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg libasound2-dev pkg-config pulseaudio
+        timeout-minutes: 10
+        run: sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update && sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y ffmpeg libasound2-dev pkg-config pulseaudio
       # the runner has no sound card; the playback tests that pass in Firefox on macOS time out here without a sound server
       - name: a silent sound server
         run: |
@@ -271,9 +274,10 @@ jobs:
             native/formwav-dsp
             src-tauri
       - name: system libraries for tauri
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
       # tauri checks its externalBin and frontendDist when the crate compiles; the release builds make the real ones,
       # so stand-ins named for the host triple let this job compile in minutes, and never leave the runner
       - name: stand-ins for the sidecars and the built interface
