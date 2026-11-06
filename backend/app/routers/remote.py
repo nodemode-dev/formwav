@@ -153,14 +153,16 @@ def admitted(scope: dict, headers: dict) -> bool:
 
 
 def addresses() -> list[str]:
-    """This machine's IPv4 addresses a phone on the same network could reach."""
+    """This machine's IPv4 address a phone on the same network could reach.
+
+    Only the routing table is asked (a UDP connect to a documentation address sends no packet). Resolving the
+    machine's own name goes through Bonjour (<name>.local), and macOS answers that with its Local Network prompt,
+    so it is not done; callers ask only while the listener is on."""
     found = set()
     with contextlib.suppress(OSError), socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
         probe.connect(("192.0.2.1", 9))  # a documentation address: no packet is sent
         found.add(probe.getsockname()[0])
-    with contextlib.suppress(OSError):
-        found.update(socket.gethostbyname_ex(socket.gethostname())[2])
-    return sorted(address for address in found if not address.startswith("127."))
+    return sorted(address for address in found if not address.startswith("127.") and address != "0.0.0.0")
 
 
 def start(app) -> None:
@@ -195,7 +197,9 @@ def _desktop(request: Request) -> None:
 def _public() -> dict:
     data = _read()
     devices = [{key: device.get(key) for key in ("id", "name", "created", "lastSeen")} for device in data.get("devices", [])]
-    return {"enabled": bool(data.get("enabled")), "port": port(), "addresses": addresses(), "devices": devices}
+    enabled = bool(data.get("enabled"))
+    # no address lookup while the listener is off: opening Settings must not touch the network
+    return {"enabled": enabled, "port": port(), "addresses": addresses() if enabled else [], "devices": devices}
 
 
 @router.get("/api/remote")
