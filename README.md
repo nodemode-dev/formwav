@@ -126,6 +126,8 @@ One registry of 141 commands, the menu bar's items and the session tools. The wi
 
 All FormWav builds are compiled and released from [FormCompiler](https://github.com/nodemode-dev/formcompiler); this repo holds the source.
 
+**Updates come through FormPortal.** FormWav does not update itself: install [FormPortal](https://formai.studio/formportal/) and it keeps FormWav up to date, or download the new version from the links above.
+
 ## Run it from source
 
 Prefer it in your browser, or want to contribute? Run the web UI straight from this repo.
