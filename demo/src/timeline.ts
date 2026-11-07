@@ -3,7 +3,7 @@ import { buildPeaks, type PeakPyramid, spectrogram, type Spectro } from "./dsp";
 import type { Player } from "./player";
 import type { Store, Track } from "./state";
 
-const TRACK_H = 96;
+const TRACK_H = 80;
 const STEPS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
 
 export function fmtTime(t: number): string {

@@ -32,6 +32,14 @@ export class Panels {
   private tab = "clip";
   private statsTimer = 0;
   private statKey = "";
+  private audioIds = new WeakMap<Float32Array, number>();
+  private audioCount = 0;
+
+  private audioId(a: Float32Array): number {
+    let id = this.audioIds.get(a);
+    if (id === undefined) { id = ++this.audioCount; this.audioIds.set(a, id); }
+    return id;
+  }
   private specCanvas: HTMLCanvasElement;
   private specCtx: CanvasRenderingContext2D;
   private specW = 0;
@@ -227,7 +235,7 @@ export class Panels {
     setText($("dm-s-len"), fmtTime(t.chans[0].length / this.store.rate));
     setText($("dm-s-rate"), `${this.store.rate} Hz`);
     setText($("dm-s-range"), rg.whole ? "Whole track" : `Selection ${fmtTime((rg.e - rg.s) / this.store.rate)}`);
-    const key = `${t.chans[0].length}:${rg.s}:${rg.e}:${t.chans[0][rg.s]}:${t.chans[0][Math.max(rg.s, rg.e - 1)]}`;
+    const key = `${t.id}:${t.chans.map((c) => this.audioId(c)).join(",")}:${rg.s}:${rg.e}`;
     if (this.tab === "clip" && key !== this.statKey) {
       this.statKey = key;
       setText($("dm-s-peak"), db(toDb(peakOf(t.chans, rg.s, rg.e))));
@@ -290,7 +298,7 @@ export class Panels {
       mags = this.liveBuf;
     } else if (t) {
       const rg = this.range()!;
-      const key = `${t.chans[0].length}:${rg.s}:${rg.e}:${t.chans[0][rg.s]}:${t.id}`;
+      const key = `${t.id}:${t.chans.map((c) => this.audioId(c)).join(",")}:${rg.s}:${rg.e}`;
       if (!this.staticSpec || this.staticSpec.key !== key) this.staticSpec = { key, mags: averageSpectrum(t.chans, rg.s, rg.e, 512) };
       mags = this.staticSpec.mags;
       binHz = rate / 1024;

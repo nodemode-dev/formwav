@@ -17,6 +17,7 @@ import logo from "../../frontend/public/logo-64.png";
 import { applyTheme, readChoice, setAccent, setTheme, THEMES } from "../../frontend/src/vendor/formvis/themes";
 import { type Chans, loudness, peakOf, toDb } from "./dsp";
 import { mountIcons, DEMO_ICONS } from "./icons";
+import { CLIP_BY_ID, decodeClip, SESSION_CLIPS } from "./media";
 import { mixdown } from "./mix";
 import { Panels } from "./panels";
 import { Player } from "./player";
@@ -40,7 +41,7 @@ const player = new Player(store);
 const timeline = new Timeline($("dm-timeline"), store, player);
 const panels = new Panels(store, player, (t) => panels.setTab(t));
 
-function loadSession(): void {
+function loadSynthetic(): void {
   const rate = store.rate;
   store.reset();
   const specs: Array<[string, () => Chans]> = [
@@ -51,12 +52,65 @@ function loadSession(): void {
   for (const [name, make] of specs) store.tracks.push(store.newTrack(name, make()));
   store.selected = store.tracks[0].id;
   player.position = 0;
+  setText($("dm-session-name"), "Sample session");
   store.commit("Open sample session");
   timeline.fit();
-  store.say("Sample session loaded: three synthetic tracks, generated in this page");
+  store.say("Synthetic sample session loaded: three tracks, generated in this page");
+}
+
+let loadToken = 0;
+
+async function loadSession(): Promise<void> {
+  const rate = store.rate;
+  const token = ++loadToken;
+  const total = SESSION_CLIPS.length;
+  let done = 0;
+  store.say(`Loading the session media: 0 of ${total}`);
+  try {
+    const loaded: Chans[] = [];
+    await Promise.all(SESSION_CLIPS.map(async (c, i) => {
+      loaded[i] = await decodeClip(c, rate);
+      done++;
+      store.say(`Loading the session media: ${done} of ${total}`);
+    }));
+    if (token !== loadToken) return;
+    store.reset();
+    SESSION_CLIPS.forEach((c, i) => {
+      const t = store.newTrack(c.name, loaded[i]);
+      t.gain = c.gain;
+      t.mute = c.mute;
+      t.spec = c.spec;
+      store.tracks.push(t);
+    });
+    store.selected = store.tracks[1].id;
+    player.position = 0;
+    setText($("dm-session-name"), "Round the Moon, a field report");
+    store.commit("Open the Round the Moon session");
+    timeline.fit();
+    store.say("Round the Moon: launch radio, narration, piano and Saturn plasma waves. Select a track and try a tool");
+  } catch (err) {
+    if (token !== loadToken) return;
+    store.say(`The session media did not load (${(err as Error).message}); using the synthetic samples`);
+    loadSynthetic();
+  }
+}
+
+async function addClip(id: string): Promise<void> {
+  const base = CLIP_BY_ID[id];
+  store.say(`Decoding ${base.name}`);
+  try {
+    const chans = await decodeClip({ ...base, offset: 0 }, store.rate);
+    const grow = store.tracks.length === 0;
+    store.addTrack(base.name, chans, `Add ${base.name}`);
+    if (grow) timeline.fit();
+    store.say(`Added ${base.name}`);
+  } catch (err) {
+    store.say(`Could not add ${base.name}: ${(err as Error).message}`);
+  }
 }
 
 function addSample(kind: string): void {
+  if (CLIP_BY_ID[kind]) { void addClip(kind); return; }
   const rate = store.rate;
   const make = kind === "dialogue" ? sampleDialogue : kind === "music" ? sampleMusic : sampleDrums;
   const name = kind[0].toUpperCase() + kind.slice(1);
@@ -331,8 +385,8 @@ function loop(): void {
   requestAnimationFrame(loop);
 }
 
-loadSession();
-panels.choose("normalize");
+void loadSession().then(() => setText($("dm-empty"), "No tracks. Open an audio file or use the Sounds tab."));
+panels.choose("dehum");
 panels.setTab("clip");
 requestAnimationFrame(() => {
   timeline.measure();

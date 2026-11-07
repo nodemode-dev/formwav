@@ -1,5 +1,5 @@
 import {
-  type Chans, compress, fadeShape, fromDb, highpass, loudness, lowpass, notch, peaking, peakOf, resampleLinear, runBiquads, toDb,
+  type Chans, compress, denoise, fadeShape, fromDb, highpass, loudness, lowpass, notch, peaking, peakOf, resampleLinear, runBiquads, toDb,
 } from "./dsp";
 
 export interface RangeParam { kind: "range"; id: string; label: string; min: number; max: number; step: number; value: number; unit: string }
@@ -150,13 +150,18 @@ export const OPS: Op[] = [
     run: (c) => ({ chans: filterRegion(c, [peaking(Math.min(c.p.freq, c.rate * 0.45), c.p.q, c.p.gain, c.rate)]) }),
   },
   {
-    id: "dehum", title: "De-hum", group: "Filter", blurb: "Notches mains hum and its harmonics",
-    params: [select("mains", "Mains", [[50, "50 Hz"], [60, "60 Hz"]], 50), range("harm", "Harmonics", 1, 6, 1, 3, ""), range("q", "Notch width (Q)", 10, 80, 1, 35, "")],
+    id: "dehum", title: "De-hum", group: "Repair", blurb: "Notches mains hum and its harmonics",
+    params: [select("mains", "Mains", [[50, "50 Hz"], [60, "60 Hz"]], 60), range("harm", "Harmonics", 1, 6, 1, 4, ""), range("q", "Notch width (Q)", 10, 80, 1, 35, "")],
     run: (c) => {
       const stages = [];
       for (let h = 1; h <= c.p.harm; h++) if (c.p.mains * h < c.rate * 0.45) stages.push(notch(c.p.mains * h, c.p.q, c.rate));
       return { chans: filterRegion(c, stages) };
     },
+  },
+  {
+    id: "denoise", title: "Reduce noise", group: "Repair", blurb: "Learns the steady noise from the quietest parts and turns it down",
+    params: [range("red", "Reduction", 3, 36, 1, 18, "dB"), range("over", "Sensitivity", 1, 4, 0.1, 2, "x")],
+    run: (c) => ({ chans: mapRegion(c, (x) => denoise(x, c.p.red, c.p.over)), note: `up to ${c.p.red} dB off the noise floor` }),
   },
   {
     id: "compressor", title: "Compressor", group: "Dynamics", blurb: "Evens out level by turning down what exceeds a threshold",

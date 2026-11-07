@@ -254,6 +254,56 @@ export function resampleLinear(x: Float32Array, factor: number): Float32Array {
   return out;
 }
 
+export function denoise(x: Float32Array, reductionDb: number, over: number): Float32Array {
+  const N = 2048, H = 1024, bins = N / 2 + 1;
+  const len = x.length;
+  const win = new Float32Array(N);
+  for (let i = 0; i < N; i++) win[i] = Math.sqrt(0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+  const pad = new Float32Array(len + 2 * N);
+  pad.set(x, N);
+  const frames = Math.floor((len + N) / H) + 1;
+  const energy = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) {
+    let sum = 0;
+    const o = f * H;
+    for (let i = 0; i < N; i++) { const v = pad[o + i] * win[i]; sum += v * v; }
+    energy[f] = sum;
+  }
+  const order = Array.from(energy.keys()).filter((f) => f * H >= N / 2 && f * H + N <= len + N + N / 2).sort((a, b) => energy[a] - energy[b]);
+  const quiet = order.slice(0, Math.max(8, Math.round(order.length * 0.1)));
+  const noise = new Float32Array(bins);
+  const re = new Float32Array(N), im = new Float32Array(N);
+  for (const f of quiet) {
+    for (let i = 0; i < N; i++) { re[i] = pad[f * H + i] * win[i]; im[i] = 0; }
+    fft(re, im);
+    for (let k = 0; k < bins; k++) noise[k] += (re[k] * re[k] + im[k] * im[k]) / quiet.length;
+  }
+  const floor = fromDb(-reductionDb);
+  const out = new Float32Array(len + 2 * N);
+  const gain = new Float32Array(bins), prev = new Float32Array(bins).fill(1), smooth = new Float32Array(bins);
+  for (let f = 0; f < frames; f++) {
+    const o = f * H;
+    for (let i = 0; i < N; i++) { re[i] = pad[o + i] * win[i]; im[i] = 0; }
+    fft(re, im);
+    for (let k = 0; k < bins; k++) {
+      const p = re[k] * re[k] + im[k] * im[k] + 1e-12;
+      gain[k] = Math.max(floor, Math.sqrt(Math.max(0, 1 - (over * noise[k]) / p)));
+    }
+    for (let k = 0; k < bins; k++) {
+      const g = (gain[Math.max(0, k - 1)] + 2 * gain[k] + gain[Math.min(bins - 1, k + 1)]) / 4;
+      smooth[k] = g > prev[k] ? 0.5 * prev[k] + 0.5 * g : 0.7 * prev[k] + 0.3 * g;
+      prev[k] = smooth[k];
+    }
+    for (let k = 0; k < bins; k++) {
+      re[k] *= smooth[k]; im[k] = -im[k] * smooth[k];
+      if (k > 0 && k < N / 2) { re[N - k] = re[k]; im[N - k] = -im[k]; }
+    }
+    fft(re, im);
+    for (let i = 0; i < N; i++) out[o + i] += (re[i] / N) * win[i];
+  }
+  return out.slice(N, N + len);
+}
+
 export interface PeakPyramid { block: number; min: Float32Array[]; max: Float32Array[] }
 
 export const PEAK_BLOCK = 128;

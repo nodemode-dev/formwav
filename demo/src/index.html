@@ -81,8 +81,8 @@ body.app-ready #app { visibility: visible; }
       <span class="dm-badge">Demo</span>
     </div>
     <div class="dm-session">
-      <span class="dm-session-name" translate="no" id="dm-session-name">Sample session</span>
-      <span class="dm-session-sub" id="dm-session-sub">Runs in this page, nothing is uploaded</span>
+      <span class="dm-session-name" translate="no" id="dm-session-name">Round the Moon, a field report</span>
+      <span class="dm-session-sub" id="dm-session-sub">Real public-domain recordings. Runs in this page, nothing is uploaded</span>
     </div>
     <div class="dm-actions">
       <button class="fw-ibtn" type="button" id="dm-open" title="Open an audio file from your computer"><span class="icon" data-icon="folderOpen" data-size="16"></span><span>Open file</span></button>
@@ -106,11 +106,18 @@ body.app-ready #app { visibility: visible; }
       <div class="dm-left-body" data-lpanel="sounds" hidden>
         <div class="dm-group-title">Your audio</div>
         <button class="dm-sound dm-sound-open" type="button" id="dm-open2"><span class="dm-sound-name">Open an audio file</span><span class="dm-sound-sub">Or drop one anywhere on this page</span></button>
-        <div class="dm-group-title">Sample session</div>
+        <div class="dm-group-title">Session media, add as a track</div>
+        <button class="dm-sound" type="button" data-sample="launch-radio"><span class="dm-sound-name">Launch radio</span><span class="dm-sound-sub">NASA shuttle commentary over the roar, noisy</span></button>
+        <button class="dm-sound" type="button" data-sample="narration"><span class="dm-sound-name">Narration</span><span class="dm-sound-sub">Round the Moon, LibriVox, public domain</span></button>
+        <button class="dm-sound" type="button" data-sample="narration-take2"><span class="dm-sound-name">Narration take 2</span><span class="dm-sound-sub">Another reader, 60 Hz mains hum: try De-hum</span></button>
+        <button class="dm-sound" type="button" data-sample="piano"><span class="dm-sound-name">Piano</span><span class="dm-sound-sub">Satie, Gymnopedie 1, Musopen, public domain</span></button>
+        <button class="dm-sound" type="button" data-sample="saturn"><span class="dm-sound-name">Saturn radio waves</span><span class="dm-sound-sub">NASA Cassini plasma waves made audible</span></button>
+        <button class="dm-sound" type="button" data-sample="launch-roar"><span class="dm-sound-name">Launch roar</span><span class="dm-sound-sub">NASA shuttle launch ambience</span></button>
+        <button class="dm-sound" type="button" id="dm-reset"><span class="dm-sound-name">Reload the session</span><span class="dm-sound-sub">Starts over with the five tracks</span></button>
+        <div class="dm-group-title">Synthetic samples, made in this page</div>
         <button class="dm-sound" type="button" data-sample="dialogue"><span class="dm-sound-name">Dialogue</span><span class="dm-sound-sub">Synthetic voice with mains hum</span></button>
         <button class="dm-sound" type="button" data-sample="music"><span class="dm-sound-name">Music</span><span class="dm-sound-sub">Arpeggio and pad, stereo</span></button>
         <button class="dm-sound" type="button" data-sample="drums"><span class="dm-sound-name">Drums</span><span class="dm-sound-sub">Kick, snare and hat at 100 BPM</span></button>
-        <button class="dm-sound" type="button" id="dm-reset"><span class="dm-sound-name">Reload the sample session</span><span class="dm-sound-sub">Starts over with the three tracks</span></button>
         <div class="dm-group-title">Generate</div>
         <div class="dm-gen">
           <label>Kind<select id="dm-gen-kind" aria-label="Kind"><option value="tone">Tone</option><option value="sweep">Sweep</option><option value="noise">Pink noise</option><option value="clicks">Click track</option></select></label>
@@ -140,7 +147,7 @@ body.app-ready #app { visibility: visible; }
           <div class="dm-ruler" id="dm-ruler"><canvas id="dm-ruler-canvas"></canvas></div>
         </div>
         <div class="dm-tracks" id="dm-tracks"></div>
-        <div class="dm-empty" id="dm-empty" hidden>No tracks. Open an audio file or use the Sounds tab.</div>
+        <div class="dm-empty" id="dm-empty" hidden>Loading the session media</div>
         <div class="dm-overlay" id="dm-overlay" aria-hidden="true">
           <div class="dm-sel" id="dm-sel"></div>
           <div class="dm-playhead" id="dm-playhead"></div>
