@@ -34,7 +34,7 @@ async def main():
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
         await s.initialize()
         tools = (await s.list_tools()).tools
-        record("lists its tools", len(tools) == 35, f"{len(tools)} tools")
+        record("lists its tools", len(tools) == 37, f"{len(tools)} tools")
 
         async def call(name, args=None):
             res = await s.call_tool(name, args or {})

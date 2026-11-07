@@ -1,6 +1,6 @@
 ---
 name: session
-description: "Editing the session open in formwav's window through the MCP server: the open session's own tools, the command catalogue (every menu, key and button action), batches that roll back, the outside-agent permission, and the window-free command line for saved sessions. Load whenever the job changes tracks, clips, effects on tracks, markers, the loop, tempo, MIDI notes, surround placement or anything else inside a session rather than one media file."
+description: "Editing the session open in formwav's window through the MCP server: the open session's own tools, the command catalogue (every menu, key and button action), batches that roll back, the outside-agent permission, the window's extensions and their commands, and the window-free command line for saved sessions. Load whenever the job changes tracks, clips, effects on tracks, markers, the loop, tempo, MIDI notes, surround placement or anything else inside a session rather than one media file."
 ---
 
 # The open session
@@ -38,6 +38,17 @@ Command ids are the menu and the item's words in kebab case (`track.new-track`, 
 ## With no window
 
 `./formwav cli headless commands [words]` lists the engine's document commands (122 at v2.18.0) with their parameters; `./formwav cli headless run --in FILE.fmw --cmd '{"type": "set-track-gain", "trackId": "t1", "gainDb": -6}' --bounce OUT.wav --save OUT.fmw --inspect` applies them to a saved session and bounces it, the same reducer the window uses. `--demo` starts from the demo session. Use this for batch work on files when the person does not need to watch.
+
+## Extensions
+
+formwav loads extensions made to the Form Extension Contract (installed through FormPortal, or run from a folder with form.ext); they show in the window's Extensions menu and Extensions panel. Two tools reach them:
+
+| Tool | Use it to |
+| --- | --- |
+| `formwav_extensions_list` | list the loaded extensions: id, name, version, source, state (`ready`, `needs-permission`, or `refused` with the reason), permissions, panels and commands |
+| `formwav_extension_command` | run one contributed command by the extension's `id` and the command's id, with `args` if it takes any |
+
+The first run of an extension's version shows the person its permissions in the window with Allow and Not now; say so before the call and wait, as with the outside-agent permission. A refused extension cannot run: report its reason (most often "made for another app" or "needs formwav X or newer"). The same tools are the window's `extensions_list` and `extension_command` through `formwav_open_session_call` or the engine's own `/mcp`, and `./formwav cli extensions` and `./formwav cli extension <id> <command> key=value` on the command line. What extensions may do to a session is in `docs/EXTENSIONS.md`.
 
 ## Recipes
 

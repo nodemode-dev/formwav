@@ -28,7 +28,7 @@ from mcp.types import ToolAnnotations
 
 logging.getLogger("httpx").setLevel(logging.WARNING)  # one INFO line per engine request is noise on the client's stderr
 ENGINE = os.environ.get("FORMWAV_ENGINE", "http://127.0.0.1:8060").rstrip("/")
-VERSION = "2.22.4"
+VERSION = "2.24.1"
 READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 MAKES_MEDIA = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 WRITES_FILE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
@@ -511,6 +511,20 @@ async def formwav_run_commands(commands: list[dict[str, Any]]) -> dict[str, Any]
     """Runs several catalogue commands in order, each {"id": ..., "params": {...}}; stops at the first that fails and
     takes back everything the batch did, so the session is never left half-edited."""
     return {"result": _text_result(await _window("tools/call", {"name": "run_commands", "arguments": {"commands": commands}}))}
+
+
+@mcp.tool(annotations=READ, structured_output=True)
+async def formwav_extensions_list() -> dict[str, Any]:
+    """The extensions loaded in formwav's window (the window's extensions_list): id, name, version, source, state with
+    the reason when refused, permissions, panels and commands. Needs formwav's window open."""
+    return {"result": _text_result(await _window("tools/call", {"name": "extensions_list", "arguments": {}}))}
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False), structured_output=True)
+async def formwav_extension_command(id: str, command: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Runs a command an extension contributes (the window's extension_command), by the extension's id and the
+    command's id from formwav_extensions_list. The window asks its person to allow the extension the first time."""
+    return {"result": _text_result(await _window("tools/call", {"name": "extension_command", "arguments": {"id": id, "command": command, "args": args or {}}}))}
 
 
 @mcp.prompt()

@@ -13,7 +13,7 @@ import { icon as fvIcon } from "../vendor/formvis/icons";
 import { mountMenu } from "./file-menu";
 
 const HEIGHT_KEY = "formwav.editorHeight";
-const MORE = new Set(["inspector", "notes", "labels", "score", "terminal"]);
+const MORE = new Set(["inspector", "notes", "labels", "score", "terminal", "extensions"]);
 export const LANE_COLORS = ["cyan", "violet", "amber", "pink", "slate", "green", "blue", "red"];
 const FLOAT_KEY = "formwav.floating";
 
@@ -85,6 +85,7 @@ export function mountDock(host: HTMLElement, engine: Engine): void {
     ["labels", "Labels", ".fw-labels-panel", ".fw-tool-tray [data-labels]"],
     ["score", "Score", ".fw-score", ".fw-tool-tray .fw-mode[data-score-view]"],
     ["terminal", "Terminal", ".fw-term:not(.fw-agent)", '[data-action="terminal"]'],
+    ["extensions", "Extensions", ".fw-ext-panel", ".fw-tool-tray [data-ext-toggle]"],
   ];
   const docked: Docked[] = [];
   for (const [id, label, panelSel, toggleSel] of wanted) {

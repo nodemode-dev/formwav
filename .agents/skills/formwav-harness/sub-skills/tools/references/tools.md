@@ -1,6 +1,6 @@
 # formwav's MCP tools
 
-Generated from the server's own listing (35 tools) by the harness's generator; regenerate after any tool change rather than editing by hand (the generator refuses when this grouping and the server disagree). Names are exact and case sensitive.
+Generated from the server's own listing (37 tools) by the harness's generator; regenerate after any tool change rather than editing by hand (the generator refuses when this grouping and the server disagree). Names are exact and case sensitive.
 
 ## Contents
 
@@ -241,3 +241,15 @@ Runs one catalogue command on the open session with its params (see formwav_desc
 Kind: makes new media or writes a file. Parameters: `commands` (array).
 
 Runs several catalogue commands in order, each {"id": ..., "params": {...}}; stops at the first that fails and takes back everything the batch did, so the session is never left half-edited.
+
+### `formwav_extensions_list`
+
+Kind: reads only. Parameters: none.
+
+The extensions loaded in formwav's window (the window's extensions_list): id, name, version, source, state with the reason when refused, permissions, panels and commands. Needs formwav's window open.
+
+### `formwav_extension_command`
+
+Kind: makes new media or writes a file. Parameters: `id` (string), `command` (string), `args` (object/null, default None).
+
+Runs a command an extension contributes (the window's extension_command), by the extension's id and the command's id from formwav_extensions_list. The window asks its person to allow the extension the first time.

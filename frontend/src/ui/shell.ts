@@ -85,6 +85,16 @@ function shellHtml(): string {
             <button class="fw-ibtn" type="button" role="menuitem" data-proxy='.fw-status [data-action="loop"]'><span>Loop</span></button>
           </div>
         </div>
+        <div class="fw-menu fw-ext-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Extensions</button>
+          <div class="cv-menu fw-menu-pop fw-ext-pop" role="menu" aria-label="Extensions" hidden>
+            <div class="fw-ext-menu-commands" role="none" translate="no"></div>
+            <span class="fw-menu-sep fw-ext-menu-sep" hidden></span>
+            <button class="fw-ibtn" type="button" role="menuitem" data-ext-act="panel" title="Show the extensions for formwav, their permissions and their state"><span>Extensions panel</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-ext-act="reload" title="Read the installed and development extensions again"><span>Reload extensions</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-ext-act="manage" title="Install, update and remove extensions in FormPortal"><span>Manage in FormPortal</span></button>
+          </div>
+        </div>
         <div class="fw-menu fw-settings-menu">
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Settings</button>
           <div class="cv-menu fw-menu-pop fw-settings-pop" role="menu" aria-label="Settings" hidden></div>

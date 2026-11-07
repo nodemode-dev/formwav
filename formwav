@@ -29,6 +29,7 @@ case "${1:-}" in
     echo "./formwav desktop build  build the desktop app only"
     echo "./formwav claude       Claude Code with formwav's tools for the open session"
     echo "./formwav cli list|describe <id>|run <id> key=value   formwav's commands on the open session"
+    echo "./formwav cli extensions | extension <id> <command>   the extensions loaded in the window, and their commands"
     echo "./formwav cli headless run --in FILE.fmw|--demo --cmd JSON --bounce OUT.wav   engine commands with no window"
     echo "./formwav doctor       what is installed"
     exit 0 ;;

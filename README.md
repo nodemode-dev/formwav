@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 2.22.4" src="https://img.shields.io/badge/version-2.22.4-eef0f4?style=flat-square">
+  <img alt="version 2.24.1" src="https://img.shields.io/badge/version-2.24.1-eef0f4?style=flat-square">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript-Vite-3178c6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Python and FastAPI" src="https://img.shields.io/badge/Python-FastAPI-009688?style=flat-square">
   <img alt="Rust audio core" src="https://img.shields.io/badge/Rust-audio%20core-b7410e?style=flat-square">
@@ -110,6 +110,10 @@ One registry of 141 commands, the menu bar's items and the session tools. The wi
 
 `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The engine also serves MCP at `http://127.0.0.1:8060/mcp`, and `backend/formwav_mcp/serve` runs a standalone stdio server. See [`AGENTS.md`](AGENTS.md).
 
+## Extensions
+
+formwav loads extensions made to the Form Extension Contract: installed through FormPortal, or run from a folder while you make one with form.ext. They show in the **Extensions** menu (each extension's commands, Extensions panel, Reload extensions, Manage in FormPortal), in the Extensions panel under the editor's More (name, version, source, permissions, state), as panels in the editor or as dialogs, and in the command palette. Each runs in a sandboxed frame, reads and changes the session only through formwav's own commands (all of one call is one undo step), and asks before its first use. Agents reach them with `extensions_list` and `extension_command`, or `./formwav cli extensions`. What an extension can call is in [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md).
+
 ## Under the hood
 
 - **One mixer:** the Rust core (`native/formwav-dsp`) runs as WebAssembly in the browser and as a Python module in the engine.
@@ -127,6 +131,14 @@ One registry of 141 commands, the menu bar's items and the session tools. The wi
 All FormWav builds are compiled and released from [FormCompiler](https://github.com/nodemode-dev/formcompiler); this repo holds the source.
 
 **Updates come through FormPortal.** FormWav does not update itself: install [FormPortal](https://formai.studio/formportal/) and it keeps FormWav up to date, or download the new version from the links above.
+
+## Demo
+
+Three offline demos open in a browser with no install, no engine and no network, each on real public-domain or CC0 audio or your own:
+
+- [`demo/index.html`](demo/index.html), Mix: FormWav's waveform and spectrogram views and nineteen edits, including De-hum and Reduce noise repairs, on a five-track session of public-domain recordings (credits in [`demo/CREDITS.md`](demo/CREDITS.md); see [`demo/README.md`](demo/README.md)).
+- [`demos/repair/index.html`](demos/repair/index.html), Repair: one noisy 1917 record on a live chain of Heal selection, De-click, De-hum, Reduce noise, EQ, a compressor and a loudness target, with a before and after A/B (see [`demos/repair/README.md`](demos/repair/README.md)).
+- [`demos/produce/index.html`](demos/produce/index.html), Produce: a 32 bar piece at 130 BPM built from CC0 stems and one-shots with the step sequencer, effect chains, automation, markers and a bounce of the mix (see [`demos/produce/README.md`](demos/produce/README.md)).
 
 ## Run it from source
 
