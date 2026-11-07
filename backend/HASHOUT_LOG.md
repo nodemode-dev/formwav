@@ -65,6 +65,7 @@ backend/
 
 ## Table of contents
 
+- [routers/extensions.py, services/formext_host.py, core/security.py, formwav_mcp, formwav_cli.py · the extension host's engine side (unreleased, for v2.24.0)](#extension-host)
 - [tests/conftest.py, test_f2_consent.py, e2e/test_interface.py, .github/workflows · main's checks green again (unreleased, after v2.21.9)](#tests-ci-green)
 - [desktop_entry.py and the model folders · downloaded models outlive the onefile engine (v2.21.9)](#models-root)
 - [tests/test_f1_guard.py, test_f2_consent.py, test_f9_release_profiles.py · the family layers F1, F2 and F9 (v2.21.7)](#tests-family-layers)
@@ -133,6 +134,31 @@ backend/
 - [tests/test_three_way.py](#tests-three-way)
 - [tests/e2e/test_interface.py](#tests-e2e-interface)
 - [.github/workflows](#workflows)
+
+---
+
+## routers/extensions.py, services/formext_host.py, core/security.py, formwav_mcp, formwav_cli.py · the extension host's engine side (unreleased, for v2.24.0) {#extension-host}
+
+### The routes
+- refers-to: app/routers/extensions.py :: list_extensions, extensions_stamp, extension_file, manage, extension_fetch; app/services/formext_host.py (the Form Extension Contract kit, API 1, copied unmodified); app/main.py
+- kind: decision
+- logged: unreleased, for v2.24.0 · 2026-11-07
+
+`GET /api/extensions` is the kit's `resolve` for product `formwav` against FormPortal's root (`FORMPORTAL_ROOT` first), each extension's `public` record with `base` `/api/extensions/files`, the app's version (`core.version.VERSION`, so `minimum_app` compares against the release) and the two files' modification times as `stamp`; the resolved list is cached on the root and the stamp, and `?reload=1` (Reload extensions) drops the cache so a manifest edited in a development folder is read again. `GET /api/extensions/stamp` is the cheap poll. `GET` and `HEAD /api/extensions/files/{id}/{version}/{path}` (HEAD added by the integration check, which found it answering 405 while the contract and the lockdown's opening name both) is the kit's `file_for` and `headers_for`: a path outside the folder, any symlink, a type off the list, a refused extension or another version are all a bare 404 with the same headers; pages carry the contract's CSP with `'self'`, as the window serves them from its own origin (the vite proxy in development, the engine itself in the desktop app). `POST /api/extensions/manage` opens `formai://extensions?product=formwav` with the system's handler, as the cloud sign-in opens its page; the window falls back to `window.open` when nothing opened. `POST /api/extensions/fetch` is `net.fetch`: https only, the host resolved and refused unless every address is global (no loopback, private or link-local), no redirects followed (a redirect is answered, not taken, so it cannot lead inward), no cookies either way, 50 MB at most.
+
+### The lockdown's one opening
+- refers-to: app/core/security.py :: extension_file, LocalOnly, send_nosniff
+- kind: decision
+- logged: unreleased, for v2.24.0 · 2026-11-07
+
+An extension's frame is `sandbox="allow-scripts"` with an opaque origin: its module scripts and its fetches of its own files send `Origin: null` and `Sec-Fetch-Site: cross-site`, which the origin checks refused. GET and HEAD under `/api/extensions/files/` skip those two checks only; the loopback client and Host checks still hold, every other route (the list included) still refuses a null origin, and a change still needs `x-formwav-local`. `send_nosniff` now adds its header only when the answer has none, since the file route sets its own and the browser saw `nosniff, nosniff`.
+
+### Agents
+- refers-to: formwav_mcp/server.py :: formwav_extensions_list, formwav_extension_command; formwav_cli.py :: extensions, extension; tests/mcp_probe.py
+- kind: decision
+- logged: unreleased, for v2.24.0 · 2026-11-07
+
+Both server tools are `_window("tools/call", ...)` on the window's `extensions_list` and `extension_command` (the contract's names, which the engine's `/mcp` serves as they are); the server has 37 tools and `mcp_probe.py` counts 37. The command line's `extensions` prints one line per extension and its commands, `extension <id> <command> key=value ...` runs one, both through `POST /mcp`.
 
 ---
 

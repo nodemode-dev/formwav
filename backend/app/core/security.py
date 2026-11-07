@@ -61,6 +61,13 @@ def ws_allowed(origin: str | None, host: str | None) -> bool:
     return bool(origin) and (origin in cors_origins() or origin == f"http://{host}")
 
 
+def extension_file(scope) -> bool:
+    """An extension's own files (routers/extensions.py) are read by its sandboxed frame, whose origin is opaque: it
+    sends `Origin: null` and counts as another site. Reads of that one prefix pass the origin checks; the client and
+    Host checks still hold, and the files are the package's own, served with the contract's CSP and no-store."""
+    return scope["type"] == "http" and scope.get("method") in ("GET", "HEAD") and str(scope.get("path", "")).startswith("/api/extensions/files/")
+
+
 class LocalOnly:
     def __init__(self, app):
         self.app = app
@@ -83,6 +90,8 @@ class LocalOnly:
             reason = "the engine answers this machine only"
         elif not _HOST.match(headers.get("host", "")):
             reason = "unexpected Host header"
+        elif extension_file(scope):
+            pass
         elif headers.get("origin") is None and headers.get("sec-fetch-site", "").strip().lower() == "cross-site":
             reason = "a request from another site"
         elif headers.get("origin") is not None and not window_origin(headers["origin"], headers.get("host", "")):
@@ -104,7 +113,7 @@ class LocalOnly:
             return
 
         async def send_nosniff(message):
-            if message["type"] == "http.response.start":
+            if message["type"] == "http.response.start" and not any(k.lower() == b"x-content-type-options" for k, _ in message.get("headers") or []):
                 message["headers"] = list(message.get("headers") or []) + [(b"x-content-type-options", b"nosniff")]
             await send(message)
 
