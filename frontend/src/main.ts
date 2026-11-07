@@ -16,6 +16,7 @@ import "./styles/terminal-dock.css";
 import "./styles/home.css";
 import "./styles/prefs.css";
 import "./styles/desktop.css";
+import "./styles/extensions.css";
 import "./styles/form-family.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
@@ -66,6 +67,7 @@ import { mountAutosave } from "./ui/autosave";
 import { mountToolbar } from "./ui/toolbar";
 import { mountEditing } from "./ui/editing";
 import { mountDock } from "./ui/dock";
+import { mountExtensions } from "./ui/extensions";
 import { mountOutputSelect, outputDeviceNames } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
 import { mountPianoRoll } from "./ui/piano-roll";
@@ -189,6 +191,7 @@ if (host) {
   mountEditorTabs(host, engine, player);
   mountBrowserEffects(host, engine);
   mountBrowser(host, engine);
+  mountExtensions(host, engine); // Form Extension Contract API 1: the Extensions menu, panel and agent tools
   mountDock(host, engine);
   mountTerminalDock(host, engine);
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();

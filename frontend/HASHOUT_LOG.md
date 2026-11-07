@@ -97,6 +97,7 @@ frontend/
 
 ## Table of contents
 
+- [ui/extensions.ts, vendor/formext, ui/shell.ts, ui/dock.ts, ui/commands.ts, ui/agent-pane.ts · the extension host (unreleased, for v2.24.0)](#extension-host)
 - [public/splash.html · the splash is formvis's card, word for word (v2.23.2)](#splash-parity)
 - [styles/workspace.css, ui/autosave.ts · the recovery dialog holds still on Windows (unreleased, after v2.21.9)](#ask-dialog-still)
 - [styles/canvas.css · the engine chip's dot and text hold still (unreleased, after v2.21.9)](#styles-engine-chip-still)
@@ -184,6 +185,38 @@ frontend/
 - [src/ui/arm.ts and recording into a track (v0.25.0)](#src-ui-arm)
 - [src/ui/mixer.ts and the mute and solo commands (v0.33.0)](#src-ui-mixer)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
+
+---
+
+## ui/extensions.ts, vendor/formext, ui/shell.ts, ui/dock.ts, ui/commands.ts, ui/agent-pane.ts · the extension host (unreleased, for v2.24.0) {#extension-host}
+
+### What it is
+- refers-to: src/ui/extensions.ts :: mountExtensions, extensionsApi; src/vendor/formext/host-bridge.ts (the Form Extension Contract kit, API 1, copied unmodified); src/styles/extensions.css; src/i18n/added/extensions/*.json
+- kind: decision
+- logged: unreleased, for v2.24.0 · 2026-11-07
+
+formwav hosts extensions made to the Form Extension Contract API 1 (product id `formwav`); the API page is `docs/EXTENSIONS.md`. The contract's host side is the kit's `host-bridge.ts`, vendored unchanged under `src/vendor/formext/` and wrapped by `ui/extensions.ts`, which passes formwav's handlers: `readDocument` (session, selection, markers, media, transport; the session form is `inspectSession` plus region ids, the playhead, the selection and the last undo step), `applyDocument` (the ops are reducer commands, dispatched as one `batch` with `whole: true` and the call's label, so a call is exactly one History step; when the batch leaves the session as it was but the same commands applied without `whole` would change it, a lock refused it and the call fails with -32004), `commands` and `run` (the registry in `ui/commands.ts`, minus `extension.*`, which `app.run` refuses so an extension cannot start another), `openFiles` (a hidden file input; its `cancel` event is -32002), `saveFile` (the save picker where the window has one, a download otherwise), `fetch` (through the engine's `/api/extensions/fetch`, since formwav already reaches the network), `notify` (the status bar's notice line, formwav's toast), `consent` (a `fw-export-dialog` listing the kit's permission words, Allow and Not now) and the theme (formwav's `--bg-primary`, `--bg-secondary`, `--text-primary`, `--text-secondary`, `--accent-color`, `--border-color`, `--radius` as the contract's seven names, plus formwav's own names; a MutationObserver on the root and body attributes sends `ext.theme` only when the computed set changed).
+
+### Where it shows
+- refers-to: src/ui/shell.ts :: the Extensions menu; src/ui/dock.ts :: MORE, wanted; src/main.ts :: mountExtensions before mountDock
+- kind: decision
+- logged: unreleased, for v2.24.0 · 2026-11-07
+
+The Extensions menu is in the shell's HTML between Transport and Settings, so it is in its final place before the first paint and `commands.gather` makes its three fixed items commands (`extensions.extensions-panel`, `extensions.reload-extensions`, `extensions.manage-in-formportal`). Contributed commands are menu items patched in place inside `.fw-ext-menu-commands` (display: contents, `translate="no"` since they are names) and registry commands `extension.<id>.<command>` in group Extensions, which puts them in the palette; `Commands.remove` is new so a command leaves with its extension. The Extensions panel is one more panel the dock adopts (More > Extensions, its toggle in the toolbar's hidden store), made before `mountDock`; its head has chip tabs, Installed first, then one tab per open dock panel titled `Name: Panel` with its own close button. Dialog panels open as `fw-export-dialog` dialogs. Rows are `patchList` rows keyed by id: a reload or the 2 s stamp poll (while the window has focus) changes only the rows whose JSON changed, and an extension whose record changed has its frames, tabs and dialogs closed (a new version asks for consent again by the kit's grant key). Extension names, versions, paths, descriptions and refusal reasons are `translate="no"`; the fixed words are in all 25 languages in `i18n/added/extensions`.
+
+### Agents
+- refers-to: src/ui/agent-pane.ts :: extensions_list, extension_command
+- kind: decision
+- logged: unreleased, for v2.24.0 · 2026-11-07
+
+The two contract tools are window tools in agent-pane.ts, so the in-app agent, the engine's `/mcp`, the MCP server's `formwav_extensions_list` and `formwav_extension_command` and the command line's `extensions` and `extension` all reach them by these names. `extension_command` goes through the same consent as a click: the window shows the dialog and the call waits for the person.
+
+### The contract's 07:47 update
+- refers-to: src/vendor/formext/host-bridge.ts (copied again from the kit); src/ui/extensions.ts :: openPanel, saveFile, confirmSave; src/i18n/added/extensions-save/*.json
+- kind: decision
+- logged: unreleased, for v2.24.0 · 2026-11-07
+
+The kit's bridge was copied over again: `open` asks for consent and only then mounts, and a headless command's 120 s clock counts only time with no `files.*`, `app.run`, `document.apply` or `net.fetch` request pending. `openPanel` now builds the panel's container detached, calls `open` and puts the tab, the view or the dialog into the page only once a frame exists, so while the consent dialog is open there is no frame and nothing to lay out; Not now leaves nothing behind. Where the window has no save picker (the desktop app's webview), `files.save` asks in formwav's own dialog ("Save this file?", the name, Cancel and Save) before the download into the downloads folder, as the contract now says; Cancel is -32002. The two new strings are in all 25 languages in `i18n/added/extensions-save`.
 
 ---
 

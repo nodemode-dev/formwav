@@ -1,5 +1,6 @@
 import { rangesOf, sessionWords, type MediaWord, type SessionWord } from "./transcript-pane";
 import { commands, type CommandParam } from "./commands";
+import { extensionsApi } from "./extensions";
 import type { Engine, HistoryEntry, MediaRef, Track } from "../engine";
 import type { Command, TrackFx } from "../engine/document";
 import { commandCatalogue, isCommandType } from "../engine/catalogue";
@@ -617,6 +618,24 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
       description: "Runs several commands in order; stops at the first that fails and takes back what the batch did.",
       input_schema: obj({ commands: { type: "array", description: "[{id, params}] in order" } }, ["commands"]),
       run: async (i) => commands.batch((Array.isArray(i.commands) ? i.commands : []) as { id: string; params?: Json }[]),
+    },
+    {
+      name: "extensions_list",
+      description: "The extensions formwav has loaded (installed through FormPortal or run from a folder with form.ext): id, name, version, source, state (ready, needs-permission or refused, with the reason), permissions, panels and commands.",
+      input_schema: obj({}),
+      run: () => ({ extensions: extensionsApi.list() }),
+    },
+    {
+      name: "extension_command",
+      description: "Runs one command an extension contributes (ids from extensions_list). The first run of an extension's version asks the person in the window to allow its permissions; a command with a panel opens it.",
+      input_schema: obj({ id: { type: "string", description: "The extension's id from extensions_list" }, command: { type: "string", description: "The command's id from that extension's commands" }, args: { type: "object", description: "What the command takes, if anything" } }, ["id", "command"]),
+      run: async (i) => {
+        try {
+          return await extensionsApi.run(String(i.id), String(i.command), i.args ?? {});
+        } catch (err) {
+          throw new Error(err instanceof Error ? err.message : String(err));
+        }
+      },
     },
   );
   const byName = new Map(tools.map((t) => [t.name, t]));

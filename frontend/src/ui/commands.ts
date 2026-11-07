@@ -48,6 +48,9 @@ export class Commands {
     this.map.set(c.id, c);
     this.listeners.forEach((fn) => fn());
   }
+  remove(id: string): void {
+    if (this.map.delete(id)) this.listeners.forEach((fn) => fn());
+  }
   get(id: string): Command | undefined {
     return this.map.get(id);
   }
