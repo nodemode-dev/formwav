@@ -16,7 +16,7 @@ It opens on a sample session of three tracks (Dialogue, Music, Drums) that the p
 - Tracks drawn as waveforms or as spectrograms, with a time ruler, zoom, fit, follow and a drag selection (double-click a track to select all of it)
 - Playback of the mix with mute, solo, per-track gain, loop of the selection, a clock and level meters
 - Measurements: peak, RMS and integrated loudness (BS.1770 K-weighted, gated) per track or selection, the same for the whole mix, and a spectrum tab that is live while playing and an average of the range while stopped
-- Fifteen real client-side operations on the selected track and range, every one a single undo step: Trim to selection, Delete selection, Silence, Reverse, Invert polarity, Gain, Normalize peak, Normalize loudness, Fade in, Fade out, High-pass, Low-pass, Band EQ, De-hum, Compressor, Strip silence, Change speed and Mono mixdown
+- Eighteen real client-side operations on the selected track and range, every one a single undo step: Trim to selection, Delete selection, Silence, Reverse, Invert polarity, Gain, Normalize peak, Normalize loudness, Fade in, Fade out, High-pass, Low-pass, Band EQ, De-hum, Compressor, Strip silence, Change speed and Mono mixdown
 - A History tab that jumps to any step, with undo and redo (Ctrl or Cmd Z, plus Shift for redo)
 - A generator for tone, sweep, pink noise and a click track
 - Export of the mixdown or the selected track, whole or the selection only, as 16-bit, 24-bit or 32-bit float WAV
