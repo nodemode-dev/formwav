@@ -7,6 +7,19 @@ Last updated: 2026-11-07 · v2.23.0 first version of the demo
 
 ---
 
+## v2.23.1 media pass
+
+- The demo now opens on real, public-domain audio (see CREDITS.md) instead of synthetic tracks: "Round the Moon, a field report". Story and order: NASA launch radio cold open (0 to 15.7 s), a LibriVox reading of Jules Verne from 16.4 s over a Satie piano bed with a Saturn plasma-wave texture from 18 s. A second reading with real 60 Hz mains hum sits muted on its own track as the repair bench, and the launch radio is itself a noisy real recording (speech over a rocket roar).
+- Lead-in offsets are baked as leading zeros when a clip is decoded (`media.ts`), because a track here is one buffer from time zero. Track gains (-3 dB on piano and Saturn) are session settings, not baked into the files.
+- Packs, not files: Chrome blocks fetch of local files on `file://`, so each clip is `assets/media/<id>.js` setting a base64 string on `window.__FW_MEDIA`, injected as a script tag and decoded with `decodeAudioData`. The page string is deleted after decoding to free memory; decoded buffers are cached per id and offset, and are never mutated, so "Reload the session" reuses them. The packs are written by a one-off generator outside the repo from ffmpeg-encoded mp3 files.
+- Zero flash: the shell is revealed at once; the empty timeline reads "Loading the session media" and the status bar counts clips; the tracks then appear in one commit and the timeline fits. On any failure the demo falls back to the synthetic session and says so.
+- Why mp3: it decodes in every browser, unlike Ogg Opus in Safari. 96 kbps mono for speech, 160 kbps for the piano, 128 kbps for the NASA stereo clips.
+- Levels: clips were gained with a static dB value to about -20 LUFS (speech), -24 (piano), and checked for peaks below -0.8 dBFS after the mp3 encode. The first attempt at +6 dB clipped after encoding because the source peaked at -4.4 dBFS; the gain was cut to +4 dB with a peak limiter.
+- Reduce noise (`denoise` in `dsp.ts`, op "Reduce noise"): spectral gate, 2048-point sqrt-Hann frames at 50 percent overlap, the noise spectrum is the mean power of the quietest tenth of the frames in the range, per-bin gain is the square root of one minus over-subtraction times noise over power, floored at the chosen reduction, smoothed across bins and time. It was added because the brief asks for repair tools on a real noisy recording and De-hum alone does not touch broadband noise. Measured on the hum reading: a quiet stretch fell from -53.9 to -68.4 dBFS RMS while a loud word moved from -15.6 to -15.7. A first version with 75 percent overlap took 875 ms for 22 s of audio in Node; this one takes 208 ms. De-hum and Reduce noise now form a "Repair" group; De-hum defaults to 60 Hz and four harmonics to match the real hum.
+- Clip tab stats were stale after an edit: the cache key used the length and two sample values, so an edit that kept the length and those two samples (a gain or a notch on the middle of a track) reused the old numbers. The key is now the track id plus a per-buffer identity (a WeakMap counter), which changes whenever an operation produces new arrays. The spectrum tab's static average had the same flaw and uses the same key.
+- Track lane height went from 96 to 80 px so five tracks fit above the bottom panel at 1440 by 900.
+- Not done: no per-clip fades or offsets editing (a track is one buffer from zero), no recording, no mp3 export.
+
 ## Why it is shaped this way
 
 - The full interface needs the engine (`/api/*`) and the Rust core, so importing `frontend/src/main.ts` with a shim would stub most of the screen. The demo is its own small interface in the app's layout idiom (title bar, tools pane, timeline, bottom tabs, transport bar) that reuses the real tokens and stylesheets, and the class names `fw-pane`, `fw-tbtn`, `fw-ibtn`, `fw-mode`, `fw-clock`, `fw-status` so form-family.css and canvas.css style it as they style the app.

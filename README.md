@@ -128,7 +128,7 @@ All FormWav builds are compiled and released from [FormCompiler](https://github.
 
 ## Demo
 
-Open [`demo/index.html`](demo/index.html) in a browser to try FormWav's waveform and spectrogram views and eighteen edits on a built-in sample or your own audio, with no install, no engine and no network. See [`demo/README.md`](demo/README.md).
+Open [`demo/index.html`](demo/index.html) in a browser to try FormWav's waveform and spectrogram views and nineteen edits, including De-hum and Reduce noise repairs, on a five-track session of real public-domain recordings (credits in [`demo/CREDITS.md`](demo/CREDITS.md)) or your own audio, with no install, no engine and no network. See [`demo/README.md`](demo/README.md).
 
 ## Run it from source
 
