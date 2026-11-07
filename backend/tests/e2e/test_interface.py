@@ -577,7 +577,7 @@ def test_the_in_app_agent_carries_out_a_chain_of_tools(page, app_url):
     page.wait_for_function("document.querySelector('.fw-agent-log').textContent.includes('Done:')", timeout=60000)
     calls = anthropic.REQUESTS
     assert [c["path"] for c in calls] == ["/v1/messages"] * 3
-    assert all(c["key"] == "stand-in" and len(c["tools"]) == 37 and "get_session" in c["tools"] and "apply_document_commands" in c["tools"] and "run_command" in c["tools"] for c in calls)
+    assert all(c["key"] == "stand-in" and len(c["tools"]) == 39 and "get_session" in c["tools"] and "extensions_list" in c["tools"] and "extension_command" in c["tools"] and "apply_document_commands" in c["tools"] and "run_command" in c["tools"] for c in calls)
     assert len(calls[2]["results"]) == 3 and not any(r.get("is_error") for r in calls[2]["results"])
     assert page.locator('[data-agent="undo"]').is_enabled()
     if page.locator(".fw-dock").is_hidden():
