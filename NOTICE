@@ -114,6 +114,9 @@ their install descriptors in backend/app/services record:
   RNNoise model bd.rnnn from GregorR/rnnoise-models (stated by its author not to
   be subject to copyright), fetched when first used and checked against their
   SHA-256.
+- The browser demo's recordings (demo/assets/media: LibriVox readings, a
+  Musopen piano performance and NASA clips, all public domain): sources,
+  licences and changes are in demo/CREDITS.md.
 
 Declined features. Because of patent risk, formwav does not include and will not
 accept content-aware scale (seam carving, or any resize that removes or inserts
