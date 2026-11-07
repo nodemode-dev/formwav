@@ -25,6 +25,9 @@ It includes third-party components under their own licences:
   frontend/src/ui/icons-agent.ts, so Claude Code looks the same in both apps.
   The vendored formvis and formcut icon sets had their sparkle icons removed
   (the sparkle is banned in formwav).
+- Form Extension Contract kit, Apache-2.0, nodemode (API 1): copied unmodified,
+  frontend/src/vendor/formext/host-bridge.ts and
+  backend/app/services/formext_host.py.
 - The CMU Pronouncing Dictionary (cmudict.dict at commit 74790861 of
   github.com/cmusphinx/cmudict), Copyright (C) 1993-2015 Carnegie Mellon University,
   under its BSD-style licence, kept beside it unmodified in

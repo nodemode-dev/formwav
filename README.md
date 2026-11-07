@@ -110,6 +110,10 @@ One registry of 141 commands, the menu bar's items and the session tools. The wi
 
 `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The engine also serves MCP at `http://127.0.0.1:8060/mcp`, and `backend/formwav_mcp/serve` runs a standalone stdio server. See [`AGENTS.md`](AGENTS.md).
 
+## Extensions
+
+formwav loads extensions made to the Form Extension Contract: installed through FormPortal, or run from a folder while you make one with form.ext. They show in the **Extensions** menu (each extension's commands, Extensions panel, Reload extensions, Manage in FormPortal), in the Extensions panel under the editor's More (name, version, source, permissions, state), as panels in the editor or as dialogs, and in the command palette. Each runs in a sandboxed frame, reads and changes the session only through formwav's own commands (all of one call is one undo step), and asks before its first use. Agents reach them with `extensions_list` and `extension_command`, or `./formwav cli extensions`. What an extension can call is in [`docs/EXTENSIONS.md`](docs/EXTENSIONS.md).
+
 ## Under the hood
 
 - **One mixer:** the Rust core (`native/formwav-dsp`) runs as WebAssembly in the browser and as a Python module in the engine.

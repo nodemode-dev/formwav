@@ -1,5 +1,6 @@
 """formwav's command line over the open session (PLAN_v14 W2): `./formwav cli list [group]`, `./formwav cli describe
-<id>`, `./formwav cli run <id> key=value ...` (values read as JSON when they parse, else as text). It speaks to the
+<id>`, `./formwav cli run <id> key=value ...` (values read as JSON when they parse, else as text), `./formwav cli
+extensions` and `./formwav cli extension <id> <command> key=value ...` (the window's extensions). It speaks to the
 engine at FORMWAV_URL or http://127.0.0.1:8060; the commands run in formwav's open window, which asks its person
 first. Standard library only, so it runs with any Python 3."""
 
@@ -52,6 +53,25 @@ def main(argv: list[str]) -> int:
         for c in out:
             print(f"{c['id']:<44} {c['label']}" + (f"  [{c['keys']}]" if c.get("keys") else "") + ("  (risky)" if c.get("risky") else ""))
         return 0
+    if verb in ("extensions", "extension") and (verb == "extensions" or len(rest) >= 2):
+        args = {}
+        for pair in rest[2:]:
+            if "=" not in pair:
+                sys.exit(f"formwav: give arguments as key=value, not {pair}")
+            k, v = pair.split("=", 1)
+            args[k] = value(v)
+        tool = {"name": "extensions_list", "arguments": {}} if verb == "extensions" else {"name": "extension_command", "arguments": {"id": rest[0], "command": rest[1], "args": args}}
+        out = call("POST", "/mcp", {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": tool})
+        result = (out or {}).get("result") or {}
+        text = "".join(p.get("text", "") for p in result.get("content") or [] if isinstance(p, dict))
+        if verb == "extensions" and not result.get("isError"):
+            for e in json.loads(text or "{}").get("extensions", []):
+                print(f"{e['id']:<28} {e['version']:<8} {e['source']:<12} {e['state']}" + (f"  {e['reason']}" if e.get("reason") else ""))
+                for c in e.get("commands", []):
+                    print(f"  {c['id']:<26} {c['title']}")
+            return 0
+        print(text or json.dumps(out, indent=2))
+        return 1 if result.get("isError") or "error" in (out or {}) else 0
     if verb == "describe" and rest:
         print(json.dumps(call("GET", f"/api/commands/{urllib.parse.quote(rest[0])}"), indent=2))
         return 0
@@ -65,7 +85,7 @@ def main(argv: list[str]) -> int:
         out = call("POST", f"/api/commands/{urllib.parse.quote(rest[0])}", {"params": params})
         print(json.dumps(out, indent=2))
         return 0 if out.get("ok") else 1
-    sys.exit("formwav: cli list [group] | describe <id> | run <id> key=value ... | commands [words] | headless run (--in FILE.fmw | --demo) [--cmd JSON]... [--bounce OUT.wav] [--save OUT.fmw] [--inspect]")
+    sys.exit("formwav: cli list [group] | describe <id> | run <id> key=value ... | extensions | extension <id> <command> key=value ... | commands [words] | headless run (--in FILE.fmw | --demo) [--cmd JSON]... [--bounce OUT.wav] [--save OUT.fmw] [--inspect]")
 
 
 if __name__ == "__main__":

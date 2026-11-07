@@ -7,7 +7,7 @@ description: "Connects formwav's MCP server to Claude Code, Codex, Cursor or Cla
 
 ## Purpose
 
-Get the 35 tools in front of the agent. Inside a formwav checkout nothing needs setting up: the repository's `.mcp.json` (Claude Code), `.codex/config.toml` (Codex, trusted project) and `.cursor/mcp.json` (Cursor) already register this server, and `.agents/skills/formwav-harness` mirrors this skill for agents that do not read `.claude`. The server is `backend/formwav_mcp/serve` in the formwav repository: it starts from any working directory, speaks stdio by default, and Streamable HTTP on 127.0.0.1:8061/mcp with `--http`. It reaches formwav's engine at `FORMWAV_ENGINE` (default http://127.0.0.1:8060), so formwav must be running.
+Get the 37 tools in front of the agent. Inside a formwav checkout nothing needs setting up: the repository's `.mcp.json` (Claude Code), `.codex/config.toml` (Codex, trusted project) and `.cursor/mcp.json` (Cursor) already register this server, and `.agents/skills/formwav-harness` mirrors this skill for agents that do not read `.claude`. The server is `backend/formwav_mcp/serve` in the formwav repository: it starts from any working directory, speaks stdio by default, and Streamable HTTP on 127.0.0.1:8061/mcp with `--http`. It reaches formwav's engine at `FORMWAV_ENGINE` (default http://127.0.0.1:8060), so formwav must be running.
 
 ## The quickest way
 
