@@ -97,6 +97,7 @@ frontend/
 
 ## Table of contents
 
+- [public/splash.html · the splash is formvis's card, word for word (v2.23.2)](#splash-parity)
 - [styles/workspace.css, ui/autosave.ts · the recovery dialog holds still on Windows (unreleased, after v2.21.9)](#ask-dialog-still)
 - [styles/canvas.css · the engine chip's dot and text hold still (unreleased, after v2.21.9)](#styles-engine-chip-still)
 - [ui/inputs.ts, ui/output-select.ts, main.ts · device names are names to the translator (unreleased, after v2.21.9)](#ui-device-names-i18n)
@@ -183,6 +184,17 @@ frontend/
 - [src/ui/arm.ts and recording into a track (v0.25.0)](#src-ui-arm)
 - [src/ui/mixer.ts and the mute and solo commands (v0.33.0)](#src-ui-mixer)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
+
+---
+
+## public/splash.html · the splash is formvis's card, word for word (v2.23.2) {#splash-parity}
+
+### the bar's family gradient, the logo without its own corner radius, formvis's img and p rules
+- refers-to: public/splash.html :: .fill, img, p, the logo; src-tauri/src/reveal.rs (unchanged, already equal to formvis's)
+- kind: decision
+- logged: v2.23.2 · 2026-11-07
+
+Owner: all the Form desktop apps get the same splash, rounded corners and reveal as formvis. formwav already had the window settings, `reveal.rs` and the page's `app_ready` call equal to the reference; the page differed. The bar's fill was the older indigo to orange gradient and is now the family's (#3A7BFF, #9A5CFF 30%, #FF4F7A 62%, #FFAE2B); the `svg` and `.logo` rules (a 16 px radius on the logo and a draggable attribute) are replaced by formvis's `img { display: block }`, since `logo-256.png` already has transparent rounded corners of its own; `p` lists its properties in the reference's order. The card, bar timing and `formwavSplashDone` are unchanged.
 
 ---
 
