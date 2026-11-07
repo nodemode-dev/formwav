@@ -126,6 +126,10 @@ One registry of 141 commands, the menu bar's items and the session tools. The wi
 
 All FormWav builds are compiled and released from [FormCompiler](https://github.com/nodemode-dev/formcompiler); this repo holds the source.
 
+## Demo
+
+Open [`demo/index.html`](demo/index.html) in a browser to try FormWav's waveform and spectrogram views and fifteen edits on a built-in sample or your own audio, with no install, no engine and no network. See [`demo/README.md`](demo/README.md).
+
 ## Run it from source
 
 Prefer it in your browser, or want to contribute? Run the web UI straight from this repo.
