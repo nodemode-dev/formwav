@@ -10,6 +10,11 @@ body { background: var(--bg-primary); color: var(--text-primary); font-family: v
 .dm-session { display: flex; flex-direction: column; justify-content: center; min-inline-size: 0; flex: 1 1 auto; line-height: 1.2; }
 .dm-session-name { font-size: var(--fs-14); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dm-session-sub { color: var(--text-secondary); font-size: var(--fs-11); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dm-demos { display: flex; align-items: center; gap: var(--space-4); flex: none; font-size: var(--fs-12); }
+.dm-demos a { padding-block: 3px; border-block-end: 1px solid transparent; color: var(--text-muted); text-decoration: none; }
+.dm-demos a:hover { color: var(--text-primary); }
+.dm-demos a[aria-current="page"] { color: var(--text-primary); border-block-end-color: var(--accent-color); }
+@media (max-width: 1100px) { .dm-demos { display: none; } }
 .dm-actions { display: flex; align-items: center; gap: var(--space-2); flex: none; }
 .dm-actions .fw-ibtn { background: var(--surface-1); border-color: var(--line-2); }
 .dm-actions .fw-ibtn:disabled { opacity: 0.45; }

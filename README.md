@@ -128,7 +128,11 @@ All FormWav builds are compiled and released from [FormCompiler](https://github.
 
 ## Demo
 
-Open [`demo/index.html`](demo/index.html) in a browser to try FormWav's waveform and spectrogram views and nineteen edits, including De-hum and Reduce noise repairs, on a five-track session of real public-domain recordings (credits in [`demo/CREDITS.md`](demo/CREDITS.md)) or your own audio, with no install, no engine and no network. See [`demo/README.md`](demo/README.md).
+Three offline demos open in a browser with no install, no engine and no network, each on real public-domain or CC0 audio or your own:
+
+- [`demo/index.html`](demo/index.html), Mix: FormWav's waveform and spectrogram views and nineteen edits, including De-hum and Reduce noise repairs, on a five-track session of public-domain recordings (credits in [`demo/CREDITS.md`](demo/CREDITS.md); see [`demo/README.md`](demo/README.md)).
+- [`demos/repair/index.html`](demos/repair/index.html), Repair: one noisy 1917 record on a live chain of Heal selection, De-click, De-hum, Reduce noise, EQ, a compressor and a loudness target, with a before and after A/B (see [`demos/repair/README.md`](demos/repair/README.md)).
+- [`demos/produce/index.html`](demos/produce/index.html), Produce: a 32 bar piece at 130 BPM built from CC0 stems and one-shots with the step sequencer, effect chains, automation, markers and a bounce of the mix (see [`demos/produce/README.md`](demos/produce/README.md)).
 
 ## Run it from source
 

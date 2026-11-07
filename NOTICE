@@ -117,6 +117,13 @@ their install descriptors in backend/app/services record:
 - The browser demo's recordings (demo/assets/media: LibriVox readings, a
   Musopen piano performance and NASA clips, all public domain): sources,
   licences and changes are in demo/CREDITS.md.
+- The repair demo's recordings (demos/repair/assets/media: a 1917 jazz record and
+  a 1907 Caruso shellac disc, both public domain on Wikimedia Commons): sources,
+  licences and changes are in demos/repair/CREDITS.md.
+- The produce demo's audio (demos/produce/assets/media: CC0 stems and drum loops
+  from two Internet Archive items, a Musopen piano performance and NASA clips,
+  public domain or CC0): sources, licences and changes are in
+  demos/produce/CREDITS.md.
 
 Declined features. Because of patent risk, formwav does not include and will not
 accept content-aware scale (seam carving, or any resize that removes or inserts
