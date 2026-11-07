@@ -130,10 +130,8 @@ def check(ext: Extension, product: str, app_version: str, app_name: str) -> Exte
     ext.version = str(manifest.get("version") or ext.version)
     if not VERSION_RE.match(ext.version):
         return refuse("its version is not x.y.z")
-    if manifest.get("api") is None:
-        return refuse(f"it does not say which extension API it needs; this {app_name} offers API {API}")
     if manifest.get("api") != API:
-        return refuse(f"this extension needs a newer {app_name} (it asks for extension API {manifest.get('api')}; this {app_name} offers API {API})")
+        return refuse(f"it needs extension API {manifest.get('api')}; this {app_name} offers API {API}")
     if manifest.get("native"):
         return refuse(f"native extensions are not supported by {app_name}")
     perms = manifest.get("permissions") or []
