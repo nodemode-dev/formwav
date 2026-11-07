@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 2.22.4" src="https://img.shields.io/badge/version-2.22.4-eef0f4?style=flat-square">
+  <img alt="version 2.23.0" src="https://img.shields.io/badge/version-2.23.0-eef0f4?style=flat-square">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript-Vite-3178c6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Python and FastAPI" src="https://img.shields.io/badge/Python-FastAPI-009688?style=flat-square">
   <img alt="Rust audio core" src="https://img.shields.io/badge/Rust-audio%20core-b7410e?style=flat-square">
@@ -128,7 +128,7 @@ All FormWav builds are compiled and released from [FormCompiler](https://github.
 
 ## Demo
 
-Open [`demo/index.html`](demo/index.html) in a browser to try FormWav's waveform and spectrogram views and fifteen edits on a built-in sample or your own audio, with no install, no engine and no network. See [`demo/README.md`](demo/README.md).
+Open [`demo/index.html`](demo/index.html) in a browser to try FormWav's waveform and spectrogram views and eighteen edits on a built-in sample or your own audio, with no install, no engine and no network. See [`demo/README.md`](demo/README.md).
 
 ## Run it from source
 
