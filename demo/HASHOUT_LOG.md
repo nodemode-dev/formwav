@@ -2,8 +2,8 @@
 
 Rationale and removed-code notes for the browser demo. Source files here stay comment-free; what they would have said lives here.
 
-Current build version: v2.23.2
-Last updated: 2026-11-07 · v2.23.2 no demo change (the version only); v2.23.1 the media pass: real public-domain session audio, Reduce noise, stale Clip stats fixed; v2.23.0 first version of the demo
+Current build version: v2.23.3
+Last updated: 2026-11-07 · v2.23.3 the link row to the Repair and Produce demos (demos/); 2026-11-07 · v2.23.2 no demo change (the version only); v2.23.1 the media pass: real public-domain session audio, Reduce noise, stale Clip stats fixed; v2.23.0 first version of the demo
 
 ---
 
