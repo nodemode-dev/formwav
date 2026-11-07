@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FormWav demo: Produce</title>
+<style>html,body{background:#111;margin:0;padding:0}#app{visibility:hidden}body.app-ready #app{visibility:visible}</style>
+<script>
+(function () {
+  var KEY = 'nodemode_ui_settings';
+  var DEFAULT_THEME = 'studio';
+  var DEFAULT_ACCENT = '#f97316';
+  var LIGHT = { 'light': 1, 'sand': 1 };
+  var PROFILES = {
+    'studio':        ['#111111', '#17151b', '#222127', '#2a2a2a', '#34333a', '#f7f7f7', '#a4a4a4', '#717072', '#1c1b1d', '#5e5e60', '#191919'],
+    'nodemode-dark': ['#0a0a0a', '#121218', '#1a1a24', '#2a2a35', '#3a3a48', '#e8e8ee', '#a8a8b8', '#6a6a7a', '#0a0a0a', 'rgba(255,255,255,0.04)'],
+    'light':         ['#ecebe6', '#f7f6f1', '#e2e0d8', '#d1cdc1', '#beb9aa', '#26241d', '#4c4a40', '#8b887a', '#e7e5dd', 'rgba(70,60,30,0.10)', '#f4f3ed'],
+    'github-dark':   ['#0d1117', '#161b22', '#21262d', '#30363d', '#3d444d', '#e6edf3', '#9198a1', '#656c76', '#0d1117', 'rgba(230,237,243,0.05)'],
+    'midnight':      ['#0b1020', '#101830', '#182242', '#25325c', '#324274', '#e4e9f7', '#9fabd0', '#63709a', '#0b1020', 'rgba(160,180,255,0.06)'],
+    'forest':        ['#0c130e', '#121c15', '#1a281e', '#2a4030', '#375441', '#e4efe7', '#a4bdac', '#6a8674', '#0c130e', 'rgba(180,230,190,0.05)'],
+    'ember':         ['#140d0a', '#1d1310', '#2a1c16', '#452e22', '#5a3d2e', '#f2e8e2', '#c7ab9c', '#8f7263', '#140d0a', 'rgba(255,200,160,0.05)'],
+    'violet':        ['#100b1c', '#171129', '#221a3c', '#382c5e', '#493b78', '#ece6f9', '#b3a6d8', '#7a6da3', '#100b1c', 'rgba(210,190,255,0.06)'],
+    'slate':         ['#101418', '#171d23', '#212a32', '#32404c', '#415260', '#e7edf2', '#a3b2bf', '#6b7a87', '#101418', 'rgba(200,220,240,0.05)'],
+    'mono':          ['#0e0e0e', '#161616', '#202020', '#333333', '#454545', '#f0f0f0', '#ababab', '#6e6e6e', '#0e0e0e', 'rgba(255,255,255,0.05)'],
+    'sand':          ['#efe8da', '#f8f3e9', '#e6dcc8', '#d4c7ab', '#c2b28e', '#2a2418', '#59503c', '#8d8168', '#eae2d1', 'rgba(80,60,10,0.10)', '#f5efe2'],
+    'ocean':         ['#06131c', '#0a1c29', '#10293c', '#1d425e', '#285578', '#e2eef7', '#96b6cc', '#5b7d94', '#06131c', 'rgba(150,210,255,0.06)'],
+    'rose':          ['#170b10', '#211117', '#301a22', '#4d2b38', '#653a49', '#f5e7ec', '#cfa5b3', '#966b7b', '#170b10', 'rgba(255,190,215,0.05)'],
+    'terminal':      ['#050d05', '#0a140a', '#102010', '#1f3d1f', '#2b522b', '#d8f5d8', '#8fce8f', '#568a56', '#050d05', 'rgba(120,255,120,0.06)'],
+    'contrast':      ['#000000', '#0a0a0a', '#161616', '#555555', '#777777', '#ffffff', '#d8d8d8', '#9a9a9a', '#000000', 'rgba(255,255,255,0.10)']
+  };
+  var NAMES = ['--bg-primary', '--bg-secondary', '--bg-tertiary', '--border-color', '--border-light', '--text-primary', '--text-secondary', '--text-muted', '--canvas-bg', '--grid-color'];
+  var theme = DEFAULT_THEME, accent = DEFAULT_ACCENT, intensity = 1;
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw) { var s = JSON.parse(raw); if (s.appearance === 3 || s.appearance === 2) { if (s.theme && PROFILES[s.theme]) theme = s.theme; if (s.accentColor && !(s.appearance === 2 && s.accentColor === '#aba0d3')) accent = s.accentColor; if (s.appearance === 3 && typeof s.intensity === 'number') intensity = Math.min(1.5, Math.max(0, s.intensity)); } }
+  } catch (e) {}
+  var p = PROFILES[theme], root = document.documentElement, i;
+  for (i = 0; i < NAMES.length; i++) root.style.setProperty(NAMES[i], p[i]);
+  root.style.setProperty('--bg-node', p[10] || p[1]);
+  root.style.setProperty('--shadow-lg', LIGHT[theme] ? '0 4px 14px rgba(96, 90, 70, 0.16)' : '0 8px 32px rgba(0, 0, 0, 0.5)');
+  root.style.setProperty('--accent-color', accent);
+  root.style.setProperty('--accent-color-dim', accent + '33');
+  root.style.setProperty('--accent-color-hover', 'color-mix(in srgb, ' + accent + ' 82%, #ffffff)');
+  root.style.setProperty('--accent-intensity', String(intensity));
+  root.style.background = p[0];
+  if (LIGHT[theme]) {
+    root.classList.add('theme-light-pending');
+    var apply = function () { if (document.body) { document.body.classList.add('theme-light'); root.classList.remove('theme-light-pending'); return true; } return false; };
+    if (!apply()) {
+      var mo = new MutationObserver(function () { if (apply()) mo.disconnect(); });
+      mo.observe(root, { childList: true });
+    }
+  }
+})();
+</script>
+  <script defer src="./assets/produce.js"></script>
+  <link rel="stylesheet" href="./assets/style.css">
+</head>
+<body>
+<div id="app" class="dm-app">
+  <header class="dm-top">
+    <div class="dm-brand">
+      <img class="fw-logo" id="dm-logo" width="22" height="22" alt="" draggable="false">
+      <span class="fw-name">formwav</span>
+      <span class="dm-badge">Demo</span>
+    </div>
+    <div class="dm-session">
+      <span class="dm-session-name" translate="no" id="dm-session-name">Cold Open, 32 bars at 130 BPM</span>
+      <span class="dm-session-sub" id="dm-session-sub">Real CC0 stems and one-shots. Runs in this page, nothing is uploaded</span>
+    </div>
+    <nav class="pr-links" aria-label="The three demos">
+      <a href="../../demo/index.html">Mix</a>
+      <a href="../repair/index.html">Repair</a>
+      <a href="../produce/index.html" aria-current="page">Produce</a>
+    </nav>
+    <div class="dm-actions">
+      <button class="fw-ibtn" type="button" id="dm-open" title="Open an audio file from your computer"><span class="icon" data-icon="folderOpen" data-size="16"></span><span>Open file</span></button>
+      <button class="fw-ibtn fw-ibtn-icon" type="button" id="dm-undo" title="Undo" aria-label="Undo"><span class="icon" data-icon="undo" data-size="16"></span></button>
+      <button class="fw-ibtn fw-ibtn-icon" type="button" id="dm-redo" title="Redo" aria-label="Redo"><span class="icon" data-icon="redo" data-size="16"></span></button>
+      <button class="fw-ibtn fw-ibtn-icon" type="button" id="dm-theme-btn" title="Theme and colour" aria-label="Theme and colour" aria-expanded="false"><span class="icon" data-icon="palette" data-size="16"></span></button>
+      <button class="dm-export" type="button" id="dm-export-btn" aria-expanded="false">Bounce</button>
+    </div>
+  </header>
+
+  <main class="dm-work">
+    <aside class="fw-pane dm-left">
+      <div class="fw-pane-header" role="tablist" aria-label="Browser">
+        <button class="fw-pane-tab is-active" type="button" role="tab" data-ltab="sounds" aria-selected="true">Sounds</button>
+        <button class="fw-pane-tab" type="button" role="tab" data-ltab="effects" aria-selected="false">Effects</button>
+      </div>
+      <div class="dm-left-body" data-lpanel="sounds">
+        <label class="dm-search"><span class="icon" data-icon="search" data-size="14"></span><input type="search" id="dm-search" placeholder="Search sounds" aria-label="Search sounds" autocomplete="off"></label>
+        <div id="pr-sounds"></div>
+      </div>
+      <div class="dm-left-body" data-lpanel="effects" hidden>
+        <p class="pr-hint">Click an effect to add it to the selected track's chain.</p>
+        <div class="fw-browse-effects"><div class="fw-fxlib" id="pr-fxlib"></div></div>
+      </div>
+    </aside>
+
+    <section class="fw-pane dm-center">
+      <div class="fw-tool-tray dm-tray">
+        <button class="fw-mode" type="button" id="dm-zoom-out" title="Zoom out" aria-label="Zoom out"><span class="icon" data-icon="minus" data-size="14"></span></button>
+        <button class="fw-mode" type="button" id="dm-zoom-in" title="Zoom in" aria-label="Zoom in"><span class="icon" data-icon="plus" data-size="14"></span></button>
+        <button class="fw-mode" type="button" id="dm-fit">Fit</button>
+        <button class="fw-mode" type="button" id="dm-follow" aria-pressed="true">Follow</button>
+        <select class="pr-snap" id="pr-snap" aria-label="Snap"><option value="4">Snap: bar</option><option value="1" selected>Snap: beat</option><option value="0.25">Snap: 1/16</option><option value="0">Snap: off</option></select>
+        <span class="pr-sep" aria-hidden="true"></span>
+        <button class="fw-mode" type="button" id="pr-split" title="Split the selected clip at the playhead (S)">Split</button>
+        <button class="fw-mode" type="button" id="pr-dup" title="Duplicate the selected clip after itself (D)">Duplicate</button>
+        <button class="fw-mode" type="button" id="pr-del" title="Delete the selected clip (Delete)">Delete</button>
+        <button class="fw-mode" type="button" id="pr-mark" title="Add a marker at the playhead (M)">Marker</button>
+        <button class="fw-mode" type="button" id="pr-bouncetrack" title="Render the selected track through its effects into a new track">Bounce track</button>
+        <span class="dm-tray-hint" id="pr-hint">Drag clips to move, drag their edges to trim</span>
+        <span class="dm-read"><span class="dm-read-k">Position</span><span class="dm-read-v" id="pr-r-pos">1.1.1</span></span>
+        <span class="dm-read"><span class="dm-read-k">Region</span><span class="dm-read-v" id="pr-r-region">none</span></span>
+      </div>
+      <div class="dm-timeline" id="dm-timeline">
+        <div class="dm-ruler-row">
+          <div class="dm-ruler-corner">130 BPM, 4/4</div>
+          <div class="dm-ruler" id="pr-ruler"><canvas></canvas></div>
+        </div>
+        <div class="dm-tracks" id="dm-tracks"></div>
+        <div class="pr-auto" id="pr-auto">
+          <div class="pr-auto-head">
+            <span class="pr-auto-title">Automation</span>
+            <select id="pr-auto-param" aria-label="Automated parameter"></select>
+            <span class="pr-auto-btns">
+              <button class="fw-mode" type="button" data-auto="rise" title="Ramp up across the region, the clip or the whole track">Rise</button>
+              <button class="fw-mode" type="button" data-auto="fall" title="Ramp down across the region, the clip or the whole track">Fall</button>
+              <button class="fw-mode" type="button" data-auto="clear" title="Remove every point of this lane">Clear</button>
+            </span>
+          </div>
+          <div class="dm-lane pr-auto-lane"><canvas></canvas></div>
+        </div>
+        <div class="dm-empty" id="dm-empty" hidden>Loading the session media</div>
+        <div class="dm-overlay" id="dm-overlay" aria-hidden="true">
+          <div class="pr-region" id="pr-region"></div>
+          <div class="dm-playhead" id="dm-playhead"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="fw-dock pr-dock">
+      <div class="fw-dock-head">
+        <span class="fw-dock-tabs" role="tablist" aria-label="Editor">
+          <button class="fw-dock-tab" type="button" role="tab" data-btab="fx" aria-selected="true">Effects</button>
+          <button class="fw-dock-tab" type="button" role="tab" data-btab="seq" aria-selected="false">Sequencer</button>
+          <button class="fw-dock-tab" type="button" role="tab" data-btab="mixer" aria-selected="false">Mixer</button>
+          <button class="fw-dock-tab" type="button" role="tab" data-btab="markers" aria-selected="false">Markers</button>
+        </span>
+        <span class="fw-dock-context" id="pr-ctx">No track selected</span>
+      </div>
+      <div class="fw-dock-body">
+        <section class="fw-editor-panel fw-chain pr-panel" data-bpanel="fx" id="pr-fx" aria-label="Effects">
+          <div class="fw-chain-head"><span class="fw-chain-title"></span></div>
+          <div class="fw-chain-row"><div class="fw-fx-add fw-fx-add-slot"><select id="pr-fx-add" aria-label="Add an effect"></select><span class="pr-fx-hint">Drag a knob up or down, Shift for fine</span></div></div>
+        </section>
+        <section class="fw-editor-panel pr-seq pr-panel" data-bpanel="seq" id="pr-seq" aria-label="Sequencer" hidden>
+          <div class="pr-seq-grid fw-steps-grid" id="pr-seq-grid"></div>
+          <div class="pr-seq-side">
+            <label class="pr-seq-opt"><span>Length</span><input type="range" min="1" max="4" step="1" value="2" data-seq-bars aria-label="Bars to repeat the pattern for"><output data-seq-bars-out></output></label>
+            <label class="pr-seq-opt"><span>Swing</span><input type="range" min="50" max="75" step="0.5" value="56" data-seq-swing aria-label="Swing on the off-beat sixteenths, 50 straight to 75"><output data-seq-swing-out></output></label>
+            <div class="pr-seq-btns">
+              <button type="button" class="fw-ibtn" data-seq-act="hear" title="Play the pattern, adding nothing">Hear</button>
+              <button type="button" class="fw-ibtn pr-primary" data-seq-act="place" title="Place the pattern as a clip at the playhead on the Pattern track">Place at playhead</button>
+              <button type="button" class="fw-ibtn" data-seq-act="clear">Clear</button>
+            </div>
+            <div class="pr-seq-btns">
+              <select id="pr-seq-saved" aria-label="Patterns kept in this session"></select>
+              <button type="button" class="fw-ibtn" data-seq-act="save" title="Keep this pattern in the session">Save</button>
+              <button type="button" class="fw-ibtn" data-seq-act="delete" title="Remove the chosen pattern from the session">Delete</button>
+            </div>
+            <p class="fw-steps-hint">Click a step to light it; Shift-click a lit step for accent, normal or ghost. Swing moves the off-beat sixteenths later.</p>
+          </div>
+        </section>
+        <section class="fw-editor-panel fw-mixer pr-panel" data-bpanel="mixer" id="pr-mixer" aria-label="Mixer" hidden>
+          <div class="fw-mixer-strips"></div>
+          <div class="fw-strip" data-kind="master">
+            <div class="fw-strip-name">Master</div>
+            <span class="fw-strip-kind">Output</span>
+            <input class="fw-strip-fader" type="range" min="-24" max="6" step="0.1" data-default="0" aria-label="Master volume">
+            <div class="fw-strip-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar" id="pr-mm0"></div></div><div class="fw-out-track"><div class="fw-out-bar" id="pr-mm1"></div></div></div>
+            <output class="fw-strip-db"></output>
+            <label class="pr-ceil"><span data-ceiling-out></span><input type="range" min="-6" max="0" step="0.1" data-ceiling aria-label="Limiter ceiling"></label>
+            <output class="fw-strip-lufs">-- LUFS</output>
+          </div>
+        </section>
+        <section class="fw-editor-panel fw-labels-body pr-panel" data-bpanel="markers" id="pr-markers" aria-label="Markers" hidden>
+          <div class="pr-mk-bar">
+            <button type="button" class="fw-ibtn" data-mk-act="add" title="Add a marker at the playhead (M)">Add marker at playhead</button>
+            <button type="button" class="fw-ibtn" data-mk-act="region" title="Make the region run from the marker at or before the playhead to the next one">Region: marker to next</button>
+            <button type="button" class="fw-ibtn" data-mk-act="clear">Clear region</button>
+            <span class="pr-mk-region" data-region-out></span>
+          </div>
+          <div class="fw-labels-list" role="list"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <footer class="fw-status dm-status">
+    <div class="fw-transport dm-transport">
+      <button class="fw-tbtn" type="button" id="dm-home" title="Back to start" aria-label="Back to start"><span class="icon" data-icon="skipBack" data-size="20"></span></button>
+      <button class="fw-tbtn" type="button" data-action="play" id="dm-play" title="Play or pause (Space)" aria-label="Play"><span class="icon" data-icon="play" data-size="20" id="dm-play-icon"></span></button>
+      <button class="fw-tbtn" type="button" id="dm-stop" title="Stop" aria-label="Stop"><span class="icon" data-icon="stop" data-size="20"></span></button>
+      <button class="fw-tbtn" type="button" id="dm-loop" aria-pressed="false" title="Loop the region (L)" aria-label="Loop"><span class="icon" data-icon="loop" data-size="20"></span></button>
+    </div>
+    <div class="dm-clockbox"><div class="fw-clock" data-mode="time" id="dm-clock">00:00.000</div><div class="dm-clock-sub" id="dm-clock-sub">bar 1 of 33</div></div>
+    <div class="dm-meters" aria-label="Output level">
+      <div class="dm-meter"><span class="dm-meter-fill" id="dm-m0"></span></div>
+      <div class="dm-meter"><span class="dm-meter-fill" id="dm-m1"></span></div>
+    </div>
+    <div class="dm-mixinfo"><span class="dm-mix-k">Mix</span><span class="dm-mix-v" id="dm-mix-lufs">-- LUFS</span><span class="dm-mix-v" id="dm-mix-peak">-- dBFS</span></div>
+    <div class="dm-info"><div class="dm-notice" id="dm-notice" role="status">Ready</div><div class="dm-info-sub" id="dm-info-sub">44.1 kHz</div></div>
+  </footer>
+</div>
+
+<div id="overlay-root">
+  <div class="dm-drop" id="dm-drop" data-on="false"><div class="dm-drop-card"><span class="icon" data-icon="upload" data-size="28"></span><span>Drop audio to add it as a clip at the playhead</span></div></div>
+  <div class="fw-popover dm-pop" id="dm-theme-pop" hidden role="dialog" aria-label="Theme and colour">
+    <label class="dm-pop-row">Theme<select id="dm-theme-select" aria-label="Theme"></select></label>
+    <span class="dm-pop-label">Accent</span>
+    <div class="dm-swatches" id="dm-swatches" role="group" aria-label="Accent colour"></div>
+  </div>
+  <div class="fw-popover dm-pop dm-export-pop" id="dm-export-pop" hidden role="dialog" aria-label="Bounce">
+    <label class="dm-pop-row">Source<select id="pr-ex-src" aria-label="Source"><option value="all">The whole arrangement</option><option value="region">The region</option><option value="track">Selected track, with its effects</option></select></label>
+    <label class="dm-pop-row">Tail<select id="pr-ex-tail" aria-label="Tail"><option value="0">None</option><option value="2" selected>2 s, for reverb and echo</option><option value="4">4 s</option></select></label>
+    <label class="dm-pop-row">Loudness<select id="pr-ex-lufs" aria-label="Loudness target"><option value="0">As mixed</option><option value="-14">-14 LUFS, streaming</option><option value="-16">-16 LUFS, podcast</option><option value="-9">-9 LUFS, club</option></select></label>
+    <label class="dm-pop-row">Format<select id="pr-ex-fmt" aria-label="Format"><option value="16">WAV, 16-bit</option><option value="24" selected>WAV, 24-bit</option><option value="32">WAV, 32-bit float</option></select></label>
+    <label class="dm-pop-row">File name<input type="text" id="pr-ex-name" value="cold-open" aria-label="File name" spellcheck="false"></label>
+    <div class="pr-ex-btns"><button class="dm-apply" type="button" id="pr-ex-go">Bounce and save</button><button class="fw-ibtn" type="button" id="pr-ex-hear" disabled>Hear the bounce</button></div>
+    <span class="dm-fx-note" id="pr-ex-note"></span>
+  </div>
+</div>
+<input type="file" id="dm-file" accept="audio/*,.wav,.flac,.mp3,.ogg,.oga,.opus,.m4a,.aac,.aif,.aiff" multiple hidden>
+</body>
+</html>
