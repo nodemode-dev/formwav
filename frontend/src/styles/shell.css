@@ -1,4 +1,11 @@
 html, body, #app { height: 100%; }
+/* The app is one fixed full-window layout: the document itself never scrolls, by wheel, trackpad bounce (the macOS web
+   view rubber-bands the root unless told not to), keys or a scrollIntoView; only the panes inside scroll. index.html's
+   critical style says the same before the first paint. */
+html, body { overflow: hidden; overscroll-behavior: none; }
+@supports (height: 100dvh) { html, body, #app { height: 100dvh; } }
+#app { overflow: clip; }
+.fw-shell { overflow: clip; }
 
 .fw-shell {
   display: grid;
