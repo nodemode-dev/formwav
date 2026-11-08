@@ -79,7 +79,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             traffic_lights::set_window_title,
             reveal::app_ready,
-            text_edit::text_edit
+            text_edit::text_edit,
+            menu::set_menu
         ])
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -160,7 +161,7 @@ fn main() {
                         .center()
                         // Files dropped on the window reach the page as ordinary DOM drop events.
                         .disable_drag_drop_handler();
-                        // macOS: the page's 40 px title row is the title bar (traffic lights over it, native title hidden).
+                        // macOS: the page's 38 px title row is the title bar (traffic lights over it, native title hidden).
                         #[cfg(target_os = "macos")]
                         let builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
                         // Windows and Linux: the page draws its own caption buttons (frontend/src/ui/desktop.ts).

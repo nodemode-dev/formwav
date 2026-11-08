@@ -858,6 +858,7 @@ dependencies = [
  "objc2",
  "objc2-app-kit",
  "regex",
+ "serde",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
