@@ -97,6 +97,7 @@ frontend/
 
 ## Table of contents
 
+- [ui/editor-layout.ts, ui/toast.ts, styles/editor-family.css, ui/dock.ts, ui/prefs.ts · the editor as approved, toasts, real Preferences controls (v2.25.0)](#editor-family)
 - [ui/prefs.ts, ui/prefs-models.ts, ui/native-menu.ts, ui/home.ts, ui/title-tools.ts, ui/commands.ts, ui/desktop.ts · the family redesign (v2.25.0)](#family-redesign)
 - [ui/extensions.ts, vendor/formext, ui/shell.ts, ui/dock.ts, ui/commands.ts, ui/agent-pane.ts · the extension host (v2.24.0)](#extension-host)
 - [public/splash.html · the splash is formvis's card, word for word (v2.23.2)](#splash-parity)
@@ -186,6 +187,28 @@ frontend/
 - [src/ui/arm.ts and recording into a track (v0.25.0)](#src-ui-arm)
 - [src/ui/mixer.ts and the mute and solo commands (v0.33.0)](#src-ui-mixer)
 - [src/vendor/nodemode/](#src-vendor-nodemode)
+
+---
+
+## ui/editor-layout.ts, ui/toast.ts, styles/editor-family.css, ui/dock.ts, ui/prefs.ts · the editor as approved, toasts, real Preferences controls (v2.25.0) {#editor-family}
+
+### The editor
+The approved editor (the shots editor, editor-mixer and spectro, the partials editor.html, editor-mixer.html, spectro.html and wav.css) is built by restyling the existing modules in place: the engine, the commands, the ids and the classes stay, and `ui/editor-layout.ts` only moves existing nodes into the approved places (the tool strip, the left Media, Effects and Sounds panel, the timeline head, the lane heads beside the ruler, the action row, the right Clip, Effects and Repair tabs, the bottom dock bar, the transport row and the status bar) before the first paint. Modules find their parts by class through `host.querySelector`, so moving a node does not change what a module does; a CSS rule that depended on a parent or a sibling was rewritten in `styles/editor-family.css`, loaded after `form-family.css`, which ports the values of wav.css onto the repository's tokens (40 px strip, 56 px timeline head, 88 px lane, 32 px dock bar, 52 px transport and 24 px status). The app hue is `--fw-hue` (#1fe5c0 in the dark theme).
+
+### What changed for the interface and its tests
+- The dock collapses with `data-open` on `.fw-dock` (it was the `hidden` flag); the dock's tabs are Mixer, Synth, Pads, Spectrum, Transcript, More and Ask the agent.
+- Clip and Effects (and Repair) are the right column's tabs, `.fw-side-tab[data-side]`, no longer dock tabs; the Agent column is behind the dock's Ask the agent button (`.fw-dock-ask`).
+- A lane head is the track list column: number, colour bar, name, sub line, M/S/arm/A, volume and pan; the volume and pan sliders dispatch `set-track-gain` and `set-track-pan`.
+- Heal keeps its two steps: the Repair tab only shows the Heal button, a brush stroke only paints the selection.
+
+### Toasts
+`ui/toast.ts` raises a toast at the bottom centre, a hollow liquid-glass outline in the app hue, or the danger colour when the message reads as a failure. The status notice (`.fw-notice`) stays in the DOM, visually hidden, as the live region; a change to its text raises the toast, so every existing notice is routed through without touching its module. The layer has zero height and grows upward, so it never shifts the page (CLS 0).
+
+### Preferences controls
+The rows once shown as text are controls on the stores the menus and dialogs already use: window configuration (the layout select), dock height (`HEIGHT_KEY`), zoom presets (`PRESETS_KEY`), MIDI input quantize (`INPUT_QUANTIZE_KEY`), output and input device selects (the status output select and `setTrackInput`), plug-in folders (a count and a rescan on `/api/plugins`; the folders themselves are only the environment variable FORMWAV_PLUGIN_PATH, there is no setting for them) and autosave (the kept copy and a Discard button on `/api/autosave`; autosave has no on/off setting). The theme swatch grid and the sliders with number boxes are built as FormVis's controls.ts builds them.
+
+### Strings
+Every new string is in `i18n/added/editor-family/<code>.json` in all 25 languages.
 
 ---
 
