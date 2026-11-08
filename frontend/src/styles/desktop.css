@@ -2,6 +2,10 @@
 
 /* macOS: the traffic lights sit over the title bar's left end (14 px in, three buttons) */
 .has-overlay-titlebar .fw-topbar { padding-inline-start: 78px; }
+/* macOS: the menus are the system menu bar's (native-menu.ts), so the in-window menu row is never drawn; the class is set
+   by index.html's boot before the first paint, so it never shows and nothing moves. The pops stay mounted: the system
+   menu is described from them and clicks them. */
+.has-native-menus .fw-topbar .fw-tools { display: none; }
 
 /* Windows and Linux: caption buttons at the end of the title bar's actions */
 .fw-caption { display: flex; align-items: center; gap: 0; margin-inline-start: var(--space-2); }
