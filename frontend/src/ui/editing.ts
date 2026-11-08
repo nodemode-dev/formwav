@@ -23,8 +23,8 @@ type Values = Record<string, number | string | null>;
 const num = (v: Values | null, key: string): number | null => (v && typeof v[key] === "number" ? (v[key] as number) : null);
 const str = (v: Values | null, key: string): string => (v && typeof v[key] === "string" ? (v[key] as string) : "");
 
-const PRESETS_KEY = "formwav.zoomPresets";
-const DEFAULT_PRESETS = [0.25, 1, 8, 64, 1024];
+export const PRESETS_KEY = "formwav.zoomPresets";
+export const DEFAULT_PRESETS = [0.25, 1, 8, 64, 1024];
 
 export function mountEditing(host: HTMLElement, engine: Engine, player: Player): void {
   const notice = host.querySelector<HTMLElement>(".fw-notice");
@@ -289,6 +289,17 @@ export function mountEditing(host: HTMLElement, engine: Engine, player: Player):
   } catch {
     presets = [...DEFAULT_PRESETS];
   }
+  // Preferences > Workspace sets the five by number: the same list, kept the same way
+  host.addEventListener("fw-zoom-presets", (e) => {
+    const next = (e as CustomEvent<number[]>).detail;
+    if (!Array.isArray(next) || next.length !== 5 || !next.every((z) => typeof z === "number" && z > 0)) return;
+    presets = [...next];
+    try {
+      localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+    } catch {
+      /* kept until the page closes */
+    }
+  });
   const preset = (n: number, store: boolean) => {
     if (store) {
       presets[n] = getZoom();

@@ -12,9 +12,10 @@ import type { Engine } from "../engine";
 import { icon as fvIcon } from "../vendor/formvis/icons";
 import { mountMenu } from "./file-menu";
 
-const HEIGHT_KEY = "formwav.editorHeight";
-const MORE = new Set(["inspector", "notes", "labels", "score", "terminal", "extensions"]);
-export const LANE_COLORS = ["cyan", "violet", "amber", "pink", "slate", "green", "blue", "red"];
+export const HEIGHT_KEY = "formwav.editorHeight";
+const MORE = new Set(["notes", "labels", "score", "terminal", "extensions"]);
+// The five a new track cycles through: neither cyan nor green, which read as the app's hue (PRESENT.md, lane colours)
+export const LANE_COLORS = ["blue", "violet", "amber", "pink", "slate"];
 const FLOAT_KEY = "formwav.floating";
 
 /** A floating panel and its window's place (AU-08, AU-09). */
@@ -50,7 +51,7 @@ export function mountDock(host: HTMLElement, engine: Engine): void {
   if (!pane || !transport) return;
   const dock = document.createElement("section");
   dock.className = "fw-dock";
-  dock.hidden = true;
+  dock.dataset.open = "false";
   dock.setAttribute("aria-label", "Dock");
   dock.innerHTML = `<div class="fw-dock-grip" role="separator" aria-orientation="horizontal" aria-label="Resize the editor" tabindex="0"></div><div class="fw-dock-head"><span class="fw-dock-tabs" role="tablist" aria-label="Editor"></span><div class="fw-menu fw-dock-more"><button type="button" class="fw-menu-btn fw-dock-tab" aria-haspopup="menu" aria-expanded="false"><span class="fw-dock-more-label">More</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button><div class="cv-menu fw-menu-pop" role="menu" aria-label="More panels" hidden></div></div><span class="fw-dock-context"><span class="fw-dock-who"><span class="fw-dock-swatch" aria-hidden="true"></span><span class="fw-dock-track"></span></span><span class="fw-dock-detail"></span></span><button type="button" class="fw-ibtn fw-dock-ask" data-ask-agent="">Ask the agent</button><button type="button" class="fw-icon-btn fw-dock-close" aria-label="Close the editor" title="Close the editor">${fvIcon("close", 14)}</button></div><div class="fw-dock-body"></div>`;
   transport.before(dock);
@@ -73,14 +74,12 @@ export function mountDock(host: HTMLElement, engine: Engine): void {
     });
   }
   const wanted: Array<[string, string, string, string]> = [
-    ["clip", "Clip", ".fw-cliptab", ".fw-tool-tray [data-cliptab]"],
-    ["effects", "Effects", ".fw-editor-panel.fw-chain", ".fw-tool-tray [data-chain]"],
+    // Clip, Effects and the Inspector (Repair) are the right column's tabs (editor-layout.ts), not the dock's
     ["mixer", "Mixer", ".fw-mixer", '.fw-tool-tray .fw-mode[title^="Show the mixer"]'],
     ["synth", "Synth", ".fw-synth", ".fw-tool-tray [data-synth]"],
     ["pads", "Pads", ".fw-pads", ".fw-tool-tray [data-pads]"],
     ["spectrum", "Spectrum", ".fw-spectrum", ".fw-tool-tray .fw-mode[data-spectrum]"],
     ["transcript", "Transcript", ".fw-transcript-panel", ".fw-tool-tray [data-transcript]"],
-    ["inspector", "Inspector", ".fw-pane-inspector", ".fw-tool-tray [data-inspector]"],
     ["notes", "Notes", ".fw-piano", ".fw-tool-tray .fw-mode[data-piano]"],
     ["labels", "Labels", ".fw-labels-panel", ".fw-tool-tray [data-labels]"],
     ["score", "Score", ".fw-score", ".fw-tool-tray .fw-mode[data-score-view]"],
@@ -123,7 +122,7 @@ export function mountDock(host: HTMLElement, engine: Engine): void {
   morePop.append(Object.assign(document.createElement("span"), { className: "fw-menu-sep" }), floatItem);
   mountMenu(moreRoot);
   const editorToggle = host.querySelector<HTMLButtonElement>('.fw-panel-toggle[data-pane="editor"]');
-  let lastShown = "clip";
+  let lastShown = "mixer";
 
   // AU-08: panels floated out of the dock (id to window); they are left out of the dock's one-at-a-time rule
   const floating = new Map<string, HTMLElement>();
@@ -152,7 +151,9 @@ export function mountDock(host: HTMLElement, engine: Engine): void {
     }
     if (shown) lastShown = shown.id;
     if (editorToggle && editorToggle.getAttribute("aria-pressed") !== String(!!shown)) editorToggle.setAttribute("aria-pressed", String(!!shown));
-    if (dock.hidden !== !shown) dock.hidden = !shown;
+    // Collapsed, the dock keeps its tab strip (CSS hides the body and the grip); a tab or the editor toggle opens it
+    const open = String(!!shown);
+    if (dock.dataset.open !== open) dock.dataset.open = open;
     host.dispatchEvent(new CustomEvent("fw-editor-tab", { detail: shown?.id ?? null }));
   };
   editorToggle?.addEventListener("click", () => {
@@ -278,6 +279,17 @@ export function mountDock(host: HTMLElement, engine: Engine): void {
   } catch {
     /* storage unavailable: the default height */
   }
+  // Preferences > Workspace sets the height by number: clamped and kept as a drag of the grip is
+  host.addEventListener("fw-dock-height", (e) => {
+    const px = Number((e as CustomEvent<number>).detail);
+    if (!Number.isFinite(px)) return;
+    const kept = setHeight(px);
+    try {
+      localStorage.setItem(HEIGHT_KEY, String(kept));
+    } catch {
+      /* not kept */
+    }
+  });
   grip.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     grip.setPointerCapture(e.pointerId);

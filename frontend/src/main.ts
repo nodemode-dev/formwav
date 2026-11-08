@@ -18,6 +18,7 @@ import "./styles/prefs.css";
 import "./styles/desktop.css";
 import "./styles/extensions.css";
 import "./styles/form-family.css";
+import "./styles/editor-family.css";
 import { createEngine } from "./engine";
 import { activateAll } from "./extensions/registry";
 import "./extensions/engine-link";
@@ -68,6 +69,8 @@ import { mountAutosave } from "./ui/autosave";
 import { mountToolbar } from "./ui/toolbar";
 import { mountEditing } from "./ui/editing";
 import { mountDock } from "./ui/dock";
+import { mountEditorLayout } from "./ui/editor-layout";
+import { mountToasts } from "./ui/toast";
 import { mountExtensions } from "./ui/extensions";
 import { mountOutputSelect, outputDeviceNames } from "./ui/output-select";
 import { renderNotes } from "./audio/notes";
@@ -203,7 +206,7 @@ if (host) {
   mountRoom(host, engine);
   mountShare(host, engine);
   mountAgents(host);
-  mountPreferences(host); // formvis's Preferences: Settings > Preferences…, Cmd or Ctrl comma
+  mountPreferences(host, engine); // formvis's Preferences: Settings > Preferences…, Cmd or Ctrl comma
   mountMusical(host, engine);
   mountToolbar(host, engine);
   mountEditing(host, engine, player);
@@ -212,6 +215,8 @@ if (host) {
   mountNativeMenu(host); // macOS: the menus in the system menu bar, built from the pops gathered above
   mountShortcutsPanel(host); // PLAN_v13 S13: View > Keyboard shortcuts, or ?
   mountAutosave(host, engine); // PLAN_v14 W4: unsaved work kept every 30 s and offered back on the next start
+  mountEditorLayout(host, engine); // the approved editor: last, after every module has bound the controls it moves
+  mountToasts(host); // the status notice's messages, shown at the bottom centre as toasts
 }
 if (import.meta.env.DEV) Object.assign(window, { __formwav: { engine, player, renderNotes } });
 activateAll(engine);

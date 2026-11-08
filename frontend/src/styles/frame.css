@@ -240,14 +240,11 @@
 /* The arrangement after the approved target: each track a colour by its place, through the lanes' existing colour
  * variable (a colour set on the track or the clip still wins, being set on the element), the clip's name on a chip
  * over its waveform. */
-.fw-lanes > .fw-lane:nth-of-type(8n + 1) { --fw-lane-color: var(--fw-color-cyan); }
-.fw-lanes > .fw-lane:nth-of-type(8n + 2) { --fw-lane-color: var(--fw-color-violet); }
-.fw-lanes > .fw-lane:nth-of-type(8n + 3) { --fw-lane-color: var(--fw-color-amber); }
-.fw-lanes > .fw-lane:nth-of-type(8n + 4) { --fw-lane-color: var(--fw-color-pink); }
-.fw-lanes > .fw-lane:nth-of-type(8n + 5) { --fw-lane-color: var(--fw-color-slate); }
-.fw-lanes > .fw-lane:nth-of-type(8n + 6) { --fw-lane-color: var(--fw-color-green); }
-.fw-lanes > .fw-lane:nth-of-type(8n + 7) { --fw-lane-color: var(--fw-color-blue); }
-.fw-lanes > .fw-lane:nth-of-type(8n + 8) { --fw-lane-color: var(--fw-color-red); }
+.fw-lanes > .fw-lane:nth-of-type(5n + 1) { --fw-lane-color: var(--fw-color-blue); }
+.fw-lanes > .fw-lane:nth-of-type(5n + 2) { --fw-lane-color: var(--fw-color-violet); }
+.fw-lanes > .fw-lane:nth-of-type(5n + 3) { --fw-lane-color: var(--fw-color-amber); }
+.fw-lanes > .fw-lane:nth-of-type(5n + 4) { --fw-lane-color: var(--fw-color-pink); }
+.fw-lanes > .fw-lane:nth-of-type(5n + 5) { --fw-lane-color: var(--fw-color-slate); }
 .fw-lanes .fw-lane .fw-clip { background: color-mix(in srgb, var(--fw-c) 18%, var(--surface-0)); border-color: color-mix(in srgb, var(--fw-c) 50%, transparent); }
 .fw-lanes .fw-lane .fw-clip[aria-selected="true"] { border-color: var(--accent-color); }
 .fw-lanes .fw-lane .fw-wave { color: var(--fw-c); }

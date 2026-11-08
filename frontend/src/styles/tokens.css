@@ -231,6 +231,8 @@ body.nm-home .nm-canvas-surface { display: none !important; }
 :root {
   --fw-audio: #50e2a5;
   --fw-audio-shade: #153729;
+  /* the app's own hue: the toasts' outline and the spectrogram's ramp (the approved design's #1fe5c0) */
+  --fw-hue: #1fe5c0;
   --fw-record: #ff475a;
   /* The accent swatches the title bar offers; the one chosen is stored and applied by the theme module */
   --fw-swatch-orange: #f97316;
@@ -261,7 +263,7 @@ body.nm-home .nm-canvas-surface { display: none !important; }
   --z-toast: 3000;
 }
 
-body.theme-light { color-scheme: light; --fw-agent-ink: #2f62c9; }
+body.theme-light { color-scheme: light; --fw-agent-ink: #2f62c9; --fw-hue: #0a9e85; }
 
 /* ── Liquid glass (the owner's walkthrough): one look for every menu, dropdown and flyout, from the theme's own surface,
    so it holds in light themes too; scrollbars hidden everywhere while scrolling still works. ── */
