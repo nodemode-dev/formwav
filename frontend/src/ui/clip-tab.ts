@@ -15,7 +15,8 @@ import { setText } from "../vendor/nodemode/dom-stable";
 
 // A stopwatch, inline and currentColor: the mark on a value that can change over time
 const STOPWATCH = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><path d="M12 10v4l2.5 1.5M9.5 3h5"/></svg>`;
-const COLORS = ["cyan", "violet", "amber", "pink", "slate", "green", "blue", "red"];
+// the approved lane colours: no cyan or green swatch (a stored cyan or green still draws)
+const COLORS = ["violet", "amber", "pink", "slate", "blue", "red"];
 const SHAPES: Array<[string, string]> = [["linear", "Linear"], ["equal-power", "Equal power"], ["s-curve", "S-curve"], ["exponential", "Exponential"], ["logarithmic", "Logarithmic"]];
 const TYPES: Array<[string, string]> = [["", "Not set"], ["dialogue", "Dialogue"], ["music", "Music"], ["effects", "Effects"], ["ambience", "Ambience"]];
 
