@@ -1,37 +1,67 @@
-/* Preferences (formvis's .cv-prefs-dlg): one dialog, the section rail inside its left edge (formvis floats it outside
- * the frame; inside, the native dialog keeps Escape, focus return and the top layer), the section cards stacked on the
- * right. Every value from a token; the frame, scrim and radius come from form-family.css's dialog rules. */
+/* Preferences, FormVis's SettingsDialog (.cv-prefs-dlg, dialogs.css 151 to 234): the native dialog is the frame (it
+ * keeps Escape, focus return and the top layer); the section rail floats outside it as its own glass column, a wire runs
+ * from the active tab to the port on the frame's left edge at the header divider, the sections are foldable cards in the
+ * one scrolling pane and Done sits in the footer. The frame keeps its size whatever is folded: nothing outside the pane
+ * moves. Every value from a token; the scrim comes from form-family.css's dialog rules. */
 
-dialog.fw-prefs { position: fixed; inset: 0; margin: auto; inline-size: min(860px, calc(100vw - 48px)); block-size: min(86vh, 720px); max-block-size: calc(100vh - 32px); padding: 0; color: var(--text-primary); overflow: hidden; }
-dialog.fw-prefs[open] { display: grid; grid-template-rows: 48px minmax(0, 1fr); }
-.fw-prefs-head { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) 0 var(--space-5); border-block-end: 1px solid var(--line-1); }
-.fw-prefs-title { flex: 1; margin: 0; font-size: var(--fs-16); font-weight: 600; }
-.fw-prefs-done { block-size: 30px; padding: 0 16px; border: 1px solid var(--cta-bg); border-radius: 9px; background: var(--cta-bg); color: var(--cta-text); font: inherit; font-size: var(--fs-13); cursor: pointer; }
+dialog.fw-prefs { position: fixed; inset: 0 0 0 240px; margin: auto; inline-size: min(840px, calc(100vw - 280px)); block-size: min(86vh, 780px); max-inline-size: none; max-block-size: calc(100vh - 32px); padding: 0; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: var(--radius-lg); box-shadow: var(--shadow-window); overflow: visible; }
+dialog.fw-prefs[open] { display: grid; grid-template-rows: 44px minmax(0, 1fr) auto; }
+.fw-prefs-head { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2) 0 var(--space-4); border-block-end: 1px solid var(--border-color); }
+.fw-prefs-headicon { display: inline-flex; flex: none; color: var(--text-secondary); }
+.fw-prefs-title { flex: 1 1 auto; margin: 0; font-size: var(--fs-14); font-weight: 600; }
+.fw-prefs-foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-block-start: 1px solid var(--border-color); }
+.fw-prefs-done { block-size: 30px; padding: 0 16px; border: 1px solid var(--cta-bg); border-radius: var(--radius); background: var(--cta-bg); color: var(--cta-text); font: inherit; font-size: var(--fs-12); font-weight: 500; cursor: pointer; }
 .fw-prefs-done:hover { background: var(--cta-bg-hover); }
-.fw-prefs-body { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-block-size: 0; }
-.fw-prefs-rail { display: flex; flex-direction: column; gap: 2px; padding: var(--space-3) var(--space-2); background: var(--surface-0); border-inline-end: 1px solid var(--line-0); overflow-y: auto; }
-.fw-prefs-tab { display: flex; align-items: center; gap: 10px; flex: none; block-size: 40px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-13); text-align: start; cursor: pointer; }
-.fw-prefs-tab > .icon { flex: none; color: var(--accent-color); }
-.fw-prefs-tab > span:not(.icon) { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fw-prefs-tab:hover { background: var(--surface-1); color: var(--text-primary); }
-.fw-prefs-tab.is-current { border-color: var(--accent-color); background: var(--accent-color); color: var(--text-on-accent); box-shadow: var(--shadow-sm); }
-.fw-prefs-tab.is-current > .icon { color: var(--text-on-accent); }
+.fw-prefs-done:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+.fw-prefs-rail { position: absolute; inset-block-start: 0; inset-inline-end: calc(100% + var(--space-7)); display: flex; flex-direction: column; gap: var(--space-2); inline-size: 232px; max-block-size: 100%; padding: var(--space-2); box-sizing: border-box; background: var(--glass-bg); backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter); border: 1px solid var(--border-light); border-radius: var(--radius-xl); box-shadow: var(--shadow-window); }
+dialog.fw-prefs.is-rail-collapsed .fw-prefs-rail { inline-size: 76px; }
+.fw-prefs-nav { display: flex; flex-direction: column; gap: var(--space-1); flex: 1 1 auto; min-block-size: 0; padding: 6px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-primary); overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
+dialog.fw-prefs.is-rail-collapsed .fw-prefs-nav { align-items: center; }
+.fw-prefs-tab { position: relative; z-index: var(--z-raised); display: flex; align-items: center; gap: 10px; flex: none; inline-size: 100%; block-size: 40px; padding: 0 10px; box-sizing: border-box; border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--bg-tertiary); box-shadow: var(--shadow-sm); color: var(--text-secondary); font: inherit; font-size: var(--fs-12); font-weight: 500; text-align: start; white-space: nowrap; cursor: pointer; }
+.fw-prefs-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+.fw-prefs-tab.is-active { border-color: var(--accent-color); background: var(--accent-color); color: var(--text-on-accent); }
+.fw-prefs-tabicon { display: inline-flex; flex: none; color: var(--accent-color); }
+.fw-prefs-tab.is-active .fw-prefs-tabicon { color: currentColor; }
+.fw-prefs-tablabel { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+dialog.fw-prefs.is-rail-collapsed .fw-prefs-tablabel { display: none; }
+dialog.fw-prefs.is-rail-collapsed .fw-prefs-tab { justify-content: center; inline-size: 44px; block-size: 44px; padding: 0; }
+.fw-prefs-fold { position: relative; z-index: var(--z-raised); flex: none; align-self: stretch; display: inline-flex; align-items: center; justify-content: center; block-size: 40px; padding: 0; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-primary); box-shadow: var(--shadow-sm); color: var(--text-secondary); cursor: pointer; }
+dialog.fw-prefs.is-rail-collapsed .fw-prefs-fold { align-self: center; inline-size: 44px; block-size: 44px; }
+.fw-prefs-fold:hover { background: var(--bg-hover); color: var(--text-primary); }
+.fw-prefs-fold .icon { transition: rotate 180ms ease; }
+dialog.fw-prefs.is-rail-collapsed .fw-prefs-fold .icon { rotate: 180deg; }
+.fw-prefs-fold:focus-visible, .fw-prefs-sechead:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
+.fw-prefs-wire { position: absolute; inset-inline-start: 0; inset-block-start: 0; inline-size: 1px; block-size: 1px; overflow: visible; pointer-events: none; z-index: var(--z-base); }
+.fw-prefs-wire path { fill: none; stroke-linecap: round; }
+.fw-prefs-wire-shade { stroke: var(--prefs-wire-shade); stroke-opacity: 0.45; stroke-width: 6px; transform: translateY(3px); }
+body.theme-light .fw-prefs-wire-shade { stroke-opacity: 0.05; }
+.fw-prefs-wire-line { stroke: var(--text-muted); stroke-width: 2px; }
+.fw-prefs-port { position: absolute; inset-inline-start: -7px; inset-block-start: -7px; inline-size: 14px; block-size: 14px; box-sizing: border-box; border: 2px solid var(--text-muted); border-radius: var(--radius-pill); background: var(--bg-secondary); box-shadow: var(--shadow-sm); pointer-events: none; z-index: var(--z-selected); }
+.fw-prefs-port::after { content: ""; position: absolute; inset: 2px; border-radius: var(--radius-pill); background: var(--text-muted); }
+@media (prefers-reduced-motion: reduce) { .fw-prefs-fold .icon, .fw-prefs-chev { transition: none; } }
+body.animations-disabled .fw-prefs-fold .icon, body.animations-disabled .fw-prefs-chev { transition: none; }
 dialog.fw-prefs::backdrop { background: var(--fw-scrim); backdrop-filter: none; -webkit-backdrop-filter: none; }
-.fw-prefs-x { display: inline-grid; place-items: center; inline-size: 30px; block-size: 30px; border: 1px solid var(--line-2); border-radius: var(--radius); background: transparent; color: var(--text-secondary); cursor: pointer; }
-.fw-prefs-x:hover { background: var(--surface-2); color: var(--text-primary); }
-.fw-prefs-group { margin: var(--space-3) 0 0; font-size: var(--fs-11); font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent-color); }
-.fw-prefs-sec-title { display: flex; align-items: center; gap: var(--space-2); }
-.fw-prefs-sec-title > .icon { color: var(--accent-color); }
+.fw-prefs-x { display: inline-grid; place-items: center; inline-size: 30px; block-size: 30px; border: 1px solid var(--border-light); border-radius: var(--radius); background: transparent; color: var(--text-secondary); cursor: pointer; }
+.fw-prefs-x:hover { border-color: var(--accent-color); color: var(--text-primary); }
+.fw-prefs-group { margin: 0; font-size: var(--fs-11); font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--accent-color); }
+.fw-prefs-groupbox { display: flex; flex-direction: column; gap: var(--space-1); min-inline-size: 0; padding: 12px 14px 14px; border-radius: var(--radius-lg); background: color-mix(in srgb, var(--bg-tertiary) 55%, var(--bg-secondary)); box-shadow: var(--shadow-sm); }
+.fw-prefs-sec { flex: none; border-radius: var(--radius-xl); background: var(--bg-secondary); box-shadow: var(--shadow-md); overflow: hidden; }
+.fw-prefs-sec.is-current { box-shadow: var(--shadow-md), 0 0 0 1px color-mix(in srgb, var(--accent-color) 55%, transparent); }
+.fw-prefs-sechead { display: flex; align-items: center; gap: 10px; inline-size: 100%; padding: 12px 14px; border: 0; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-13); font-weight: 600; text-align: start; cursor: pointer; }
+.fw-prefs-sechead:hover { background: var(--bg-hover); }
+.fw-prefs-secicon { display: inline-flex; flex: none; color: var(--accent-color); }
+.fw-prefs-seclabel { flex: 1 1 auto; }
+.fw-prefs-chev { display: inline-flex; color: var(--text-muted); transition: rotate 160ms ease; }
+.fw-prefs-sec.is-folded .fw-prefs-chev { rotate: -90deg; }
+.fw-prefs-secbody { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; }
+.fw-prefs-secbody[hidden] { display: none; }
 .fw-prefs-note { margin: var(--space-2) 0 0; min-block-size: 16px; font-size: var(--fs-11); color: var(--text-muted); }
 .fw-prefs-key { inline-size: 100%; min-inline-size: 0; block-size: 30px; padding: 0 8px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-field); color: var(--text-primary); font: inherit; font-size: var(--fs-12); }
 .fw-prefs-btn:disabled { opacity: 0.45; cursor: default; }
 .fw-model-row .fw-prefs-row-ctl { flex-wrap: nowrap; }
 .fw-prefs-tab:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
-.fw-prefs-pane { display: flex; flex-direction: column; gap: var(--space-4); min-block-size: 0; padding: var(--space-4) var(--space-5) var(--space-8); overflow-y: auto; overscroll-behavior: contain; }
-.fw-prefs-sec { flex: none; padding: var(--space-2) var(--space-4) var(--space-3); border: 1px solid var(--line-1); border-radius: 12px; background: var(--bg-secondary); box-shadow: var(--shadow-sm); scroll-margin-block-start: var(--space-4); }
-.fw-prefs-sec-title { margin: var(--space-2) 0 var(--space-1); font-size: var(--fs-14); font-weight: 600; }
-.fw-prefs-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 44%); align-items: center; gap: var(--space-4); min-block-size: 44px; padding-block: var(--space-2); border-block-start: 1px solid var(--line-0); }
-.fw-prefs-sec-title + .fw-prefs-row { border-block-start: 0; }
+.fw-prefs-pane { display: flex; flex-direction: column; gap: var(--space-3); min-block-size: 0; padding: var(--space-3) var(--space-4) var(--space-4); box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; background: var(--bg-primary); }
+.fw-prefs-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 46%); align-items: center; column-gap: 12px; min-block-size: 38px; padding-block: 4px; }
 .fw-prefs-row-text { display: grid; gap: 2px; min-inline-size: 0; }
 .fw-prefs-row-label { font-size: 12.5px; color: var(--text-primary); }
 .fw-prefs-row-hint { font-size: var(--fs-11); line-height: 1.4; color: var(--text-muted); }
@@ -53,8 +83,10 @@ dialog.fw-prefs::backdrop { background: var(--fw-scrim); backdrop-filter: none; 
 .fw-prefs-slide input[type="range"] { min-inline-size: 0; accent-color: var(--accent-color); }
 .fw-prefs-slide .fw-prefs-num input { inline-size: 64px; }
 .fw-prefs-slide input:disabled, .fw-prefs-row-ctl select:disabled { opacity: 0.45; }
-.fw-prefs-themes { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2); inline-size: 100%; }
-.fw-theme-swatch { display: grid; place-items: center; aspect-ratio: 1; min-inline-size: 0; padding: 0; border: 2px solid transparent; border-radius: var(--radius-md); background: transparent; cursor: pointer; }
+.fw-prefs-themes { display: grid; grid-template-columns: repeat(auto-fill, 32px); gap: var(--space-2); inline-size: 100%; }
+.fw-prefs-row:has(.fw-prefs-themes) { grid-template-columns: minmax(0, 1fr); row-gap: var(--space-2); }
+.fw-prefs-row:has(.fw-prefs-themes) .fw-prefs-row-ctl { justify-content: flex-start; }
+.fw-theme-swatch { display: grid; place-items: center; inline-size: 32px; block-size: 32px; min-inline-size: 0; padding: 0; border: 2px solid transparent; border-radius: var(--radius); background: transparent; cursor: pointer; }
 .fw-theme-swatch > i { display: block; inline-size: 100%; block-size: 100%; border: 1px solid var(--line-2); border-radius: calc(var(--radius-md) - 2px); background: linear-gradient(135deg, var(--sw-a) 0 50%, var(--sw-b) 50% 100%); box-shadow: inset 0 0 0 5px var(--sw-a), inset 0 -6px 0 5px var(--sw-c); opacity: 0.95; }
 .fw-theme-swatch:hover { border-color: var(--line-3); }
 .fw-theme-swatch[aria-checked="true"] { border-color: var(--accent-color); }
@@ -64,8 +96,11 @@ dialog.fw-prefs::backdrop { background: var(--fw-scrim); backdrop-filter: none; 
 .fw-prefs-zooms input::-webkit-inner-spin-button { appearance: none; margin: 0; }
 .fw-prefs-zooms input:focus { border-color: var(--accent-color); outline: none; }
 .fw-prefs-state { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-11); color: var(--text-muted); }
-@media (max-width: 900px) {
-  .fw-prefs-body { grid-template-columns: 64px minmax(0, 1fr); }
-  .fw-prefs-tab { justify-content: center; padding: 0; }
-  .fw-prefs-tab > span:not(.icon) { display: none; }
-}
+/* the switch of FormVis's toggleRow, drawn on the native checkbox (still the same input, keyboard and all) */
+.fw-prefs-check input[type="checkbox"] { appearance: none; -webkit-appearance: none; position: relative; flex: none; inline-size: 36px; block-size: 20px; margin: 0; border-radius: var(--radius-pill); background: var(--border-light); cursor: pointer; transition: background 140ms ease; }
+.fw-prefs-check input[type="checkbox"]::after { content: ""; position: absolute; inset-block-start: 2px; inset-inline-start: 2px; inline-size: 16px; block-size: 16px; border-radius: var(--radius-pill); background: var(--text-primary); box-shadow: var(--shadow-sm); transition: translate 140ms ease; }
+.fw-prefs-check input[type="checkbox"]:checked { background: var(--accent-color); }
+.fw-prefs-check input[type="checkbox"]:checked::after { translate: 16px 0; background: var(--text-on-accent); }
+.fw-prefs-check input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-color-dim); outline-offset: 2px; }
+.fw-prefs-check input[type="checkbox"]:disabled { opacity: 0.45; cursor: default; }
+body.animations-disabled .fw-prefs-check input[type="checkbox"], body.animations-disabled .fw-prefs-check input[type="checkbox"]::after { transition: none; }

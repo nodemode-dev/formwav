@@ -152,9 +152,20 @@ def acestep_generate(body: dict = Body(...)) -> dict:
 # Models on this machine, installed on request into their own runtime: Kokoro, Pocket TTS and Chatterbox (from formcut), and the trained speech, music and effects separator (TIGER)
 @router.get("/providers/local-speech")
 def local_speech_status() -> dict:
-    from ..services import acestep_local, local_sfx, local_speech, singing, tiger_dnr
+    from ..services import acestep_local, local_sfx, local_speech, model_sizes, singing, tiger_dnr
 
-    return {"engines": [*local_speech.status(), tiger_dnr.status(), local_sfx.status(), acestep_local.status(), singing.status()]}
+    engines = [*local_speech.status(), tiger_dnr.status(), local_sfx.status(), acestep_local.status(), singing.status()]
+    return {"engines": [_with_download(model_sizes, e["id"], e, e["id"]) for e in engines]}
+
+
+def _with_download(model_sizes, model: str, item: dict, owner: str) -> dict:
+    """The row with what its install downloads and should take (services/model_sizes.py), and a running download's
+    bytes done, total and time left."""
+    busy = str(item.get("installing", "")).startswith("installing")
+    if not busy:
+        model_sizes.finished(owner)
+    extra = {"download": model_sizes.facts(model)} if model in model_sizes.TABLE else {}
+    return {**item, **extra, "progress": model_sizes.progress(owner) if busy else None}
 
 
 @router.post("/providers/local-speech/{engine}/install", status_code=202)
@@ -216,9 +227,12 @@ def local_voice_changer(body: dict = Body(...)) -> dict:
 # Dubbing on this machine (PLAN_v11 2.M5): Whisper, Argos Translate's models through CTranslate2, Kokoro
 @router.get("/providers/local-dub")
 def local_dub_status() -> dict:
-    from ..services import local_dub
+    from ..services import local_dub, model_sizes
 
-    return local_dub.status()
+    found = local_dub.status()
+    if isinstance(found.get("languages"), list):
+        found = {**found, "languages": [_with_download(model_sizes, "dub", l, f"dub:{l['code']}") for l in found["languages"]]}
+    return found
 
 
 @router.post("/providers/local-dub/{lang}/install", status_code=202)

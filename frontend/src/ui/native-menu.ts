@@ -4,7 +4,7 @@ import { commands } from "./commands";
 /**
  * formwav's menus in the macOS menu bar, as the desktop app on a Mac shows them (the owner's decision for the form
  * family, built the way formvis's native-menu.ts does): an application menu first (About, Preferences, Hide, Quit, which
- * the shell builds), then File, Edit, View, Track, Clip, Event, Transport, Extensions and Settings. The page's menu
+ * the shell builds), then File, Edit, View, Track, Clip, Event, Transport, Extensions, Settings and Help. The page's menu
  * pops are the one list: the system menu is described from them, item by item, so the two never differ in labels,
  * order, separators, shortcuts, tick marks or what is enabled. The shell receives labels, ids and shortcuts and builds
  * the menu itself (set_menu); a click comes back as the id of the item, which is its place in its pop, and clicks that
@@ -25,7 +25,7 @@ const GLYPHS: Record<string, string> = { "⌘": "CmdOrCtrl", "⇧": "Shift", "�
 const NAMED: Record<string, string> = { Space: "Space", Enter: "Enter", Tab: "Tab", Delete: "Delete", Backspace: "Backspace", Esc: "Escape" };
 // the keys the system's Edit menu owns, so the menu bar does not take them from a text field
 const EDIT_KEYS = new Set(["CmdOrCtrl+A", "CmdOrCtrl+C", "CmdOrCtrl+V", "CmdOrCtrl+X"]);
-const MENUS = ["File", "Edit", "View", "Track", "Clip", "Event", "Transport", "Extensions", "Settings"];
+const MENUS = ["File", "Edit", "View", "Track", "Clip", "Event", "Transport", "Extensions", "Settings", "Help"];
 
 /** A shortcut as the pops write it (⇧⌘E, ⌥⇧H, ⌘,) as a Tauri accelerator (CmdOrCtrl+Shift+E); null for a bare key or what has no name. */
 export function accelerator(text: string | null | undefined): string | null {

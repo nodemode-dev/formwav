@@ -55,6 +55,7 @@ import { mountThemeMenu } from "./ui/theme-menu";
 import { mountTitleTools } from "./ui/title-tools";
 import { mountNativeMenu } from "./ui/native-menu";
 import { mountHome } from "./ui/home";
+import { mountStartContent } from "./ui/start-content";
 import { mountPreferences } from "./ui/prefs";
 import { desktopReady, mountDesktop } from "./ui/desktop";
 import { mountLanguage, startI18n } from "./ui/i18n";
@@ -202,6 +203,7 @@ if (host) {
   bindInputs(engine); // track inputs live in the session (Track.input)
   mountProjects(host, engine, player);
   mountHome(host, engine); // formvis's Home: at launch with no session, from the brand and View > Home
+  mountStartContent(host, engine); // Home > Start's Demos and Templates, File > New from template, Help > Demos
   mountCloud(host, engine);
   mountRoom(host, engine);
   mountShare(host, engine);

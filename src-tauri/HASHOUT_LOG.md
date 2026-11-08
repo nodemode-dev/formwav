@@ -2,6 +2,12 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### tauri.conf.json, icons/FormWav.icon · the macOS app icon follows light and dark
+- refers-to: tauri.conf.json :: bundle.icon; icons/FormWav.icon/icon.json; icons/FormWav.icon/Assets/light.png, dark.png
+- kind: decision
+
+The family's icon set has a light and a dark FormWav tile, and the dock icon should follow the system's appearance as the page's mark does. `icons/FormWav.icon` is an Icon Composer document: one layer whose image is light.png by default and dark.png for the dark appearance (`image-name-specializations`), with glass, specular and translucency off so the art shows as drawn. The tauri-cli this repo pins (2.12.1, build_macos_app) compiles a `.icon` listed in bundle.icon into Assets.car with actool and names it in Info.plist when actool is version 26 or newer (Xcode 26); on an older Xcode it logs that and leaves the app with icon.icns alone, which stays the icon on macOS before 26. The layers are 1024 px full-bleed squares cut from inside each tile's rim (3.5 percent in from the tile's edge), so the system's own mask draws the corners: dark from the 1024 px art (assets/formwav_icon.png), light from the 256 px kit art (the largest that exists) scaled up. The codegen picks the window icon by file suffix (.png, .icns, .ico), so the folder entry changes nothing there; cargo check passes. Not run here: the macOS build (Linux container).
+
 ### src/menu.rs, build.rs, capabilities/default.json, src/traffic_lights.rs, ../frontend/public/splash.html · the system menu bar from the page's menus, a 38 px title row, the Starting FormWav splash (v2.25.0)
 - refers-to: src/menu.rs :: Entry, entry, with_menus, set_menu, application_menu; build.rs :: APP_COMMANDS; capabilities/default.json :: allow-set-menu; src/traffic_lights.rs :: ROW
 - kind: decision

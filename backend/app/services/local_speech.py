@@ -181,8 +181,10 @@ def install(engine: str) -> dict:
                     if not (_models() / name).exists():
                         _installing[engine] = f"installing: downloading {name}"
                         tmp = _models() / f".{name}.part"
+                        from . import model_sizes
+
                         with urllib.request.urlopen(url, timeout=600) as res, open(tmp, "wb") as out:
-                            shutil.copyfileobj(res, out)
+                            model_sizes.copy(res, out, "kokoro")   # progress for Preferences, and the measured speed
                         import hashlib
 
                         with open(tmp, "rb") as got:

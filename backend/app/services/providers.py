@@ -78,6 +78,11 @@ def _http(method: str, url: str, headers: dict[str, str], body: bytes | None = N
 
 
 def _ok(provider: str, status: int, raw: bytes) -> bytes:
+    key = secrets.PROVIDER_KEY.get(provider)
+    if key and status in (401, 403):
+        secrets.refused(key)   # Preferences shows the key refused until it is replaced or cleared
+    elif key and status < 400:
+        secrets.accepted(key)
     if status >= 400:
         raise ProviderError(502, f"{provider} answered {status}: {raw[:300].decode(errors='replace')}")
     return raw

@@ -4,11 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FormWav</title>
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-light-32.png" media="(prefers-color-scheme: light)">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
 html, body { background: #111111; margin: 0; padding: 0; }
-#app { visibility: hidden; }
+/* a fixed full-window app: the document never scrolls or bounces (the macOS web view rubber-bands the root otherwise);
+   only inner panes scroll */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+#app { height: 100%; overflow: clip; visibility: hidden; }
 body.app-ready #app { visibility: visible; }
 </style>
 <script>
@@ -63,6 +67,17 @@ body.app-ready #app { visibility: visible; }
   root.style.setProperty('--accent-intensity', String(intensity));
   /* the critical inline style paints html with the profile background */
   root.style.background = p[0];
+  /* The desktop app on a Mac (Tauri injects __TAURI_INTERNALS__ before any page script): the menus are the system
+     menu bar's and the title bar is the window's, so both classes are on before the first paint and the in-window menu
+     row never draws (desktop.ts sets the same classes again, the same test). */
+  try {
+    if (window.__TAURI_INTERNALS__ && (/Mac/.test(navigator.platform) || /Mac/.test(navigator.userAgent))) root.classList.add('has-overlay-titlebar', 'has-native-menus');
+  } catch (e) { /* not the desktop app: the in-window menus stay */ }
+  /* The Start page's side panel width (ui/home.ts keeps it under formwav.homeNavW), so it opens at its width */
+  try {
+    var navW = parseInt(localStorage.getItem('formwav.homeNavW') || '', 10);
+    if (navW >= 180 && navW <= 420) root.style.setProperty('--fw-home-nav-w', navW + 'px');
+  } catch (e) { /* storage blocked: the default width */ }
   if (LIGHT[theme]) {
     root.classList.add('theme-light-pending');
     var apply = function () { if (document.body) { document.body.classList.add('theme-light'); root.classList.remove('theme-light-pending'); return true; } return false; };

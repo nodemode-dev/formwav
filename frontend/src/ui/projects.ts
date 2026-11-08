@@ -210,6 +210,29 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       return "Opened the demo session: 16 bars at 104 BPM; save it to keep it";
     });
   });
+  // Home > Demos and Templates (ui/start-content.ts): a new unsaved session the page builds, through the same guard,
+  // so Save asks for a name and never writes over the demo or the session open before
+  host.addEventListener("fw-load-session", (e) => {
+    const job = (e as CustomEvent<{ name: string; build: () => Promise<SessionDoc>; then?: () => void; pending: string; done: string; failed: string }>).detail;
+    if (unsaved() && !window.confirm("Start a new session? Unsaved changes to the current session will be lost.")) return;
+    void withNotice(job.pending, async () => {
+      let doc: SessionDoc;
+      try {
+        doc = await job.build();
+      } catch (err) {
+        return `${job.failed}: ${reason(err)}`;
+      }
+      player.stop();
+      engine.loadDocument(doc);
+      job.then?.();
+      lastSaved = engine.get("document");
+      known = null;
+      savedAt = null;
+      writeState();
+      if (nameField && nameField.value !== job.name) nameField.value = job.name;
+      return job.done;
+    });
+  });
   const startNew = () => {
     if (unsaved() && !window.confirm("Start a new session? Unsaved changes to the current session will be lost.")) return;
     player.stop();

@@ -1,13 +1,26 @@
 /* Home (formvis's .cv-home, adapted to formwav): a page over the workspace between the title bar and the transport,
  * under the menus; built once, shown by [hidden]. Every value from a token. */
 
-.fw-home { position: fixed; inset: var(--fw-titlebar-h) 0 var(--cv-foot-h) 0; z-index: calc(var(--z-menu) - 1); display: grid; grid-template-columns: 232px minmax(0, 1fr); background: var(--group-head); color: var(--text-primary); }
+/* The whole window under the title bar (the title bar stays: traffic lights, drag region, caption buttons, and the
+ * menus on Windows and Linux), opaque, above every editor layer (the transport, the status bar, the floating panels at
+ * --z-companion); the title bar is raised over it (below) so its menus still open over Home. */
+.fw-home { position: fixed; inset: var(--fw-titlebar-h) 0 0 0; z-index: var(--z-taskbar); display: grid; grid-template-columns: var(--fw-home-nav-w, 232px) 6px minmax(0, 1fr); background: var(--group-head); color: var(--text-primary); }
 .fw-home[hidden] { display: none; }
-/* The narrow rail: 49 px of icons; the edge handle sits on the divider and switches it. */
-.fw-home[data-rail="1"] { grid-template-columns: 49px minmax(0, 1fr); }
-.fw-home-edge { position: absolute; inset-block-start: 22px; inset-inline-start: var(--fw-home-rail, 232px); translate: -50% 0; z-index: 1; display: grid; place-items: center; inline-size: 22px; block-size: 22px; padding: 0; border: 1px solid var(--line-2); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-secondary); cursor: pointer; }
-.fw-home[data-rail="1"] .fw-home-edge { --fw-home-rail: 49px; rotate: 180deg; }
-.fw-home-edge:hover { color: var(--text-primary); border-color: var(--accent-color); }
+.fw-shell > .fw-topbar { position: relative; z-index: var(--z-modal); }
+.fw-home-main { grid-column: -2 / -1; }
+/* The side panel's width is dragged on the separator (180 to 420 px, kept under formwav.homeNavW and set before the
+ * first paint by index.html); dragged under 120 px it folds to the narrow rail, 49 px of icons. */
+.fw-home[data-rail="1"] { grid-template-columns: 49px 6px minmax(0, 1fr); }
+.fw-home-resizer { position: relative; min-inline-size: 0; background: var(--surface-0); cursor: col-resize; touch-action: none; }
+.fw-home-resizer::after { content: ''; position: absolute; inset-block: 0; inset-inline-end: 0; inline-size: 1px; background: var(--line-0); transform-origin: right center; transition: background-color var(--transition-fast), transform var(--transition-fast); }
+.fw-home-resizer:hover::after, .fw-home-resizer.is-dragging::after, .fw-home-resizer:focus-visible::after { background: var(--accent-color); transform: scaleX(2); }
+.fw-home-resizer:focus-visible { outline: none; }
+/* The handle: a tab on the separator's outer edge, halfway down, that folds the panel to the rail and back. */
+.fw-home-edge { position: absolute; inset-block-start: 50%; inset-inline-start: calc(var(--fw-home-nav-w, 232px) + 6px); z-index: var(--z-raised); display: inline-flex; align-items: center; justify-content: center; inline-size: 14px; block-size: 56px; margin-block-start: -28px; padding: 0; border: 1px solid var(--line-2); border-inline-start: 0; border-radius: 0 var(--radius-md) var(--radius-md) 0; background: var(--surface-1); color: var(--text-secondary); cursor: pointer; }
+.fw-home[data-rail="1"] .fw-home-edge { inset-inline-start: calc(49px + 6px); }
+.fw-home[data-rail="1"] .fw-home-edge svg { rotate: 180deg; }
+.fw-home-edge:hover { background: var(--surface-raised); color: var(--text-primary); }
+.fw-home-edge:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
 .fw-home-brandtext { display: grid; line-height: 1.15; }
 .fw-home[data-rail="1"] .fw-home-nav { padding-inline: 6px; overflow-x: hidden; }
 .fw-home[data-rail="1"] .fw-home-brandtext,
@@ -72,7 +85,6 @@
 .fw-topbar button.fw-identity:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
 
 @media (max-width: 1100px) {
-  .fw-home { grid-template-columns: 196px minmax(0, 1fr); }
   .fw-home-main { padding: 24px 24px 32px; }
   .fw-home-hero { grid-template-columns: minmax(0, 1fr); }
 }

@@ -41,7 +41,7 @@ def local_dub_remove(lang: str) -> dict:
 
 @router.get("/keys")
 def keys_status() -> dict:
-    return {**secrets.where(), "keys": [{"name": name, "label": label, **secrets.summary(name)} for name, label in secrets.KEYS.items()], "agentModel": secrets.agent_model(), "defaultAgentModel": secrets.DEFAULT_AGENT_MODEL}
+    return {**secrets.where(), "keys": [{"name": name, "label": label, "link": secrets.LINKS.get(name, ""), **secrets.summary(name)} for name, label in secrets.KEYS.items()], "agentModel": secrets.agent_model(), "defaultAgentModel": secrets.DEFAULT_AGENT_MODEL}
 
 
 @router.put("/keys/{name}")
@@ -53,6 +53,8 @@ def keys_save(name: str, body: dict = Body(...)) -> dict:
         raise HTTPException(422, "send the key as value")
     try:
         kept = secrets.put(name, value)
+    except ValueError as err:
+        raise HTTPException(422, str(err)) from err
     except OSError as err:
         raise HTTPException(500, f"the key could not be kept: {err}") from err
     return {"kept": kept, **secrets.summary(name)}

@@ -325,7 +325,9 @@ export function mountEditorLayout(host: HTMLElement, engine: Engine): void {
     setText(card.querySelector(".fw-session-line2"), `${media === 1 ? "1 media file" : `${media} media files`}, ${(doc.sampleRate / 1000).toFixed(doc.sampleRate % 1000 ? 1 : 0)} kHz`);
     setText(foot.querySelector(".fw-media-count"), media === 1 ? "1 item" : `${media} items`);
   };
-  engine.subscribe("document", cardText);
+  // a session that loads (open, demo, template, new) has its name set just after the document, in the same task:
+  // read both once that task is done, still before the frame is painted
+  engine.subscribe("document", () => queueMicrotask(cardText));
   nameInput?.addEventListener("input", cardText);
   if (nameInput) new MutationObserver(cardText).observe(nameInput, { attributes: true, attributeFilter: ["value"] });
   cardText();

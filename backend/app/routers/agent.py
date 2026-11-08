@@ -57,6 +57,10 @@ async def agent_step(request: Request) -> dict:
         status, raw = await asyncio.to_thread(_post, f"{base}/v1/messages", payload, key)
     except (urllib.error.URLError, TimeoutError, OSError) as err:
         raise HTTPException(502, f"The model service could not be reached: {err}") from err
+    if status in (401, 403):
+        secrets.refused("ANTHROPIC_API_KEY")   # Preferences shows the key refused until it is replaced or cleared
+    elif status < 400:
+        secrets.accepted("ANTHROPIC_API_KEY")
     if status >= 400:
         raise HTTPException(502, f"The model service answered {status}: {raw[:300].decode(errors='replace')}")
     return json.loads(raw)

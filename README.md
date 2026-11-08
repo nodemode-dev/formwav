@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="assets/app-icon/formwav-256.png" width="128" height="128" alt="FormWav icon: the f-note on a dark tile with a waveform running through it">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/app-icon/formwav-256.png">
+    <img src="assets/app-icon/formwav-light-256.png" width="128" height="128" alt="FormWav icon: the f-note with a waveform running through it, on a dark tile in dark mode and a light tile in light mode">
+  </picture>
 </p>
 
 <h1 align="center">FormWav</h1>
@@ -11,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 2.25.0" src="https://img.shields.io/badge/version-2.25.0-eef0f4?style=flat-square">
+  <img alt="version 2.26.0" src="https://img.shields.io/badge/version-2.26.0-eef0f4?style=flat-square">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript-Vite-3178c6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Python and FastAPI" src="https://img.shields.io/badge/Python-FastAPI-009688?style=flat-square">
   <img alt="Rust audio core" src="https://img.shields.io/badge/Rust-audio%20core-b7410e?style=flat-square">
@@ -26,9 +29,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/formwav-hero.jpg" alt="FormWav with a Final scene session: Dialogue and Music tracks drawn as waveforms, the effects browser on the left, and a Compressor and De-Esser chain with knobs on the Effects tab below" width="100%">
+  <img src="docs/images/formwav-hero.webp" alt="FormWav on macOS with the Produce demo open: Score, Texture, Keys, Drums, Bass and Perc tracks at 130 BPM with section markers, the media list on the left and the Clip, Effects, Repair and Agent inspector on the right" width="100%">
   <br>
-  <sub>A dialogue and music scene with a compressor and de-esser chain on the voice track.</sub>
+  <sub>The Produce demo: 32 bars at 130 BPM with stems, loops and section markers.</sub>
 </p>
 
 <p align="center">
@@ -66,16 +69,30 @@
 <table>
   <tr>
     <td width="50%" valign="top">
-      <img src="docs/images/formwav-clip.png" alt="The pad clip selected on the timeline, with its name, start, length, gain, fades and sound type in the Clip tab" width="100%">
-      <br><sub>A selected clip and its settings in the Clip tab.</sub>
-      <h3>Clips you can shape</h3>
-      Set gain, fades and their curve, split at the playhead, normalize, or run the repair assistant on a clip.
+      <img src="docs/images/formwav-start.webp" alt="The Start page with the Mix, Repair and Produce demos drawn from their own waveforms, and seven session templates" width="100%">
+      <br><sub>Start: three demos and seven templates.</sub>
+      <h3>Demos and templates on Start</h3>
+      Open the Mix, Repair or Produce demo as a new unsaved session with its recordings, or start from a Podcast, Voice-over, Music, Audio repair, Dub and ADR, Sound design or Blank stereo template with its tracks, buses and effects set up. File > New from template and Help > Demos reach the same.
     </td>
     <td width="50%" valign="top">
-      <img src="docs/images/formwav-spectrogram.png" alt="The four tracks drawn as spectrograms with a frequency ruler, over the mixer" width="100%">
-      <br><sub>The same four stems as spectrograms.</sub>
-      <h3>See the sound</h3>
-      Switch clips to spectrograms, select a box, lasso or brush stroke of sound, and heal it in one undo step.
+      <img src="docs/images/formwav-mix.webp" alt="The Mix demo: five tracks, the launch radio clip drawn as a spectrogram and the narration takes as waveforms" width="100%">
+      <br><sub>The Mix demo, with one clip shown as a spectrogram.</sub>
+      <h3>Clips you can shape, sound you can see</h3>
+      Set gain, fades and their curve, split at the playhead, normalize, or switch a clip to a spectrogram, select a box, lasso or brush stroke of sound, and heal it as a separate step.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/formwav-models.webp" alt="Preferences with the section rail floating beside the dialog and wired to it, open at Models on this computer: each model with its download size, the time it takes at 50 and 200 Mbit/s, Install and Remove" width="100%">
+      <br><sub>Preferences, open at Models on this computer.</sub>
+      <h3>Models you can size up first</h3>
+      Every local model shows its download size and about how long it takes before you install it, then its progress and the space installed models take. API keys stay in the system password store, as in the rest of the Form family.
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/formwav-start-light.webp" alt="The Start page in the light theme with the light FormWav icon" width="100%">
+      <br><sub>Start in the light theme.</sub>
+      <h3>One window, light or dark</h3>
+      On macOS the menus are the system menu bar's and the window never scrolls; the Start panel drags to any width. The page and its icon follow the light or dark theme, and so does the dock icon on macOS 26 and later.
     </td>
   </tr>
 </table>
@@ -152,7 +169,7 @@ cd formwav
 ./formwav                # web UI at http://localhost:3060
 ```
 
-On Windows use `formwav_oc_install.bat` and `formwav.bat`. Optional keys (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `FAL_KEY`) are set in Preferences > Keys and Models, which keeps them in the system password store (a file only you can read where there is none); a key in `backend/.env` still works. Preferences > Models on this computer installs, removes and measures the models the engine runs here, and opens their folder.
+On Windows use `formwav_oc_install.bat` and `formwav.bat`. Optional keys (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `FAL_KEY`) are set in Preferences > Keys and Models, which keeps them in the system password store (a file only you can read where there is none); a key in `backend/.env` or the environment comes first, as in FormVis, and the row says so. Preferences > Models on this computer installs, removes and measures the models the engine runs here, shows each one's download size and about how long it takes before you install it, and opens their folder.
 
 > **Status:** in development. The Windows scripts are written but not run on Windows, and the models run against stand-ins here; the reasoning and the gaps are kept in [`backend/HASHOUT_LOG.md`](backend/HASHOUT_LOG.md).
 

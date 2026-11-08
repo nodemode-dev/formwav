@@ -3,6 +3,7 @@ import { listProjects, type ProjectSummary } from "../io/projects-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { icon as fvIcon } from "../vendor/formvis/icons";
 import { icon, ICON_SIZE } from "./icons";
+import { START_CONTENT_HTML } from "./start-content";
 
 const AT_LAUNCH = "formwav.homeAtLaunch";
 const FORMATS = ["WAV", "AIFF", "FLAC", "MP3", "M4A", "OGG", "MIDI", "FMW"];
@@ -25,7 +26,7 @@ export function setHomeAtLaunch(on: boolean): void {
 
 export const HOME_HTML = `<section class="fw-home" aria-label="Home" hidden>
   <nav class="fw-home-nav" aria-label="Home pages">
-    <div class="fw-home-brand"><span class="fw-home-logo"><img src="/logo-64.png" width="24" height="24" alt="" draggable="false"></span><span class="fw-home-brandtext"><b translate="no">FormWav</b><span class="fw-home-by">by nodemode.ai</span></span></div>
+    <div class="fw-home-brand"><span class="fw-home-logo"><img class="fw-mark-dark" src="/logo-64.png" width="24" height="24" alt="" draggable="false"><img class="fw-mark-light" src="/logo-light-64.png" width="24" height="24" alt="" draggable="false"></span><span class="fw-home-brandtext"><b translate="no">FormWav</b><span class="fw-home-by">by nodemode.ai</span></span></div>
     <div class="fw-home-group">
       <button type="button" class="fw-home-item is-active" data-home-page="start">${fvIcon("menu", 16)}<span>Start</span></button>
       <button type="button" class="fw-home-item" data-home-page="recent">${fvIcon("history", 16)}<span>Recent</span><span class="fw-home-count" data-home-count translate="no"></span></button>
@@ -44,6 +45,7 @@ export const HOME_HTML = `<section class="fw-home" aria-label="Home" hidden>
       <button type="button" class="fw-home-item" data-home-act="help">${fvIcon("info", 16)}<span>Keyboard shortcuts</span></button>
     </div>
   </nav>
+  <div class="fw-home-resizer" data-home-resizer role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize the side panel" aria-valuemin="180" aria-valuemax="420" aria-valuenow="232"></div>
   <button type="button" class="fw-home-edge" data-home-rail aria-label="Collapse the sidebar" aria-expanded="true" title="Collapse the sidebar">${fvIcon("chevronLeft", 14)}</button>
   <div class="fw-home-main">
     <div class="fw-home-page" data-home-view="start">
@@ -61,6 +63,7 @@ export const HOME_HTML = `<section class="fw-home" aria-label="Home" hidden>
           <button type="button" class="fw-home-btn" data-home-act="new">${fvIcon("newFile", 16)}<span>New session</span><kbd>⌘N</kbd></button>
         </div>
       </div>
+      ${START_CONTENT_HTML}
       <div class="fw-home-section-head"><h2 class="fw-home-section-title">Recent sessions</h2><button type="button" class="fw-home-link" data-home-page="recent">Show all</button></div>
       <div class="fw-home-grid" data-home-recent="6" data-empty="Sessions you save show up here"></div>
     </div>
@@ -167,6 +170,71 @@ export function mountHome(host: HTMLElement, engine: Engine): { show: () => void
   } catch {
     rail(false);
   }
+  // the side panel's width, dragged on the separator or moved by its arrow keys (180 to 420 px, kept under
+  // formwav.homeNavW; index.html sets it on the root before the first paint); under 120 px it folds to the rail
+  const NAV_MIN = 180, NAV_MAX = 420, NAV_FOLD = 120;
+  const root = document.documentElement;
+  const sep = home.querySelector<HTMLElement>("[data-home-resizer]");
+  const navWidth = (): number => parseInt(root.style.getPropertyValue("--fw-home-nav-w"), 10) || 232;
+  const setWidth = (px: number) => {
+    const w = Math.round(Math.max(NAV_MIN, Math.min(NAV_MAX, px)));
+    if (root.style.getPropertyValue("--fw-home-nav-w") !== `${w}px`) root.style.setProperty("--fw-home-nav-w", `${w}px`);
+    sep?.setAttribute("aria-valuenow", String(w));
+  };
+  const keepWidth = () => {
+    try {
+      localStorage.setItem("formwav.homeNavW", String(navWidth()));
+    } catch {
+      /* storage blocked: this visit only */
+    }
+  };
+  sep?.setAttribute("aria-valuenow", String(navWidth()));
+  sep?.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const x0 = e.clientX;
+    const before = navWidth();
+    const start = home.dataset.rail === "1" ? 49 : before;
+    sep.classList.add("is-dragging");
+    sep.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const raw = start + ev.clientX - x0;
+      const fold = raw < NAV_FOLD;
+      if ((home.dataset.rail === "1") !== fold) rail(fold);
+      // folded, the panel keeps the width it had, to open at again
+      setWidth(fold ? before : raw);
+    };
+    const up = () => {
+      sep.classList.remove("is-dragging");
+      sep.removeEventListener("pointermove", move);
+      sep.removeEventListener("pointerup", up);
+      sep.removeEventListener("pointercancel", up);
+      keepWidth();
+    };
+    sep.addEventListener("pointermove", move);
+    sep.addEventListener("pointerup", up);
+    sep.addEventListener("pointercancel", up);
+  });
+  sep?.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 48 : 16;
+    const narrow = home.dataset.rail === "1";
+    if (e.key === "ArrowLeft") {
+      if (narrow) return;
+      if (navWidth() <= NAV_MIN) rail(true);
+      else setWidth(navWidth() - step);
+    } else if (e.key === "ArrowRight") {
+      if (narrow) rail(false);
+      else setWidth(navWidth() + step);
+    } else if (e.key === "Home") {
+      if (narrow) rail(false);
+      setWidth(NAV_MIN);
+    } else if (e.key === "End") {
+      if (narrow) rail(false);
+      setWidth(NAV_MAX);
+    } else return;
+    e.preventDefault();
+    keepWidth();
+  });
   home.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
     if (t.closest("[data-home-rail]")) return rail(home.dataset.rail !== "1");

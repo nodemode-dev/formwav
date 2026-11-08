@@ -12,7 +12,7 @@ import os
 import time
 import urllib.parse
 
-from . import media
+from . import media, secrets
 from .providers import ProviderError, _http, _multipart
 
 TASKS = ("text2music", "cover", "repaint", "lego", "extract", "complete")
@@ -24,7 +24,7 @@ def _base() -> str:
 
 def _headers(extra: dict | None = None) -> dict:
     h = dict(extra or {})
-    key = os.environ.get("ACESTEP_API_KEY", "").strip()
+    key = secrets.get("ACESTEP_API_KEY")   # the environment, else the key set in Preferences
     if key:
         h["Authorization"] = f"Bearer {key}"
     return h

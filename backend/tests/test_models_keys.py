@@ -37,15 +37,19 @@ def data(tmp_path, monkeypatch):
     for name in secrets.KEYS:
         monkeypatch.delenv(name, raising=False)
     secrets._held.clear()
+    secrets._asked.clear()
+    secrets._refused.clear()
     monkeypatch.setattr(secrets, "_store", lambda: None)
     yield tmp_path
     secrets._held.clear()
+    secrets._asked.clear()
+    secrets._refused.clear()
 
 
 def test_a_key_is_kept_in_a_file_only_the_user_reads_and_never_comes_back(client, data):
     got = client.put("/api/keys/FAL_KEY", json={"value": KEY}, headers=H)
     assert got.status_code == 200
-    assert got.json() == {"kept": "file", "set": True, "source": "file", "last4": KEY[-4:]}
+    assert got.json() == {"kept": "file", "set": True, "source": "file", "last4": KEY[-4:], "refused": False, "refusedAt": 0}
     assert KEY not in client.get("/api/keys").text
     path = data / "data" / "keys-file.json"
     assert json.loads(path.read_text()) == {"FAL_KEY": KEY}
@@ -64,7 +68,7 @@ def test_a_key_goes_to_the_system_password_store_when_there_is_one(client, data,
     store = FakeStore()
     monkeypatch.setattr(secrets, "_store", lambda: store)
     got = client.put("/api/keys/ELEVENLABS_API_KEY", json={"value": f" {KEY} "}, headers=H).json()
-    assert got["kept"] == "store" and got["last4"] == KEY[-4:]
+    assert got["kept"] == "system" and got["source"] == "system" and got["last4"] == KEY[-4:]
     assert store.items == {("formwav", "ELEVENLABS_API_KEY"): KEY}
     assert not (data / "data" / "keys-file.json").exists()
     assert KEY not in (data / "data" / "keys.json").read_text()
@@ -74,15 +78,70 @@ def test_a_key_goes_to_the_system_password_store_when_there_is_one(client, data,
     assert store.items == {} and secrets.get("ELEVENLABS_API_KEY") == ""
 
 
-def test_the_environment_still_answers_and_a_saved_key_wins(client, data, monkeypatch):
+def test_the_environment_overrides_a_saved_key_as_formvis_does(client, data, monkeypatch):
+    client.put("/api/keys/ANTHROPIC_API_KEY", json={"value": KEY}, headers=H)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "from-the-env-file")
     listed = {k["name"]: k for k in client.get("/api/keys").json()["keys"]}
-    assert listed["ANTHROPIC_API_KEY"]["source"] == "environment"
+    assert listed["ANTHROPIC_API_KEY"]["source"] == "environment" and listed["ANTHROPIC_API_KEY"]["last4"] == "file"
     assert secrets.get("ANTHROPIC_API_KEY") == "from-the-env-file"
-    client.put("/api/keys/ANTHROPIC_API_KEY", json={"value": KEY}, headers=H)
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
     assert secrets.get("ANTHROPIC_API_KEY") == KEY
     client.delete("/api/keys/ANTHROPIC_API_KEY", headers=H)
-    assert secrets.get("ANTHROPIC_API_KEY") == "from-the-env-file"
+    assert secrets.get("ANTHROPIC_API_KEY") == ""
+
+
+def test_the_key_list_names_every_key_the_engine_sends_with_a_link_to_get_one(client, data):
+    got = client.get("/api/keys").json()
+    listed = {k["name"]: k for k in got["keys"]}
+    assert list(listed) == ["ELEVENLABS_API_KEY", "FAL_KEY", "ANTHROPIC_API_KEY", "ACESTEP_API_KEY"]
+    assert listed["FAL_KEY"]["link"] == "https://fal.ai/dashboard/keys" and listed["ACESTEP_API_KEY"]["link"] == ""
+    assert got["store"] == "file" and not listed["FAL_KEY"]["set"]
+
+
+def test_a_file_key_moves_to_the_password_store_on_first_use(client, data, monkeypatch):
+    client.put("/api/keys/FAL_KEY", json={"value": KEY}, headers=H)
+    store = FakeStore()
+    monkeypatch.setattr(secrets, "_store", lambda: store)
+    assert secrets.summary("FAL_KEY")["source"] == "file" and store.items == {}
+    assert secrets.get("FAL_KEY") == KEY
+    assert store.items == {("formwav", "FAL_KEY"): KEY}
+    assert "FAL_KEY" not in json.loads((data / "data" / "keys-file.json").read_text())
+    assert secrets.summary("FAL_KEY")["source"] == "system"
+
+
+def test_a_key_an_earlier_version_left_in_the_store_is_asked_for_once(data, monkeypatch):
+    store = FakeStore()
+    asked = []
+    real = store.get_password
+    store.get_password = lambda s, n: asked.append(n) or real(s, n)
+    monkeypatch.setattr(secrets, "_store", lambda: store)
+    assert secrets.get("FAL_KEY") == "" and secrets.get("FAL_KEY") == ""
+    assert asked == ["FAL_KEY"]
+    store.items[("formwav", "ELEVENLABS_API_KEY")] = KEY
+    assert secrets.get("ELEVENLABS_API_KEY") == KEY and secrets.summary("ELEVENLABS_API_KEY")["last4"] == KEY[-4:]
+
+
+def test_a_refused_key_shows_refused_until_it_is_replaced_and_the_status_never_asks_the_store(client, data, monkeypatch):
+    from app.services import providers
+
+    client.put("/api/keys/ELEVENLABS_API_KEY", json={"value": KEY}, headers=H)
+    with pytest.raises(providers.ProviderError):
+        providers._ok("ElevenLabs", 401, b"invalid api key")
+    got = {k["name"]: k for k in client.get("/api/keys").json()["keys"]}["ELEVENLABS_API_KEY"]
+    assert got["refused"] is True and got["refusedAt"] > 0
+    client.put("/api/keys/ELEVENLABS_API_KEY", json={"value": KEY[::-1]}, headers=H)
+    assert secrets.summary("ELEVENLABS_API_KEY")["refused"] is False
+    providers._ok("ElevenLabs", 401 - 201, b"{}")
+    assert secrets.summary("ELEVENLABS_API_KEY")["refused"] is False
+    store = FakeStore()
+    store.get_password = lambda s, n: pytest.fail("a status check asked the password store")
+    monkeypatch.setattr(secrets, "_store", lambda: store)
+    client.get("/api/keys")
+
+
+def test_a_key_with_spaces_is_refused_before_it_is_kept(client, data):
+    got = client.put("/api/keys/FAL_KEY", json={"value": "two words"}, headers=H)
+    assert got.status_code == 422 and "fal" in got.json()["detail"]
 
 
 def test_a_key_route_refuses_an_unknown_name_an_empty_value_and_a_local_header_it_lacks(client, data):
@@ -178,3 +237,36 @@ def test_open_folder_makes_the_folder_and_hands_it_to_the_file_manager(client, d
     got = client.post("/api/models/open-folder", headers=H).json()
     assert got == {"opened": str(data / "models")} and (data / "models").is_dir()
     assert opened[0][-1] == str(data / "models") and opened[0][0] == {"darwin": "open", "win32": "explorer"}.get(sys.platform, "xdg-open")
+
+
+def test_every_model_row_carries_its_download_size_and_install_time_from_one_table(client, data, monkeypatch):
+    from app.services import model_sizes
+
+    monkeypatch.setattr(model_sizes, "_torch_present", lambda: False)
+    engines = {e["id"]: e for e in client.get("/api/providers/local-speech").json()["engines"]}
+    assert set(engines) == set(model_sizes.TABLE) - {"dub"}
+    gb = lambda e: engines[e]["download"]["bytes"] / 1e9
+    assert gb("kokoro") == 0.57 and gb("chatterbox") == 7.8 and gb("acestep") == 4.7
+    assert round(gb("soulx-singer"), 2) == 3.72 and round(gb("ezaudio"), 1) == 6.6 and gb("tiger") == 0.917
+    assert engines["pocket"]["download"]["measured"] is False and engines["kokoro"]["download"]["measured"] is True
+    assert engines["acestep"]["download"]["estimates"] == {"50": 752 + 300, "200": 188 + 300}
+    assert engines["tiger"]["progress"] is None
+    monkeypatch.setattr(model_sizes, "_torch_present", lambda: True)
+    shared = {e["id"]: e for e in client.get("/api/providers/local-speech").json()["engines"]}
+    assert shared["soulx-singer"]["download"]["bytes"] == 2_820_000_000 and shared["kokoro"]["download"]["bytes"] == 570_000_000
+    langs = client.get("/api/providers/local-dub").json()["languages"]
+    assert langs and all(l["download"]["bytes"] == 90_000_000 for l in langs)
+
+
+def test_a_download_keeps_its_progress_and_measures_the_speed(data, monkeypatch):
+    import io
+
+    from app.services import model_sizes
+
+    monkeypatch.setattr(model_sizes, "_bps", 0.0)
+    out = io.BytesIO()
+    model_sizes.copy(io.BytesIO(b"x" * (3 << 20)), out, "tiger")
+    got = model_sizes.progress("tiger")
+    assert got["done"] == 3 << 20 and got["total"] == 17_000_000
+    model_sizes.finished("tiger")
+    assert model_sizes.progress("tiger") is None and out.tell() == 3 << 20
