@@ -26,6 +26,14 @@ formwav is running with its window open (the desktop app, or `./formwav` and the
 
 Command ids are the menu and the item's words in kebab case (`track.new-track`, `track.duplicate`, `track.move-up`), plus `session.` and the tool's name in kebab case for each session tool (`session.generate-music`). Never guess an id: list, then describe.
 
+Starting points (all `risky`: they replace the open session, so confirm with the person first, and the window asks before dropping unsaved changes):
+
+| Command | What it does |
+| --- | --- |
+| `demo.open` `{"id": "mix" \| "repair" \| "produce"}` | opens one of the three demos as a new, unsaved session with its recordings: mix, a five-track field report; repair, a noisy 1917 record and three more sources, each with a repair chain; produce, 32 bars at 130 BPM with stems, loops, filter sweeps and a reverb bus |
+| `template.new` `{"id": "podcast" \| "voice-over" \| "music" \| "repair" \| "dub" \| "sound-design" \| "blank"}` | starts a new session from a template: named, coloured tracks, buses, sends and effects made by the session's own commands |
+| `file.new-from-template`, `help.demos`, `help.mix-demo`, `help.repair-demo`, `help.produce-demo` | the menu items: show Home at the templates or the demos, or open that demo |
+
 ## Order of work
 
 1. `formwav_status`, then `formwav_open_session_tools`. If the window is closed, ask the person to open formwav.

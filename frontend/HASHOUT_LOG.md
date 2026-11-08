@@ -267,6 +267,19 @@ the form and reads every row's text, and screenshots of both sections.
 
 ---
 
+## ui/start-content.ts, styles/start-content.css, public/demos/ · Demos and Templates on Start, File > New from template, Help {#start-content}
+
+Asked for: the three demos (demo/ Mix, demos/repair, demos/produce) were browser pages only, not in the app, and Start had no templates. Now:
+
+- `ui/start-content.ts` holds Start's two sections, mounted by home.ts as `START_CONTENT_HTML` (one line in its Start page) and wired by `mountStartContent` from main.ts, so home.ts's side panel and layout stay untouched. Cards reuse the Recent grid's classes (`fw-home-card`, `fw-home-thumb`); clicks are caught on `.fw-start-content` and stopped there, so Home's own handler never sees them. Elements are found by `data-start-demo`, `data-start-template`, `data-start-section`, `data-open-demo` and `data-action`, never by words.
+- Demos open as real sessions: the recordings ship under `frontend/public/demos/<id>/` (Vite copies them into dist; the desktop app serves dist from the engine as FORMWAV_DIST, so the same paths work in the browser and the app). `scripts/demo-media.py` decodes them from the demos' own JavaScript packs (only files their CREDITS.md list) and writes `peaks.json` (48 peaks a file) for the thumbnails. Opening one fetches each file, imports it through `/api/media` at 44.1 kHz and builds the document (tracks, colours, clips, sends to a bus, effects, the Produce demo's tempo, volume lane and low-pass sweeps, markers), loaded through projects.ts's new `fw-load-session` listener: its unsaved-changes guard, a new name, `known = null`, so Save asks for a name and the demo is never written over. The Produce demo's sequencer patterns are made in the browser demo from one-shots and are not carried over; the Perc track uses the two CC0 loops instead.
+- Templates are made by dispatching the reducer's existing commands (add-bus, set-bus-fx, add-track, set-track-color, set-track-gain, set-track-pan, set-track-fx, route-track, set-track-send, set-master-fx, set-tempo) on an empty document; no new command type. Seven: Podcast, Voice-over, Music, Audio repair, Dub and ADR, Sound design and foley, Blank stereo.
+- Thumbnails are inline SVG coloured with `--fw-color-*`: a demo's lanes and clips with their real peaks (patched in when peaks.json arrives, inside the fixed 4:3 box), a template's lanes, insert count and buses. Descriptions clamp to two lines with a reserved height, so cards never change size.
+- File > New from template… and a new Help menu (Demos…, Mix demo, Repair demo, Produce demo) are pops like the others, so `commands.gather` makes them commands and native-menu.ts (Help added to MENUS) puts them in the macOS menu bar. `demo.open {id}` and `template.new {id}` are registered for agents (risky).
+- Strings in 25 languages: `i18n/added/start-content/`.
+
+---
+
 ## ui/editor-layout.ts, ui/toast.ts, styles/editor-family.css, ui/dock.ts, ui/prefs.ts · the editor as approved, toasts, real Preferences controls (v2.25.0) {#editor-family}
 
 ### The editor
