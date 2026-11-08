@@ -217,6 +217,36 @@ The family's icon set has a dark and a light FormWav tile. The page now shows th
 
 ---
 
+## index.html, styles/desktop.css, styles/shell.css, ui/home.ts, styles/home.css · the app shell fixed (unreleased) {#shell-fixes}
+
+### No in-window menu row on the Mac desktop app
+desktop.ts set `has-native-menus` but no rule hid the row, so the menus showed twice (system bar and title bar). Now
+index.html's boot adds `has-overlay-titlebar has-native-menus` before the first paint when `__TAURI_INTERNALS__` is
+present on a Mac (the same test as desktop.ts, which Tauri's injected script makes true before any page script), and
+desktop.css hides `.fw-topbar .fw-tools` under that class. The traffic-light inset is pre-paint too, so nothing moves.
+The pops stay mounted: native-menu.ts describes the system menu from them and clicks them. Windows, Linux and the
+browser keep the row (measured in Chromium with the shell emulated: row hidden, title bar 40 px either way).
+
+### The document never scrolls
+In Chromium nothing was taller than the window (scrollHeight equalled innerHeight on Start and the editor at 1280x800,
+1440x900 and 1024x700, also with the demo open and the dock open); the whole-app movement in the macOS app is the web
+view's root rubber band, which runs even when nothing overflows. html and body are now `overflow: hidden` with
+`overscroll-behavior: none` (inline critical style and shell.css), 100dvh where supported, and `#app` and `.fw-shell`
+are `overflow: clip`, so neither a wheel, a bounce nor a scrollIntoView can move the window's content.
+
+### Start covers the window, its side panel resizes
+Start sat between the title bar and a 58 px foot while the editor's foot is 76 px, so the transport and status bar
+showed under it. It now runs from the title bar to the window's bottom, opaque, at `--z-taskbar` (above the floating
+panels at `--z-companion`); the title bar is raised to `--z-modal` so its menus still open over Start, and it stays
+visible for the traffic lights, drag region, caption buttons and the Windows and Linux menus. The side panel has the
+form family's separator and handle: drag the 6 px separator (180 to 420 px; under 120 px folds to the 49 px rail, which
+keeps the width to open at), arrows on the focused separator (Shift for 48 px, Home and End for the limits), the tab
+handle halfway down folds and unfolds as before. The width is kept under `formwav.homeNavW` and set on the root as
+`--fw-home-nav-w` by index.html's boot, so Start opens at its width. New string: "Resize the side panel"
+(i18n/added/home-resize).
+
+---
+
 ## ui/editor-layout.ts, ui/toast.ts, styles/editor-family.css, ui/dock.ts, ui/prefs.ts · the editor as approved, toasts, real Preferences controls (v2.25.0) {#editor-family}
 
 ### The editor
