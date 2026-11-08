@@ -34,7 +34,8 @@ function shellHtml(): string {
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">File</button>
           <div class="cv-menu fw-menu-pop" role="menu" aria-label="File" hidden>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="new" title="Start an empty session at this session's sample rate (Cmd or Ctrl N)"><span>New session</span><kbd>⌘N</kbd></button>
-            <button class="fw-ibtn" type="button" role="menuitem" data-action="save" title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span><kbd>⌘S</kbd></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="new-from-template" title="Start a new session from a template: podcast, voice-over, music, repair, dub and ADR, sound design or blank"><span>New from template…</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="save"title="Save (Cmd or Ctrl S)">${icon("save", ICON_SIZE.control)}<span>Save</span><kbd>⌘S</kbd></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="save-template" title="Save the tracks, buses, routing, effects and automation without the audio, to start new sessions from"><span>Save as template…</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="revert" title="Open the last saved version again, leaving the changes since"><span>Revert to saved</span></button>
             <button class="fw-ibtn" type="button" role="menuitem" data-action="open" aria-haspopup="dialog" title="Open (Cmd or Ctrl O)">${icon("folderOpen", ICON_SIZE.control)}<span>Open…</span><kbd>⌘O</kbd></button>
@@ -94,6 +95,15 @@ function shellHtml(): string {
         <div class="fw-menu fw-settings-menu">
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Settings</button>
           <div class="cv-menu fw-menu-pop fw-settings-pop" role="menu" aria-label="Settings" hidden></div>
+        </div>
+        <div class="fw-menu">
+          <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">Help</button>
+          <div class="cv-menu fw-menu-pop" role="menu" aria-label="Help" hidden>
+            <button class="fw-ibtn" type="button" role="menuitem" data-action="show-demos" title="Show the demos on Home"><span>Demos…</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-open-demo="mix" title="Open the Mix demo as a new, unsaved session with its recordings"><span>Mix demo</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-open-demo="repair" title="Open the Repair demo as a new, unsaved session with its recordings"><span>Repair demo</span></button>
+            <button class="fw-ibtn" type="button" role="menuitem" data-open-demo="produce" title="Open the Produce demo as a new, unsaved session with its recordings"><span>Produce demo</span></button>
+          </div>
         </div>
       </div>
       <div class="fw-doc">

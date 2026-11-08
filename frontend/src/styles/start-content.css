@@ -1,0 +1,7 @@
+/* Home > Start's Demos and Templates (ui/start-content.ts): the Recent sessions grid's cards, with a drawn preview
+   of the tracks in a fixed 4:3 box and a two-line description, so the cards are the same height before and after the
+   demos' peaks arrive. */
+.fw-start-note { color: var(--text-muted); font-size: var(--fs-12); }
+.fw-start-thumb { padding: var(--space-2); color: var(--text-muted); }
+.fw-start-thumb svg { display: block; inline-size: 100%; block-size: 100%; }
+.fw-start-blurb { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; min-block-size: calc(2 * 1.35em); line-height: 1.35; }

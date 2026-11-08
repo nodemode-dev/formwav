@@ -3,6 +3,7 @@ import { listProjects, type ProjectSummary } from "../io/projects-client";
 import { setText } from "../vendor/nodemode/dom-stable";
 import { icon as fvIcon } from "../vendor/formvis/icons";
 import { icon, ICON_SIZE } from "./icons";
+import { START_CONTENT_HTML } from "./start-content";
 
 const AT_LAUNCH = "formwav.homeAtLaunch";
 const FORMATS = ["WAV", "AIFF", "FLAC", "MP3", "M4A", "OGG", "MIDI", "FMW"];
@@ -62,6 +63,7 @@ export const HOME_HTML = `<section class="fw-home" aria-label="Home" hidden>
           <button type="button" class="fw-home-btn" data-home-act="new">${fvIcon("newFile", 16)}<span>New session</span><kbd>⌘N</kbd></button>
         </div>
       </div>
+      ${START_CONTENT_HTML}
       <div class="fw-home-section-head"><h2 class="fw-home-section-title">Recent sessions</h2><button type="button" class="fw-home-link" data-home-page="recent">Show all</button></div>
       <div class="fw-home-grid" data-home-recent="6" data-empty="Sessions you save show up here"></div>
     </div>
