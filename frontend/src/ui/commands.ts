@@ -109,16 +109,17 @@ export class Commands {
     }
     return { ok: true, results };
   }
-  /** The menu bar's items as commands, by the menu's name and the item's words (Edit > Duplicate is edit.duplicate),
-   *  run by clicking the item as a person would; read once the interface is up. */
+  /** The menu bar's items as commands, by the menu's name and the item's words (Edit > Duplicate is edit.duplicate, or
+   *  the item's own data-cmd, as Settings > Preferences is `settings`), run by clicking the item as a person would;
+   *  read once the interface is up. */
   gather(host: HTMLElement): void {
     for (const pop of host.querySelectorAll<HTMLElement>(".fw-topbar .fw-menu-pop[aria-label]")) {
       const menu = pop.getAttribute("aria-label") ?? "";
       for (const item of pop.querySelectorAll<HTMLElement>('[role^="menuitem"]')) {
         const words = [...item.childNodes].filter((n) => n.nodeName !== "KBD").map((n) => n.textContent ?? "").join(" ").replace(/\s+/g, " ").trim();
         if (!words) continue;
-        const id = `${slug(menu)}.${slug(words)}`;
-        if (!id.split(".")[1] || this.map.has(id)) continue;
+        const id = item.dataset.cmd || `${slug(menu)}.${slug(words)}`;
+        if (this.map.has(id) || (!item.dataset.cmd && !id.split(".")[1])) continue;
         const keys = item.querySelector("kbd")?.textContent?.trim();
         this.add({
           id,

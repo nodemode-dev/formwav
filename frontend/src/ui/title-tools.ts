@@ -14,6 +14,9 @@ export function mountTitleTools(host: HTMLElement): void {
   const toggle = host.querySelector<HTMLButtonElement>('[data-action="theme-toggle"]');
   const search = host.querySelector<HTMLButtonElement>('[data-action="search-commands"]');
   if (search && !search.firstElementChild) search.innerHTML = icon("search", 15);
+  const gear = host.querySelector<HTMLButtonElement>('.fw-title-tools [data-action="settings"]');
+  if (gear && !gear.firstElementChild) gear.innerHTML = icon("settings", 15);
+  gear?.addEventListener("click", () => host.dispatchEvent(new CustomEvent("fw-preferences")));
   let shown = "";
   const paint = () => {
     if (!toggle) return;

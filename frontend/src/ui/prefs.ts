@@ -2,6 +2,8 @@ import { icon as fvIcon } from "../vendor/formvis/icons";
 import { DEFAULT_ACCENT, readChoice, setAccent, setIntensity, setTheme, THEMES } from "../vendor/formvis/themes";
 import { homeAtLaunch, setHomeAtLaunch } from "./home";
 import { language, LANGUAGES, onLanguage, setLanguage } from "./i18n";
+import { modelsMarkup, mountModelsKeys } from "./prefs-models";
+import { CLOCK_MODES, clockMode, setClockMode, type ClockMode } from "./shell";
 
 const MOTION_KEY = "formwav.reduceMotion";
 const SYSTEM_KEY = "formwav.followSystem";
@@ -23,12 +25,19 @@ const write = (key: string, value: string) => {
   }
 };
 
+// FormVis's list of sections (its SettingsDialog), with formwav's own: Models on this computer is the eleventh
 const SECTIONS: [id: string, label: string, icon: string][] = [
   ["general", "General", "settings"],
   ["interface", "Interface", "theme"],
-  ["audio", "Audio", "sliders"],
+  ["workspace", "Workspace", "layers"],
+  ["audio", "Audio and Devices", "sliders"],
+  ["recording", "Recording", "play"],
   ["editing", "Editing", "penTool"],
-  ["agents", "Agents and devices", "link"],
+  ["files", "File Handling", "folder"],
+  ["plugins", "Plugins and Extensions", "plus"],
+  ["keys", "Keys and Models", "lock"],
+  ["models", "Models on this computer", "download"],
+  ["agents", "Agents", "link"],
 ];
 
 const row = (label: string, hint: string, control: string) =>
@@ -55,36 +64,70 @@ export function mountPreferences(host: HTMLElement): void {
     .map(([id, p]) => `<option value="${id}">${p.label}</option>`)
     .join("");
   const langOptions = LANGUAGES.map(([code, name]) => `<option value="${code}">${name}</option>`).join("");
+  const clockOptions = CLOCK_MODES.map((m) => `<option value="${m.id}">${m.label}</option>`).join("");
+  const proxy = (selector: string, label: string) => `<button type="button" class="fw-prefs-btn" data-prefs-click='${selector}'>${label}</button>`;
+  const group = (label: string) => `<h4 class="fw-prefs-group">${label}</h4>`;
+  const extra = modelsMarkup();
   const cards: Record<string, string> = {
     general:
-      row("Home at launch", "Show Home when formwav starts with no session open", check("home", "Show Home at launch")) +
+      group("Startup") +
+      row("Home at launch", "Show Start when formwav starts with no session open", check("home", "Show Start at launch")) +
+      group("Reset") +
       row("Reset all preferences", "Theme, language, layout, recording and every other setting of this window go back to their defaults; sessions are kept", btn("reset", "Reset…")),
     interface:
+      group("Theme") +
       row("Theme", "The colours of every surface", `<select data-pref="theme" aria-label="Theme" translate="no">${themeOptions}</select>`) +
       row("Follow the system", "Switch between the light theme and your dark one with the computer's appearance", check("system", "Follow the system's appearance")) +
       row("Accent colour", "Buttons, selection and focus", `<span class="fw-prefs-accent"><input type="color" data-pref="accent" aria-label="Accent colour">${btn("accent-default", "Default")}</span>`) +
       row("Accent strength", "How strongly the accent tints surfaces", `<input type="range" data-pref="intensity" min="0" max="150" step="5" aria-label="Accent strength">`) +
+      group("Language and motion") +
       row("Language", "The language of the interface; English is the default", `<select data-pref="language" aria-label="Language" translate="no">${langOptions}</select>`) +
-      row("Reduce motion", "Turn off transitions and animations", check("motion", "Reduce motion")),
+      row("Reduce motion", "Turn off transitions and animations", check("motion", "Reduce motion")) +
+      group("Counters") +
+      row("Main counter", "The timebase of the counter and the ruler", `<select data-pref="clock" aria-label="Main counter">${clockOptions}</select>`),
+    workspace:
+      group("Panels") +
+      row("Browser", "The media browser beside the tracks", check("pane-media", "Show the browser")) +
+      row("Editor", "The editor panel under the tracks", check("pane-editor", "Show the editor")),
     audio:
+      group("Output") +
+      row("Output", "Where playback is heard: choose it in the status bar's output menu", "") +
+      group("Input") +
+      row("Recording input", "Each track records from its own input, chosen on the track", ""),
+    recording:
+      group("Timing") +
       row("Recording latency", "How far a take is moved back to line up with what was playing", num("latency", 0, 500, 1, "ms", "Recording latency in milliseconds")) +
       row("Pre-roll", "How long recording rolls before the punch point", num("preroll", 0, 10, 0.5, "s", "Pre-roll in seconds")) +
-      row("Post-roll", "How long a punch keeps rolling after its out point", num("postroll", 0, 10, 0.5, "s", "Post-roll in seconds")) +
-      row("Output", "Where playback is heard: choose it in the status bar's output menu", ""),
+      row("Post-roll", "How long a punch keeps rolling after its out point", num("postroll", 0, 10, 0.5, "s", "Post-roll in seconds")),
     editing:
+      group("Commands") +
       row("Keyboard shortcuts", "Every command with a key, by menu", btn("shortcuts", "Show shortcuts")) +
       row("Commands", "Find and run any command by name (Cmd or Ctrl K)", btn("palette", "Search commands")),
+    files:
+      group("Autosave and recovery") +
+      row("Autosave", "The open session is kept every 30 seconds; after a crash, Recover or Discard is offered at the next start", "") +
+      group("Cloud") +
+      row("Google Drive and Dropbox", "Open a session from, or save it to, your cloud storage", proxy('[data-action="cloud"]', "Cloud…")),
+    plugins:
+      group("Extensions") +
+      row("Reload extensions", "Read the installed and development extensions again", proxy('[data-ext-act="reload"]', "Reload")) +
+      row("Manage in FormPortal", "Install, update and remove extensions in FormPortal", proxy('[data-ext-act="manage"]', "Open FormPortal")),
+    keys: extra.keys,
+    models: extra.models,
     agents:
+      group("Agents") +
       row("Agents", "Connect an AI agent to formwav's MCP server", btn("agents", "Agents…")) +
+      group("Devices") +
       row("Devices on this network", "Pair a phone or tablet as a remote or a microphone; off until you turn it on", btn("devices", "Devices…")),
   };
-  dialog.innerHTML = `<div class="fw-prefs-head"><h2 class="fw-prefs-title">Preferences</h2><button type="button" class="fw-prefs-done" data-prefs-act="done">Done</button></div>
+  dialog.innerHTML = `<div class="fw-prefs-head"><h2 class="fw-prefs-title">Preferences</h2><button type="button" class="fw-prefs-done" data-prefs-act="done">Done</button><button type="button" class="fw-prefs-x" data-prefs-act="done" aria-label="Close" title="Close">${fvIcon("close", 14)}</button></div>
 <div class="fw-prefs-body">
   <nav class="fw-prefs-rail" aria-label="Sections">${SECTIONS.map(([id, label, ic], i) => `<button type="button" class="fw-prefs-tab${i ? "" : " is-current"}" data-prefs-tab="${id}">${fvIcon(ic, 16)}<span>${label}</span></button>`).join("")}</nav>
-  <div class="fw-prefs-pane">${SECTIONS.map(([id, label]) => `<section class="fw-prefs-sec" data-prefs-sec="${id}"><h3 class="fw-prefs-sec-title">${label}</h3>${cards[id]}</section>`).join("")}</div>
+  <div class="fw-prefs-pane">${SECTIONS.map(([id, label, ic]) => `<section class="fw-prefs-sec" data-prefs-sec="${id}"><h3 class="fw-prefs-sec-title">${fvIcon(ic, 16)}<span>${label}</span></h3>${cards[id]}</section>`).join("")}</div>
 </div>`;
   host.append(dialog);
-  const pref = <T extends HTMLElement = HTMLInputElement>(k: string) => dialog.querySelector<T>(`[data-pref="${k}"]`);
+  const modelsKeys = mountModelsKeys(dialog);
+  const pref =<T extends HTMLElement = HTMLInputElement>(k: string) => dialog.querySelector<T>(`[data-pref="${k}"]`);
   const pane = dialog.querySelector<HTMLElement>(".fw-prefs-pane")!;
   const field = (sel: string) => host.querySelector<HTMLInputElement>(sel);
 
@@ -121,11 +164,16 @@ export function mountPreferences(host: HTMLElement): void {
     set("latency", field("[data-latency]")?.value ?? "0");
     set("preroll", field("[data-preroll]")?.value ?? "0");
     set("postroll", field("[data-postroll]")?.value ?? "0");
+    set("clock", clockMode());
+    set("pane-media", host.querySelector('.fw-panel-toggle[data-pane="media"]')?.getAttribute("aria-pressed") === "true");
+    set("pane-editor", host.querySelector('.fw-panel-toggle[data-pane="editor"]')?.getAttribute("aria-pressed") === "true");
   };
   const open = () => {
     sync();
     if (!dialog.open) dialog.showModal();
+    modelsKeys.start();
   };
+  dialog.addEventListener("close", () => modelsKeys.stop());
   const toField = (sel: string, value: string) => {
     const f = field(sel);
     if (!f) return;
@@ -145,6 +193,10 @@ export function mountPreferences(host: HTMLElement): void {
     else if (k === "motion") {
       write(MOTION_KEY, el.checked ? "1" : "0");
       applyMotion();
+    } else if (k === "clock") setClockMode(el.value as ClockMode);
+    else if (k === "pane-media" || k === "pane-editor") {
+      const toggle = host.querySelector<HTMLElement>(`.fw-panel-toggle[data-pane="${k.slice(5)}"]`);
+      if (toggle && (toggle.getAttribute("aria-pressed") === "true") !== el.checked) toggle.click();
     } else if (k === "latency") toField("[data-latency]", el.value);
     else if (k === "preroll") toField("[data-preroll]", el.value);
     else if (k === "postroll") toField("[data-postroll]", el.value);
@@ -161,6 +213,12 @@ export function mountPreferences(host: HTMLElement): void {
     // the pane alone scrolls (scrollIntoView would scroll the dialog's own clipped box too and hide its head)
     const sec = tab ? dialog.querySelector<HTMLElement>(`[data-prefs-sec="${tab}"]`) : null;
     if (sec) return pane.scrollTo({ top: pane.scrollTop + sec.getBoundingClientRect().top - pane.getBoundingClientRect().top - 16 });
+    const proxied = t.closest<HTMLElement>("[data-prefs-click]")?.dataset.prefsClick;
+    if (proxied) {
+      dialog.close();
+      host.querySelector<HTMLElement>(proxied)?.click();
+      return;
+    }
     const act = t.closest<HTMLElement>("[data-prefs-act]")?.dataset.prefsAct;
     if (!act) return;
     if (act === "done") dialog.close();
@@ -199,6 +257,7 @@ export function mountPreferences(host: HTMLElement): void {
   item.type = "button";
   item.setAttribute("role", "menuitem");
   item.dataset.action = "preferences";
+  item.dataset.cmd = "settings"; // the command `settings`: Cmd or Ctrl comma, the gear, the app menu and Start's row run it
   item.title = "Theme, language, recording and every other setting (Cmd or Ctrl comma)";
   item.innerHTML = "<span>Preferences…</span><kbd>⌘,</kbd>";
   host.querySelector(".fw-settings-pop")?.prepend(item);

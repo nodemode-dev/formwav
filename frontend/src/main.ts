@@ -52,6 +52,7 @@ import { mountStatusBar } from "./ui/status-bar";
 import { mountFileMenu } from "./ui/file-menu";
 import { mountThemeMenu } from "./ui/theme-menu";
 import { mountTitleTools } from "./ui/title-tools";
+import { mountNativeMenu } from "./ui/native-menu";
 import { mountHome } from "./ui/home";
 import { mountPreferences } from "./ui/prefs";
 import { desktopReady, mountDesktop } from "./ui/desktop";
@@ -208,6 +209,7 @@ if (host) {
   mountEditing(host, engine, player);
   mountPalette(host, engine); // PLAN_v14 W2: the command registry's palette, Cmd or Ctrl K
   commands.gather(host);
+  mountNativeMenu(host); // macOS: the menus in the system menu bar, built from the pops gathered above
   mountShortcutsPanel(host); // PLAN_v13 S13: View > Keyboard shortcuts, or ?
   mountAutosave(host, engine); // PLAN_v14 W4: unsaved work kept every 30 s and offered back on the next start
 }

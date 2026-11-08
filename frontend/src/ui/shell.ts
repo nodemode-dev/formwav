@@ -29,10 +29,6 @@ function shellHtml(): string {
 <div class="fw-shell">
   <header class="fw-topbar">
     <div class="fw-titlebar-left">
-      <button type="button" class="fw-identity" aria-label="Home" title="Home: start a session or open a recent one">
-        <img class="fw-logo" src="/logo-64.png" width="22" height="22" alt="" draggable="false">
-        <span class="fw-name">formwav</span>
-      </button>
       <div class="fw-tools" role="group" aria-label="Menus">
         <div class="fw-menu">
           <button type="button" class="fw-menu-btn" aria-haspopup="menu" aria-expanded="false">File</button>
@@ -105,9 +101,11 @@ function shellHtml(): string {
         <span class="fw-doc-state" aria-live="polite">Nothing to save yet</span>
       </div>
     </div>
+    <button type="button" class="fw-identity" aria-label="Home" title="Home: start a session or open a recent one"><span class="fw-name" translate="no">FormWav</span></button>
     <div class="fw-topbar-mid"></div>
     <div class="fw-topbar-actions">
       <span class="fw-title-tools" role="group" aria-label="Theme and commands">
+        <button class="fw-tt-btn" type="button" data-action="settings" aria-label="Preferences" title="Preferences (Cmd or Ctrl comma)"></button>
         <button class="fw-tt-btn" type="button" data-action="theme-toggle" aria-label="Switch to a light theme" title="Switch to a light theme"></button>
         <button class="fw-tt-btn" type="button" data-action="search-commands" aria-label="Search commands" title="Search commands (Cmd or Ctrl K)"></button>
       </span>

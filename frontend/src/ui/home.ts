@@ -25,7 +25,7 @@ export function setHomeAtLaunch(on: boolean): void {
 
 export const HOME_HTML = `<section class="fw-home" aria-label="Home" hidden>
   <nav class="fw-home-nav" aria-label="Home pages">
-    <div class="fw-home-brand"><span class="fw-home-logo"><img src="/logo-64.png" width="24" height="24" alt="" draggable="false"></span><span><b>formwav</b> <span class="fw-home-by">by nodemode.ai</span></span></div>
+    <div class="fw-home-brand"><span class="fw-home-logo"><img src="/logo-64.png" width="24" height="24" alt="" draggable="false"></span><span class="fw-home-brandtext"><b translate="no">FormWav</b><span class="fw-home-by">by nodemode.ai</span></span></div>
     <div class="fw-home-group">
       <button type="button" class="fw-home-item is-active" data-home-page="start">${fvIcon("menu", 16)}<span>Start</span></button>
       <button type="button" class="fw-home-item" data-home-page="recent">${fvIcon("history", 16)}<span>Recent</span><span class="fw-home-count" data-home-count translate="no"></span></button>
@@ -44,6 +44,7 @@ export const HOME_HTML = `<section class="fw-home" aria-label="Home" hidden>
       <button type="button" class="fw-home-item" data-home-act="help">${fvIcon("info", 16)}<span>Keyboard shortcuts</span></button>
     </div>
   </nav>
+  <button type="button" class="fw-home-edge" data-home-rail aria-label="Collapse the sidebar" aria-expanded="true" title="Collapse the sidebar">${fvIcon("chevronLeft", 14)}</button>
   <div class="fw-home-main">
     <div class="fw-home-page" data-home-view="start">
       <h1 class="fw-home-title" data-home-greeting>Welcome</h1>
@@ -147,8 +148,28 @@ export function mountHome(host: HTMLElement, engine: Engine): { show: () => void
     delete document.documentElement.dataset.home;
   };
   const proxy = (sel: string) => host.querySelector<HTMLElement>(sel)?.click();
+  // the sidebar narrows to a 49 px rail of icons (kept under formwav.homeRail); the edge handle switches it, in place
+  const rail = (narrow: boolean) => {
+    home.dataset.rail = narrow ? "1" : "0";
+    const edge = home.querySelector<HTMLElement>("[data-home-rail]");
+    const words = narrow ? "Expand the sidebar" : "Collapse the sidebar";
+    edge?.setAttribute("aria-expanded", String(!narrow));
+    edge?.setAttribute("aria-label", words);
+    if (edge) edge.title = words;
+    try {
+      localStorage.setItem("formwav.homeRail", narrow ? "1" : "0");
+    } catch {
+      /* storage blocked: this visit only */
+    }
+  };
+  try {
+    rail(localStorage.getItem("formwav.homeRail") === "1");
+  } catch {
+    rail(false);
+  }
   home.addEventListener("click", (e) => {
     const t = e.target as HTMLElement;
+    if (t.closest("[data-home-rail]")) return rail(home.dataset.rail !== "1");
     const pageBtn = t.closest<HTMLElement>("[data-home-page]");
     if (pageBtn?.dataset.homePage) return page(pageBtn.dataset.homePage);
     const card = t.closest<HTMLElement>(".fw-home-card");

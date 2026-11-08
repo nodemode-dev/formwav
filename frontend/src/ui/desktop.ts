@@ -25,6 +25,19 @@ function call(command: string, args?: Record<string, unknown>): void {
 
 const isMac = (): boolean => /Mac/.test(navigator.platform) || /Mac/.test(navigator.userAgent);
 
+/** The menus live in the macOS system menu bar: only in the desktop app on a Mac (elsewhere, and in a browser, the page keeps its own). */
+export const wantsNativeMenus = (): boolean => internals() !== null && isMac();
+
+/** Hands the shell the page's menus (labels, ids, shortcuts) for the system menu bar; the shell builds them, the page gets no menu API. */
+export function setNativeMenu(menus: unknown[]): void {
+  call("set_menu", { menus });
+}
+
+/** The standard edit action (undo, redo, cut, copy, paste, select-all) to the focused text field, through the shell. */
+export function textEdit(action: string): void {
+  call("text_edit", { action });
+}
+
 const WIN_ICONS = {
   min: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M3.5 8h9"></path></svg>',
   max: '<svg class="fw-cap-max" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.2"></rect></svg>' +
@@ -35,7 +48,7 @@ const WIN_ICONS = {
 const TEXT_EDITS = new Set(["undo", "redo", "cut", "copy", "paste", "select-all"]);
 const NOT_TEXT = new Set(["button", "checkbox", "radio", "range", "color", "file", "submit", "reset", "image"]);
 
-function textFieldFocused(): boolean {
+export function textFieldFocused(): boolean {
   const active = document.activeElement;
   if (active instanceof HTMLTextAreaElement) return !active.readOnly && !active.disabled;
   if (active instanceof HTMLInputElement) return !NOT_TEXT.has(active.type) && !active.readOnly && !active.disabled;
@@ -110,7 +123,7 @@ export function mountDesktop(host: HTMLElement): void {
   const root = document.documentElement;
   const header = host.querySelector<HTMLElement>(".fw-topbar");
   if (isMac()) {
-    root.classList.add("has-overlay-titlebar");
+    root.classList.add("has-overlay-titlebar", "has-native-menus");
     listenMenu(host);
   } else {
     const actions = host.querySelector<HTMLElement>(".fw-topbar-actions");
