@@ -48,6 +48,22 @@ dialog.fw-prefs::backdrop { background: var(--fw-scrim); backdrop-filter: none; 
 .fw-prefs-btn { block-size: 30px; padding: 0 14px; border: 1px solid var(--line-3); border-radius: var(--radius); background: var(--surface-2); color: var(--text-primary); font: inherit; font-size: var(--fs-12); white-space: nowrap; cursor: pointer; }
 .fw-prefs-btn:hover { background: var(--surface-raised); }
 .fw-prefs-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+/* controls built the way FormVis's controls.ts builds them: a swatch for each theme, a slider with its number box */
+.fw-prefs-slide { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); inline-size: 100%; }
+.fw-prefs-slide input[type="range"] { min-inline-size: 0; accent-color: var(--accent-color); }
+.fw-prefs-slide .fw-prefs-num input { inline-size: 64px; }
+.fw-prefs-slide input:disabled, .fw-prefs-row-ctl select:disabled { opacity: 0.45; }
+.fw-prefs-themes { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2); inline-size: 100%; }
+.fw-theme-swatch { display: grid; place-items: center; aspect-ratio: 1; min-inline-size: 0; padding: 0; border: 2px solid transparent; border-radius: var(--radius-md); background: transparent; cursor: pointer; }
+.fw-theme-swatch > i { display: block; inline-size: 100%; block-size: 100%; border: 1px solid var(--line-2); border-radius: calc(var(--radius-md) - 2px); background: linear-gradient(135deg, var(--sw-a) 0 50%, var(--sw-b) 50% 100%); box-shadow: inset 0 0 0 5px var(--sw-a), inset 0 -6px 0 5px var(--sw-c); opacity: 0.95; }
+.fw-theme-swatch:hover { border-color: var(--line-3); }
+.fw-theme-swatch[aria-checked="true"] { border-color: var(--accent-color); }
+.fw-theme-swatch:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.fw-prefs-zooms { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-1); inline-size: 100%; }
+.fw-prefs-zooms input { inline-size: 100%; min-inline-size: 0; block-size: 30px; padding: 0 2px; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--surface-field); color: var(--text-primary); font: inherit; font-size: var(--fs-11); font-variant-numeric: tabular-nums; text-align: center; -moz-appearance: textfield; appearance: textfield; }
+.fw-prefs-zooms input::-webkit-inner-spin-button { appearance: none; margin: 0; }
+.fw-prefs-zooms input:focus { border-color: var(--accent-color); outline: none; }
+.fw-prefs-state { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-11); color: var(--text-muted); }
 @media (max-width: 900px) {
   .fw-prefs-body { grid-template-columns: 64px minmax(0, 1fr); }
   .fw-prefs-tab { justify-content: center; padding: 0; }
