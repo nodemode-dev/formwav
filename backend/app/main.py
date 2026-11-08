@@ -9,7 +9,7 @@ from .core import trust
 from .core.config import cors_origins
 from .core.security import LocalOnly
 from .core.version import VERSION
-from .routers import agent, agents, claude, cloud, extensions, health, remote, room, share, media, midi, native_audio, presets, projects, providers, render, terminal
+from .routers import agent, agents, claude, cloud, extensions, health, remote, room, share, media, midi, models, native_audio, presets, projects, providers, render, terminal
 
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("text/javascript", ".mjs")
@@ -36,6 +36,7 @@ app.include_router(native_audio.router)
 app.include_router(midi.router)
 app.include_router(agent.router, prefix="/api")
 app.include_router(providers.router, prefix="/api")
+app.include_router(models.router, prefix="/api")  # Preferences: remove a model, open the models folder, what they take, the keys
 app.include_router(cloud.router, prefix="/api")  # cloud projects: Google Drive and Dropbox, ported from formcut
 app.include_router(remote.router)  # devices on the local network, paired; ported from formcut (its routes carry /api and /pair)
 remote.resume(app)  # reopen the network listener at start if it was left on

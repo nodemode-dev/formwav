@@ -2,8 +2,9 @@
 
 The open session lives in the browser, so the browser runs the agent's loop and carries out its actions; this route
 only forwards one turn of the conversation (system prompt, messages, tool definitions) to the Anthropic Messages API
-and returns the reply, so the API key stays in the engine (ANTHROPIC_API_KEY in backend/.env) and never reaches the
-page. FORMWAV_AGENT_MODEL picks the model (claude-sonnet-5-5 by default); ANTHROPIC_BASE_URL points it elsewhere
+and returns the reply, so the API key stays in the engine (set in Preferences, or ANTHROPIC_API_KEY in backend/.env)
+and never reaches the page. The model is the one chosen in Preferences, else FORMWAV_AGENT_MODEL (claude-sonnet-5-5 by
+default); ANTHROPIC_BASE_URL points it elsewhere
 (a proxy, or a recording stand-in in tests). Standard library only, in a worker thread, so the engine gains no
 dependency.
 """
@@ -17,6 +18,8 @@ import urllib.error
 import urllib.request
 
 from fastapi import APIRouter, HTTPException, Request
+
+from ..services import secrets
 
 router = APIRouter()
 
@@ -32,18 +35,18 @@ def _post(url: str, payload: dict, key: str) -> tuple[int, bytes]:
 
 @router.post("/agent/step")
 async def agent_step(request: Request) -> dict:
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    key = secrets.get("ANTHROPIC_API_KEY")
     if not key:
         from ..services.providers import env_file
 
-        raise HTTPException(503, f"The agent needs an Anthropic API key: put ANTHROPIC_API_KEY=... in {env_file()} and restart formwav.")
+        raise HTTPException(503, f"The agent needs an Anthropic API key: set it in Preferences, Keys and Models, or put ANTHROPIC_API_KEY=... in {env_file()} and restart formwav.")
     try:
         body = await request.json()
         messages = body["messages"]
     except (ValueError, KeyError, TypeError) as err:
         raise HTTPException(422, "send messages (and optionally system and tools) as the Messages API takes them") from err
     payload = {
-        "model": os.environ.get("FORMWAV_AGENT_MODEL", "claude-sonnet-5-5"),
+        "model": secrets.agent_model(),
         "max_tokens": int(body.get("max_tokens", 2048)),
         "system": str(body.get("system", "")),
         "messages": messages,

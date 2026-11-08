@@ -65,7 +65,7 @@ Run ".venv-package\Scripts\maturin.exe" @("build", "--release", "-m", "..\native
 Run $Py @("-m", "pip", "install", "--force-reinstall", (Get-ChildItem wheels\*.whl | Select-Object -First 1).FullName)
 # PyInstaller's data separator on Windows is ;
 Run ".venv-package\Scripts\pyinstaller.exe" @("--clean", "--noconfirm", "--onefile", "--name", "formwav-engine",
-  "--collect-all", "uvicorn", "--collect-all", "formwav_dsp", "--collect-all", "app", "--hidden-import", "app.main", "--collect-all", "winpty",
+  "--collect-all", "uvicorn", "--collect-all", "formwav_dsp", "--collect-all", "app", "--collect-all", "keyring", "--hidden-import", "app.main", "--collect-all", "winpty",
   "--add-data", "..\frontend\dist;frontend_dist",
   "--add-data", "..\native\formwav-nyquist\runtime;nyquist_runtime",
   "desktop_entry.py")

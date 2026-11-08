@@ -53,7 +53,7 @@ rm -rf wheels && maturin build --release -m ../native/formwav-dsp/Cargo.toml --f
 # version"), so a rebuilt core would not reach the app (the owner's v1.93.0 log)
 pip install --force-reinstall wheels/*.whl
 pyinstaller --clean --noconfirm --onefile --name formwav-engine \
-  --collect-all uvicorn --collect-all formwav_dsp --collect-all app \
+  --collect-all uvicorn --collect-all formwav_dsp --collect-all app --collect-all keyring \
   --hidden-import app.main \
   --add-data "../frontend/dist:frontend_dist" \
   --add-data "../native/formwav-nyquist/runtime:nyquist_runtime" \
