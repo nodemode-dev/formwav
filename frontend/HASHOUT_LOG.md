@@ -206,6 +206,17 @@ prefsCardBody(id) and the `[data-prefs-body]` card bodies let a section module r
 computer now comes before Keys and Models, as in the approved mockup. New strings: Collapse tabs, Expand tabs
 (i18n/added/prefs-rail). The wire shade's black is the new token --prefs-wire-shade.
 
+---
+
+## ui/shell.ts, ui/home.ts, styles/shell.css, index.html · the app icon in light and dark {#icons-light-dark}
+
+- refers-to: src/ui/shell.ts :: the empty stage's mark; src/ui/home.ts :: the Start header's logo; src/styles/shell.css :: .fw-mark-dark, .fw-mark-light; index.html :: the two favicon links; public/logo-light-256.png, logo-light-64.png, favicon-light-32.png; ../assets/app-icon/formwav-512.png, formwav-light-256.png
+- kind: decision
+
+The family's icon set has a dark and a light FormWav tile. The page now shows the light tile in the light themes (light, sand) and the dark one in the rest: both images are in the markup and `body.theme-light` hides one, so switching the theme swaps the picture with no reload, no flash and no layout shift (same box). The favicon follows the system's scheme through two `<link rel=icon media=...>`. The splash stays dark because its own background is dark. The desktop icons in src-tauri/icons were checked against the 1024 px art (assets/formwav_icon.png) and are already it pixel for pixel (premultiplied mean difference 0.0), so they were left as they are; formvis ships one dock icon and so does formwav. The light art exists only at 256 px, so no light 512 was made (no upscaling).
+
+---
+
 ## ui/editor-layout.ts, ui/toast.ts, styles/editor-family.css, ui/dock.ts, ui/prefs.ts · the editor as approved, toasts, real Preferences controls (v2.25.0) {#editor-family}
 
 ### The editor

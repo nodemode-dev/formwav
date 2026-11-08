@@ -46,7 +46,8 @@ It includes third-party components under their own licences:
   stock singers of formwav's singing.
 - Inter and JetBrains Mono fonts, installed through @fontsource: SIL Open Font
   License 1.1 for the fonts, MIT for the packaging. Bundled into the built interface.
-- The formwav logomark and favicons in assets/ and frontend/public/ are the
+- The formwav logomark and favicons in assets/ and frontend/public/, dark and
+  light (the *-light-* files, from the form family's icon set), are the
   project's own artwork.
 - libnyquist and XLISP (Nyquist 3.15 as vendored in the 2.4.2 libnyquist), by
   Roger Dannenberg, Dominic Mazzoni and the Nyquist authors, under Nyquist's

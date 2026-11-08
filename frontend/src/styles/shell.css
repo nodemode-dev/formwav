@@ -74,6 +74,7 @@ html, body, #app { height: 100%; }
 }
 
 .fw-empty-mark { color: var(--accent-color); }
+body:not(.theme-light) .fw-mark-light, body.theme-light .fw-mark-dark { display: none; }
 .fw-empty-title { font-size: var(--fs-18); font-weight: 600; }
 .fw-empty-body { color: var(--text-secondary); line-height: 1.5; }
 
