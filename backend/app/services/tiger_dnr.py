@@ -100,9 +100,10 @@ def status() -> dict:
 def _fetch(url: str, target: Path, sha: str) -> None:
     part = target.with_name(f".{target.name}.part")
     target.parent.mkdir(parents=True, exist_ok=True)
+    from . import model_sizes
+
     with urllib.request.urlopen(url, timeout=600) as res, open(part, "wb") as out:
-        while block := res.read(1 << 20):
-            out.write(block)
+        model_sizes.copy(res, out, model_sizes.target_owner(target))   # progress for Preferences, and the measured speed
     if _sha(part) != sha:
         part.unlink()
         raise RuntimeError(f"{target.name} did not match its pinned checksum")

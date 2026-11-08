@@ -138,6 +138,32 @@ backend/
 
 ---
 
+## services/secrets.py, services/model_sizes.py, routers/models.py, routers/providers.py · keys kept as FormVis keeps them, model downloads sized and timed (unreleased, after v2.25.0) {#keys-formvis-sizes}
+
+Keys: services/secrets.py now follows FormVis's services/secrets.py step for step. The environment comes first (as
+FormVis's fal key does), so a key in backend/.env is shown "set in the environment" and its Clear stays off; before,
+a key saved in Preferences won over it. A key in the file moves to the password store the first time a feature uses
+it, and the file copy goes; a key an earlier version left in the store without a keys.json entry is asked for once a
+session (`_asked`). `put` answers "system" or "file" (FormVis's words; it was "store"), and a summary's source is
+"environment", "system" or "file". A refusal is held as FormVis holds it: a fingerprint of the key with the time,
+set when ElevenLabs, fal (providers._ok) or the Anthropic API (routers/agent.py) answers 401 or 403, lifted by a later
+success, a new key or Clear, and shown in Preferences. A key with spaces or over 512 characters is refused before it
+is kept (422). The list gains ACESTEP_API_KEY (the ACE-Step server's bearer key, which services/acestep.py now reads
+through secrets.get) and /api/keys gives each provider's "Get a key" link.
+
+Model sizes: one table, services/model_sizes.py, holds what each install downloads (the installers' own numbers:
+Kokoro 570 MB, Chatterbox 7.8 GB with PyTorch, ACE-Step 4.7 GB, SoulX-Singer 2.82 GB, EzAudio 2.6 GB with FLAN-T5
+large 3.1 GB, TIGER 17 MB, PyTorch's CPU build 900 MB counted once while the speech runtime lacks it, 90 MB a dubbing
+language; Pocket TTS's 400 MB of weights is an estimate and marked so) and the setup each install spends besides
+downloading (estimated). GET /api/providers/local-speech and /api/providers/local-dub carry it per row as `download`
+(bytes, parts, estimates at 50 and 200 Mbit/s, the measured speed and time once a download measured it), and a
+running install's `progress` (bytes done of the model's own files, time left). The engine's own downloads
+(tiger_dnr._fetch, which ACE-Step and EzAudio share, Kokoro's files and the dubbing models) go through
+model_sizes.copy, which keeps that progress and measures the speed after 4 MB and a second. pip's downloads are not
+counted. Tests: tests/test_models_keys.py.
+
+---
+
 ## services/secrets.py, services/models_disk.py, routers/models.py, services/providers.py, routers/agent.py · keys and models in Preferences (v2.25.0) {#keys-and-models}
 
 ### Keys

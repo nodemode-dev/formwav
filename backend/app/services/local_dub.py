@@ -92,8 +92,10 @@ def install(lang: str) -> dict:
                 with tempfile.TemporaryDirectory() as tmp:
                     pkg = Path(tmp) / "pkg.argosmodel"
                     request = urllib.request.Request(LANGS[lang][3], headers={"User-Agent": f"formwav/{VERSION}"})
+                    from . import model_sizes
+
                     with urllib.request.urlopen(request, timeout=600) as res, open(pkg, "wb") as out:
-                        shutil.copyfileobj(res, out)
+                        model_sizes.copy(res, out, f"dub:{lang}")   # progress for Preferences, and the measured speed
                     import hashlib
 
                     with open(pkg, "rb") as got:
