@@ -247,6 +247,26 @@ handle halfway down folds and unfolds as before. The width is kept under `formwa
 
 ---
 
+## ui/prefs-models.ts, styles/prefs-models.css, i18n/added/prefs-keys-sizes · FormVis's API keys rows, download size and time on each model (unreleased, after v2.25.0) {#prefs-keys-sizes}
+
+The keys rows are FormVis's ApiKeysSection in formwav's row markup: the provider; "Key kept, ends 1234", "(set in the
+environment)" and "Refused by the service: replace it" or "No key"; a password field (placeholder "Paste your key" or
+"Paste a new key to replace it") with a Show button (inline eye, aria-pressed), Save key (the form's submit, so Return
+saves), Get a key (a link, where the provider has a key page) and Clear (off with no key, and for a key in the
+environment). Under the rows, where keys are kept and what the last Save key or Clear did. Four rows now, the ACE-Step
+server's key added. The section's head is "API keys" (was "Keys"); Save and Forget became Save key and Clear.
+
+Each model row gains a line from the engine's one table (services/model_sizes.py): "Download 4.7 GB, about 18 min at
+50 Mbit/s · about 8 min at 200 Mbit/s", or at the measured speed once a download measured it, "(estimated size)" where
+the size was not measured, and while an install downloads "312 of 4700 MB, about 3 min left". The line keeps its
+height when a model is installed (visibility, data-off), so no row shifts. The dubbing rows are built from the same
+row markup. The folder line says "Installed models take". The section's styles are in a sheet of their own, so
+prefs.css (the dialog's chrome) is left alone; its rules pair classes, since it can load before prefs.css. 31 strings
+in 25 languages in i18n/added/prefs-keys-sizes. Checked: tsc, vite build, a Playwright run that saves a key through
+the form and reads every row's text, and screenshots of both sections.
+
+---
+
 ## ui/editor-layout.ts, ui/toast.ts, styles/editor-family.css, ui/dock.ts, ui/prefs.ts · the editor as approved, toasts, real Preferences controls (v2.25.0) {#editor-family}
 
 ### The editor

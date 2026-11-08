@@ -1,0 +1,18 @@
+/* Preferences > Models on this computer and API keys: the inside of their rows (prefs-models.ts). The dialog's frame,
+ * rail and cards are prefs.css's. Every value from a token. */
+
+/* What Install downloads and should take: one line that keeps its height, so a row never shifts as it installs. */
+.fw-model-dl { display: block; min-block-size: 1.4em; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fw-model-dl[data-off="true"] { visibility: hidden; }
+
+/* An API key row: the provider and its state above, the field with Show, Save key, Get a key and Clear below. */
+.fw-prefs-row.fw-key-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+/* class pairs: this sheet can load before prefs.css, so each rule outweighs the one it refines */
+.fw-prefs-row-ctl.fw-key-paste { margin: 0; justify-content: flex-start; flex-wrap: nowrap; }
+.fw-key-paste .fw-prefs-key { flex: 1 1 auto; inline-size: auto; }
+.fw-prefs-btn.fw-key-eye { display: inline-grid; place-items: center; flex: none; inline-size: 30px; padding: 0; color: var(--text-secondary); }
+.fw-key-eye[aria-pressed="false"] [data-eye="slash"] { display: none; }
+.fw-prefs-btn.fw-key-link { display: inline-flex; align-items: center; flex: none; text-decoration: none; box-sizing: border-box; }
+.fw-prefs-btn.fw-key-link[hidden] { display: none; }
+.fw-key-paste > .fw-prefs-btn { flex: none; }
+.fw-key-row [data-k="refused"] { color: var(--danger-text); }
