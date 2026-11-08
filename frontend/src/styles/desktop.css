@@ -6,6 +6,11 @@
    by index.html's boot before the first paint, so it never shows and nothing moves. The pops stay mounted: the system
    menu is described from them and clicks them. */
 .has-native-menus .fw-topbar .fw-tools { display: none; }
+/* With the menus in the system bar, the title row reads as FormVis's: the session at the left, the app's name centred on
+   the window (FormVis's .cv-tb-app), out of the row's flow so nothing beside it moves; it gives way on narrow windows. */
+.has-native-menus .fw-topbar { position: relative; }
+.has-native-menus .fw-topbar > .fw-identity { position: absolute; inset-inline-start: 50%; inset-block-start: 50%; transform: translate(-50%, -50%); max-inline-size: 120px; }
+@media (max-width: 1099px) { .has-native-menus .fw-topbar > .fw-identity { display: none; } }
 
 /* Windows and Linux: caption buttons at the end of the title bar's actions */
 .fw-caption { display: flex; align-items: center; gap: 0; margin-inline-start: var(--space-2); }
