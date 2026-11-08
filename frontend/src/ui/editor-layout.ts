@@ -357,12 +357,19 @@ export function mountEditorLayout(host: HTMLElement, engine: Engine): void {
     else if (act === "lock") run("clip.edit-lock");
     else if (act === "delete") window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
   });
-  const selectedNow = () => !!stage.querySelector('.fw-clip[aria-selected="true"]');
+  // the lanes announce every selection change (fw-selection); watching the whole stage's DOM instead ran on every
+  // meter, clip and playhead mutation while playing and recording
+  let selectedIds: string[] = [];
   const paintActions = () => {
-    const off = !selectedNow();
+    const doc = engine.get("document");
+    const off = !selectedIds.some((id) => doc.tracks.some((t) => t.clips.some((c) => c.id === id)));
     for (const b of actions.querySelectorAll<HTMLButtonElement>("[data-act]")) if (b.disabled !== off) b.disabled = off;
   };
-  new MutationObserver(paintActions).observe(stage, { attributes: true, attributeFilter: ["aria-selected"], subtree: true, childList: true });
+  host.addEventListener("fw-selection", (e) => {
+    selectedIds = (e as CustomEvent<string[]>).detail ?? [];
+    paintActions();
+  });
+  engine.subscribe("document", paintActions);
   paintActions();
 
   // ---- status: what is selected, beside the engine ------------------------------------------------------------------

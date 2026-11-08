@@ -84,6 +84,9 @@
 .fw-tl-head .fw-clock { min-inline-size: 11ch; font-size: 22px; font-weight: 500; letter-spacing: 0.01em; color: var(--text-primary); }
 .fw-tl-head .fw-position-sub { display: flex; align-items: baseline; gap: 6px; font-size: var(--fs-11); color: var(--text-muted); }
 .fw-tl-head .fw-bar-beat::after { content: ","; display: none; }
+/* the bar and beat change while playing: digits of one width and room for "Bar 999, beat 12", so nothing after them moves */
+.fw-tl-head .fw-bar-beat { display: inline-block; min-inline-size: 15ch; font-variant-numeric: tabular-nums; }
+.fw-tl-head .fw-st-length { font-variant-numeric: tabular-nums; }
 .fw-tl-head .fw-musical { display: flex; gap: 14px; padding-inline-start: 4px; }
 .fw-tl-head .fw-mus { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 0; border: 0; background: transparent; line-height: 1.2; text-align: start; }
 .fw-tl-head .fw-mus-label { font-size: var(--fs-11); color: var(--text-muted); }
