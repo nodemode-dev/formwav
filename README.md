@@ -152,7 +152,7 @@ cd formwav
 ./formwav                # web UI at http://localhost:3060
 ```
 
-On Windows use `formwav_oc_install.bat` and `formwav.bat`. Optional keys (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `FAL_KEY`) go in `backend/.env`.
+On Windows use `formwav_oc_install.bat` and `formwav.bat`. Optional keys (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `FAL_KEY`) are set in Preferences > Keys and Models, which keeps them in the system password store (a file only you can read where there is none); a key in `backend/.env` still works. Preferences > Models on this computer installs, removes and measures the models the engine runs here, and opens their folder.
 
 > **Status:** in development. The Windows scripts are written but not run on Windows, and the models run against stand-ins here; the reasoning and the gaps are kept in [`backend/HASHOUT_LOG.md`](backend/HASHOUT_LOG.md).
 
