@@ -254,7 +254,14 @@
 .fw-pane-agent .fw-fx-knobs .fw-knob svg { inline-size: 40px; block-size: 40px; }
 .fw-pane-agent .fw-fx-knobs .fw-knob :is(.fw-knob-value, .fw-knob-label) { max-inline-size: 100%; white-space: nowrap; }
 .fw-pane-agent .fw-fx-card:has(.fw-fx-bypass[aria-pressed="false"]) .fw-fx-knobs { opacity: 0.45; }
-.fw-pane-agent .fw-fx-add { inline-size: auto; flex-direction: row; align-items: center; margin: 10px 12px; }
+.fw-pane-agent .fw-fx-add.fw-fx-add { inline-size: auto; flex-direction: row; align-items: center; margin: 10px 12px; border: 1px dashed var(--line-3); background: transparent; box-shadow: none; color: var(--text-secondary); }
+.fw-pane-agent .fw-fx-add.fw-fx-add:hover { background: transparent; border-color: var(--fw-hue); color: var(--text-primary); }
+/* the app hue marks a live effect: knob arcs and the power toggle (orange stays a highlight) */
+:is(.fw-pane-agent, .fw-dock) .fw-fx-card .fw-knob { color: var(--fw-hue); }
+:is(.fw-pane-agent, .fw-dock) .fw-fx-bypass[aria-pressed="true"] { color: var(--fw-hue); border-color: color-mix(in oklab, var(--fw-hue) 60%, var(--line-2)); background: color-mix(in oklab, var(--fw-hue) 12%, transparent); }
+/* the kit primary: white fill with ink text in dark, ink fill with paper text in light */
+.fw-btn-export, .fw-topbar .fw-btn-export { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg-primary); }
+.fw-btn-export:hover:not(:disabled), .fw-topbar .fw-btn-export:hover:not(:disabled) { background: color-mix(in oklab, var(--text-primary) 85%, var(--bg-primary)); border-color: transparent; }
 .fw-pane-agent > .fw-side-panel { flex: 1 1 auto; min-block-size: 0; overflow: hidden auto; border: 0; background: transparent; }
 .fw-pane-agent > .fw-side-panel.is-off { display: none; }
 .fw-pane-agent > .fw-side-panel[hidden] { display: none; }
@@ -355,7 +362,8 @@
 .fw-toasts {
   position: fixed;
   inset-inline: 0;
-  inset-block-end: 31px;
+  /* above the status bar, the transport and the dock bar, in both themes */
+  inset-block-end: 132px;
   z-index: var(--z-toast);
   /* zero height, growing upward: the layer never changes size, and a toast already shown never moves */
   display: flex;
