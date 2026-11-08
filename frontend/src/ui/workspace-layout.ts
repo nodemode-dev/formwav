@@ -66,7 +66,9 @@ export function mountWorkspaceLayout(host: HTMLElement): void {
     }
     if (auto) writeActive();
   };
-  const agent = ws.querySelector<HTMLElement>(".fw-pane-agent > .fw-agent");
+  // The right column is the inspector (Clip, Effects, Repair, and the agent behind Ask the agent), so it stays; it
+  // closes only through its own toggle
+  const agent = ws.querySelector<HTMLElement>(".fw-pane-agent");
   const shown = (side: Side) => (side === "media" ? layout.showMedia : !!agent && !agent.hidden);
   const clamp = (side: Side, width: number) => {
     const other: Side = side === "media" ? "inspector" : "media";

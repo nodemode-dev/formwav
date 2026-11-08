@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 2.24.1" src="https://img.shields.io/badge/version-2.24.1-eef0f4?style=flat-square">
+  <img alt="version 2.25.0" src="https://img.shields.io/badge/version-2.25.0-eef0f4?style=flat-square">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript-Vite-3178c6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Python and FastAPI" src="https://img.shields.io/badge/Python-FastAPI-009688?style=flat-square">
   <img alt="Rust audio core" src="https://img.shields.io/badge/Rust-audio%20core-b7410e?style=flat-square">
@@ -152,7 +152,7 @@ cd formwav
 ./formwav                # web UI at http://localhost:3060
 ```
 
-On Windows use `formwav_oc_install.bat` and `formwav.bat`. Optional keys (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `FAL_KEY`) go in `backend/.env`.
+On Windows use `formwav_oc_install.bat` and `formwav.bat`. Optional keys (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `FAL_KEY`) are set in Preferences > Keys and Models, which keeps them in the system password store (a file only you can read where there is none); a key in `backend/.env` still works. Preferences > Models on this computer installs, removes and measures the models the engine runs here, and opens their folder.
 
 > **Status:** in development. The Windows scripts are written but not run on Windows, and the models run against stand-ins here; the reasoning and the gaps are kept in [`backend/HASHOUT_LOG.md`](backend/HASHOUT_LOG.md).
 

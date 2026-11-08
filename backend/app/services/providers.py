@@ -12,7 +12,8 @@
   wherever the owner keeps them, never in the repository.
 
 Whatever a provider returns is imported through the media service, so it lands as media like any import (any format
-ffmpeg reads). Keys come from the environment (backend/.env) and never leave the engine. ELEVENLABS_BASE_URL and
+ffmpeg reads). Keys are the ones set in Preferences (services/secrets.py: the system's password store, or a file only
+the user can read) and then the environment (backend/.env); they never leave the engine. ELEVENLABS_BASE_URL and
 FAL_QUEUE_URL point the clients elsewhere (a proxy, or a recording stand-in in tests). Standard library only.
 """
 
@@ -29,7 +30,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-from . import media, provenance
+from . import media, provenance, secrets
 
 LOCAL_FILE = Path(os.environ.get("FORMWAV_MODELS_ROOT", Path(__file__).resolve().parents[2] / "models")).expanduser() / "local_models.json"
 FAL_PRESETS = [
@@ -59,9 +60,9 @@ def env_file() -> str:
 
 
 def _key(name: str, provider: str) -> str:
-    value = os.environ.get(name, "").strip()
+    value = secrets.get(name)
     if not value:
-        raise ProviderError(503, f"{provider} needs a key: put {name}=... in {env_file()} and restart formwav.")
+        raise ProviderError(503, f"{provider} needs a key: set it in Preferences, Keys and Models, or put {name}=... in {env_file()} and restart formwav.")
     return value
 
 
@@ -116,8 +117,8 @@ def providers() -> dict:
     """What can generate here: each provider, whether its key or models are set up, and what it offers."""
     return {
         "providers": [
-            {"id": "elevenlabs", "label": "ElevenLabs", "ready": bool(os.environ.get("ELEVENLABS_API_KEY", "").strip()), "needs": "ELEVENLABS_API_KEY", "offers": ["speech", "voice-changer", "music", "stems", "isolation", "sound-effects", "transcription", "voice-design", "dialogue", "alignment", "dubbing"]},
-            {"id": "fal", "label": "fal", "ready": bool(os.environ.get("FAL_KEY", "").strip()), "needs": "FAL_KEY", "offers": ["music", "audio"], "presets": FAL_PRESETS},
+            {"id": "elevenlabs", "label": "ElevenLabs", "ready": secrets.has("ELEVENLABS_API_KEY"), "needs": "ELEVENLABS_API_KEY", "offers": ["speech", "voice-changer", "music", "stems", "isolation", "sound-effects", "transcription", "voice-design", "dialogue", "alignment", "dubbing"]},
+            {"id": "fal", "label": "fal", "ready": secrets.has("FAL_KEY"), "needs": "FAL_KEY", "offers": ["music", "audio"], "presets": FAL_PRESETS},
             _acestep_entry(),
             {"id": "local", "label": "On this machine", "ready": bool(local_models()), "needs": "backend/models/local_models.json", "offers": ["music", "audio", "speech"], "models": [{k: e.get(k) for k in ("id", "label", "kind", "fields", "license", "source")} for e in local_models()]},
         ],

@@ -471,9 +471,9 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-fade-preview { position: absolute; inset-block: 0; z-index: var(--z-raised); inline-size: 0; pointer-events: none; }
 .fw-fade-preview-in { inset-inline-start: 0; background: linear-gradient(to bottom right, color-mix(in srgb, var(--accent-color) 45%, transparent) 50%, transparent 50%); border-inline-end: 1px solid var(--accent-color); }
 .fw-fade-preview-out { inset-inline-end: 0; background: linear-gradient(to bottom left, color-mix(in srgb, var(--accent-color) 45%, transparent) 50%, transparent 50%); border-inline-start: 1px solid var(--accent-color); }
-.fw-tool-tray[data-tool="split"] ~ .fw-stage .fw-clip, .fw-pane-timeline:has(.fw-tool-tray[data-tool="split"]) .fw-clip { cursor: col-resize; }
-.fw-pane-timeline:has(.fw-tool-tray[data-tool="fade"]) .fw-clip { cursor: ew-resize; }
-.fw-pane-timeline:has(.fw-tool-tray[data-tool="zoom"]) .fw-lane-body, .fw-pane-timeline:has(.fw-tool-tray[data-tool="zoom"]) .fw-clip { cursor: zoom-in; }
+.fw-tool-tray[data-tool="split"] ~ .fw-stage .fw-clip, .fw-workspace:has(> .fw-tool-tray[data-tool="split"]) .fw-clip { cursor: col-resize; }
+.fw-workspace:has(> .fw-tool-tray[data-tool="fade"]) .fw-clip { cursor: ew-resize; }
+.fw-workspace:has(> .fw-tool-tray[data-tool="zoom"]) .fw-lane-body, .fw-workspace:has(> .fw-tool-tray[data-tool="zoom"]) .fw-clip { cursor: zoom-in; }
 .fw-vh { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Editor */

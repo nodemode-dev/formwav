@@ -155,6 +155,12 @@ export function zoomToSpan(doc: SessionDoc, start: number, end: number): void {
   stage.scrollLeft = Math.max(0, start / samplesPerPixel(doc) - 12);
 }
 
+/** A pan as the track head reads it: C in the middle, else the side and how far (0 to 100). */
+function laneDocPan(pan: number): string {
+  const n = Math.round(Math.abs(pan) * 100);
+  return n === 0 ? "C" : `${pan < 0 ? "L" : "R"}${n}`;
+}
+
 function channelLabel(n: number): string {
   return n === 1 ? "mono" : n === 2 ? "stereo" : `${n} channels`;
 }
@@ -505,7 +511,7 @@ function updateFolder(row: HTMLElement, bus: { id: string; name: string }, count
 function laneNode(): HTMLElement {
   const lane = document.createElement("div");
   lane.className = "fw-lane";
-  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-num" aria-hidden="true"></span><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead. Shift-click to arm several tracks at once">R</button><button type="button" class="fw-takes-toggle fw-icon-btn" hidden aria-expanded="false" aria-label="Takes and playlists" title="Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)">${fcIcon("layers")}</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><div class="fw-lane-ms"><button type="button" class="fw-lane-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute this track">M</button><button type="button" class="fw-lane-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo this track">S</button></div><button type="button" class="fw-auto-toggle fw-icon-btn" aria-expanded="false" aria-label="Show automation" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">A</button></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span><span class="fw-auto-fx-head" hidden><select class="fw-auto-fx" aria-label="Effect parameter to automate"></select></span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="fx" data-fx="0" data-key="freq" aria-label="Effect parameter automation" hidden><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-heads" hidden aria-hidden="true"></div><div class="fw-take-rows" hidden></div>`;
+  lane.innerHTML = `<div class="fw-lane-head"><span class="fw-lane-num" aria-hidden="true"></span><span class="fw-lane-name"></span><button type="button" class="fw-arm" aria-pressed="false" aria-label="Arm track for recording" title="Arm this track: recording goes into it at the playhead. Shift-click to arm several tracks at once">R</button><button type="button" class="fw-takes-toggle fw-icon-btn" hidden aria-expanded="false" aria-label="Takes and playlists" title="Show every take and every other playlist as a lane; drag across one to comp that range (a click on a playlist's clip comps the whole clip)">${fcIcon("layers")}</button><span class="fw-lane-meta"></span><div class="fw-lane-meter" aria-hidden="true"><div class="fw-out-track"><div class="fw-out-bar"></div></div><div class="fw-out-track"><div class="fw-out-bar"></div></div></div><div class="fw-lane-ms"><button type="button" class="fw-lane-mute fw-icon-btn" aria-pressed="false" aria-label="Mute" title="Mute this track">M</button><button type="button" class="fw-lane-solo fw-icon-btn" aria-pressed="false" aria-label="Solo" title="Solo this track">S</button></div><button type="button" class="fw-auto-toggle fw-icon-btn" aria-expanded="false" aria-label="Show automation" title="Show volume and pan automation: click a line to add a point, drag to move it, Alt-click to delete it">A</button><div class="fw-lane-mix"><input type="range" class="fw-lane-vol" min="-60" max="12" step="0.1" value="0" data-default="0" aria-label="Volume in dB" title="Volume in dB; double-click resets it"><output class="fw-lane-volval"></output><input type="range" class="fw-lane-pan" min="-1" max="1" step="0.01" value="0" data-default="0" aria-label="Pan, left to right" title="Pan; double-click for the centre"><output class="fw-lane-panval"></output></div></div><div class="fw-lane-body"></div><div class="fw-auto-heads" hidden aria-hidden="true"><span>Volume</span><span>Pan L / R</span><span class="fw-auto-fx-head" hidden><select class="fw-auto-fx" aria-label="Effect parameter to automate"></select></span></div><div class="fw-auto-rows" hidden><div class="fw-auto-row" data-param="volume" aria-label="Volume automation"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="pan" aria-label="Pan automation, left at the top"><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div><div class="fw-auto-row" data-param="fx" data-fx="0" data-key="freq" aria-label="Effect parameter automation" hidden><svg class="fw-auto-svg"><polyline class="fw-auto-line"></polyline><g class="fw-auto-points"></g></svg></div></div><div class="fw-take-heads" hidden aria-hidden="true"></div><div class="fw-take-rows" hidden></div>`;
   return lane;
 }
 
@@ -531,6 +537,22 @@ function updateLane(node: HTMLElement, track: Track, doc: SessionDoc, spp: numbe
   setText(node.querySelector(".fw-lane-num"), String(doc.tracks.findIndex((t) => t.id === track.id) + 1).padStart(2, "0"));
   const laneColor = track.color ? `var(--fw-color-${track.color})` : "";
   if (node.style.getPropertyValue("--fw-lane-color") !== laneColor) node.style.setProperty("--fw-lane-color", laneColor);
+  // the head's volume and pan: shown always, set by a drag (one command when it is let go); a track with automation
+  // reads from it instead, so its faders are left as drawn
+  const vol = node.querySelector<HTMLInputElement>(".fw-lane-vol");
+  const pan = node.querySelector<HTMLInputElement>(".fw-lane-pan");
+  if (vol && document.activeElement !== vol) {
+    const v = String(Math.round(track.gainDb * 10) / 10);
+    if (vol.value !== v) vol.value = v;
+    vol.style.setProperty("--fw-fill", `${((track.gainDb + 60) / 72) * 100}%`);
+  }
+  if (pan && document.activeElement !== pan) {
+    const p = String(track.pan ?? 0);
+    if (pan.value !== p) pan.value = p;
+    pan.style.setProperty("--fw-fill", `${(((track.pan ?? 0) + 1) / 2) * 100}%`);
+  }
+  setText(node.querySelector(".fw-lane-volval"), track.gainDb.toFixed(1));
+  setText(node.querySelector(".fw-lane-panval"), laneDocPan(track.pan ?? 0));
   const arm = node.querySelector<HTMLElement>(".fw-arm");
   const armed = String(isArmed(track.id));
   if (arm && arm.getAttribute("aria-pressed") !== armed) arm.setAttribute("aria-pressed", armed);
@@ -966,6 +988,23 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     else setArmedTrack(isArmed(id) && armedTracks().length === 1 ? null : id);
   });
   onArm(() => render(engine.get("document")));
+  // the head's volume and pan: the number follows the drag, and the command (one undo step) is sent when it ends
+  lanes.addEventListener("input", (e) => {
+    const input = e.target as HTMLInputElement;
+    if (!input.matches?.(".fw-lane-vol, .fw-lane-pan")) return;
+    const lane = input.closest<HTMLElement>(".fw-lane");
+    const isVol = input.classList.contains("fw-lane-vol");
+    setText(lane?.querySelector(isVol ? ".fw-lane-volval" : ".fw-lane-panval") ?? null, isVol ? Number(input.value).toFixed(1) : laneDocPan(Number(input.value)));
+    input.style.setProperty("--fw-fill", isVol ? `${((Number(input.value) + 60) / 72) * 100}%` : `${((Number(input.value) + 1) / 2) * 100}%`);
+  });
+  lanes.addEventListener("change", (e) => {
+    const input = e.target as HTMLInputElement;
+    if (!input.matches?.(".fw-lane-vol, .fw-lane-pan")) return;
+    const trackId = input.closest<HTMLElement>(".fw-lane")?.dataset.key;
+    if (!trackId) return;
+    if (input.classList.contains("fw-lane-vol")) engine.dispatch({ type: "set-track-gain", trackId, gainDb: Number(input.value) });
+    else engine.dispatch({ type: "set-track-pan", trackId, pan: Number(input.value) });
+  });
   lanes.addEventListener("click", (e) => {
     const button = (e.target as HTMLElement).closest<HTMLElement>(".fw-lane-mute, .fw-lane-solo");
     const trackId = button?.closest<HTMLElement>(".fw-lane")?.dataset.key;

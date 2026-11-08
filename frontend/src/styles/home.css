@@ -3,6 +3,19 @@
 
 .fw-home { position: fixed; inset: var(--fw-titlebar-h) 0 var(--cv-foot-h) 0; z-index: calc(var(--z-menu) - 1); display: grid; grid-template-columns: 232px minmax(0, 1fr); background: var(--group-head); color: var(--text-primary); }
 .fw-home[hidden] { display: none; }
+/* The narrow rail: 49 px of icons; the edge handle sits on the divider and switches it. */
+.fw-home[data-rail="1"] { grid-template-columns: 49px minmax(0, 1fr); }
+.fw-home-edge { position: absolute; inset-block-start: 22px; inset-inline-start: var(--fw-home-rail, 232px); translate: -50% 0; z-index: 1; display: grid; place-items: center; inline-size: 22px; block-size: 22px; padding: 0; border: 1px solid var(--line-2); border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-secondary); cursor: pointer; }
+.fw-home[data-rail="1"] .fw-home-edge { --fw-home-rail: 49px; rotate: 180deg; }
+.fw-home-edge:hover { color: var(--text-primary); border-color: var(--accent-color); }
+.fw-home-brandtext { display: grid; line-height: 1.15; }
+.fw-home[data-rail="1"] .fw-home-nav { padding-inline: 6px; overflow-x: hidden; }
+.fw-home[data-rail="1"] .fw-home-brandtext,
+.fw-home[data-rail="1"] .fw-home-label,
+.fw-home[data-rail="1"] .fw-home-item > span:not(.icon),
+.fw-home[data-rail="1"] .fw-home-count { display: none; }
+.fw-home[data-rail="1"] .fw-home-item,
+.fw-home[data-rail="1"] .fw-home-brand { justify-content: center; padding-inline: 0; }
 .fw-home-nav { display: flex; flex-direction: column; gap: 2px; min-block-size: 0; padding: 14px 10px 12px; background: var(--surface-0); border-inline-end: 1px solid var(--line-0); overflow-y: auto; }
 .fw-home-brand { display: flex; align-items: center; gap: var(--space-2); flex: none; block-size: 36px; margin-block-end: 10px; padding: 0 8px; font-size: 15px; }
 .fw-home-brand b { font-weight: 600; letter-spacing: -0.005em; }

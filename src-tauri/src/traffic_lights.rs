@@ -1,4 +1,4 @@
-//! macOS: the window's traffic lights are centred in the page's 40 px title row (the title bar is an overlay, main.rs).
+//! macOS: the window's traffic lights are centred in the page's 38 px title row (the title bar is an overlay, main.rs).
 //! Tao's own traffic_light_position is not used (1.95.9): it sizes the title bar container to the button height plus y and
 //! moves the buttons sideways only, so they kept the system's height whatever y said, and it reapplies that from its
 //! view's drawRect. Here the container is the whole row and every button's origin is set on both axes, after each moment
@@ -9,7 +9,7 @@ use tauri::{Runtime, Window};
 #[cfg(target_os = "macos")]
 const LEFT: f64 = 14.0;
 #[cfg(target_os = "macos")]
-const ROW: f64 = 40.0;
+const ROW: f64 = 38.0;
 
 /// The page's title for the window: set, then the lights placed again, since AppKit lays the title bar out anew.
 #[tauri::command]

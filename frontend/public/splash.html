@@ -9,12 +9,12 @@
     img { display: block; }
     p { margin: 0; height: 16px; line-height: 16px; letter-spacing: 0.2px; }
     .bar { width: 180px; height: 3px; border-radius: 2px; background: #1f1f26; overflow: hidden; }
-    .fill { width: 100%; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #3A7BFF, #9A5CFF 30%, #FF4F7A 62%, #FFAE2B); transform-origin: 0 50%; transform: scaleX(0.04); animation: load 2.6s cubic-bezier(0.25, 0.6, 0.35, 1) forwards; }
+    .fill { width: 100%; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #F08686, #DA6FA4 32%, #B070D5 64%, #6069CD 100%); transform-origin: 0 50%; transform: scaleX(0.04); animation: load 2.6s cubic-bezier(0.25, 0.6, 0.35, 1) forwards; }
     .fill.done { animation: none; transform: scaleX(1); transition: transform 0.2s ease-out; }
     @keyframes load { to { transform: scaleX(0.92); } }
   </style>
 </head>
-<body><img src="logo-256.png" width="72" height="72" alt="formwav"><p>Starting formwav</p><div class="bar" role="progressbar" aria-label="Starting formwav"><div class="fill"></div></div><script>
+<body><img src="logo-256.png" width="72" height="72" alt="FormWav"><p>Starting FormWav</p><div class="bar" role="progressbar" aria-label="Starting FormWav"><div class="fill"></div></div><script>
 window.formwavSplashDone = function () {
   var fill = document.querySelector('.fill');
   fill.style.transform = getComputedStyle(fill).transform;

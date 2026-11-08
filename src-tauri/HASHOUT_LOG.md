@@ -2,6 +2,13 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### src/menu.rs, build.rs, capabilities/default.json, src/traffic_lights.rs, ../frontend/public/splash.html · the system menu bar from the page's menus, a 38 px title row, the Starting FormWav splash (v2.25.0)
+- refers-to: src/menu.rs :: Entry, entry, with_menus, set_menu, application_menu; build.rs :: APP_COMMANDS; capabilities/default.json :: allow-set-menu; src/traffic_lights.rs :: ROW
+- kind: decision
+- logged: v2.25.0 · 2026-11-08
+
+The redesign puts every menu (File, Edit, View, Track, Clip, Event, Transport, Extensions, Settings) in the macOS menu bar after an application menu (About FormWav, Preferences... Cmd+comma, Hide, Quit), built the way FormVis's native-menu.ts builds its menu: one list, described by the page from its own menu pops (ui/native-menu.ts) and handed over as labels, ids and shortcuts. The brief named FormVis's `core:menu` permissions; formwav's invariant (CLAUDE.md) is that the page may call only a short list of named commands, so the page instead calls one new narrow command, `set_menu`, with a JSON description, and the shell builds the menu itself (a shortcut the system cannot parse leaves its item without one rather than losing the menu). A click returns as the event `fw-menu` carrying the item's id (`n:<menu>:<place>`, or `preferences`, `cut`, `copy`, `paste`, `select-all`), and the page clicks the item in its pop as a person would, so the in-window and system menus never differ. Only macOS calls it (the command is a no-op elsewhere, where the page keeps its in-window menu row); `core:menu` is not granted. The 38 px title row is traffic_lights.rs ROW. The splash is 360 by 200 on the window background #0a0a0a, titled Starting FormWav, with the family gradient (#F08686, #DA6FA4 at 32 percent, #B070D5 at 64 percent, #6069CD). Not run here: the macOS build (Linux container); cargo check, clippy and test pass for the portable code, and menu.rs's macOS paths are compiled only on macOS.
+
 ### tauri.conf.json, src/menu.rs · the app is FormWav and the README is the Form family template (v2.22.1)
 - refers-to: tauri.conf.json :: productName, app.windows[splash].title; src/menu.rs :: build (AboutMetadata.name)
 - kind: decision

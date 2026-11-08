@@ -58,8 +58,8 @@ function setAttr(el: Element | null, name: string, value: string): void {
 
 function updateStrip(node: HTMLElement, strip: Strip, doc: SessionDoc): void {
   setText(node.querySelector(".fw-strip-name"), strip.item.name);
-  const palette = ["cyan", "violet", "amber", "pink", "slate", "green", "blue", "red"];
-  const color = strip.kind === "track" ? `var(--fw-color-${strip.item.color ?? palette[Math.max(0, doc.tracks.indexOf(strip.item)) % 8]})` : strip.kind === "master" ? "var(--accent-color)" : "var(--text-muted)";
+  const palette = ["blue", "violet", "amber", "pink", "slate"]; // a new track's colours: not cyan or green, which read as the app's hue
+  const color = strip.kind === "track" ? `var(--fw-color-${strip.item.color ?? palette[Math.max(0, doc.tracks.indexOf(strip.item)) % palette.length]})` : strip.kind === "master" ? "var(--accent-color)" : "var(--text-muted)";
   if (node.style.getPropertyValue("--fw-strip-color") !== color) node.style.setProperty("--fw-strip-color", color);
   if (strip.kind === "master") {
     const masterFader = node.querySelector<HTMLInputElement>(".fw-strip-fader");

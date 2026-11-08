@@ -49,7 +49,8 @@ Invariants worth repeating, because breaking them is silent:
   devices; keep it that way. Its link for guests from anywhere (also off by default) opens a second one on 127.0.0.1
   only, for the user's cloudflared to tunnel to, and it admits pairing and the recording room and nothing else
   (`remote.GUEST_PATHS`); never widen that set. In the desktop app the page may call only the named commands
-  `app_ready`, `set_window_title` and `text_edit`, the window calls the caption buttons need and event listening
+  `app_ready`, `set_window_title`, `text_edit` and `set_menu` (the macOS menu bar's labels, ids and shortcuts, which the
+  shell builds itself; the page gets no menu API and `core:menu` is never granted), the window calls the caption buttons need and event listening
   (`src-tauri/capabilities/default.json`, `remote.urls` `http://127.0.0.1:*`); never add to that list.
 
 Claude Code runs inside formwav (PLAN_v14 W1): `backend/app/services/claude_code.py` finds the user's `claude` and its

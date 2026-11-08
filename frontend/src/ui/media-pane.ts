@@ -11,8 +11,13 @@ const length = (m: MediaRef) => {
 
 function fill(row: HTMLElement, m: MediaRef): void {
   setText(row.querySelector(".fw-media-name"), m.name);
-  setText(row.querySelector(".fw-media-meta"), `${m.channels === 1 ? "Mono" : m.channels === 2 ? "Stereo" : `${m.channels} channels`}, ${(m.sampleRate / 1000).toFixed(1)} kHz`);
+  // The list reads Name, Type, Length (the approved browser): the type is the file's own extension, its channels and
+  // rate are in the row's tooltip
+  setText(row.querySelector(".fw-media-meta"), (/\.([a-z0-9]{1,5})$/i.exec(m.name)?.[1] ?? m.format ?? "WAV").toUpperCase());
   setText(row.querySelector(".fw-media-len"), length(m));
+  const shape = `${m.channels === 1 ? "Mono" : m.channels === 2 ? "Stereo" : `${m.channels} channels`}, ${(m.sampleRate / 1000).toFixed(1)} kHz`;
+  const kind = row.querySelector(".fw-media-meta");
+  if (kind && kind.getAttribute("title") !== shape) kind.setAttribute("title", shape);
   const title = `${m.name} (right-click to move it to a folder)`;
   if (row.title !== title) row.title = title;
 }
@@ -267,7 +272,7 @@ export function mountMediaPane(host: HTMLElement, engine: Engine, player?: { pla
         row.tabIndex = 0;
         row.setAttribute("role", "button");
         row.draggable = true;
-        row.innerHTML = `<span class="fw-media-name"></span><span class="fw-media-meta"></span><span class="fw-media-len"></span><button type="button" class="fw-icon-btn fw-media-place" aria-label="Place on the selected track" title="Place on the selected clip's track at the playhead">${fcIcon("plus")}</button><button type="button" class="fw-icon-btn fw-media-add" aria-label="Add to a new track" title="Add to a new track at the playhead">${fcIcon("addToTrack")}</button>`;
+        row.innerHTML = `<span class="fw-media-name"></span><span class="fw-media-meta" translate="no"></span><span class="fw-media-len"></span><button type="button" class="fw-icon-btn fw-media-place" aria-label="Place on the selected track" title="Place on the selected clip's track at the playhead">${fcIcon("plus")}</button><button type="button" class="fw-icon-btn fw-media-add" aria-label="Add to a new track" title="Add to a new track at the playhead">${fcIcon("addToTrack")}</button>`;
         fill(row, m);
         return row;
       },

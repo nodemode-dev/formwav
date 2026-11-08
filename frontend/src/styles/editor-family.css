@@ -1,0 +1,428 @@
+/*
+ * The editor as approved (design/formwav: editor, editor-mixer, spectro; wav.css, ported onto the repo's tokens).
+ * Loaded after form-family.css, so these rules set the look over the older layers; ui/editor-layout.ts moves the
+ * finished containers into the places named here before the app is revealed, so nothing is seen to move.
+ * Every value is a token or a size from the layout below; the theme profiles follow.
+ */
+
+:root {
+  --cv-track-head-w: 252px;
+  --cv-editor-h: clamp(222px, 40vh, 330px);
+  --cv-lane-h: 88px;
+  --fw-strip-h: 40px;
+  --fw-tlhead-h: 56px;
+  --fw-actions-h: 36px;
+  --fw-dockbar-h: 36px;
+  --fw-transport-h: 52px;
+  --fw-status-h: 76px;
+}
+
+/* ---- the tool strip: across the top of the workspace ---------------------------------------------------------- */
+.fw-workspace { grid-template-rows: auto minmax(0, 1fr); row-gap: var(--fw-gutter); }
+.fw-workspace > .fw-tool-tray {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--fw-strip-h);
+  margin: calc(var(--fw-gutter) * -1) calc(var(--fw-gutter) * -1) 0;
+  padding: 0 12px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border-block-end: 1px solid var(--line-0);
+}
+.fw-workspace > .fw-tool-tray > * { flex: none; }
+.fw-tool-tray [data-add-track] { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-color: var(--line-2); border-radius: 8px; background: var(--surface-1); }
+.fw-tool-tray [data-add-track] .fw-ico { inline-size: 14px; block-size: 14px; }
+.fw-tool-tray .fw-tools-seg { gap: 2px; padding: 0 0 0 var(--space-2); border-inline-start: 1px solid var(--line-1); border-radius: 0; background: transparent; }
+.fw-tool-tray .fw-seg-btn.fw-tool-icon {
+  display: grid;
+  place-items: center;
+  inline-size: 30px;
+  min-block-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 0;
+  color: var(--text-secondary);
+}
+.fw-tool-tray .fw-seg-btn.fw-tool-icon::after { content: none; }
+.fw-tool-tray .fw-seg-btn.fw-tool-icon .fw-ico { inline-size: 16px; block-size: 16px; }
+.fw-tool-tray .fw-seg-btn.fw-tool-icon:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.fw-tool-tray .fw-seg-btn.fw-tool-icon[aria-pressed="true"] { border-color: var(--line-3); background: var(--surface-raised); color: var(--accent-color); font-weight: 400; }
+/* the spectrogram tray: the toggle stays; with the view on, Log Hz and Box, Lasso, Paint take the tools' place */
+.fw-spectral-strip, .fw-spectral-modes { display: flex; align-items: center; gap: 2px; }
+.fw-spectral-strip { padding-inline: var(--space-2) 0; border-inline-start: 1px solid var(--line-1); }
+.fw-tool-tray[data-spectral="false"] :is(.fw-spectral-log, .fw-spectral-modes) { display: none; }
+.fw-tool-tray[data-spectral="true"] .fw-tools-seg { display: none; }
+.fw-tool-tray .fw-spectral-log { display: inline-flex; align-items: center; block-size: 30px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-12); cursor: pointer; }
+.fw-tool-tray .fw-spectral-log:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.fw-tool-tray .fw-spectral-log[aria-pressed="true"] { border-color: var(--line-3); background: var(--surface-raised); color: var(--text-primary); }
+.fw-workspace > .fw-tool-tray > .fw-tool-hint,
+.fw-workspace > .fw-tool-tray > .fw-st-hint { flex: 1 1 0; padding-inline: var(--space-2); text-align: start; color: var(--text-muted); }
+.fw-workspace > .fw-tool-tray > .fw-sel-box { flex: 0 1 252px; }
+.fw-sel-label { font-size: var(--fs-10); }
+.fw-sel-value { font-size: var(--fs-11); }
+
+/* ---- the timeline: a head with the counter, then the track list beside the ruler ---------------------------------- */
+.fw-pane-timeline { display: flex; flex-direction: column; background: var(--surface-0); }
+.fw-tl-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-block-size: var(--fw-tlhead-h);
+  padding: 0 10px 0 14px;
+  border-block-end: 1px solid var(--line-0);
+  background: var(--surface-0);
+  white-space: nowrap;
+}
+.fw-tl-gap { flex: 1 1 0; min-inline-size: 0; }
+.fw-tl-head .fw-position { display: flex; flex-direction: column; justify-content: center; gap: 1px; line-height: 1.15; }
+.fw-tl-head .fw-clock { min-inline-size: 11ch; font-size: 22px; font-weight: 500; letter-spacing: 0.01em; color: var(--text-primary); }
+.fw-tl-head .fw-position-sub { display: flex; align-items: baseline; gap: 6px; font-size: var(--fs-11); color: var(--text-muted); }
+.fw-tl-head .fw-bar-beat::after { content: ","; display: none; }
+/* the bar and beat change while playing: digits of one width and room for "Bar 999, beat 12", so nothing after them moves */
+.fw-tl-head .fw-bar-beat { display: inline-block; min-inline-size: 15ch; font-variant-numeric: tabular-nums; }
+.fw-tl-head .fw-st-length { font-variant-numeric: tabular-nums; }
+.fw-tl-head .fw-musical { display: flex; gap: 14px; padding-inline-start: 4px; }
+.fw-tl-head .fw-mus { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 0; border: 0; background: transparent; line-height: 1.2; text-align: start; }
+.fw-tl-head .fw-mus-label { font-size: var(--fs-11); color: var(--text-muted); }
+.fw-tl-head .fw-mus-value { font-size: var(--fs-13); font-weight: 500; color: var(--text-primary); }
+.fw-tl-head .fw-punch { display: flex; gap: 6px; }
+.fw-tl-head .fw-tb-btn { block-size: 28px; padding: 0 12px; border-color: var(--line-2); border-radius: 8px; background: var(--surface-1); }
+.fw-tl-head .fw-zoom { display: flex; align-items: center; gap: 2px; }
+.fw-tl-head .fw-zoom .fw-tb-icon { inline-size: 24px; min-block-size: 24px; }
+.fw-tl-head .fw-zoom .fw-tb-btn { block-size: 28px; }
+.fw-tl-head .fw-zoom .fw-follow[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-ink); }
+.fw-tl-head .fw-follow::before { content: none; }
+.fw-zoom-slider { inline-size: 84px; min-inline-size: 0; margin: 0 4px; accent-color: var(--text-secondary); }
+/* the smallest windows leave the timeline head about 730 px: the same controls, closer together */
+@media (max-width: 1360px) {
+  .fw-tl-head { gap: 8px; padding-inline: 10px 8px; }
+  .fw-tl-head .fw-musical { gap: 10px; padding-inline-start: 0; }
+  .fw-tl-head .fw-tb-btn { padding-inline: 8px; }
+  .fw-zoom-slider { inline-size: 48px; margin-inline: 2px; }
+}
+
+.fw-pane-timeline .fw-stage { flex: 1 1 auto; min-block-size: 0; background: var(--surface-0); }
+.fw-ruler { block-size: calc(40px + var(--fw-ruler-rows, 0) * 20px); background: var(--group-head); border-block-end: 1px solid var(--line-0); }
+.fw-ruler-corner { justify-content: space-between; padding: 0 12px 0 14px; background: var(--group-head); border-inline-end: 1px solid var(--line-0); }
+.fw-ruler-title { font-size: var(--fs-11); color: var(--text-muted); }
+
+/* ---- track heads: number, colour bar, name, M S arm A, sub line, volume and pan --------------------------------------- */
+.fw-shell .fw-lane { grid-template-rows: calc(var(--cv-lane-h) - 1px); }
+/* with a dock panel open the rows go compact, as the approved mixer screen shows them */
+.fw-pane-timeline:has(> .fw-dock[data-open="true"]) .fw-lane:not([data-height]) { --cv-lane-h: 56px; }
+.fw-pane-timeline:has(> .fw-dock[data-open="true"]) .fw-lane:not([data-height]) .fw-lane-head { row-gap: 2px; }
+.fw-pane-timeline:has(> .fw-dock[data-open="true"]) .fw-lane:not([data-height]) .fw-lane-head .fw-lane-mix { display: none; }
+.fw-shell .fw-lane .fw-lane-head {
+  position: sticky;
+  inset-inline-start: 0;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) repeat(4, 24px);
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  align-items: center;
+  column-gap: 4px;
+  row-gap: 4px;
+  padding: 0 10px 0 14px;
+  background: var(--surface-1);
+  border-inline-end: 1px solid var(--line-0);
+  box-shadow: inset 4px 0 0 var(--fw-lane-color, var(--fw-audio));
+}
+.fw-shell .fw-lane:has(.fw-clip[aria-selected="true"]) .fw-lane-head { background: color-mix(in srgb, var(--accent-color) 8%, var(--surface-1)); }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-num { grid-area: 1 / 1; align-self: center; padding: 0; font-family: var(--font-mono); font-size: var(--fs-11); font-weight: 400; color: var(--text-muted); }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-name { grid-area: 1 / 2; padding-inline-start: 0; font-size: var(--fs-13); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-name::before { content: none; }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-ms { display: contents; }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-mute { grid-area: 1 / 3; }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-solo { grid-area: 1 / 4; }
+.fw-shell .fw-lane .fw-lane-head .fw-arm { grid-area: 1 / 5; }
+.fw-shell .fw-lane .fw-lane-head .fw-auto-toggle { grid-area: 1 / 6; }
+.fw-shell .fw-lane .fw-lane-head :is(.fw-lane-mute, .fw-lane-solo, .fw-arm, .fw-auto-toggle) {
+  margin: 0;
+  inline-size: 24px;
+  block-size: 20px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  font-weight: 600;
+}
+.fw-shell .fw-lane .fw-lane-head .fw-arm { border-radius: 50%; font-size: 0; inline-size: 18px; block-size: 18px; justify-self: center; }
+.fw-shell .fw-lane .fw-lane-head .fw-arm::before { content: ""; inline-size: 8px; block-size: 8px; border-radius: 50%; background: currentColor; }
+.fw-shell .fw-lane .fw-lane-head :is(.fw-lane-mute, .fw-lane-solo)[aria-pressed="true"] { background: var(--surface-raised); border-color: var(--text-muted); color: var(--text-primary); }
+.fw-shell .fw-lane .fw-lane-head .fw-arm[aria-pressed="true"] { background: var(--fw-record); border-color: var(--fw-record); color: var(--fw-record); }
+.fw-shell .fw-lane .fw-lane-head .fw-arm[aria-pressed="true"]::before { background: var(--text-on-accent); }
+.fw-shell .fw-lane .fw-lane-head .fw-auto-toggle[aria-expanded="true"] { background: var(--surface-raised); border-color: var(--text-muted); color: var(--text-primary); }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-meta { grid-area: 2 / 2 / 3 / 6; padding: 0; font-size: var(--fs-11); line-height: 1.2; color: var(--text-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-shell .fw-lane .fw-lane-head .fw-takes-toggle { grid-area: 2 / 6; justify-self: end; }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-mix {
+  grid-area: 3 / 2 / 4 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px minmax(0, 0.7fr) 26px;
+  align-items: center;
+  column-gap: 6px;
+}
+.fw-lane-volval, .fw-lane-panval { font-family: var(--font-mono); font-size: var(--fs-10); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fw-lane-volval { text-align: end; }
+.fw-lane-panval { text-align: start; }
+.fw-lane-vol, .fw-lane-pan {
+  appearance: none;
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: 12px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.fw-lane-vol::-webkit-slider-runnable-track { block-size: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--text-secondary) var(--fw-fill, 83%), var(--line-2) var(--fw-fill, 83%)); }
+.fw-lane-pan::-webkit-slider-runnable-track { block-size: 4px; border-radius: 2px; background: var(--line-2); }
+.fw-lane-vol::-webkit-slider-thumb, .fw-lane-pan::-webkit-slider-thumb { appearance: none; inline-size: 8px; block-size: 12px; margin-block-start: -4px; border: 0; border-radius: 2px; background: var(--text-primary); }
+.fw-lane-vol::-moz-range-track { block-size: 4px; border-radius: 2px; background: var(--line-2); }
+.fw-lane-pan::-moz-range-track { block-size: 4px; border-radius: 2px; background: var(--line-2); }
+.fw-lane-vol::-moz-range-thumb, .fw-lane-pan::-moz-range-thumb { inline-size: 8px; block-size: 12px; border: 0; border-radius: 2px; background: var(--text-primary); }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-meter { position: absolute; inset-inline: 14px 10px; inset-block-end: 3px; display: grid; row-gap: 1px; margin: 0; pointer-events: none; opacity: 0.7; }
+.fw-shell .fw-lane .fw-lane-head .fw-lane-meter .fw-out-track { block-size: 1px; }
+.fw-shell .fw-lane[data-height="small"] .fw-lane-head .fw-lane-mix { display: none; }
+/* the automation sub-row: a corner mark in place of a number, never a track number */
+.fw-auto-heads > span { position: relative; padding-inline-start: 26px; }
+.fw-auto-heads > span::before { content: ""; position: absolute; inset-inline-start: 6px; inset-block-start: calc(50% - 8px); inline-size: 12px; block-size: 10px; border-inline-start: 1.5px solid var(--text-muted); border-block-end: 1.5px solid var(--text-muted); border-end-start-radius: 4px; }
+
+/* clips: a name chip over the waveform, the selection outlined in the accent */
+.fw-lanes .fw-lane .fw-clip { border-radius: 6px; }
+.fw-lanes .fw-lane .fw-clip[aria-selected="true"] { outline: 2px solid var(--accent-color); outline-offset: -1px; }
+
+/* ---- the action row, under the tracks ----------------------------------------------------------------------------- */
+.fw-action-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-block-size: var(--fw-actions-h);
+  padding: 0 8px;
+  border-block-start: 1px solid var(--line-0);
+  background: var(--group-head);
+}
+.fw-action-row .fw-ibtn { block-size: 26px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-primary); font-size: var(--fs-12); }
+.fw-action-row .fw-ibtn:hover:not(:disabled) { background: var(--surface-raised); border-color: var(--line-3); }
+.fw-action-row .fw-ibtn:disabled { color: var(--text-muted); opacity: 0.6; cursor: default; }
+.fw-action-hint { flex: 1 1 0; min-inline-size: 0; padding-inline: var(--space-2); text-align: end; white-space: normal; line-height: 1.25; font-size: var(--fs-11); color: var(--text-muted); }
+
+/* ---- the dock: a tab strip that opens to its panel, collapsed by default -------------------------------------------- */
+.fw-pane-timeline > .fw-dock { flex: none; display: flex; flex-direction: column; block-size: auto; max-block-size: none; background: var(--surface-0); border-block-start: 1px solid var(--line-0); }
+.fw-pane-timeline > .fw-dock[data-open="true"] { block-size: var(--fw-dock-h, var(--cv-editor-h, 300px)); max-block-size: 70%; }
+.fw-dock .fw-dock-head { flex: none; min-block-size: var(--fw-dockbar-h); padding: 0 8px; background: var(--group-head); border-block-end: 0; }
+.fw-dock[data-open="true"] .fw-dock-head { border-block-end: 1px solid var(--line-0); }
+.fw-dock[data-open="false"] > :is(.fw-dock-grip, .fw-dock-body) { display: none; }
+.fw-dock[data-open="false"] .fw-dock-close { display: none; }
+.fw-dock[data-open="true"] > .fw-dock-body { flex: 1 1 0; min-block-size: 0; }
+/* the floating Picture panel clears the dock bar, the transport row and the status bar beneath it */
+.fw-picture { inset-block-end: calc(var(--fw-transport-h, 52px) + var(--fw-dockbar-h, 32px) + 24px + var(--space-2)); }
+/* the Mixer: its actions in a row above the strips, as approved */
+.fw-dock .fw-mixer { flex-direction: column; align-items: stretch; gap: 10px; padding: 10px 12px; overflow: auto; }
+.fw-dock .fw-mixer-bar { order: -1; flex: none; display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0; }
+.fw-dock .fw-mixer-bar > select { grid-column: auto; inline-size: auto; }
+.fw-dock .fw-mixer-bar .fw-mix-panlaw { margin-inline-start: auto; }
+.fw-dock .fw-mixer-strips { flex: none; align-items: flex-start; }
+/* the bar sits at the foot of the window: its More menu opens upward, where there is room */
+.fw-dock-more > .fw-menu-pop { inset-block-start: auto; inset-block-end: calc(100% + 6px); max-block-size: calc(100vh - 140px); overflow-y: auto; }
+.fw-dock .fw-dock-tab { min-block-size: 26px; block-size: 26px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; font-size: var(--fs-12); font-weight: 400; }
+.fw-dock .fw-dock-tab[aria-selected="true"], .fw-dock-more.is-active > .fw-dock-tab { border: 1px solid var(--line-3); background: var(--surface-raised); color: var(--text-primary); font-weight: 400; }
+.fw-dock .fw-dock-ask { block-size: 26px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); color: var(--text-primary); font-size: var(--fs-12); }
+
+/* ---- the right column: Clip, Effects, Repair and the agent -------------------------------------------------------- */
+.fw-pane-agent { display: flex; flex-direction: column; background: var(--surface-0); }
+.fw-side-tabs { flex: none; display: flex; align-items: center; gap: 2px; min-block-size: var(--fw-group-head-h); padding: 0 var(--space-1); background: var(--group-head); border-block-end: 1px solid var(--line-0); }
+.fw-side-tab { flex: none; block-size: 24px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--fs-12); cursor: pointer; }
+.fw-side-tab[hidden] { display: none; }
+.fw-side-tab:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.fw-side-tab[aria-selected="true"] { border-color: var(--line-3); background: var(--surface-raised); color: var(--text-primary); }
+
+/* ---- the Effects tab: the chain as stacked cards, a dark band for each effect, the knobs wrapping across the column --- */
+.fw-pane-agent .fw-chain { flex: 1 1 0; min-block-size: 0; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden auto; }
+.fw-pane-agent .fw-chain-head { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 10px 12px; border-block-end: 1px solid var(--line-0); }
+.fw-pane-agent .fw-chain-row { flex: none; display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: visible; }
+.fw-pane-agent .fw-fx-link { display: none; }
+.fw-pane-agent .fw-fx-card, .fw-pane-agent .fw-fx-card-wide { inline-size: auto; max-block-size: none; gap: 0; padding: 0; border: 0; border-block-end: 1px solid var(--line-0); border-radius: 0; background: transparent; }
+.fw-pane-agent .fw-fx-top { align-items: center; padding: 6px 8px 6px 12px; background: var(--group-head); }
+.fw-pane-agent .fw-fx-name { font-size: var(--fs-13); font-weight: 600; }
+.fw-pane-agent .fw-fx-knobs, .fw-pane-agent .fw-fx-card-wide .fw-fx-knobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); justify-content: stretch; gap: 8px 4px; padding: 10px 8px 12px; overflow: visible; }
+.fw-pane-agent .fw-fx-knobs .fw-knob { flex: none; inline-size: auto; block-size: auto; min-inline-size: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0; color: var(--accent-color); }
+.fw-pane-agent .fw-fx-knobs .fw-knob svg { inline-size: 40px; block-size: 40px; }
+.fw-pane-agent .fw-fx-knobs .fw-knob :is(.fw-knob-value, .fw-knob-label) { max-inline-size: 100%; white-space: nowrap; }
+.fw-pane-agent .fw-fx-card:has(.fw-fx-bypass[aria-pressed="false"]) .fw-fx-knobs { opacity: 0.45; }
+.fw-pane-agent .fw-fx-add.fw-fx-add { inline-size: auto; flex-direction: row; align-items: center; margin: 10px 12px; border: 1px dashed var(--line-3); background: transparent; box-shadow: none; color: var(--text-secondary); }
+.fw-pane-agent .fw-fx-add.fw-fx-add:hover { background: transparent; border-color: var(--fw-hue); color: var(--text-primary); }
+/* the app hue marks a live effect: knob arcs and the power toggle (orange stays a highlight) */
+:is(.fw-pane-agent, .fw-dock) .fw-fx-card .fw-knob { color: var(--fw-hue); }
+:is(.fw-pane-agent, .fw-dock) .fw-fx-bypass[aria-pressed="true"] { color: var(--fw-hue); border-color: color-mix(in oklab, var(--fw-hue) 60%, var(--line-2)); background: color-mix(in oklab, var(--fw-hue) 12%, transparent); }
+/* the kit primary: white fill with ink text in dark, ink fill with paper text in light */
+.fw-btn-export, .fw-topbar .fw-btn-export { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg-primary); }
+.fw-btn-export:hover:not(:disabled), .fw-topbar .fw-btn-export:hover:not(:disabled) { background: color-mix(in oklab, var(--text-primary) 85%, var(--bg-primary)); border-color: transparent; }
+.fw-pane-agent > .fw-side-panel { flex: 1 1 auto; min-block-size: 0; overflow: hidden auto; border: 0; background: transparent; }
+.fw-pane-agent > .fw-side-panel.is-off { display: none; }
+.fw-pane-agent > .fw-side-panel[hidden] { display: none; }
+/* Repair (the Inspector): a dark band over each group, the rows indented under it */
+.fw-pane-agent .fw-inspector-body { flex: 1 1 0; min-block-size: 0; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden auto; }
+.fw-pane-agent .fw-inspector-body > .fw-insp-section { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0 0 12px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.fw-pane-agent .fw-inspector-body > .fw-insp-section > * { flex: none; }
+.fw-pane-agent .fw-inspector-body > .fw-insp-section > :not(.fw-insp-head) { margin-inline: 12px; box-sizing: border-box; max-inline-size: calc(100% - 24px); }
+.fw-pane-agent .fw-inspector-body .fw-insp-head { display: flex; align-items: center; min-block-size: 28px; margin: 0 0 2px; padding: 0 12px; background: var(--group-head); border-block: 1px solid var(--line-0); font-size: var(--fs-12); font-weight: 600; color: var(--text-primary); text-transform: none; letter-spacing: 0; }
+.fw-pane-agent .fw-inspector-body .fw-analyze-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+/* the repair work comes first: the assistant and the analysis, then the effects (where Heal sits), then the rest */
+.fw-pane-agent .fw-inspector-body > .fw-insp-analyze { order: -2; }
+.fw-pane-agent .fw-inspector-body > .fw-insp-effects { order: -1; }
+.fw-pane-agent > .fw-pane-inspector { display: flex; flex-direction: column; }
+.fw-pane-agent > .fw-pane-inspector > .fw-pane-header { display: none; }
+.fw-pane-agent > .fw-pane-inspector .fw-inspector-body { flex: 1 1 auto; min-block-size: 0; overflow: auto; padding: 0; column-width: auto; }
+.fw-pane-agent > .fw-agent.fw-side-panel { display: flex; flex-direction: column; }
+.fw-pane-agent > .fw-agent.fw-side-panel.is-off { display: none; }
+
+/* the Clip tab: groups with a dark band, label left, value in a field right */
+.fw-cliptab { padding: 0; background: transparent; }
+.fw-cliptab .fw-cliptab-empty { margin: 0; padding: 12px 14px; font-size: var(--fs-12); color: var(--text-muted); }
+.fw-cliptab .fw-cliptab-grid { display: flex; flex-direction: column; gap: 0; padding: 0; }
+.fw-cliptab .fw-cf-group { flex: none; display: flex; align-items: center; min-block-size: 28px; margin: 0; padding: 0 12px; background: var(--group-head); border-block: 1px solid var(--line-0); font-size: var(--fs-12); font-weight: 600; color: var(--text-primary); }
+.fw-cliptab .fw-cliptab-grid > .fw-cf-group:first-child { border-block-start: 0; }
+.fw-cliptab .fw-cf { display: grid; grid-template-columns: minmax(0, 118px) minmax(0, 1fr); align-items: center; gap: 6px; min-block-size: 30px; padding: 0 12px; }
+.fw-cliptab .fw-cf-label { display: flex; align-items: center; gap: 6px; font-size: var(--fs-12); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fw-cliptab .fw-cf :is(input, select, output) { min-inline-size: 0; block-size: 22px; padding: 0 7px; border: 1px solid var(--line-1); border-radius: 5px; background: var(--surface-field); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-12); }
+.fw-cliptab .fw-cf select { font-family: inherit; }
+.fw-cliptab .fw-cf output { display: flex; align-items: center; block-size: auto; min-block-size: 22px; padding-block: 3px; border-color: transparent; background: transparent; overflow: visible; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+.fw-stopwatch { display: inline-grid; place-items: center; flex: none; inline-size: 16px; block-size: 16px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.fw-stopwatch:hover { color: var(--accent-color); }
+.fw-cliptab .fw-cf-wide { grid-template-columns: minmax(0, 1fr); padding-block: 4px; }
+.fw-cliptab .fw-cf-colors { display: flex; gap: 7px; }
+.fw-cliptab .fw-cf:has(> .fw-cf-colors) { grid-template-columns: minmax(0, 118px) minmax(0, 1fr); }
+.fw-cliptab .fw-cf:has(> .fw-cf-colors) { padding-block: 6px; }
+.fw-cliptab .fw-cf-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px; }
+.fw-cliptab .fw-cf-actions .fw-ibtn { padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-1); font-size: var(--fs-12); }
+
+/* ---- the left panel: the session card, search, Name, Type and Length, the footer ---------------------------------------- */
+.fw-pane-media { display: flex; flex-direction: column; background: var(--surface-0); }
+.fw-pane-media .fw-session-card { flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-block-end: 1px solid var(--line-0); }
+.fw-session-mark { display: grid; place-items: center; inline-size: 52px; block-size: 40px; border: 1px solid var(--line-2); border-radius: 6px; color: var(--accent-color); background: radial-gradient(90% 120% at 50% 120%, color-mix(in oklab, var(--accent-color) 28%, transparent), transparent 70%), var(--surface-1); }
+.fw-session-text { display: flex; flex-direction: column; min-inline-size: 0; }
+.fw-session-title { font-size: var(--fs-13); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-session-line { font-size: var(--fs-11); line-height: 1.35; color: var(--text-muted); }
+.fw-pane-media .fw-browse-search { flex: none; margin: 8px 10px; }
+.fw-pane-media .fw-browse[data-panel="media"] { flex: 1 1 auto; min-block-size: 0; overflow: hidden auto; padding: 0; }
+.fw-pane-media .fw-browse[data-panel="media"] > :is(.fw-browse-head, .fw-fx-groups, .fw-agent-card) { display: none; }
+.fw-pane-media .fw-browse[data-panel="media"] > .fw-browse-hint { order: 3; margin: 0; padding: 10px 12px; font-size: var(--fs-11); line-height: 1.4; color: var(--text-muted); }
+.fw-media-cols { display: grid; grid-template-columns: minmax(0, 1fr) 44px 52px; column-gap: 6px; align-items: center; min-block-size: 22px; padding: 0 12px 0 10px; background: var(--group-head); border-block: 1px solid var(--line-0); font-size: var(--fs-11); color: var(--text-muted); }
+.fw-media-cols > :last-child { text-align: end; }
+.fw-pane-media .fw-media-list { block-size: auto; max-block-size: none; }
+.fw-pane-media .fw-media-list .fw-media-item { grid-template-columns: minmax(0, 1fr) 44px 52px; column-gap: 6px; min-block-size: 26px; padding: 0 12px 0 10px; border-radius: 0; font-size: var(--fs-12); }
+.fw-pane-media .fw-media-list .fw-media-item.is-current { background: var(--surface-raised); box-shadow: inset 2px 0 var(--accent-color); }
+.fw-pane-media .fw-media-list .fw-media-name { grid-area: 1 / 1; font-weight: 400; font-size: var(--fs-12); color: var(--text-primary); }
+.fw-pane-media .fw-media-list .fw-media-meta { grid-area: 1 / 2; font-size: var(--fs-11); color: var(--text-muted); }
+.fw-pane-media .fw-media-list .fw-media-len { grid-area: 1 / 3; text-align: end; font-size: var(--fs-11); color: var(--text-muted); }
+.fw-media-foot { flex: none; display: flex; align-items: center; gap: 2px; min-block-size: 32px; padding: 0 8px; border-block-start: 1px solid var(--line-0); background: var(--group-head); font-size: var(--fs-11); }
+.fw-media-foot .fw-icon-btn { display: grid; place-items: center; inline-size: 26px; block-size: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); }
+.fw-media-foot .fw-icon-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.fw-media-foot .fw-ico { inline-size: 15px; block-size: 15px; }
+.fw-media-count { margin-inline-start: auto; color: var(--text-muted); }
+
+/* ---- the transport row and the status line ----------------------------------------------------------------------- */
+.fw-shell { grid-template-rows: var(--fw-titlebar-h) minmax(0, 1fr) var(--fw-status-h); }
+.fw-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--fw-transport-h) minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
+  background: var(--group-head);
+  border-block-start: 1px solid var(--line-0);
+}
+.fw-status > .fw-transport { grid-row: 1; min-inline-size: 0; padding: 0 14px; gap: 14px; overflow: hidden; }
+.fw-status > .fw-st-info { display: contents; }
+.fw-status .fw-st-line { grid-row: 2; align-self: stretch; padding: 0 14px; gap: 18px; border-block-start: 1px solid var(--line-0); font-size: var(--fs-11); color: var(--text-muted); }
+.fw-status .fw-transport > :is(.fw-speed-btn, .fw-rec-btn):not(.fw-room-btn) { display: inline-flex; align-items: center; block-size: 26px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface-raised); color: var(--text-primary); font-size: var(--fs-12); }
+.fw-status .fw-st-line .fw-st-rate { margin-inline-start: auto; }
+.fw-status .fw-st-line .fw-st-output select { block-size: 20px; border: 0; background: transparent; color: var(--text-muted); font-size: var(--fs-11); }
+.fw-status .fw-tbtn { border: 1px solid var(--line-2); background: var(--surface-raised); border-radius: 8px; }
+.fw-status .fw-tbtn[data-action="play"] { border-color: var(--cta-bg); background: var(--cta-bg); color: var(--cta-text); }
+.fw-status .fw-tbtn[data-action="play"]:hover:not(:disabled) { background: var(--cta-bg-hover); color: var(--cta-text); }
+.fw-status .fw-tbtn[data-action="record"] { color: var(--fw-record); }
+.fw-status .fw-tbtn[data-action="record"][aria-pressed="true"] { background: var(--fw-record); border-color: var(--fw-record); color: var(--text-on-accent); }
+.fw-status .fw-tbtn { inline-size: 32px; block-size: 32px; }
+.fw-status .fw-tbtn[data-action="play"] { inline-size: 32px; block-size: 32px; border-radius: 8px; }
+/* the notice keeps its words for the live region and the tests; the toast is what is seen */
+.fw-status .fw-notice { position: absolute; inline-size: 1px; block-size: 1px; min-block-size: 0; overflow: visible; clip-path: inset(50%); white-space: nowrap; text-overflow: clip; }
+.fw-tx-clock { display: flex; flex-direction: column; justify-content: center; line-height: 1.15; }
+.fw-tx-time { font-family: var(--font-mono); font-size: var(--fs-16); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.fw-tx-of { font-size: var(--fs-11); color: var(--text-muted); }
+.fw-st-selected { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.fw-st-selected:empty { display: none; }
+
+/* ---- toasts: bottom centre, a hollow liquid-glass outline; the app's hue, or the danger colour for an error ----------- */
+.fw-toasts {
+  position: fixed;
+  inset-inline: 0;
+  /* above the status bar, the transport and the dock bar, in both themes */
+  inset-block-end: 132px;
+  z-index: var(--z-toast);
+  /* zero height, growing upward: the layer never changes size, and a toast already shown never moves */
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: var(--space-2);
+  block-size: 0;
+  pointer-events: none;
+}
+.fw-toast {
+  --fw-t: var(--fw-hue);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-inline-size: min(560px, calc(100vw - 32px));
+  padding: 9px 18px;
+  border: 1.5px solid var(--fw-t);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-primary) 38%, transparent);
+  color: var(--fw-t);
+  font-size: var(--fs-13);
+  font-weight: 500;
+  line-height: 1.3;
+  backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-md);
+  pointer-events: auto;
+  cursor: default;
+  animation: fw-toast-in 160ms var(--ease-glass) both;
+}
+/* the words are drawn from the data-text attribute, so the toast is not page text: the status notice stays the one live region */
+.fw-toast::before { content: attr(data-text); min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.fw-toast[data-kind="error"] { --fw-t: var(--danger); }
+.fw-toast[data-leaving] { opacity: 0; transform: translateY(6px); transition: opacity 220ms var(--ease-glass), transform 220ms var(--ease-glass); }
+body.theme-light .fw-toast { color: color-mix(in oklab, var(--fw-t) 72%, #26241d); background: color-mix(in srgb, var(--surface-raised) 55%, transparent); }
+@keyframes fw-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fw-toast { animation: none; } .fw-toast[data-leaving] { transition: none; } }
+
+/* ---- fixes found laying the panels out ------------------------------------------------------------------------------ */
+.fw-tool-tray .fw-tool-icon:is(.fw-seg-btn, .fw-mode) {
+  display: grid;
+  place-items: center;
+  inline-size: 30px;
+  min-block-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 0;
+  color: var(--text-secondary);
+}
+.fw-tool-tray .fw-tool-icon:is(.fw-seg-btn, .fw-mode) .fw-ico { inline-size: 16px; block-size: 16px; }
+.fw-tool-tray .fw-tool-icon:is(.fw-seg-btn, .fw-mode):hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.fw-tool-tray .fw-tool-icon:is(.fw-seg-btn, .fw-mode)[aria-pressed="true"] { border-color: var(--line-3); background: var(--surface-raised); color: var(--accent-color); }
+.fw-tool-tray .fw-tool-icon > svg:not(.fw-ico) { display: none; }
+.fw-tool-tray .fw-seg > .fw-mode.fw-tool-icon > svg.fw-ico { display: block; }
+.fw-pane-media .fw-browse[data-panel="media"] > .fw-browse-hint { block-size: auto; min-block-size: 0; overflow: visible; white-space: normal; }
+.fw-pane-media { padding: 0; gap: 0; }
+.fw-pane-media .fw-browse[data-panel="media"] { gap: 0; }
+.fw-pane-media .fw-media-list { gap: 0; }

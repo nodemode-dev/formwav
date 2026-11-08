@@ -13,7 +13,10 @@ import type { Clip, Command, FadeShape, SessionDoc, Track } from "../engine/docu
 import type { MediaRef } from "../engine";
 import { setText } from "../vendor/nodemode/dom-stable";
 
-const COLORS = ["cyan", "violet", "amber", "pink", "slate", "green", "blue", "red"];
+// A stopwatch, inline and currentColor: the mark on a value that can change over time
+const STOPWATCH = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7"/><path d="M12 10v4l2.5 1.5M9.5 3h5"/></svg>`;
+// the approved lane colours: no cyan or green swatch (a stored cyan or green still draws)
+const COLORS = ["violet", "amber", "pink", "slate", "blue", "red"];
 const SHAPES: Array<[string, string]> = [["linear", "Linear"], ["equal-power", "Equal power"], ["s-curve", "S-curve"], ["exponential", "Exponential"], ["logarithmic", "Logarithmic"]];
 const TYPES: Array<[string, string]> = [["", "Not set"], ["dialogue", "Dialogue"], ["music", "Music"], ["effects", "Effects"], ["ambience", "Ambience"]];
 
@@ -27,21 +30,26 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
   panel.setAttribute("aria-label", "Clip");
   const field = (label: string, control: string, wide = false) => `<label class="fw-cf${wide ? " fw-cf-wide" : ""}"><span class="fw-cf-label">${label}</span>${control}</label>`;
   panel.innerHTML = `<p class="fw-cliptab-empty">Select a clip to see its settings here.</p><div class="fw-cliptab-grid">${[
+    // Grouped as the approved inspector is: label left, value right, a head over each group
+    `<h3 class="fw-cf-group">Clip</h3>`,
+    field("Clip name", `<input type="text" data-f="clipName" maxlength="80">`),
     field("Track name", `<input type="text" data-f="name" maxlength="80">`),
     field("Start (s)", `<input type="number" data-f="start" min="0" step="0.001">`),
     field("Length (s)", `<output data-f="length"></output>`),
-    field("Gain (dB)", `<input type="number" data-f="gain" min="-60" max="24" step="0.1">`),
+    field("Source", `<output data-f="source"></output>`, true),
+    `<h3 class="fw-cf-group">Level and fades</h3>`,
+    field("Gain (dB)", `<input type="number" data-f="gain" min="-60" max="24" step="0.1">`).replace('<span class="fw-cf-label">', `<span class="fw-cf-label"><button type="button" class="fw-stopwatch" data-auto-gain aria-label="Automate the gain over time" title="Automate the gain over time: opens the track's volume automation">${STOPWATCH}</button>`),
     field("Fade in (s)", `<input type="number" data-f="fadeIn" min="0" step="0.01">`),
     field("Fade out (s)", `<input type="number" data-f="fadeOut" min="0" step="0.01">`),
     field("Fade shape", `<select data-f="shape" title="Both fades' shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
-    field("Sound type", `<select data-f="type">${TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
-    `<div class="fw-cf-actions" role="group" aria-label="Clip actions"><button type="button" class="fw-ibtn" data-clip-act="split" title="Split this clip where the playhead is">Split at the playhead</button><button type="button" class="fw-ibtn" data-clip-act="normalize" title="Normalize the selected clips to a loudness target">Normalize</button><button type="button" class="fw-ibtn" data-clip-act="check" title="Measure the recording and list what it needs, in the Inspector">Check the recording</button><button type="button" class="fw-ibtn" data-clip-act="repair" title="Find the clip's problems and propose a repair chain, in the Inspector">Repair assistant</button></div>`,
-    field("Clip name", `<input type="text" data-f="clipName" maxlength="80">`),
     field("Fade-out shape", `<select data-f="outShape" title="The fade-out's own shape">${SHAPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
+    `<h3 class="fw-cf-group">Clip sound</h3>`,
+    field("Sound type", `<select data-f="type">${TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`),
     field("Mute", `<select data-f="mute"><option value="">Plays</option><option value="on">Muted</option></select>`),
     field("Lock", `<select data-f="lock"><option value="">None</option><option value="time">Time lock</option><option value="edit">Edit lock</option></select>`),
-    field("Source", `<output data-f="source"></output>`, true),
+    `<h3 class="fw-cf-group">Colour</h3>`,
     `<div class="fw-cf fw-cf-wide"><span class="fw-cf-label">Colour</span><div class="fw-cf-colors" role="group" aria-label="Clip colour"><button type="button" class="fw-cf-color" data-color="" aria-label="The track's colour" title="The track's colour"></button>${COLORS.map((c) => `<button type="button" class="fw-cf-color" data-color="${c}" aria-label="${c}" title="${c}" style="color: var(--fw-color-${c})"></button>`).join("")}</div></div>`,
+    `<div class="fw-cf-actions" role="group" aria-label="Clip actions"><button type="button" class="fw-ibtn" data-clip-act="split" title="Split this clip where the playhead is">Split at the playhead</button><button type="button" class="fw-ibtn" data-clip-act="normalize" title="Normalize the selected clips to a loudness target">Normalize</button><button type="button" class="fw-ibtn" data-clip-act="check" title="Measure the recording and list what it needs, in the Inspector">Check the recording</button><button type="button" class="fw-ibtn" data-clip-act="repair" title="Find the clip's problems and propose a repair chain, in the Inspector">Repair assistant</button></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-three"><span class="fw-cf-label">Separate</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-three>Speech, music and effects to three tracks</button></div><output class="fw-cf-ara-state" data-three-state>Three tracks that add up to this clip exactly</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-speech"><span class="fw-cf-label">Speech</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-speech>Mark where people speak</button></div><output class="fw-cf-ara-state" data-speech-state>Marks speech as regions, even under music</output></div>`,
     `<div class="fw-cf fw-cf-wide fw-cf-sync"><span class="fw-cf-label">Line up by sound</span><div class="fw-cf-ara-row"><button type="button" class="fw-ibtn" data-sync>Line up other tracks' takes to this one</button></div><output class="fw-cf-ara-state" data-sync-state>Overlapping takes move to match this clip's sound</output></div>`,
@@ -183,6 +191,15 @@ export function mountClipTab(host: HTMLElement, engine: Engine): void {
     const card = button?.closest<HTMLElement>(".fw-insp-section");
     card?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
     card?.querySelectorAll<HTMLElement>(".fw-mic-findings")[act === "check" ? 0 : 1]?.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+  });
+
+  // The stopwatch on Gain: the track's volume automation opens under its lane (the lane's own A button), which is where
+  // the gain over time is drawn
+  panel.addEventListener("click", (e) => {
+    if (!(e.target as HTMLElement).closest("[data-auto-gain]")) return;
+    const hit = find(engine.get("document"));
+    const toggle = hit ? [...host.querySelectorAll<HTMLElement>(".fw-lane")].find((l) => l.dataset.key === hit.track.id)?.querySelector<HTMLButtonElement>(".fw-auto-toggle") : null;
+    if (toggle && toggle.getAttribute("aria-expanded") !== "true") toggle.click();
   });
 
   // Speech, music and effects (services/three_way.py, a trained model where installed): three tracks under the clip that sum to it exactly, one undo step

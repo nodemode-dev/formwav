@@ -117,6 +117,12 @@ their install descriptors in backend/app/services record:
   RNNoise model bd.rnnn from GregorR/rnnoise-models (stated by its author not to
   be subject to copyright), fetched when first used and checked against their
   SHA-256.
+- keyring 25.7.0 (MIT), with its dependencies jaraco.classes, jaraco.context,
+  jaraco.functools, more-itertools and jeepney (MIT) and SecretStorage (BSD-3-Clause),
+  installed from PyPI into the engine (backend/requirements.txt): the cloud
+  providers' API keys are kept in the system's password store
+  (backend/app/services/secrets.py). Not modified; licences and versions are in
+  LICENSES.md.
 - The browser demo's recordings (demo/assets/media: LibriVox readings, a
   Musopen piano performance and NASA clips, all public domain): sources,
   licences and changes are in demo/CREDITS.md.

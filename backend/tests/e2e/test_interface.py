@@ -13,6 +13,9 @@ from stand_ins import anthropic
 
 DIST = ROOT / "frontend" / "dist"
 SMALLEST = {"width": 1288, "height": 683}
+# the approved editor's reference window: the left panel (245 px), the track list (264 px) and the right column (301 px) leave
+# the timeline about 630 px here, six seconds at the first zoom; the smallest window is still measured by the clipping test
+DESIGN = {"width": 1440, "height": 900}
 WATCH = """
 window.__fw = { errors: [], shift: 0, shifts: [], clicks: [] };
 addEventListener('error', (e) => window.__fw.errors.push(String(e.message)));
@@ -107,7 +110,7 @@ def browser(playwright):
 def page(browser, app_url):
     # an earlier test's autosave (kept every 30 s while a session has unsaved changes) would greet this one with Recover
     urllib.request.urlopen(urllib.request.Request(app_url + "/api/autosave", method="DELETE", headers={"x-formwav-local": "1"}), timeout=10).close()
-    context = browser.new_context(viewport=SMALLEST)
+    context = browser.new_context(viewport=DESIGN)
     page = context.new_page()
     page.add_init_script(WATCH)
     page.console_errors = []
@@ -124,6 +127,13 @@ def _open(page, url: str) -> None:
     # v2.20.1: Home shows at launch with no session open, over the panes; the person steps back to the session first
     # (through the element itself: the recovery dialog a test answers next may already be open over it)
     page.evaluate("document.querySelector('.fw-home:not([hidden]) [data-home-act=\"back\"]')?.click()")
+
+
+def _agent_tab(page, name: str) -> None:
+    # the approved editor keeps the Agent column behind the dock's Ask the agent button: open it, then pick the tab
+    if not page.locator(f'[data-agent-tab="{name}"]').is_visible():
+        page.click(".fw-dock-ask")
+    page.click(f'[data-agent-tab="{name}"]')
 
 
 def _import_speech(page) -> None:
@@ -192,7 +202,7 @@ def test_an_imported_file_becomes_a_track_that_plays(page, app_url):
 def test_history_lists_each_edit_and_goes_back_to_any_of_them(page, app_url):
     _open(page, app_url)
     _import_speech(page)
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     rows = "[...document.querySelectorAll('.fw-history-row')].map((r) => [r.querySelector('.fw-history-label').textContent, r.dataset.state])"
     assert page.evaluate(rows) == [["Session start", "done"], ["Added jfk.wav", "now"]]
     page.click(".fw-history-row:nth-child(1) .fw-history-btn")
@@ -212,7 +222,7 @@ def test_the_synth_tab_sets_the_sessions_synth_in_one_undo_step(page, app_url):
     page.wait_for_function("document.querySelector('.fw-wave-seg [data-wave=\"saw\"]').getAttribute('aria-pressed') === 'true'")
     page.select_option(".fw-synth-preset", "Warm bass")
     page.wait_for_function("document.querySelector('[data-synth-key=\"cutoff\"] .fw-knob-value').textContent === '600 Hz'")
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     labels = page.evaluate("[...document.querySelectorAll('.fw-history-label')].map((l) => l.textContent)")
     assert labels == ["Session start", "Changed the synth", "Changed the synth"]
     assert _clean(page)["errors"] == []
@@ -246,7 +256,7 @@ def test_the_mixers_controls_set_solo_safe_trim_polarity_automation_off_the_pan_
     page.select_option(".fw-mix-panlaw", "-3")
     page.select_option(".fw-mix-bypass", "dynamics")
     assert page.input_value(".fw-mix-bypass") == ""
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     labels = page.evaluate("[...document.querySelectorAll('.fw-history-label')].map((l) => l.textContent)")
     assert labels[2:] == ["Changed the effects on jfk", "Soloed jfk", "Made jfk solo safe", "Cleared every solo", "Trimmed the input of jfk", "Inverted the polarity of jfk", "Turned off the automation of jfk", "Changed the pan law", "Bypassed inserts"]
     assert _clean(page)["errors"] == []
@@ -259,7 +269,7 @@ def test_while_it_plays_a_strip_holds_its_peak_and_latches_a_clip_and_a_dynamics
     page.click('.fw-tbtn[data-action="play"]')
     page.wait_for_function(f"document.querySelector('{strip} .fw-strip-clip').dataset.clip === 'true'")
     page.wait_for_function(f"[...document.querySelectorAll('{strip} .fw-out-hold')].every((h) => h.dataset.on === 'true')")
-    page.click('.fw-dock-tab[data-panel="effects"]')
+    page.click('.fw-side-tab[data-side="effects"]')
     page.wait_for_function("/^GR -\\d+\\.\\d dB$/.test(document.querySelector('.fw-fx-gr').textContent)")
     page.click('.fw-tbtn[data-action="stop"]')
     page.wait_for_function("document.querySelector('.fw-fx-gr').textContent === 'GR 0.0 dB'")
@@ -296,7 +306,7 @@ def test_the_export_dialog_writes_a_range_as_24_bit_aiff_normalised_and_reports_
 
 
 def _labels(page) -> list:
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     return page.evaluate("[...document.querySelectorAll('.fw-history-label')].map((l) => l.textContent)")
 
 
@@ -487,6 +497,7 @@ def test_memory_locations_the_snap_dialog_and_a_range_pasted_on_another_track_ho
     page.keyboard.press("ControlOrMeta+c")
     page.wait_for_function("document.querySelector('.fw-notice').textContent.startsWith('Copied 1.000 s')")
     page.keyboard.press("Escape")
+    body = page.locator(".fw-lane-body").nth(1).bounding_box()  # the lanes sit closer while a panel is open under them
     page.mouse.click(body["x"] + 400, body["y"] + body["height"] / 2)
     page.keyboard.press("ControlOrMeta+v")
     page.wait_for_function("document.querySelectorAll('.fw-lane')[1].querySelectorAll('.fw-clip').length === 1")
@@ -496,6 +507,7 @@ def test_memory_locations_the_snap_dialog_and_a_range_pasted_on_another_track_ho
 
 
 def test_the_counters_read_every_timebase_and_the_rulers_stack_with_nothing_moving_unasked(page, app_url):
+    page.set_viewport_size(SMALLEST)  # the Start, End and Length tray drops End at the smallest window
     _open(page, app_url)
     _import_speech(page)
     clock = "document.querySelector('.fw-clock').textContent"
@@ -515,17 +527,17 @@ def test_the_counters_read_every_timebase_and_the_rulers_stack_with_nothing_movi
     assert page.evaluate("[document.querySelector('.fw-subcounter').textContent, document.querySelector('.fw-st-length').hidden]") == ["Timecode 00:00:03:00", True]
     page.click('.fw-counter-pop [data-c="all"]')
     ruler = "Math.round(document.querySelector('.fw-ruler').getBoundingClientRect().height)"
-    page.wait_for_function(f"{ruler} === 236")
+    page.wait_for_function(f"{ruler} === 240")  # the approved ruler row is 40 px (it was 36), then 20 px a ruler
     assert page.evaluate("[...document.querySelectorAll('.fw-ruler-names span')].map((s) => s.textContent)") == ["Bars|Beats", "Min:Secs", "Timecode", "Timecode 2", "Feet+Frames", "Samples", "Tempo", "Meter", "Key", "Chords"]
     page.click('.fw-counter-pop [data-c="minimal"]')
-    page.wait_for_function(f"{ruler} === 36")
+    page.wait_for_function(f"{ruler} === 40")
     page.keyboard.press("Escape")
     page.wait_for_selector(".fw-counter-pop", state="hidden")
     _range(page, 1, 2)
     cells = "[...document.querySelectorAll('.fw-sel-cell')].map((c) => getComputedStyle(c).display === 'none' ? null : c.querySelector('.fw-sel-value').textContent)"
     page.wait_for_function(f"{cells}[2] === '0:01.000'")
-    # at the smallest window the tray holds Start and Length; End is dropped first
-    assert page.evaluate(cells) == ["0:01.000", None, "0:01.000"]
+    # the approved tool strip has room for Start, End and Length at the smallest window (they were once cut to Start and Length)
+    assert page.evaluate(cells) == ["0:01.000", "0:02.000", "0:01.000"]
     assert _labels(page) == ["Session start", "Added jfk.wav", "Changed the frame rate"]
     assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
 
@@ -571,6 +583,7 @@ def test_the_in_app_agent_carries_out_a_chain_of_tools(page, app_url):
     anthropic.REQUESTS.clear()
     _open(page, app_url)
     _import_speech(page)
+    page.click(".fw-dock-ask")
     page.select_option(".fw-agent-via", "api")
     page.fill(".fw-agent-ask textarea", "Lower the track by 6 dB, fade its clip in and out, and mark one second")
     page.click('[data-agent="run"]')
@@ -642,7 +655,7 @@ def test_linked_faders_move_as_one_step_polarity_sits_on_the_strip_the_master_sh
         page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
     finally:
         _engine(app_url, "DELETE", "/api/autosave")
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     if page.locator(".fw-dock").is_hidden():
         page.click('.fw-panel-toggle[data-pane="editor"]')
     page.click('.fw-dock-tab[data-panel="mixer"]')
@@ -718,7 +731,7 @@ def test_every_string_on_screen_has_a_translation_in_all_twenty_five_languages_a
     page.click('[data-mix="add-bus"]')
     page.click('[data-mix="add-vca"]')
     page.click(".fw-lane .fw-auto-toggle")
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     english = page.evaluate("window.__fwI18n.keys()")
     text = page.evaluate("document.body.innerText")
     gaps = {}
@@ -783,7 +796,7 @@ def _add_notes(page, notes: list) -> None:
 
 def _new_note_clip(page) -> None:
     # History open beside the work, so each step's words can be waited for as they land
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     _menu(page, "Event", "New note clip")
     page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1 && !document.querySelector('.fw-piano').hidden")
     page.wait_for_function(f"{NOTES_STATE} === 'Notes · 0 notes'")
@@ -880,8 +893,7 @@ def test_the_event_menu_and_list_quantize_edit_name_chords_and_split_each_in_one
     # the Inspector's MIDI effects offer the real-time duration and delay
     clip = page.locator(".fw-lane .fw-clip").first.bounding_box()
     page.mouse.click(clip["x"] + 20, clip["y"] + clip["height"] * 0.75)
-    page.click(".fw-dock-more > .fw-menu-btn")
-    page.click('.fw-dock-more [data-panel="inspector"]')
+    page.click('.fw-side-tab[data-side="repair"]')  # the Inspector is the right column's Repair tab
     for kind in ("duration", "delay"):
         page.select_option('[data-midifx="kind"]', kind)
         page.click('[data-midifx="add"]')
@@ -949,12 +961,13 @@ CUT = """(() => {
   return out;
 })()"""
 ACTIONS_IN_VIEW = """(() => {
-  const panel = document.querySelector('.fw-dock .fw-cliptab').getBoundingClientRect();
-  return [...document.querySelectorAll('.fw-dock .fw-cf-actions button')].filter((b) => { const r = b.getBoundingClientRect(); return r.top < panel.top || r.bottom > panel.bottom; }).map((b) => b.textContent);
+  // the right column scrolls: each action is scrolled to, and must then sit inside the column, uncut
+  const panel = document.querySelector('.fw-cliptab').closest('.fw-pane-agent').getBoundingClientRect();
+  return [...document.querySelectorAll('.fw-cliptab .fw-cf-actions button')].filter((b) => { b.scrollIntoView({ block: 'nearest' }); const r = b.getBoundingClientRect(); return r.top < panel.top || r.bottom > panel.bottom; }).map((b) => b.textContent);
 })()"""
 STATES = [
     ["clip"], ["effects"], ["studio", "effects"], ["mixer"], ["mixer", "route"], ["synth"], ["pads"], ["spectrum"], ["transcript"],
-    ["more", "inspector"], ["more", "notes"], ["list"], ["more", "labels"],
+    ["repair"], ["more", "notes"], ["list"], ["more", "labels"],
 ]
 
 
@@ -986,6 +999,9 @@ def test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes(bro
                     page.click('.fw-fxlib-item[data-proc="dither"]')
                 elif state[0] == "more":
                     page.click(f'.fw-dock-more [data-panel="{step}"]')
+                elif step in ("clip", "effects", "repair"):
+                    # the approved editor keeps Clip, Effects and Repair (the Inspector) in the right column's tabs
+                    page.click(f'.fw-side-tab[data-side="{step}"]')
                 else:
                     page.click(f'.fw-dock-tab[data-panel="{step}"]')
                 page.wait_for_timeout(250)
@@ -996,7 +1012,7 @@ def test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes(bro
             page.click(f'.fw-pane-media .fw-pane-tab[data-tab="{tab}"]')
             page.wait_for_timeout(250)
             found[f"browser {tab}"] = page.evaluate(CUT)
-        page.click('[data-agent-tab="history"]')
+        _agent_tab(page, "history")
         page.wait_for_timeout(250)
         found["history"] = page.evaluate(CUT)
         page.locator(".fw-menu-btn", has_text="Event").click()
@@ -1073,7 +1089,7 @@ def test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_
     assert svg == {"measures": "1", "heads": "4"}
     assert page.evaluate("document.querySelectorAll('.fw-score-body svg ellipse.head').length") == 4
 
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     _menu(page, "Event", "New note clip")
     page.wait_for_function("!document.querySelector('.fw-piano').hidden")
     page.click(".fw-piano [data-step]")
@@ -1111,7 +1127,7 @@ def test_the_more_lanes_row_draws_mute_trim_vca_send_and_master_lanes_coalesces_
         page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1")
     finally:
         _engine(app_url, "DELETE", "/api/autosave")
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     page.click(".fw-lane .fw-auto-toggle")
     select = ".fw-lane select.fw-auto-fx"
     options = page.evaluate(f"[...document.querySelector('{select}').options].map((o) => [o.value, o.textContent])")
@@ -1164,7 +1180,7 @@ def test_every_send_shows_on_the_strip_with_pre_mute_and_pan_a_bus_plays_into_a_
         page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 2")
     finally:
         _engine(app_url, "DELETE", "/api/autosave")
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     _range(page, 1, 3)
     page.click('.fw-lane[data-key="t2"] .fw-lane-head', modifiers=["Shift"], position={"x": 40, "y": 8})
     page.wait_for_function("[...document.querySelectorAll('.fw-range')].filter((r) => !r.hidden).length === 2")
@@ -1221,7 +1237,7 @@ def test_tempo_meter_key_and_chord_rulers_take_changes_by_double_click_and_the_e
         page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1")
     finally:
         _engine(app_url, "DELETE", "/api/autosave")
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     assert page.evaluate("[...document.querySelectorAll('.fw-ruler-names span')].length") == 4
     top = page.evaluate("document.querySelector('.fw-ruler-corner').offsetHeight")
     canvas = page.locator(".fw-ruler-canvas").first
@@ -1258,7 +1274,7 @@ def test_the_demo_session_opens_from_the_file_menu_and_agents_read_and_change_th
     _menu(page, "File", "Open the demo session")
     page.wait_for_function("document.querySelectorAll('.fw-lane').length === 6", timeout=60000)
     assert page.evaluate("[...document.querySelectorAll('.fw-lane .fw-lane-name')].map((n) => n.textContent)") == ["Kick", "Snare", "Hats", "Bass", "Pad", "Keys"]
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     _engine(app_url, "POST", "/api/agents/outside", {"outside": "allow"})
     try:
         state = _engine(app_url, "POST", "/api/commands/session.get-session-state", {"params": {}})
@@ -1281,7 +1297,7 @@ def test_the_demo_session_opens_from_the_file_menu_and_agents_read_and_change_th
 def test_commands_focus_keys_shortcuts_window_clip_gain_paste_special_templates_and_revert(page, app_url):
     _open(page, app_url)
     _import_speech(page)
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     clip = page.locator(".fw-lane .fw-clip").first
     box = clip.bounding_box()
     # Commands Focus: B separates at the playhead, A trims the start to it
@@ -1322,6 +1338,9 @@ def test_commands_focus_keys_shortcuts_window_clip_gain_paste_special_templates_
     # Paste Special: the copied clip repeated across a range
     page.locator(".fw-lane .fw-clip").first.click(position={"x": 40, "y": box["height"] * 0.8})
     page.keyboard.press("ControlOrMeta+c")
+    # the lanes start further in (the left panel and the track list leave about six seconds in view): scroll the stage on, then draw the range
+    page.evaluate("document.querySelector('.fw-stage').scrollLeft = 250")
+    page.wait_for_function("document.querySelector('.fw-stage').scrollLeft >= 249")
     _range(page, 3.5, 8.5)
     _menu(page, "Edit", "Paste special: repeat to fill selection")
     _step(page, "Repeated to fill the selection")
@@ -1369,7 +1388,7 @@ def test_playlists_as_lanes_comp_merge_notes_clips_files_and_window_configuratio
         page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 3")
     finally:
         _engine(app_url, "DELETE", "/api/autosave")
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     # the other playlist as a lane: a drag across its clip comps that span into the main playlist
     page.click('.fw-lane[data-key="t1"] .fw-takes-toggle')
     seg = page.locator('.fw-lane[data-key="t1"] .fw-take-row[data-playlist="Take 2"] .fw-take-seg').first
@@ -1498,15 +1517,15 @@ def test_a_note_track_plays_the_drum_and_subtractive_synths_and_a_tracks_effects
         _engine(app_url, "DELETE", "/api/autosave")
     clip = page.locator('.fw-lane[data-key="t1"] .fw-clip').first.bounding_box()
     page.mouse.click(clip["x"] + 20, clip["y"] + clip["height"] * 0.75)
-    page.click(".fw-dock-more > .fw-menu-btn")
-    page.click('.fw-dock-more [data-panel="inspector"]')
+    page.click('.fw-side-tab[data-side="repair"]')  # the Inspector is the right column's Repair tab
     page.select_option("[data-instrument]", "drums")
     page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Instrument set: 1 note clip re-rendered'")
     assert page.is_visible('[data-inst-params="drums"]') and not page.is_visible('[data-inst-params="subtractive"]')
     page.fill('[data-inst-params="drums"] [data-inst-param="kickDecay"]', "0.9")
     page.press('[data-inst-params="drums"] [data-inst-param="kickDecay"]', "Tab")
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     _step(page, "Edited notes on Beat")
+    page.click('.fw-side-tab[data-side="repair"]')  # the right column shows one tab at a time: back to the Inspector
     page.select_option("[data-instrument]", "subtractive")
     page.wait_for_function("document.querySelector('.fw-notice').textContent === 'Instrument set: 1 note clip re-rendered'")
     page.select_option('[data-inst-params="subtractive"] [data-inst-param="osc1"]', "0")
@@ -1530,7 +1549,7 @@ def test_a_prores_picture_plays_through_its_proxy_with_thumbnails_an_offset_and_
     _open(page, app_url)
     page.evaluate("document.querySelector('[data-picture]').click()")
     page.set_input_files("[data-picture-file]", str(movie))
-    page.click('[data-agent-tab="history"]')
+    _agent_tab(page, "history")
     _step(page, "Opened the picture scene.mov")
     page.wait_for_function("document.querySelector('.fw-picture-video').readyState >= 2", timeout=60000)
     # a frame of the proxy drawn into a canvas is not black
