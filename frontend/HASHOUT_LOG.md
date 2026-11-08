@@ -190,6 +190,22 @@ frontend/
 
 ---
 
+## ui/prefs.ts, styles/prefs.css · Preferences as FormVis's SettingsDialog, rail outside the frame {#prefs-rail}
+
+The rail used to sit inside the dialog and Done at the top, unlike the rest of the form family. Now the native dialog is
+the frame (it keeps Escape, focus return and the top layer) at FormVis's size, min(840px, 100vw minus 280px) by
+min(86vh, 780px), offset 240 px so frame and rail centre together. The rail is a 232 px glass column 28 px left of it
+(76 px collapsed, the fold button at its foot, kept in formwav.prefsRailCollapsed); an SVG wire runs from the active tab
+along a trunk in the gap to a 14 px port on the frame's edge at the header divider, redrawn in one animation frame and
+only when its path changes. Each section is a card with a head that folds it (chevron turns, body hidden, aria-expanded),
+its groups wrapped in FormVis's group cards; Done is in the footer. The spy marks the last card whose top passed the
+pane's top plus 24 px (the last card at the end of the scroll) and is muted 700 ms after a tab click. Keys typed in the
+dialog stop at it, as FormVis's Dialog does. Checkboxes are drawn as FormVis's switch; theme swatches are 32 px.
+Measured at 1440 by 900: folding General leaves the frame (420, 63, 840 by 774), the card head and Done where they were.
+prefsCardBody(id) and the `[data-prefs-body]` card bodies let a section module render into its card. Models on this
+computer now comes before Keys and Models, as in the approved mockup. New strings: Collapse tabs, Expand tabs
+(i18n/added/prefs-rail). The wire shade's black is the new token --prefs-wire-shade.
+
 ## ui/editor-layout.ts, ui/toast.ts, styles/editor-family.css, ui/dock.ts, ui/prefs.ts · the editor as approved, toasts, real Preferences controls (v2.25.0) {#editor-family}
 
 ### The editor
