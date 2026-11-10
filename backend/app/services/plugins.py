@@ -30,7 +30,7 @@ def host_binary() -> str:
     if named and Path(named).is_file():
         return named
     for build in ("release", "debug"):
-        candidate = REPO_HOST / build / "fwhost"
+        candidate = REPO_HOST / build / ("fwhost.exe" if os.name == "nt" else "fwhost")
         if candidate.is_file():
             return str(candidate)
     found = shutil.which("fwhost")

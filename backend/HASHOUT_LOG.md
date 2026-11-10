@@ -138,6 +138,15 @@ backend/
 
 ---
 
+## services/plugins.py host_binary · the Windows host is found by its .exe name (unreleased, after v2.26.0) {#plugins-host-exe}
+
+host_binary looked for native/formwav-host/target/<build>/fwhost, which on Windows is built as fwhost.exe, so the host
+that oc_install.bat now builds was never found there and the engine still said the plug-in host was not built until
+FORMWAV_HOST_BIN was set. The repo candidate is now fwhost.exe when os.name is "nt" (shutil.which already honours
+PATHEXT for the PATH lookup). Checked with py_compile and pyflakes; not run on Windows.
+
+---
+
 ## oc_install.bat · the Windows install builds what the bash install builds (unreleased, after v2.26.0) {#oc-install-bat-parity}
 
 oc_install.bat stopped after `maturin develop`. oc_install also builds the plug-in host (native/formwav-host, which
