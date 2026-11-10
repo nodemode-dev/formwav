@@ -138,6 +138,16 @@ backend/
 
 ---
 
+## services/aup_project.py _read_au · a corrupt .au block answers 422, not 500 (unreleased, after v2.26.0) {#aup-au-offset}
+
+An .au block whose header names a data offset past the end of the file made numpy's frombuffer raise a bare ValueError
+(offset must be non-negative and no greater than buffer length), which routers/projects.py import_aup does not catch
+(it catches media.MediaError only), so the import answered 500. _read_au now refuses it as a media.MediaError ("a block
+file's data offset lies past its end"), which the route answers as 422 like every other unreadable block. Checked with
+a "dns." header naming offset 1000 in a 40 byte block.
+
+---
+
 ## services/secrets.py, services/model_sizes.py, routers/models.py, routers/providers.py · keys kept as FormVis keeps them, model downloads sized and timed (unreleased, after v2.25.0) {#keys-formvis-sizes}
 
 Keys: services/secrets.py now follows FormVis's services/secrets.py step for step. The environment comes first (as
