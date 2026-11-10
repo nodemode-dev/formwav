@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 2.26.0" src="https://img.shields.io/badge/version-2.26.0-eef0f4?style=flat-square">
+  <img alt="version 2.26.1" src="https://img.shields.io/badge/version-2.26.1-eef0f4?style=flat-square">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript-Vite-3178c6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="Python and FastAPI" src="https://img.shields.io/badge/Python-FastAPI-009688?style=flat-square">
   <img alt="Rust audio core" src="https://img.shields.io/badge/Rust-audio%20core-b7410e?style=flat-square">
