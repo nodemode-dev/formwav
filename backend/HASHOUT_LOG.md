@@ -138,6 +138,14 @@ backend/
 
 ---
 
+## oc_install.bat · the engine venv's creation stops the install too (unreleased, after v2.26.0) {#oc-install-bat-venv}
+
+The `python -m venv venv` line was the one step left without `|| exit /b 1` after the parity change; bash `set -e`
+stops on it. A failed venv creation now stops the install instead of installing into whatever python is active. Not
+run: Windows is not available here.
+
+---
+
 ## services/plugins.py host_binary · the Windows host is found by its .exe name (unreleased, after v2.26.0) {#plugins-host-exe}
 
 host_binary looked for native/formwav-host/target/<build>/fwhost, which on Windows is built as fwhost.exe, so the host
