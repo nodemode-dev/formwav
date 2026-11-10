@@ -138,6 +138,18 @@ backend/
 
 ---
 
+## oc_install.bat · the Windows install builds what the bash install builds (unreleased, after v2.26.0) {#oc-install-bat-parity}
+
+oc_install.bat stopped after `maturin develop`. oc_install also builds the plug-in host (native/formwav-host, which
+services/plugins.py runs as fwhost and names in its "not built" error) and makes formwav_mcp/venv with the MCP server's
+requirements, so a Windows install had no plug-in host and no MCP venv. The .bat now does both, after deactivating the
+engine's venv, with the same order and the venv's python.exe for the pip calls. Every pip, maturin and cargo line ends
+`|| exit /b 1`, so a failed step stops the install instead of reporting success. The root formwav_oc_install.bat only
+calls backend\oc_install.bat and frontend\oc_install.bat, so nothing was already doing these steps and nothing is
+duplicated. Not run: Windows is not available here.
+
+---
+
 ## boot_backend.bat · the Windows reload watches app only (unreleased, after v2.26.0) {#boot-backend-bat-reload}
 
 boot_backend has run uvicorn with `--reload-dir app` so that pip or maturin writing into venv/ does not reload the
