@@ -138,6 +138,15 @@ backend/
 
 ---
 
+## boot_backend.bat · the Windows reload watches app only (unreleased, after v2.26.0) {#boot-backend-bat-reload}
+
+boot_backend has run uvicorn with `--reload-dir app` so that pip or maturin writing into venv/ does not reload the
+engine during an install (an import failing mid-install left it down until the next edit). boot_backend.bat lacked the
+flag and so watched the whole backend folder, venv\ included. It now has `--reload --reload-dir app`, as the bash
+script does. Not run: Windows is not available here; the line was compared with boot_backend by eye.
+
+---
+
 ## services/aup_project.py _read_au · a corrupt .au block answers 422, not 500 (unreleased, after v2.26.0) {#aup-au-offset}
 
 An .au block whose header names a data offset past the end of the file made numpy's frombuffer raise a bare ValueError
