@@ -341,8 +341,10 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
 
   /** The editor's notes back in each clip's media frames, every clip rendered again, then one batch: one undo step
    *  however many clips changed, labelled as the gesture was (S7). */
+  let commitSeq = 0;
   const commit = async (label = "Edited notes", extra: readonly Command[] = []) => {
     if (!target) return false;
+    const seq = ++commitSeq;
     setText(state, "Rendering…");
     // a snapshot first: the document can change while the renders run
     const edited = notes.map((n) => ({ ...n }));
@@ -358,6 +360,10 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
         if (!clip || JSON.stringify(clip.notes) === JSON.stringify(mine)) continue;
         const media = await renderNoteMedia(engine, tg.trackId, tg.clipId, mine);
         commands.push({ type: "set-clip-notes", trackId: tg.trackId, clipId: tg.clipId, notes: mine, media });
+      }
+      if (seq !== commitSeq) {
+        if (extra.length) engine.dispatch(extra.length === 1 ? extra[0] : { type: "batch", commands: [...extra], label });
+        return false;
       }
       commands.push(...extra);
       if (commands.length) engine.dispatch(commands.length === 1 && label === "Edited notes" ? commands[0] : { type: "batch", commands, label });
