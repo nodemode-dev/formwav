@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Body, HTTPException
 
+from ..services import media
 from ..services import providers as prov
 
 router = APIRouter()
@@ -15,6 +16,12 @@ def _run(fn, *args, **kwargs):
         return fn(*args, **kwargs)
     except prov.ProviderError as err:
         raise HTTPException(err.status, str(err)) from err
+    except KeyError as err:
+        if err.args and isinstance(err.args[0], str) and media.MEDIA_ID.match(err.args[0]):
+            raise HTTPException(404, "no media with that id") from err
+        raise
+    except media.MediaError as err:
+        raise HTTPException(422, str(err)) from err
 
 
 @router.get("/providers")
