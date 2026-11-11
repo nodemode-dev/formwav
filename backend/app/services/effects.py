@@ -199,7 +199,7 @@ def _rnnoise_model() -> str:
         if hashlib.sha256(data).hexdigest() != RNNOISE_SHA256:
             raise media.MediaError("the fetched RNNoise model did not match its pinned checksum; not used")
         path.write_bytes(data)
-    return str(path)
+    return "'" + str(path).replace("\\", "/").replace(":", "\\:") + "'"
 
 
 GRAPHIC_BANDS = (31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
