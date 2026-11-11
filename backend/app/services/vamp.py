@@ -49,7 +49,10 @@ def _run(args: list[str], timeout: float):
 
 def list_plugins() -> list[dict]:
     """Every Vamp plugin on the path: key, name, maker, description, parameters (id, name, unit, range, default,
-    quantize step, choices) and outputs (id, name, unit, bins, timing type, whether features have durations)."""
+    quantize step, choices) and outputs (id, name, unit, bins, timing type, whether features have durations); none
+    when fwvamp is not built, as the plug-in catalogue is empty when fwhost is not."""
+    if not Path(binary()).is_file():
+        return []
     return _run(["list"], 120)
 
 

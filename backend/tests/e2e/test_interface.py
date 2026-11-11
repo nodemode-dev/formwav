@@ -305,6 +305,26 @@ def test_the_export_dialog_writes_a_range_as_24_bit_aiff_normalised_and_reports_
     assert _clean(page)["errors"] == []
 
 
+def test_the_export_and_cloud_dialogs_open_in_the_middle_of_the_window(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    centred = """(sel) => {
+      const r = document.querySelector(sel).getBoundingClientRect();
+      return [Math.abs(r.left + r.width / 2 - innerWidth / 2), Math.abs(r.top + r.height / 2 - innerHeight / 2), r.left, r.top];
+    }"""
+    page.click('[data-action="export"]')
+    page.wait_for_selector("dialog.fw-export-dialog[open]")
+    dx, dy, left, top = page.evaluate(centred, "dialog.fw-export-dialog[open]")
+    assert dx <= 1 and dy <= 1 and left > 0 and top > 0, (dx, dy, left, top)
+    page.keyboard.press("Escape")
+    page.wait_for_selector("dialog.fw-export-dialog[open]", state="detached")
+    page.evaluate("""document.querySelector('[data-action="cloud"]').click()""")
+    page.wait_for_selector("dialog.fw-cloud-dialog[open]")
+    dx, dy, left, top = page.evaluate(centred, "dialog.fw-cloud-dialog[open]")
+    assert dx <= 1 and dy <= 1 and left > 0 and top > 0, (dx, dy, left, top)
+    assert _clean(page)["errors"] == []
+
+
 def _labels(page) -> list:
     _agent_tab(page, "history")
     return page.evaluate("[...document.querySelectorAll('.fw-history-label')].map((l) => l.textContent)")
