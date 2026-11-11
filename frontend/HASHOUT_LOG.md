@@ -201,7 +201,13 @@ Third-party plug-in names are the plug-ins' own, like a file name: the effect pi
 `plugin:`, the Instrument row's CLAP and VST3 instruments and the Vamp picker's outputs are marked `translate="no"`, so
 i18n.ts skips them and they are not counted as missing. On macOS the scan lists the system's Audio Units ("Apple:
 AUBandpass (AU)" and the rest), which made the every-string-translated interface test fail in all 25 languages whenever
-fwhost was built. formwav's own effects in the same picker are still translated.
+fwhost was built. formwav's own effects in the same picker are still translated. That test only reaches the plug-in
+names where fwhost is built on macOS, so
+test_third_party_plugin_effect_vamp_and_clap_instrument_names_are_marked_not_to_be_translated runs anywhere: it serves
+the window a stand-in `plugin:` effect (added to the engine's real /api/effects groups), a stand-in Vamp plug-in and a
+stand-in CLAP instrument through Playwright routes, and checks all three options carry `translate="no"` while the
+built-in effects carry no translate attribute. On the inspector-pane.ts before this change it fails with all three
+marks null.
 
 The reset `* { margin: 0 }` also took the browser's `margin: auto` from dialog elements, which is what centres a modal
 dialog in its fixed, inset 0 box, so Export, Cloud and the other dialogs without their own margin opened at the top
