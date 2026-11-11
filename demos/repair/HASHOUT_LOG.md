@@ -2,7 +2,7 @@
 
 Rationale and removed-code notes for the repair demo. Source files here stay comment-free; what they would have said lives here.
 
-Current build version: v2.26.2
+Current build version: v2.26.3
 Last updated: 2026-11-10 · v2.26.2 the config's paths are file system paths; 2026-11-07 · v2.23.3 first version of the demo
 
 ---

@@ -2,7 +2,7 @@
 
 Rationale and removed-code notes for the browser demo. Source files here stay comment-free; what they would have said lives here.
 
-Current build version: v2.26.2
+Current build version: v2.26.3
 Last updated: 2026-11-10 · v2.26.2 the config's paths are file system paths (a checkout path with a space, or on Windows, builds); 2026-11-07 · v2.24.1 no demo change (the version only); 2026-11-07 · v2.24.0 no demo change (the version only); 2026-11-07 · v2.23.3 the link row to the Repair and Produce demos (demos/); 2026-11-07 · v2.23.2 no demo change (the version only); v2.23.1 the media pass: real public-domain session audio, Reduce noise, stale Clip stats fixed; v2.23.0 first version of the demo
 
 ---
