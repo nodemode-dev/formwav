@@ -365,13 +365,20 @@ def adopt(source: Path, title: str, move: bool = False) -> str:
     raise ProjectError("too many sessions share this name")
 
 
+def _mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def list_projects() -> list[dict]:
     items = []
-    for path in sorted(projects_dir().glob("*.fmw"), key=lambda p: p.stat().st_mtime, reverse=True):
+    for path in sorted((p for p in projects_dir().glob("*.fmw") if not p.name.startswith(".")), key=_mtime, reverse=True):
         try:
             manifest, doc, z = _read(path)
             z.close()
-        except (ProjectError, zipfile.BadZipFile):
+        except (ProjectError, zipfile.BadZipFile, OSError):
             continue
         items.append(_summary(path, manifest, doc))
     return items
