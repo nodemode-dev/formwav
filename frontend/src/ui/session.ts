@@ -1,12 +1,13 @@
+import type { Player } from "../audio/player";
 import type { Engine, HistoryState } from "../engine";
 import { mountImport } from "./import";
 import { mountLanes } from "./lanes";
 import { mountResampleRepair } from "./resample";
 import { bindShortcuts } from "./shortcuts";
 
-export function mountSession(host: HTMLElement, engine: Engine): void {
+export function mountSession(host: HTMLElement, engine: Engine, player: Player): void {
   mountLanes(host, engine);
-  mountImport(host, engine);
+  mountImport(host, engine, player);
   mountResampleRepair(host, engine);
   const undo = host.querySelector<HTMLButtonElement>('[data-action="undo"]');
   const redo = host.querySelector<HTMLButtonElement>('[data-action="redo"]');

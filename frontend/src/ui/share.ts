@@ -1,3 +1,4 @@
+import type { Player } from "../audio/player";
 import type { Engine } from "../engine";
 import { computeRestore, type Command, type RestorePatch } from "../engine/document";
 import { setText } from "../vendor/nodemode/dom-stable";
@@ -20,7 +21,7 @@ const call = async <T>(url: string, method = "GET", body?: unknown): Promise<T> 
   return out as T;
 };
 
-export function mountShare(host: HTMLElement, engine: Engine): void {
+export function mountShare(host: HTMLElement, engine: Engine, player: Player): void {
   const notice = host.querySelector<HTMLElement>(".fw-notice");
   let sharing = false;
   let seq = 0;
@@ -117,6 +118,7 @@ export function mountShare(host: HTMLElement, engine: Engine): void {
   };
   const join = async () => {
     const d = await call<{ document: Parameters<Engine["loadDocument"]>[0]; ops: Op[]; seq: number }>("/api/share/join");
+    player.stop();
     engine.loadDocument(d.document);
     seq = 0;
     apply(d.ops);
