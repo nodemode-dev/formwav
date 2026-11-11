@@ -1,5 +1,7 @@
+import { fileURLToPath } from "node:url";
+
 const PORT = 3073;
-const here = (p) => new URL(p, import.meta.url).pathname;
+const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 
 const classicScripts = {
   name: "classic-scripts-for-file-protocol",

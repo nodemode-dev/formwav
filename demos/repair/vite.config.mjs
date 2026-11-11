@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const PORT = 3071;
-const here = (p) => new URL(p, import.meta.url).pathname;
+const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 
 const themeBoot = {
   name: "theme-boot-from-demo-one",
