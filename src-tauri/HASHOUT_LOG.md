@@ -2,6 +2,19 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### capabilities/default.json · a double click on the title row maximizes on Windows and Linux (v2.26.2)
+- refers-to: capabilities/default.json :: permissions (`core:window:allow-internal-toggle-maximize`), description; ../frontend/src/ui/desktop.ts :: the title row's `data-tauri-drag-region`
+- kind: fix
+- logged: v2.26.2 · 2026-11-10
+
+Tauri's drag-region script (tauri 2.12.1, the version in Cargo.lock: src/window/scripts/drag.js) invokes
+`plugin:window|internal_toggle_maximize` on a double click of a `data-tauri-drag-region` element, not `toggle_maximize`.
+That command's permission is in `core:window:default`, which this capability deliberately does not grant, so the double
+click on the frameless window's title row did nothing. `core:window:allow-internal-toggle-maximize` is granted beside
+`allow-toggle-maximize`; the command only maximizes or restores the calling window when it is resizable, and it is the
+caption behaviour the title row is meant to have. Checked: the permission is listed in tauri 2.12.1's
+permissions/window reference and its build.rs; the JSON parses. Not run: no desktop build here.
+
 ### capabilities/default.json · the page no longer gets shell execute or the dialog plug-in (v2.26.2)
 - refers-to: capabilities/default.json :: description, permissions (`dialog:default` and `shell:allow-execute` removed); src/main.rs :: the sidecar spawn and the engine-failure dialog
 - kind: fix
