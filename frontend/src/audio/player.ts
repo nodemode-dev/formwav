@@ -953,6 +953,7 @@ export class Player {
     if (this.node) send(this.node, { type: "stop" });
     if ((this.node as unknown) instanceof NativeNode) (this.node as unknown as NativeNode).close();
     if (this.ctx) await this.ctx.close();
+    if (this.node) streams.delete(this.node);
     this.ctx = null;
     this.node = null;
     this.sources.clear();
@@ -974,6 +975,7 @@ export class Player {
   private async start(rate: number): Promise<AudioWorkletNode> {
     if (this.ctx) {
       await this.ctx.close();
+      if (this.node) streams.delete(this.node);
       this.ctx = null;
       this.node = null;
       this.sources.clear();
