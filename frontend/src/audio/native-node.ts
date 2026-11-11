@@ -6,7 +6,7 @@
  * own store) where the worklet would be sent the samples. The choice is kept per browser: null plays in the browser,
  * "" on the system's default device, a name on that device.
  */
-const OUTPUT_KEY = "formwav.output";
+const OUTPUT_KEY = "formwav.nativeOutput";
 
 type Reply = { type: string; [key: string]: unknown };
 
