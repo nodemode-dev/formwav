@@ -100,30 +100,39 @@ export function setMonitorLevel(gain: number): void {
  * the monitor level and no take started, until stop(). */
 export async function startMonitoring(player: Player, deviceId = ""): Promise<{ stop: () => void; node: AudioWorkletNode }> {
   const stream = await openInput(deviceId);
-  const ctx = await player.context();
-  await ctx.audioWorklet.addModule(recorderUrl);
-  const channels = Math.min(2, Math.max(1, stream.getAudioTracks()[0]?.getSettings().channelCount ?? 1));
-  const shared = inputs.get(deviceId);
-  const source = shared?.source ?? ctx.createMediaStreamSource(stream);
-  if (shared && !shared.source) shared.source = source;
-  const node = new AudioWorkletNode(ctx, "formwav-recorder", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: channels, channelCountMode: "explicit", channelInterpretation: "speakers" });
-  source.connect(node);
-  node.connect(ctx.destination);
-  node.port.postMessage({ type: "monitor", on: true, level: monitorGain } satisfies RecorderMessage);
-  monitorNodes.add(node);
-  return {
-    node,
-    stop: () => {
-      monitorNodes.delete(node);
-      node.port.postMessage({ type: "monitor", on: false } satisfies RecorderMessage);
-      try {
-        source.disconnect(node);
-      } catch {
-        // already disconnected
-      }
-      node.disconnect();
-    },
-  };
+  try {
+    const ctx = await player.context();
+    await ctx.audioWorklet.addModule(recorderUrl);
+    const channels = Math.min(2, Math.max(1, stream.getAudioTracks()[0]?.getSettings().channelCount ?? 1));
+    const shared = inputs.get(deviceId);
+    const source = shared?.source && shared.source.context === ctx ? shared.source : ctx.createMediaStreamSource(stream);
+    if (shared) shared.source = source;
+    const node = new AudioWorkletNode(ctx, "formwav-recorder", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: channels, channelCountMode: "explicit", channelInterpretation: "speakers" });
+    source.connect(node);
+    node.connect(ctx.destination);
+    node.port.postMessage({ type: "monitor", on: true, level: monitorGain } satisfies RecorderMessage);
+    monitorNodes.add(node);
+    let stopped = false;
+    return {
+      node,
+      stop: () => {
+        if (stopped) return;
+        stopped = true;
+        monitorNodes.delete(node);
+        node.port.postMessage({ type: "monitor", on: false } satisfies RecorderMessage);
+        try {
+          source.disconnect(node);
+        } catch {
+          // already disconnected
+        }
+        node.disconnect();
+        closeInput(deviceId);
+      },
+    };
+  } catch (err) {
+    closeInput(deviceId);
+    throw err;
+  }
 }
 
 export async function startRecording(player: Player, startPosition: number, onLevel: (peak: number) => void, deviceId = "", monitor = false, playAlong = true, pick: number[] | null = null): Promise<Recording> {
@@ -135,8 +144,8 @@ export async function startRecording(player: Player, startPosition: number, onLe
     const picked = (pick ?? []).filter((c) => c >= 0 && c < deviceChannels);
     const channels = picked.length ? picked.length : Math.min(2, deviceChannels);
     const shared = inputs.get(deviceId);
-    const source = shared?.source ?? ctx.createMediaStreamSource(stream);
-    if (shared && !shared.source) shared.source = source;
+    const source = shared?.source && shared.source.context === ctx ? shared.source : ctx.createMediaStreamSource(stream);
+    if (shared) shared.source = source;
     const node = new AudioWorkletNode(ctx, "formwav-recorder", {
       numberOfInputs: 1,
       numberOfOutputs: 1,
