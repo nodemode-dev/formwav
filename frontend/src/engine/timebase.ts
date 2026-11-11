@@ -6,7 +6,7 @@
  * samples.
  */
 import type { SessionDoc } from "./document";
-import { barBeatAt as mapBarBeat, barStartTick, hasMap, meterAtTick, sampleToTick, tempoMap, tickToSample, ticksPerBeat, type TempoMap } from "./tempo";
+import { barBeatAt as mapBarBeat, barStartTick, hasMap, meterAtTick, sampleToTick, tempoMap, tickToSample, ticksPerBar, ticksPerBeat, type TempoMap } from "./tempo";
 
 export type FrameRateId = "23.976" | "24" | "25" | "29.97" | "29.97df" | "30" | "47.952" | "48" | "50" | "59.94" | "59.94df" | "60" | "100" | "119.88" | "120";
 
@@ -222,6 +222,15 @@ export function formatPosition(samples: number, fmt: TimeFormat, ctx: TimeContex
 
 /** A length from `start` (Bars|Beats lengths count from 0| 0| 000, timecode lengths from 00:00:00:00). */
 export function formatLength(start: number, length: number, fmt: TimeFormat, ctx: TimeContext): string {
+  if (fmt === "bars_beats" && ctx.map) {
+    const from = roundHalfAway(sampleToTick(ctx.map, start));
+    const ticks = Math.max(0, roundHalfAway(sampleToTick(ctx.map, start + length)) - from);
+    const m = meterAtTick(ctx.map, from);
+    const bars = Math.floor(ticks / ticksPerBar(m.num, m.den));
+    const inBar = ticks - bars * ticksPerBar(m.num, m.den);
+    const beats = Math.floor(inBar / ticksPerBeat(m.den));
+    return barsText(bars, beats, inBar - beats * ticksPerBeat(m.den));
+  }
   if (fmt === "bars_beats") {
     const ticks = Math.max(0, ticksAt(start + length, ctx) - ticksAt(start, ctx));
     const at = barBeatAtTick(ticks, ctx);

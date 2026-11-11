@@ -2,6 +2,34 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### capabilities/default.json · a double click on the title row maximizes on Windows and Linux (v2.26.2)
+- refers-to: capabilities/default.json :: permissions (`core:window:allow-internal-toggle-maximize`), description; ../frontend/src/ui/desktop.ts :: the title row's `data-tauri-drag-region`
+- kind: fix
+- logged: v2.26.2 · 2026-11-10
+
+Tauri's drag-region script (tauri 2.12.1, the version in Cargo.lock: src/window/scripts/drag.js) invokes
+`plugin:window|internal_toggle_maximize` on a double click of a `data-tauri-drag-region` element, not `toggle_maximize`.
+That command's permission is in `core:window:default`, which this capability deliberately does not grant, so the double
+click on the frameless window's title row did nothing. `core:window:allow-internal-toggle-maximize` is granted beside
+`allow-toggle-maximize`; the command only maximizes or restores the calling window when it is resizable, and it is the
+caption behaviour the title row is meant to have. Checked: the permission is listed in tauri 2.12.1's
+permissions/window reference and its build.rs; the JSON parses. Not run: no desktop build here.
+
+### capabilities/default.json · the page no longer gets shell execute or the dialog plug-in (v2.26.2)
+- refers-to: capabilities/default.json :: description, permissions (`dialog:default` and `shell:allow-execute` removed); src/main.rs :: the sidecar spawn and the engine-failure dialog
+- kind: fix
+- logged: v2.26.2 · 2026-11-10
+
+The capability granted the window `dialog:default` and `shell:allow-execute` for the engine sidecar, on the belief (the
+2026-10-22 entry below) that main.rs needed them. A capability gates only calls from the webview; `app.shell().sidecar(...)`
+and `handle.dialog()` in Rust need none. The window shows a page on any `http://127.0.0.1:*`, so any script there could
+spawn the bundled engine through `plugin:shell|spawn` with its own environment and folder, and open native dialogs, which
+CLAUDE.md's list of what the page may call does not include. A search of frontend/src, frontend/public, frontend/index.html,
+demo/ and demos/ finds no `plugin:shell` or `plugin:dialog` call (ui/desktop.ts calls only the app commands, the window
+calls and event listening), and the two plug-ins stay initialised in main.rs for its own use. Both permissions and the
+description's mention of them are removed. Checked: the JSON parses. Not run: the desktop shell is not built here (no
+WebKit), so the engine start and the failure dialog were not tried in the app.
+
 ### tauri.conf.json, icons/FormWav.icon · the macOS app icon follows light and dark
 - refers-to: tauri.conf.json :: bundle.icon; icons/FormWav.icon/icon.json; icons/FormWav.icon/Assets/light.png, dark.png
 - kind: decision

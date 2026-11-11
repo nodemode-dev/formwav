@@ -21,7 +21,7 @@ _ROOT = Path(__file__).resolve().parents[3] / "native" / "formwav-vamp"
 
 
 def binary() -> str:
-    return os.environ.get("FORMWAV_FWVAMP") or str(_ROOT / "fwvamp")
+    return os.environ.get("FORMWAV_FWVAMP") or str(_ROOT / ("fwvamp.exe" if os.name == "nt" else "fwvamp"))
 
 
 def _run(args: list[str], timeout: float):

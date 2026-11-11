@@ -434,7 +434,7 @@ export interface RangeClip {
 
 /** Range copy: what plays in the range, its automation with it. */
 export function copyRange(doc: SessionDoc, range: EditRange): RangeClip | null {
-  const span = editSpan(doc, { range, clipIds: [] });
+  const span = editSpan(doc, { range: { trackId: range.trackId, start: range.start, end: range.end }, clipIds: [] });
   const track = doc.tracks.find((t) => t.id === range.trackId);
   if (!span || !track) return null;
   return {

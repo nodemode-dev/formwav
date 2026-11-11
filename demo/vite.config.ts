@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 const PORT = 3070;
 
 const classicScripts = {
@@ -11,11 +13,11 @@ const classicScripts = {
 };
 
 export default {
-  root: new URL("./src", import.meta.url).pathname,
+  root: fileURLToPath(new URL("./src", import.meta.url)),
   base: "./",
   publicDir: false,
   plugins: [classicScripts],
-  resolve: { alias: { "@fontsource": new URL("../frontend/node_modules/@fontsource", import.meta.url).pathname } },
+  resolve: { alias: { "@fontsource": fileURLToPath(new URL("../frontend/node_modules/@fontsource", import.meta.url)) } },
   server: { host: false, port: PORT, strictPort: true, fs: { allow: [".."] } },
   preview: { host: false, port: PORT + 1, strictPort: true },
   build: {

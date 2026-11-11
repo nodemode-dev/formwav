@@ -28,7 +28,7 @@ from mcp.types import ToolAnnotations
 
 logging.getLogger("httpx").setLevel(logging.WARNING)  # one INFO line per engine request is noise on the client's stderr
 ENGINE = os.environ.get("FORMWAV_ENGINE", "http://127.0.0.1:8060").rstrip("/")
-VERSION = "2.26.0"
+VERSION = "2.26.2"
 READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 MAKES_MEDIA = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 WRITES_FILE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
@@ -160,7 +160,7 @@ async def formwav_import_audio(path: str) -> dict[str, Any]:
     if not file.is_file():
         raise ToolError(f"No file at {file}. Give an absolute path to an audio or video file on this machine.")
     data = file.read_bytes()
-    return _media((await _call("POST", "/api/media", content=data, headers={"X-Filename": file.name, "Content-Type": "application/octet-stream"})).json())
+    return _media((await _call("POST", "/api/media", content=data, headers={"X-Filename": quote(file.name), "Content-Type": "application/octet-stream"})).json())
 
 
 @mcp.tool(annotations=WRITES_FILE, structured_output=True)

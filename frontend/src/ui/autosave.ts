@@ -23,6 +23,10 @@ export function mountAutosave(host: HTMLElement, engine: Engine): void {
     last = saved;
     void send("DELETE").catch(() => undefined);
   });
+  host.addEventListener("fw-opened", () => {
+    saved = engine.get("document");
+    last = saved;
+  });
   window.setInterval(() => {
     const doc = engine.get("document");
     if (busy || doc === last || doc === saved || !doc.tracks.length) return;

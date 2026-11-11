@@ -22,7 +22,7 @@ _ROOT = Path(__file__).resolve().parents[3] / "native" / "formwav-nyquist"
 
 
 def binary() -> str:
-    return os.environ.get("FORMWAV_FWNYQ") or str(_ROOT / "fwnyq")
+    return os.environ.get("FORMWAV_FWNYQ") or str(_ROOT / ("fwnyq.exe" if os.name == "nt" else "fwnyq"))
 
 
 def _bundled(name: str) -> Path | None:

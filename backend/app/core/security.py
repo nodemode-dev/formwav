@@ -68,6 +68,17 @@ def extension_file(scope) -> bool:
     return scope["type"] == "http" and scope.get("method") in ("GET", "HEAD") and str(scope.get("path", "")).startswith("/api/extensions/files/")
 
 
+def oauth_callback(scope, headers: dict[str, str]) -> bool:
+    return (
+        scope["type"] == "http"
+        and scope.get("method") == "GET"
+        and scope.get("path") == "/api/cloud/google/callback"
+        and headers.get("origin") is None
+        and headers.get("sec-fetch-mode", "").strip().lower() == "navigate"
+        and headers.get("sec-fetch-dest", "").strip().lower() == "document"
+    )
+
+
 class LocalOnly:
     def __init__(self, app):
         self.app = app
@@ -90,7 +101,7 @@ class LocalOnly:
             reason = "the engine answers this machine only"
         elif not _HOST.match(headers.get("host", "")):
             reason = "unexpected Host header"
-        elif extension_file(scope):
+        elif extension_file(scope) or oauth_callback(scope, headers):
             pass
         elif headers.get("origin") is None and headers.get("sec-fetch-site", "").strip().lower() == "cross-site":
             reason = "a request from another site"

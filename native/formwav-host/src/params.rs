@@ -32,7 +32,19 @@ pub struct Param {
 }
 
 fn json(text: &str) -> String {
-    text.replace('\\', "\\\\").replace('"', "\\\"")
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 pub fn to_json(params: &[Param]) -> String {
@@ -69,9 +81,14 @@ pub fn list(format: &str, path: &Path) -> Result<Vec<Param>, String> {
 }
 
 unsafe fn clap_list(path: &Path) -> Result<Vec<Param>, String> {
-    let (lib, entry) = crate::offline::clap_open(path)?;
+    let text = path.to_string_lossy();
+    let (path, index) = match text.rsplit_once('#') {
+        Some((file, n)) if n.parse::<u32>().is_ok() => (Path::new(file).to_path_buf(), n.parse::<u32>().unwrap_or(0)),
+        _ => (path.to_path_buf(), 0),
+    };
+    let (lib, entry) = crate::offline::clap_open(&path)?;
     let factory = ((*entry).get_factory.ok_or("no get_factory")?)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
-    let desc = if factory.is_null() { ptr::null() } else { ((*factory).get_plugin_descriptor.ok_or("no descriptors")?)(factory, 0) };
+    let desc = if factory.is_null() { ptr::null() } else { ((*factory).get_plugin_descriptor.ok_or("no descriptors")?)(factory, index) };
     if desc.is_null() {
         return Err("the file holds no plugin".into());
     }

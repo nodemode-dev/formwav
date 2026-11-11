@@ -905,6 +905,7 @@ export class Player {
     const node = this.node;
     if (!ctx || !node || !(node instanceof AudioWorkletNode)) return;
     node.disconnect();
+    if (this.tapNode && this.tapNode.context === ctx) node.connect(this.tapNode);
     try {
       this.outputTap?.disconnect();
     } catch {
@@ -953,6 +954,7 @@ export class Player {
     if (this.node) send(this.node, { type: "stop" });
     if ((this.node as unknown) instanceof NativeNode) (this.node as unknown as NativeNode).close();
     if (this.ctx) await this.ctx.close();
+    if (this.node) streams.delete(this.node);
     this.ctx = null;
     this.node = null;
     this.sources.clear();
@@ -974,6 +976,7 @@ export class Player {
   private async start(rate: number): Promise<AudioWorkletNode> {
     if (this.ctx) {
       await this.ctx.close();
+      if (this.node) streams.delete(this.node);
       this.ctx = null;
       this.node = null;
       this.sources.clear();
@@ -1004,6 +1007,8 @@ export class Player {
   }
 
   private open = false;
+  private playSeq = 0;
+  private playLoading = false;
 
   /** AU-37: a note on the live instrument (velocity 0 ends it), heard whether the transport runs or not; the audio
    *  graph is started if this is the first sound, as play starts it. */
@@ -1027,27 +1032,38 @@ export class Player {
   }
 
   async play(open = false): Promise<void> {
-    this.open = open;
-    const node = await this.ensure();
-    await this.ctx?.resume();
-    const doc = this.engine.get("document");
-    await Promise.all(Object.keys(doc.media).map((id) => this.load(node, id)));
-    this.sendPlan(node, this.engine.get("document"));
-    // The loop rule: with looping on, playback that starts outside the loop starts at its beginning (it had
-    // played straight past the loop from a playhead after its end). Recording's open playback keeps its pre-roll.
-    let at = this.engine.get("transport").positionSamples;
-    const loop = doc.loop;
-    if (!open && loop?.enabled && loop.end > loop.start && (at < loop.start || at >= loop.end)) {
-      at = loop.start;
-      this.engine.setTransport({ positionSamples: at });
+    const seq = ++this.playSeq;
+    this.playLoading = true;
+    try {
+      this.open = open;
+      const node = await this.ensure();
+      await this.ctx?.resume();
+      if (seq !== this.playSeq) return;
+      const doc = this.engine.get("document");
+      await Promise.all(Object.keys(doc.media).map((id) => this.load(node, id)));
+      if (seq !== this.playSeq) return;
+      this.sendPlan(node, this.engine.get("document"));
+      // The loop rule: with looping on, playback that starts outside the loop starts at its beginning (it had
+      // played straight past the loop from a playhead after its end). Recording's open playback keeps its pre-roll.
+      let at = this.engine.get("transport").positionSamples;
+      const loop = doc.loop;
+      if (!open && loop?.enabled && loop.end > loop.start && (at < loop.start || at >= loop.end)) {
+        at = loop.start;
+        this.engine.setTransport({ positionSamples: at });
+      }
+      await focusAll(node, doc, at);
+      if (seq !== this.playSeq) return;
+      send(node, { type: "seek", position: at });
+      send(node, { type: "play" });
+      this.engine.setTransport({ playing: true });
+    } finally {
+      if (seq === this.playSeq) this.playLoading = false;
     }
-    await focusAll(node, doc, at);
-    send(node, { type: "seek", position: at });
-    send(node, { type: "play" });
-    this.engine.setTransport({ playing: true });
   }
 
   stop(): void {
+    this.playSeq++;
+    this.playLoading = false;
     this.open = false;
     if (this.node) send(this.node, { type: "stop" });
     this.emitLevel(0, 0, [], null);
@@ -1076,7 +1092,7 @@ export class Player {
   }
 
   toggle(): Promise<void> {
-    if (this.engine.get("transport").playing) {
+    if (this.engine.get("transport").playing || this.playLoading) {
       this.stop();
       return Promise.resolve();
     }

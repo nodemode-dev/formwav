@@ -179,6 +179,7 @@ export function mountProjects(host: HTMLElement, engine: Engine, player: Player)
       }
       engine.loadDocument(opened.document);
       lastSaved = engine.get("document");
+      host.dispatchEvent(new CustomEvent("fw-opened", { detail: opened.name }));
       known = { name: opened.name, revision: opened.revision };
       savedAt = null;
       writeState();

@@ -1469,6 +1469,10 @@ export function applyCommand(doc: SessionDoc, cmd: Command, newId: () => string)
             ...(c.fadeIn !== undefined ? { fadeIn: at(c.fadeIn) } : {}),
             ...(c.fadeOut !== undefined ? { fadeOut: at(c.fadeOut) } : {}),
             ...(c.takes ? { takes: c.takes.map(source) } : {}),
+            ...(c.envelope ? { envelope: c.envelope.map((p) => ({ ...p, at: source(p.at) })) } : {}),
+            ...(c.notes ? { notes: c.notes.map((n) => ({ ...n, at: source(n.at), length: Math.max(1, source(n.length)) })) } : {}),
+            ...(c.controllers ? { controllers: c.controllers.map((e) => ({ ...e, at: source(e.at) })) } : {}),
+            ...(c.pitchCurve ? { pitchCurve: c.pitchCurve.map(([a, p]) => [source(a), p] as const) } : {}),
           };
         }),
         ...(t.automation

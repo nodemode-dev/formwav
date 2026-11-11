@@ -307,8 +307,8 @@ def _export(body: UploadInput) -> tuple[Path, str]:
         return path, f"{body.project}.fmw"
     if body.mediaId:
         info = media.media_info(body.mediaId)
-        path = next(media.media_dir().glob(f"{body.mediaId}.*"), None)
-        if path is None:
+        path = media.media_dir() / f"{body.mediaId}.wav"
+        if not path.is_file():
             raise HTTPException(404, "file missing")
         return path, str(info.get("name") or path.name)
     raise HTTPException(422, "name a saved session (project) or a media item (mediaId)")

@@ -43,6 +43,8 @@ def _read_au(data: bytes, count: int) -> np.ndarray:
     offset, _size, encoding, _rate, channels = struct.unpack(order + "IIIII", data[4:24])
     if channels != 1:
         raise media.MediaError("a block file holds more than one channel, which an .aup project never writes")
+    if offset > len(data):
+        raise media.MediaError("a block file's data offset lies past its end")
     if encoding == AU_FLOAT:
         samples = np.frombuffer(data, dtype=order + "f4", offset=offset, count=min(count, (len(data) - offset) // 4)).astype(np.float32)
     elif encoding == AU_INT16:

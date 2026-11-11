@@ -7,6 +7,7 @@
  *
  *   fwnyq <runtime-dir> <in.wav> <out.wav> <script.lsp>
  */
+#include <math.h>
 #include <sndfile.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -137,9 +138,14 @@ int main(int argc, char **argv) {
         case nyx_int:
             printf("{\"type\": \"int\", \"value\": %d}\n", nyx_get_int());
             break;
-        case nyx_double:
-            printf("{\"type\": \"double\", \"value\": %.17g}\n", nyx_get_double());
+        case nyx_double: {
+            double value = nyx_get_double();
+            if (isfinite(value))
+                printf("{\"type\": \"double\", \"value\": %.17g}\n", value);
+            else
+                printf("{\"type\": \"double\", \"value\": null}\n");
             break;
+        }
         case nyx_string:
             printf("{\"type\": \"string\", \"value\": ");
             json_string(nyx_get_string());

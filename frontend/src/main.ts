@@ -125,7 +125,7 @@ const i18nReady = startI18n(() => {
 if (host) {
   mountShell(host, engine);
   mountCounters(host, engine);
-  mountSession(host, engine);
+  mountSession(host, engine, player);
   mountTransport(host, engine, player);
   // Double-click a slider to reset it to its default: the same input and change
   // events a drag fires, so each slider's own handler records the change and undo works as usual. The double-click's
@@ -206,7 +206,7 @@ if (host) {
   mountStartContent(host, engine); // Home > Start's Demos and Templates, File > New from template, Help > Demos
   mountCloud(host, engine);
   mountRoom(host, engine);
-  mountShare(host, engine);
+  mountShare(host, engine, player);
   mountAgents(host);
   mountPreferences(host, engine); // formvis's Preferences: Settings > Preferences…, Cmd or Ctrl comma
   mountMusical(host, engine);

@@ -2,10 +2,17 @@
 
 Rationale and removed-code notes for the browser demo. Source files here stay comment-free; what they would have said lives here.
 
-Current build version: v2.24.1
-Last updated: 2026-11-07 · v2.24.1 no demo change (the version only); 2026-11-07 · v2.24.0 no demo change (the version only); 2026-11-07 · v2.23.3 the link row to the Repair and Produce demos (demos/); 2026-11-07 · v2.23.2 no demo change (the version only); v2.23.1 the media pass: real public-domain session audio, Reduce noise, stale Clip stats fixed; v2.23.0 first version of the demo
+Current build version: v2.26.2
+Last updated: 2026-11-10 · v2.26.2 the config's paths are file system paths (a checkout path with a space, or on Windows, builds); 2026-11-07 · v2.24.1 no demo change (the version only); 2026-11-07 · v2.24.0 no demo change (the version only); 2026-11-07 · v2.23.3 the link row to the Repair and Produce demos (demos/); 2026-11-07 · v2.23.2 no demo change (the version only); v2.23.1 the media pass: real public-domain session audio, Reduce noise, stale Clip stats fixed; v2.23.0 first version of the demo
 
 ---
+
+## v2.26.2 the config's paths are file system paths
+
+- refers-to: vite.config.ts :: root, resolve.alias "@fontsource"; ../demos/produce/vite.config.mjs and ../demos/repair/vite.config.mjs :: here
+- kind: fix
+- logged: v2.26.2 · 2026-11-10
+- `new URL(p, import.meta.url).pathname` is a URL path, not a file system path: it keeps percent-encoding (a checkout under `My Projects` gives `My%20Projects`) and on Windows starts `/C:/`, so vite's root and the `@fontsource` alias pointed at folders that do not exist and the build and dev server failed. The config now imports `fileURLToPath` from `node:url` (a Node built-in, so it still resolves when the config is loaded from `frontend/`) and uses it for both paths; the two demos under `demos/` do the same in their `here` helper. Checked by building the three demos (outDir sent to a scratch folder) from a copy under a folder named `My Projects`: all three build; with the old configs the demo and repair builds failed there. Not run on Windows.
 
 ## v2.23.1 media pass
 
@@ -25,7 +32,7 @@ Last updated: 2026-11-07 · v2.24.1 no demo change (the version only); 2026-11-0
 - The full interface needs the engine (`/api/*`) and the Rust core, so importing `frontend/src/main.ts` with a shim would stub most of the screen. The demo is its own small interface in the app's layout idiom (title bar, tools pane, timeline, bottom tabs, transport bar) that reuses the real tokens and stylesheets, and the class names `fw-pane`, `fw-tbtn`, `fw-ibtn`, `fw-mode`, `fw-clock`, `fw-status` so form-family.css and canvas.css style it as they style the app.
 - `native/formwav-dsp` has no committed WebAssembly, and a build needs a Rust wasm toolchain, so the operations are re-written in TypeScript (`dsp.ts`, `ops.ts`). Loudness follows ITU-R BS.1770 (K-weighting, 400 ms blocks at 75 percent overlap, absolute gate at -70 LUFS and relative gate 10 LU lower).
 - Module scripts do not load from `file://` in Chrome, so `vite.config.ts` builds an IIFE and a post plugin rewrites the module script tag to a deferred classic one and drops `crossorigin` from the stylesheet link. Fonts are inlined as data URLs (`assetsInlineLimit`) for the same reason.
-- The config is a plain object with no `import` so it resolves from `frontend/`, where vite is installed; `root` is `demo/src` and `outDir` is `demo` with `emptyOutDir: false`, so the output sits beside `README.md` and `src/`. Vite warns that outDir is a parent of root; that is intended.
+- The config is a plain object that imports only the Node built-in `node:url` (for `fileURLToPath`, since v2.26.2) so it resolves from `frontend/`, where vite is installed; `root` is `demo/src` and `outDir` is `demo` with `emptyOutDir: false`, so the output sits beside `README.md` and `src/`. Vite warns that outDir is a parent of root; that is intended.
 - `@fontsource` is aliased to `frontend/node_modules`, and only the latin subsets are imported, which keeps the stylesheet near 530 KB instead of several megabytes.
 - Zero DOM flash: all panes are static markup in `index.html`; track rows are created once per track and patched in place; op forms are built once and shown or hidden; canvases are sized by a ResizeObserver and redrawn in place; the playhead, selection and meters move by transform; the page is hidden until the first frame and the theme boot runs inline before the first paint.
 - Edits are destructive per track with whole-track snapshots in a history list (the arrays are never mutated, so a snapshot is a set of references).

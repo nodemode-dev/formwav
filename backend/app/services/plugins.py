@@ -30,7 +30,7 @@ def host_binary() -> str:
     if named and Path(named).is_file():
         return named
     for build in ("release", "debug"):
-        candidate = REPO_HOST / build / "fwhost"
+        candidate = REPO_HOST / build / ("fwhost.exe" if os.name == "nt" else "fwhost")
         if candidate.is_file():
             return str(candidate)
     found = shutil.which("fwhost")
@@ -54,7 +54,7 @@ def scan(refresh: bool = False) -> list[dict]:
 
 def lv2_binary() -> str:
     """AU-27: fwlv2 (native/formwav-lv2), the LV2 host; FORMWAV_FWLV2 names it in the desktop app."""
-    return os.environ.get("FORMWAV_FWLV2") or str(Path(__file__).resolve().parents[3] / "native" / "formwav-lv2" / "fwlv2")
+    return os.environ.get("FORMWAV_FWLV2") or str(Path(__file__).resolve().parents[3] / "native" / "formwav-lv2" / ("fwlv2.exe" if os.name == "nt" else "fwlv2"))
 
 
 _lv2_listing: dict[str, dict] = {}

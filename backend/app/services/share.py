@@ -2,7 +2,9 @@
 with its waveform drawn in formwav's orange, a title, and the transcript's words burned in as captions, in a square,
 portrait or landscape layout."""
 
+import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -11,6 +13,19 @@ from . import media, render
 LAYOUTS = {"square": (1080, 1080), "portrait": (1080, 1920), "landscape": (1920, 1080)}
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 MAX_SECONDS = 15 * 60
+
+
+def _font() -> str:
+    if sys.platform == "darwin":
+        options = ["/System/Library/Fonts/Supplemental/Arial Bold.ttf", "/Library/Fonts/Arial.ttf"]
+    elif os.name == "nt":
+        options = [os.path.join(os.environ.get("WINDIR") or "C:\\Windows", "Fonts", "arialbd.ttf")]
+    else:
+        options = [FONT]
+    found = next((path for path in options if os.path.isfile(path)), None)
+    if found is None:
+        return "font=Sans"
+    return "fontfile='" + found.replace("\\", "/").replace(":", "\\:") + "'"
 
 
 def _clock(t: float) -> str:
@@ -111,14 +126,14 @@ def video(doc: object, words: list, layout: str = "square", title: str = "", sta
             # draw=full: showwaves' default (scale) blends each sample faintly, which left a dim grey on the dark ground
             f"[0:a]showwaves=s={wave_w}x{wave_h}:mode=cline:draw=full:colors=0xf97316:rate=30,format=rgba[w];"
             f"[bg][w]overlay=x={(width - wave_w) // 2}:y={wave_y}:shortest=1[v1];"
-            f"[v1]drawtext=fontfile={FONT}:textfile={label}:fontcolor=white:fontsize={round(min(width, height) * 0.055)}:x=(w-text_w)/2:y={round(height * 0.14)}[v2];"
-            f"[v2]ass={subs}[v]"
+            f"[v1]drawtext={_font()}:textfile={label.name}:fontcolor=white:fontsize={round(min(width, height) * 0.055)}:x=(w-text_w)/2:y={round(height * 0.14)}[v2];"
+            f"[v2]ass={subs.name}[v]"
         )
         done = subprocess.run(
             [media._tool("ffmpeg"), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", str(src),
              "-filter_complex", graph, "-map", "[v]", "-map", "0:a", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
              "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", str(out)],
-            capture_output=True, timeout=900,
+            capture_output=True, timeout=900, cwd=tmp,
         )
         if done.returncode != 0 or not out.exists():
             raise media.MediaError(f"the video could not be made: {done.stderr.decode(errors='replace').strip()[-300:]}")

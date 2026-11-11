@@ -2,10 +2,17 @@
 
 Rationale and removed-code notes for the repair demo. Source files here stay comment-free; what they would have said lives here.
 
-Current build version: v2.23.3
-Last updated: 2026-11-07 · v2.23.3 first version of the demo
+Current build version: v2.26.2
+Last updated: 2026-11-10 · v2.26.2 the config's paths are file system paths; 2026-11-07 · v2.23.3 first version of the demo
 
 ---
+
+## v2.26.2 the config's paths are file system paths
+
+- refers-to: vite.config.mjs :: here (root, outDir, the "@fontsource" alias, the theme boot's readFileSync of demo/src/index.html)
+- kind: fix
+- logged: v2.26.2 · 2026-11-10
+- `here` returned `new URL(p, import.meta.url).pathname`, which keeps percent-encoding (a checkout under `My Projects` gives `My%20Projects`) and on Windows starts `/C:/`, so root, outDir and the `@fontsource` alias named folders that do not exist and the theme boot's readFileSync threw. It now returns `fileURLToPath(new URL(p, import.meta.url))` (`node:url`). Checked by building from a copy under a folder named `My Projects` (outDir sent to a scratch folder): it builds, where the old config failed there. Not run on Windows. The same change is in `demo/` and `demos/produce/` (see demo/HASHOUT_LOG.md).
 
 ## v2.23.3 first version
 

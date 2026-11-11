@@ -209,6 +209,8 @@ def list_media(query: str = "", limit: int = 100, offset: int = 0) -> dict:
     q = query.lower().strip()
     infos = []
     for path in media_dir().glob("*.json"):
+        if not MEDIA_ID.match(path.stem):
+            continue
         try:
             info = json.loads(path.read_text())
         except (OSError, ValueError):

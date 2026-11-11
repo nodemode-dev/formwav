@@ -71,7 +71,19 @@ fn find(dir: &Path, found: &mut Vec<(&'static str, PathBuf)>, depth: usize) {
 }
 
 fn json(text: &str) -> String {
-    text.replace('\\', "\\\\").replace('"', "\\\"")
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// A CLAP file, or the binary inside a CLAP bundle (macOS).
@@ -228,7 +240,7 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
             }
             continue;
         }
-        let described: Result<Vec<(String, String, bool)>, String> = unsafe {
+        let described: Result<Vec<(String, String, bool, u32)>, String> = unsafe {
             match format {
                 "clap" => clap_open(&path).and_then(|(lib, entry)| {
                     let factory = ((*entry).get_factory.ok_or("no get_factory")?)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
@@ -244,7 +256,7 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
                                     instrument |= CStr::from_ptr(*f).to_bytes() == b"instrument";
                                     f = f.add(1);
                                 }
-                                list.push((CStr::from_ptr((*d).id).to_string_lossy().into_owned(), CStr::from_ptr((*d).name).to_string_lossy().into_owned(), instrument));
+                                list.push((CStr::from_ptr((*d).id).to_string_lossy().into_owned(), CStr::from_ptr((*d).name).to_string_lossy().into_owned(), instrument, i));
                             }
                         }
                     }
@@ -254,7 +266,7 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
                 }),
                 _ => vst3_open(&path).map(|(lib, factory)| {
                     let instruments = vst3_instruments(&factory);
-                    let list = vst3_effects(&factory).into_iter().map(|(cid, name)| (cid.iter().map(|b| format!("{:02X}", *b as u8)).collect(), name, instruments.contains(&cid))).collect();
+                    let list = vst3_effects(&factory).into_iter().map(|(cid, name)| (cid.iter().map(|b| format!("{:02X}", *b as u8)).collect(), name, instruments.contains(&cid), 0)).collect();
                     drop(factory);
                     vst3_close(lib);
                     list
@@ -262,7 +274,7 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<String> {
             }
         };
         match described {
-            Ok(list) => out.extend(list.into_iter().map(|(id, name, instrument)| format!("{{\"format\": \"{format}\", \"path\": \"{p}\", \"id\": \"{}\", \"name\": \"{}\"{}}}", json(&id), json(&name), if instrument { ", \"instrument\": true" } else { "" }))),
+            Ok(list) => out.extend(list.into_iter().map(|(id, name, instrument, i)| format!("{{\"format\": \"{format}\", \"path\": \"{p}{}\", \"id\": \"{}\", \"name\": \"{}\"{}}}", if i == 0 { String::new() } else { format!("#{i}") }, json(&id), json(&name), if instrument { ", \"instrument\": true" } else { "" }))),
             Err(e) => out.push(format!("{{\"format\": \"{format}\", \"path\": \"{p}\", \"error\": \"{}\"}}", json(&e))),
         }
     }

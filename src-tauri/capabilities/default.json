@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The formwav window: the engine-failure dialog, and running the one bundled engine sidecar. The window shows the page the engine serves on 127.0.0.1, a remote origin to Tauri, so this capability lists that address (http://127.0.0.1:*) and the page may call exactly these and nothing else: the app commands app_ready (the page has drawn, the splash may end), set_window_title (the window title follows the page's), text_edit (the standard edit action to a focused text field) and set_menu (on macOS the page's menus, as labels, ids and shortcuts, go in the system menu bar; the page gets no menu API of Tauri's); the window calls minimize, toggle-maximize, maximize, unmaximize, is-maximized, close and start-dragging, for the Windows and Linux caption buttons and title bar drag; and listening for events, by which it hears the macOS menu (event fw-menu). The core defaults are deliberately not granted.",
+  "description": "The formwav window. The engine-failure dialog and the bundled engine sidecar are run from Rust and need no permission here. The window shows the page the engine serves on 127.0.0.1, a remote origin to Tauri, so this capability lists that address (http://127.0.0.1:*) and the page may call exactly these and nothing else: the app commands app_ready (the page has drawn, the splash may end), set_window_title (the window title follows the page's), text_edit (the standard edit action to a focused text field) and set_menu (on macOS the page's menus, as labels, ids and shortcuts, go in the system menu bar; the page gets no menu API of Tauri's); the window calls minimize, toggle-maximize, maximize, unmaximize, is-maximized, close and start-dragging, for the Windows and Linux caption buttons and title bar drag, and internal-toggle-maximize, which Tauri's drag-region script calls on a double click of the title row; and listening for events, by which it hears the macOS menu (event fw-menu). The core defaults are deliberately not granted.",
   "windows": ["splash", "main"],
   "remote": { "urls": ["http://127.0.0.1:*"] },
   "permissions": [
@@ -9,6 +9,7 @@
     "core:event:allow-unlisten",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
+    "core:window:allow-internal-toggle-maximize",
     "core:window:allow-maximize",
     "core:window:allow-unmaximize",
     "core:window:allow-is-maximized",
@@ -17,11 +18,6 @@
     "allow-app-ready",
     "allow-set-window-title",
     "allow-text-edit",
-    "allow-set-menu",
-    "dialog:default",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [{ "name": "binaries/formwav-engine", "sidecar": true }]
-    }
+    "allow-set-menu"
   ]
 }

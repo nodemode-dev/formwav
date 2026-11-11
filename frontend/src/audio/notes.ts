@@ -28,7 +28,7 @@ export function midiFile(notes: readonly NoteEvent[], rate: number, bpm = 120, p
       events.push([ticks(n.at), 1, [0xff, 0x05, ...vlq(word.length), ...word]]);
     }
     events.push([ticks(n.at), 2, [0x90, n.pitch & 0x7f, n.velocity & 0x7f]]);
-    events.push([ticks(n.at + n.length), 0, [0x80, n.pitch & 0x7f, 64]]);
+    events.push([Math.max(ticks(n.at) + 1, ticks(n.at + n.length)), 0, [0x80, n.pitch & 0x7f, 64]]);
   }
   events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   const tempo = Math.round(60_000_000 / bpm);

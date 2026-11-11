@@ -1,3 +1,4 @@
+import type { Player } from "../audio/player";
 import type { Command, Engine, MediaRef, SessionDoc } from "../engine";
 import { importFile } from "../io/media-client";
 import { delayedIndicator, setText } from "../vendor/nodemode/dom-stable";
@@ -29,7 +30,7 @@ function songMap(song: SongMap): Command[] {
   return out;
 }
 
-export function mountImport(host: HTMLElement, engine: Engine): void {
+export function mountImport(host: HTMLElement, engine: Engine, player: Player): void {
   const input = host.querySelector<HTMLInputElement>(".fw-file");
   const button = host.querySelector<HTMLButtonElement>('[data-action="import"]');
   const stage = host.querySelector<HTMLElement>(".fw-stage");
@@ -67,11 +68,12 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
     try {
       const doc = engine.get("document");
       const lower = file.name.toLowerCase();
+      const headerName = file.name.replace(/[^\x20-\x7e\xa0-\xff]/g, "_");
       if (lower.endsWith(".aup")) throw new Error("zip the .aup together with its _data folder and import the zip");
       if (lower.endsWith(".fmw")) {
         // A formwav session picked or dropped here: the engine keeps it among the sessions, then it opens the way any
         // saved session opens (ui/projects.ts, its unsaved-changes guard included)
-        const res = await fetch("/api/projects/upload", { method: "POST", body: file, headers: { "X-Filename": file.name } });
+        const res = await fetch("/api/projects/upload", { method: "POST", body: file, headers: { "X-Filename": headerName } });
         const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string };
         if (!res.ok || !out.name) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
         openAfter = out.name;
@@ -91,6 +93,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
           });
           const out = (await res.json().catch(() => ({}))) as { detail?: unknown; document?: SessionDoc; events?: number; matched?: number; unmatched?: { event: string; reel: string }[] };
           if (!res.ok || !out.document) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          player.stop();
           engine.loadDocument(out.document);
           final = `Conformed ${file.name}: ${out.matched} of ${out.events} events placed from the recorder files${out.unmatched?.length ? `; not found: ${out.unmatched.map((u) => `${u.event} (${u.reel})`).join(", ")}` : ""}`;
         }
@@ -102,6 +105,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
           const res = await fetch("/api/projects/import-aaf", { method: "POST", body: file });
           const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string; document?: SessionDoc; tracks?: number; clips?: number; missing?: string[] };
           if (!res.ok || !out.document) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          player.stop();
           engine.loadDocument(out.document);
           final = `Opened the AAF ${out.name}: ${out.tracks} track${out.tracks === 1 ? "" : "s"}, ${out.clips} clip${out.clips === 1 ? "" : "s"}${out.missing?.length ? `; linked audio not found: ${out.missing.join(", ")}` : ""}`;
         }
@@ -114,6 +118,7 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
           const res = await fetch("/api/projects/import-omf", { method: "POST", body: file });
           const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string; document?: SessionDoc; tracks?: number; clips?: number; missing?: string[] };
           if (!res.ok || !out.document) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          player.stop();
           engine.loadDocument(out.document);
           final = `Opened the OMF ${out.name}: ${out.tracks} track${out.tracks === 1 ? "" : "s"}, ${out.clips} clip${out.clips === 1 ? "" : "s"}${out.missing?.length ? `; audio not found: ${out.missing.join(", ")}` : ""}`;
         }
@@ -122,15 +127,16 @@ export function mountImport(host: HTMLElement, engine: Engine): void {
         if (doc.tracks.length && !window.confirm(`Open the .aup project ${file.name}? Unsaved changes to the current session will be lost.`)) {
           final = "Kept the current session";
         } else {
-          const res = await fetch("/api/projects/import-aup", { method: "POST", body: file, headers: { "X-Filename": file.name } });
+          const res = await fetch("/api/projects/import-aup", { method: "POST", body: file, headers: { "X-Filename": headerName } });
           const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string; document?: SessionDoc; tracks?: number; clips?: number; labels?: number };
           if (!res.ok || !out.document) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
+          player.stop();
           engine.loadDocument(out.document);
           final = `Opened the .aup project ${out.name}: ${out.tracks} track${out.tracks === 1 ? "" : "s"}, ${out.clips} clip${out.clips === 1 ? "" : "s"}, ${out.labels} label${out.labels === 1 ? "" : "s"}; envelopes and effects were not carried over`;
         }
       } else if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
         // the engine reads the file and the built-in instrument renders its notes; the rendering plays like any audio
-        const res = await fetch(`/api/midi/import?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST", body: file, headers: { "X-Filename": file.name } });
+        const res = await fetch(`/api/midi/import?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST", body: file, headers: { "X-Filename": headerName } });
         type Song = SongMap & { detail?: unknown; tempo?: number; markers?: { time: number; label: string }[]; tracks?: { name: string; channel: number; media: MediaRef; notes: { start: number; length: number; pitch: number; velocity: number; lyric?: string }[]; controllers: { time: number; kind: "cc" | "bend" | "program" | "pressure"; number: number; value: number }[] }[] };
         const out = (await res.json().catch(() => ({}))) as Song;
         if (!res.ok || !out.tracks?.length) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);

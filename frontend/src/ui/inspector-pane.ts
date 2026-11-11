@@ -1786,7 +1786,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
       const ids: string[] = [];
       for (const [i, file] of files.entries()) {
         setText(notice, `Uploading ${i + 1} of ${files.length}: ${file.name}`);
-        const up = await fetch("/api/media", { method: "POST", body: file, headers: { "X-Filename": file.name } });
+        const up = await fetch("/api/media", { method: "POST", body: file, headers: { "X-Filename": encodeURIComponent(file.name) } });
         const info = (await up.json().catch(() => ({}))) as { id?: string; detail?: unknown };
         if (!up.ok || !info.id) throw new Error(typeof info.detail === "string" ? info.detail : `${file.name}: the engine answered ${up.status}`);
         ids.push(info.id);
