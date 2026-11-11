@@ -49,7 +49,7 @@ class Bridge:
         return self.pending
 
     def live(self) -> bool:
-        return time.monotonic() - self.seen < 45
+        return self.seen > 0 and time.monotonic() - self.seen < 45
 
     async def call(self, name: str, arguments: dict, who: str) -> Any:
         if not self.live():
