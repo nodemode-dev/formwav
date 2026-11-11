@@ -351,7 +351,7 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
         return Err("the plugin would not initialise".into());
     }
     let state_ext = ((*plugin).get_extension.ok_or("no get_extension")?)(plugin, clap_sys::ext::state::CLAP_EXT_STATE.as_ptr()) as *const clap_sys::ext::state::clap_plugin_state;
-    if (state_in.is_some() || state_out.is_some()) && state_ext.is_null() {
+    if state_in.is_some() && state_ext.is_null() {
         return Err("the plugin keeps no state".into());
     }
     if let Some(bytes) = state_in {
@@ -407,7 +407,7 @@ unsafe fn clap_process(path: &Path, rate: u32, left: &[f32], right: &[f32], out:
     }
     ((*plugin).stop_processing.ok_or("no stop_processing")?)(plugin);
     ((*plugin).deactivate.ok_or("no deactivate")?)(plugin);
-    if let Some(saved) = state_out {
+    if let Some(saved) = state_out.filter(|_| !state_ext.is_null()) {
         saved.clear();
         let stream = clap_sys::stream::clap_ostream { ctx: saved as *mut Vec<u8> as *mut c_void, write: Some(crate::params::state_write) };
         if !((*state_ext).save.ok_or("no state save")?)(plugin, &stream) {

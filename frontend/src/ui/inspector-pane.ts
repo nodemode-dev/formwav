@@ -893,7 +893,13 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         ...groups.map((g) => {
           const group = document.createElement("optgroup");
           group.label = g.group;
-          group.append(...g.effects.map((fx) => new Option(fx.label, fx.id)));
+          group.append(
+            ...g.effects.map((fx) => {
+              const option = new Option(fx.label, fx.id);
+              if (fx.id.startsWith("plugin:")) option.setAttribute("translate", "no");
+              return option;
+            }),
+          );
           return group;
         }),
       );
@@ -1207,6 +1213,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
           const o = document.createElement("option");
           o.value = `${p.key}|${out.id}`;
           o.textContent = `${p.name}: ${out.name}`;
+          o.setAttribute("translate", "no");
           vampSel.append(o);
         }
       }
@@ -1368,6 +1375,7 @@ export function mountInspector(host: HTMLElement, engine: Engine): void {
         const o = document.createElement("option");
         o.value = p.id;
         o.textContent = `${p.name} (CLAP)`;
+        o.setAttribute("translate", "no");
         instSel?.append(o);
       }
     })

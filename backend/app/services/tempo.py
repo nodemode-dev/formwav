@@ -55,7 +55,7 @@ def envelope(x: np.ndarray) -> np.ndarray:
         steps = np.diff(mag, axis=0) if prev is None else np.diff(np.vstack([prev[None, :], mag]), axis=0)
         flux[max(0, b - 1) : max(0, b - 1) + len(steps)] = np.maximum(0, steps).sum(axis=1)
         prev = mag[-1]
-    k = max(1, round(FPS / 2))
+    k = max(1, min(round(FPS / 2), len(flux)))
     return np.maximum(0, flux - np.convolve(flux, np.ones(k) / k, mode="same"))
 
 
