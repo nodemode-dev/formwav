@@ -68,11 +68,12 @@ export function mountImport(host: HTMLElement, engine: Engine, player: Player): 
     try {
       const doc = engine.get("document");
       const lower = file.name.toLowerCase();
+      const headerName = file.name.replace(/[^\x20-\x7e\xa0-\xff]/g, "_");
       if (lower.endsWith(".aup")) throw new Error("zip the .aup together with its _data folder and import the zip");
       if (lower.endsWith(".fmw")) {
         // A formwav session picked or dropped here: the engine keeps it among the sessions, then it opens the way any
         // saved session opens (ui/projects.ts, its unsaved-changes guard included)
-        const res = await fetch("/api/projects/upload", { method: "POST", body: file, headers: { "X-Filename": file.name } });
+        const res = await fetch("/api/projects/upload", { method: "POST", body: file, headers: { "X-Filename": headerName } });
         const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string };
         if (!res.ok || !out.name) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
         openAfter = out.name;
@@ -126,7 +127,7 @@ export function mountImport(host: HTMLElement, engine: Engine, player: Player): 
         if (doc.tracks.length && !window.confirm(`Open the .aup project ${file.name}? Unsaved changes to the current session will be lost.`)) {
           final = "Kept the current session";
         } else {
-          const res = await fetch("/api/projects/import-aup", { method: "POST", body: file, headers: { "X-Filename": file.name } });
+          const res = await fetch("/api/projects/import-aup", { method: "POST", body: file, headers: { "X-Filename": headerName } });
           const out = (await res.json().catch(() => ({}))) as { detail?: unknown; name?: string; document?: SessionDoc; tracks?: number; clips?: number; labels?: number };
           if (!res.ok || !out.document) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
           player.stop();
@@ -135,7 +136,7 @@ export function mountImport(host: HTMLElement, engine: Engine, player: Player): 
         }
       } else if (lower.endsWith(".mid") || lower.endsWith(".midi")) {
         // the engine reads the file and the built-in instrument renders its notes; the rendering plays like any audio
-        const res = await fetch(`/api/midi/import?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST", body: file, headers: { "X-Filename": file.name } });
+        const res = await fetch(`/api/midi/import?rate=${doc.tracks.length ? doc.sampleRate : 48000}`, { method: "POST", body: file, headers: { "X-Filename": headerName } });
         type Song = SongMap & { detail?: unknown; tempo?: number; markers?: { time: number; label: string }[]; tracks?: { name: string; channel: number; media: MediaRef; notes: { start: number; length: number; pitch: number; velocity: number; lyric?: string }[]; controllers: { time: number; kind: "cc" | "bend" | "program" | "pressure"; number: number; value: number }[] }[] };
         const out = (await res.json().catch(() => ({}))) as Song;
         if (!res.ok || !out.tracks?.length) throw new Error(typeof out.detail === "string" ? out.detail : `the engine answered ${res.status}`);
