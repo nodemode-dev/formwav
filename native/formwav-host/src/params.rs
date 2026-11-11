@@ -69,9 +69,14 @@ pub fn list(format: &str, path: &Path) -> Result<Vec<Param>, String> {
 }
 
 unsafe fn clap_list(path: &Path) -> Result<Vec<Param>, String> {
-    let (lib, entry) = crate::offline::clap_open(path)?;
+    let text = path.to_string_lossy();
+    let (path, index) = match text.rsplit_once('#') {
+        Some((file, n)) if n.parse::<u32>().is_ok() => (Path::new(file).to_path_buf(), n.parse::<u32>().unwrap_or(0)),
+        _ => (path.to_path_buf(), 0),
+    };
+    let (lib, entry) = crate::offline::clap_open(&path)?;
     let factory = ((*entry).get_factory.ok_or("no get_factory")?)(CLAP_PLUGIN_FACTORY_ID.as_ptr()) as *const clap_plugin_factory;
-    let desc = if factory.is_null() { ptr::null() } else { ((*factory).get_plugin_descriptor.ok_or("no descriptors")?)(factory, 0) };
+    let desc = if factory.is_null() { ptr::null() } else { ((*factory).get_plugin_descriptor.ok_or("no descriptors")?)(factory, index) };
     if desc.is_null() {
         return Err("the file holds no plugin".into());
     }
