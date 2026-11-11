@@ -905,6 +905,7 @@ export class Player {
     const node = this.node;
     if (!ctx || !node || !(node instanceof AudioWorkletNode)) return;
     node.disconnect();
+    if (this.tapNode && this.tapNode.context === ctx) node.connect(this.tapNode);
     try {
       this.outputTap?.disconnect();
     } catch {
