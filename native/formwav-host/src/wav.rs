@@ -1,4 +1,4 @@
-//! WAV in and out for offline processing: reads 16-bit PCM or 32-bit float (formwav's media), writes 32-bit float so
+//! WAV in and out for offline processing: reads 8, 16, 24 and 32-bit PCM and 32 and 64-bit float (formwav's media), writes 32-bit float so
 //! nothing a plugin produces above full scale is clipped on the way back.
 
 use std::io::Read;
@@ -39,7 +39,11 @@ pub fn read(path: &str) -> Result<Audio, String> {
     }
     let samples: Vec<f32> = match (format, bits) {
         (3, 32) => data.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().unwrap())).collect(),
+        (3, 64) => data.chunks_exact(8).map(|b| f64::from_le_bytes(b.try_into().unwrap()) as f32).collect(),
+        (1, 8) => data.iter().map(|&b| (b as f32 - 128.0) / 128.0).collect(),
         (1, 16) => data.chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0).collect(),
+        (1, 24) => data.chunks_exact(3).map(|b| (i32::from_le_bytes([0, b[0], b[1], b[2]]) >> 8) as f32 / 8_388_608.0).collect(),
+        (1, 32) => data.chunks_exact(4).map(|b| i32::from_le_bytes(b.try_into().unwrap()) as f32 / 2_147_483_648.0).collect(),
         _ => return Err(format!("unsupported WAV encoding (format {format}, {bits} bits)")),
     };
     let frames = samples.len() / channels;
