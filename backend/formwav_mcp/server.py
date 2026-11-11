@@ -160,7 +160,7 @@ async def formwav_import_audio(path: str) -> dict[str, Any]:
     if not file.is_file():
         raise ToolError(f"No file at {file}. Give an absolute path to an audio or video file on this machine.")
     data = file.read_bytes()
-    return _media((await _call("POST", "/api/media", content=data, headers={"X-Filename": file.name, "Content-Type": "application/octet-stream"})).json())
+    return _media((await _call("POST", "/api/media", content=data, headers={"X-Filename": quote(file.name), "Content-Type": "application/octet-stream"})).json())
 
 
 @mcp.tool(annotations=WRITES_FILE, structured_output=True)
