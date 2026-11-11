@@ -424,6 +424,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-status .fw-st-line { display: flex; align-items: center; gap: var(--space-3); min-inline-size: 0; overflow: hidden; font-size: var(--fs-11); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .fw-status .fw-engine { flex: none; inline-size: 112px; min-inline-size: 0; display: inline-grid; grid-template-columns: 7px minmax(0, 1fr); justify-content: start; align-items: center; column-gap: 5px; overflow: hidden; font-size: var(--fs-11); color: var(--text-muted); }.fw-status .fw-engine-dot { flex: none; inline-size: 7px; block-size: 7px; }
 .fw-status .fw-engine-text { min-inline-size: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fw-status .fw-engine-text:empty::before { content: "\200b"; }
 .fw-status .fw-engine[data-state="stale"] .fw-engine-dot { background: var(--warn); }
 .fw-status .fw-st-rate { flex: none; min-inline-size: 7ch; }
 .fw-status .fw-st-output { display: flex; min-inline-size: 0; }
