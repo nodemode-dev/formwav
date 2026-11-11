@@ -223,3 +223,16 @@ def test_an_expiring_token_is_refreshed_first_and_unknown_services_are_refused(f
     assert fake["gets"][-1][2] == "Bearer act.2"
     assert client.get("/api/cloud/onedrive/files").status_code == 404
     assert client.get("/api/cloud/dropbox/files").status_code == 502
+
+
+def test_a_media_item_imported_from_another_format_is_saved_under_a_wav_name(fake):
+    from app.services import media
+
+    _connect("dropbox")
+    made = media.import_wav("Song.final.mp3", _tone())
+    assert client.post("/api/cloud/dropbox/upload", json={"mediaId": made["id"]}).status_code == 200
+    call, arg, body = fake["dropbox"][0]
+    assert call == "upload" and arg["path"] == "/formwav/Song.final.wav" and body[:4] == b"RIFF" and body[8:12] == b"WAVE"
+    kept = media.import_wav("tone.wav", _tone())
+    client.post("/api/cloud/dropbox/upload", json={"mediaId": kept["id"]})
+    assert fake["dropbox"][1][1]["path"] == "/formwav/tone.wav"

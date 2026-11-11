@@ -305,6 +305,26 @@ def test_the_export_dialog_writes_a_range_as_24_bit_aiff_normalised_and_reports_
     assert _clean(page)["errors"] == []
 
 
+def test_the_export_and_cloud_dialogs_open_in_the_middle_of_the_window(page, app_url):
+    _open(page, app_url)
+    _import_speech(page)
+    centred = """(sel) => {
+      const r = document.querySelector(sel).getBoundingClientRect();
+      return [Math.abs(r.left + r.width / 2 - innerWidth / 2), Math.abs(r.top + r.height / 2 - innerHeight / 2), r.left, r.top];
+    }"""
+    page.click('[data-action="export"]')
+    page.wait_for_selector("dialog.fw-export-dialog[open]")
+    dx, dy, left, top = page.evaluate(centred, "dialog.fw-export-dialog[open]")
+    assert dx <= 1 and dy <= 1 and left > 0 and top > 0, (dx, dy, left, top)
+    page.keyboard.press("Escape")
+    page.wait_for_selector("dialog.fw-export-dialog[open]", state="detached")
+    page.evaluate("""document.querySelector('[data-action="cloud"]').click()""")
+    page.wait_for_selector("dialog.fw-cloud-dialog[open]")
+    dx, dy, left, top = page.evaluate(centred, "dialog.fw-cloud-dialog[open]")
+    assert dx <= 1 and dy <= 1 and left > 0 and top > 0, (dx, dy, left, top)
+    assert _clean(page)["errors"] == []
+
+
 def _labels(page) -> list:
     _agent_tab(page, "history")
     return page.evaluate("[...document.querySelectorAll('.fw-history-label')].map((l) => l.textContent)")
@@ -754,6 +774,29 @@ def test_every_string_on_screen_has_a_translation_in_all_twenty_five_languages_a
     page.evaluate("window.__fwI18n.setLanguage('en')")
     assert page.evaluate("window.__fwI18n.keys()") == english and page.evaluate("document.body.innerText") == text
     assert _clean(page)["errors"] == []
+
+
+def test_third_party_plugin_effect_vamp_and_clap_instrument_names_are_marked_not_to_be_translated(page, app_url):
+    import json
+
+    def effects(route):
+        groups = json.loads(route.fetch().text())
+        route.fulfill(json=[*groups, {"group": "Plug-ins", "effects": [{"id": "plugin:vst3:Stand-in Verb", "label": "Stand-in Verb"}]}])
+
+    vamp = [{"key": "standin:beats", "name": "Stand-in Beats", "parameters": [], "outputs": [{"id": "beats", "name": "Beats", "unit": ""}]}]
+    page.route("**/api/effects", effects)
+    page.route("**/api/vamp/plugins", lambda route: route.fulfill(json=vamp))
+    page.route("**/api/midi/instruments", lambda route: route.fulfill(json=[{"id": "clap:stand-in", "name": "Stand-in Synth"}]))
+    _open(page, app_url)
+    marks = page.wait_for_function("""(() => {
+      const fx = document.querySelector('[data-fx="pick"] option[value="plugin:vst3:Stand-in Verb"]');
+      const vamp = document.querySelector('[data-vamp="plugin"] option[value="standin:beats|beats"]');
+      const inst = document.querySelector('[data-instrument] option[value="clap:stand-in"]');
+      if (!fx || !vamp || !inst) return null;
+      const builtIn = [...document.querySelectorAll('[data-fx="pick"] option')].filter((o) => !o.value.startsWith('plugin:'));
+      return { fx: fx.getAttribute('translate'), vamp: vamp.getAttribute('translate'), inst: inst.getAttribute('translate'), builtIn: builtIn.length > 0 && builtIn.every((o) => !o.hasAttribute('translate')) };
+    })()""").json_value()
+    assert marks == {"fx": "no", "vamp": "no", "inst": "no", "builtIn": True}
 
 
 def test_a_chosen_language_holds_after_a_reload_and_shows_from_the_first_frame(page, app_url):
