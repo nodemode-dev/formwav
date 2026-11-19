@@ -17,7 +17,7 @@ formwav is running with its window open (the desktop app, or `./formwav` and the
 
 | Tool | Use it to |
 | --- | --- |
-| `formwav_open_session_tools` | list the window's own session tools (37 at v2.18.0: get_session, set_track_gain, split_clip, apply_effect_to_clip, get_transcript, delete_words, generate_music placed on a track, and the rest) with their input schemas |
+| `formwav_open_session_tools` | list the window's own session tools (39 today: get_session, set_track_gain, split_clip, apply_effect_to_clip, get_transcript, delete_words, generate_music placed on a track, and the rest) with their input schemas |
 | `formwav_open_session_call` | run one of those tools by name with its arguments |
 | `formwav_list_commands` | find catalogue commands by `group` (File, Edit, View, Track, Clip, Event, Transport, Settings, Session) or by words in `text` |
 | `formwav_describe_command` | read one command's parameters before running it |

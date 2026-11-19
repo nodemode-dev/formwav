@@ -1,0 +1,124 @@
+{
+  "format": "form-agent-manifest",
+  "version": 1,
+  "app": "formwav",
+  "mcp": {
+    "tools": [
+      "formwav_status",
+      "formwav_list_media",
+      "formwav_analyze_media",
+      "formwav_list_effects",
+      "formwav_apply_effect",
+      "formwav_debleed",
+      "formwav_heal_selection",
+      "formwav_import_audio",
+      "formwav_export_media",
+      "formwav_list_sessions",
+      "formwav_get_session",
+      "formwav_render_session",
+      "formwav_transcribe_media",
+      "formwav_local_models_status",
+      "formwav_list_voices",
+      "formwav_generate_speech",
+      "formwav_generate_music",
+      "formwav_generate_sound_effect",
+      "formwav_speech_regions",
+      "formwav_transcribe_with_speakers",
+      "formwav_regenerate_words",
+      "formwav_dub_media",
+      "formwav_separate_speech_music_ambience",
+      "formwav_list_inputs",
+      "formwav_record",
+      "formwav_cloud_status",
+      "formwav_cloud_list_files",
+      "formwav_cloud_import",
+      "formwav_cloud_save",
+      "formwav_open_session_tools",
+      "formwav_open_session_call",
+      "formwav_list_commands",
+      "formwav_describe_command",
+      "formwav_run_command",
+      "formwav_run_commands",
+      "formwav_extensions_list",
+      "formwav_extension_command"
+    ],
+    "read_only": [
+      "formwav_status",
+      "formwav_list_media",
+      "formwav_analyze_media",
+      "formwav_list_effects",
+      "formwav_list_sessions",
+      "formwav_get_session",
+      "formwav_local_models_status",
+      "formwav_list_voices",
+      "formwav_speech_regions",
+      "formwav_list_inputs",
+      "formwav_cloud_status",
+      "formwav_cloud_list_files",
+      "formwav_open_session_tools",
+      "formwav_list_commands",
+      "formwav_describe_command",
+      "formwav_extensions_list"
+    ],
+    "approval_gated": [
+      "formwav_apply_effect",
+      "formwav_debleed",
+      "formwav_heal_selection",
+      "formwav_import_audio",
+      "formwav_render_session",
+      "formwav_transcribe_media",
+      "formwav_generate_speech",
+      "formwav_generate_music",
+      "formwav_generate_sound_effect",
+      "formwav_transcribe_with_speakers",
+      "formwav_regenerate_words",
+      "formwav_dub_media",
+      "formwav_separate_speech_music_ambience",
+      "formwav_record",
+      "formwav_cloud_import",
+      "formwav_cloud_save",
+      "formwav_open_session_call",
+      "formwav_list_commands",
+      "formwav_describe_command",
+      "formwav_run_command",
+      "formwav_run_commands",
+      "formwav_extensions_list",
+      "formwav_extension_command"
+    ],
+    "transports": [
+      "stdio",
+      "http"
+    ]
+  },
+  "skills": [
+    {
+      "name": "formwav-harness",
+      "sub_skills": [
+        "clean-noises",
+        "development",
+        "harness-director",
+        "session",
+        "setup",
+        "tools",
+        "workflows"
+      ]
+    }
+  ],
+  "dock": {
+    "present": true,
+    "positions": [
+      "right",
+      "bottom"
+    ],
+    "tabs": [
+      "terminal",
+      "claude-code",
+      "chat",
+      "agent",
+      "history"
+    ]
+  },
+  "extensions": {
+    "host_api": "1"
+  }
+}

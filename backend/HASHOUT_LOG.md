@@ -140,6 +140,59 @@ backend/
 
 ---
 
+## ../scripts/agents.py, ../agents/manifest.json · the manifest says what formwav offers agents (unreleased, after v2.26.3) {#agent-manifest}
+
+- refers-to: ../scripts/agents.py :: mcp, skills, extensions, DOCK; ../agents/manifest.json; ../formwav (the `agents` case); tests/test_agent_manifest.py; ../AGENTS.md; ../CLAUDE.md
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+The family spec reads `agents/manifest.json` at each release tag (formadaptor docs/SPEC.md, "The agent manifest"), so
+the file is written by `./formwav agents sync` (`scripts/agents.py`; this repository had no agents sync) and
+`./formwav agents sync --check` exits 1, naming the file, when the committed one is not what a write would produce.
+Nothing in it is typed except the dock. The script reads the source with `ast` and imports neither the engine nor the
+MCP SDK, so it runs on a bare Python and in CI.
+
+- Which list is "the server's tools". formwav has two things an agent can call that are named MCP. The server in
+  `backend/formwav_mcp/server.py` (stdio from `.mcp.json`, `.codex/config.toml`, `.cursor/mcp.json`, or `--http` on
+  8061) has a fixed registry of 37 `@mcp.tool` functions: that is its `tools/list`, and it is the manifest's `tools`.
+  The engine's own `POST /mcp` (routers/claude.py) answers `tools/list` with `BRIDGE.tools`, which the page posts to
+  `/api/bridge/catalogue` once a window is open: with no window it lists nothing. Those are the in-app agent's tools
+  in `frontend/src/ui/agent-pane.ts`: 39 `name:` entries (33 session tools, the 4 command tools list_commands,
+  describe_command, run_command and run_commands, and the 2 extension tools), all pushed unconditionally, so 39
+  whenever a window is open. AGENTS.md said 37 for them (it left out the 2 extension tools); it now says 39, as
+  CLAUDE.md already did, and the session sub-skill's "37 at v2.18.0" says 39 in both copies. The 37 of the server stay
+  37 in every document. The window's 39 are not in the manifest because they exist only while a page is open.
+- `read_only` is the `read_only_hint` of each tool's annotation (READ, or an inline ToolAnnotations), 16 tools.
+- `approval_gated` is derived from the gate's own data, not from the annotations, because the gate does not ask about
+  every tool that is not read-only. window_key.py asks (Consent.check) for any request from an agent (the
+  `x-formwav-agent` header) whose method is not in READS and whose path is under /api/ and not in WINDOW_ONLY, and
+  `_run_tool` in routers/claude.py asks for every `tools/call` and every `/api/commands` call from outside. The script
+  reads READS and WINDOW_ONLY from window_key.py and marks a tool when its body makes a `_post`, a `_call` with a
+  method outside READS, a `_window("tools/call", ...)` or a `_call` to `/api/commands`; a path under WINDOW_ONLY stops
+  the sync, since that call would be refused, not asked. 23 tools. Three read-only tools are in it (formwav_list_commands,
+  formwav_describe_command, formwav_extensions_list: they reach the window), and formwav_open_session_tools is not
+  (`tools/list` is answered without asking). formwav_export_media is not read-only and not asked: it is two GETs and the
+  MCP process writes the file itself, so the gate never sees it.
+- `transports` come from the `transport=` of the `mcp.run` calls: stdio and streamable-http, written as stdio and http.
+- `skills` is the folder list of `.claude/skills` (formwav-harness, 7 sub-skills); `.agents/skills` is its identical copy.
+- `extensions.host_api` is `API` in services/formext_host.py ("1").
+- `app` is the `name=` of the `MCPServer` (formwav), which is also the file name in formcompiler's apps/.
+- `dock` is the one declared value (`DOCK` in the script); the truth lives in the frontend. Today: the terminal dock
+  (`ui/terminal-dock.ts`, bottom, between the lanes and the transport) has tabs for shells (titled Terminal N), Claude
+  Code and Chat; the agent (`ui/agent-pane.ts`) is the Agent tab of the right column (`ui/editor-layout.ts`) with its
+  own Agent and History tabs. Positions are therefore right and bottom; neither can be moved or floated (`ui/dock.ts`
+  floats the editor's own panels, and its Terminal entry selects `.fw-term:not(.fw-agent)`, which no element has now).
+  Tab names are written as the schema's names: terminal, claude-code, chat, agent, history. Change DOCK when the
+  frontend changes.
+
+Checked: `sync` wrote the file; formadaptor's `scripts/manifest.py check agents/manifest.json --app formwav` accepts it
+(the first run refused "Claude Code" as a tab name, hence the lowercase names); `--check` exits 0. In a copy of the
+needed files under /tmp, renaming `formwav_status` and then changing `formwav_apply_effect` to the read-only annotation each
+made `--check` exit 1 with the file named. The names and read-only list equal what the SDK (mcp 2.2.0, in a temporary
+venv) returns: `mcp.list_tools()` and a real `tools/list` over `--http` on port 29110, 37 tools, 16 with readOnlyHint.
+Not checked: the gate's list against a live engine with an agent calling each tool (derived from the code only), and
+the window's 39 against a running page in this session (counted from agent-pane.ts; batch 3 counted 39 on `/mcp`).
+
 ## routers/claude.py · the Allow or Block card says once that the saved agent permission was reset (unreleased, after v2.26.3) {#seal-broken-card}
 
 - refers-to: app/routers/claude.py :: Consent.told, Consent.keep, Consent.check
