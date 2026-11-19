@@ -192,6 +192,25 @@ frontend/
 
 ---
 
+## io/window-key.ts, main.ts, ui/chat-pane.ts, ui/terminal-dock.ts · the page holds the window key (unreleased, after v2.26.3) {#window-key}
+
+- refers-to: io/window-key.ts :: loadWindowKey, windowKey, streamTicket; main.ts :: the fetch wrapper; ui/chat-pane.ts :: listen; ui/terminal-dock.ts :: connect
+- kind: security
+- logged: unreleased · 2026-11-19
+
+The engine now refuses every change without its per-launch window key (backend/HASHOUT_LOG.md #window-key). The page
+takes it once at boot: the packaged global `window.__FORMWAV_WINDOW_KEY` set by the shell (deleted once read), else a
+key kept in this tab's sessionStorage that still holds (checked with POST /api/window/ticket, so a reload does not
+claim again), else the development bootstrap POST /api/window/key, which answers once per engine. main.ts's fetch
+wrapper, which already added `x-formwav-local` to changes, waits for that once and adds `X-Formwav-Window-Key` to every
+same-origin /api request, reads included (some reads, such as the bridge's next call, need it). The only other ways
+the page reaches the engine: the chat's EventSource, which cannot send a header, opens with a one-time ticket and
+reopens with a new one when the browser gives up on it; the terminal socket sends `{"type": "key"}` first. The MIDI
+stream EventSource and the native audio socket are left as they were (no key needed). No XHR or sendBeacon exists.
+Nothing visible changes. Checked in headless Chrome against the Vite dev server and an engine: the page boots, claims
+the key, its catalogue and a policy write answer 200, and after a reload the kept key still writes with no second
+claim.
+
 ## ui/inspector-pane.ts, styles/tokens.css · plug-in names are not translated; dialogs open centred (v2.26.3) {#qa-fixes-2-26-3}
 
 - refers-to: src/ui/inspector-pane.ts :: the effect picker's options (fetch("/api/effects")), the Instrument row's plug-in options, the Vamp picker's options; src/styles/tokens.css :: the dialog rule after the reset

@@ -140,6 +140,65 @@ backend/
 
 ---
 
+## core/window_key.py, core/seal.py, routers/claude.py, routers/terminal.py, services/claude_code.py, services/terminals.py, desktop_entry.py, formwav_cli.py, formwav_mcp/server.py · only the formwav window can change things without asking (unreleased, after v2.26.3) {#window-key}
+
+- refers-to: app/core/window_key.py (new); app/core/seal.py (new); app/main.py :: WindowKeyGuard; app/routers/claude.py :: Consent.stored, policy, keep, outside_policy, claim_window_key, window_ticket, mcp, claude_chat, _run_chat; app/routers/terminal.py :: terminal, terminal_attach; app/services/claude_code.py :: TOKENS, issue, revoke, is_inapp, argv; app/services/terminals.py :: Session.token, open_claude, close; desktop_entry.py :: main; formwav_cli.py :: run; formwav_mcp/server.py :: _call
+- kind: security
+- logged: unreleased · 2026-11-19
+
+The engine makes a per-launch key (`secrets.token_urlsafe(32)`, memory only, compared with `hmac.compare_digest`).
+One ASGI middleware, `WindowKeyGuard`, sits inside LocalOnly (LocalOnly still runs first and is unchanged) and refuses
+with 403 "Only the formwav window can do this" every request whose method is not GET, HEAD or OPTIONS and that lacks
+`x-formwav-window-key`, and these reads that hold a secret: /api/bridge/next (pending consent prompts and tool calls),
+/api/claude/state, /api/claude/sessions, /api/claude/events, /api/terminal/list. The open list is `/mcp` (outside
+agents arrive there and the consent card applies) and `/api/window/key` (the development bootstrap). Three lanes pass
+without the key, none of them into WINDOW_ONLY (/api/agents, /api/bridge, /api/terminal, /api/claudecode,
+/api/claude, /api/remote, /api/keys, /api/settings, /api/window, /api/extensions):
+- a GET of /api/claude/events with a one-time ticket from POST /api/window/ticket (30 s, spent on use), as an
+  EventSource cannot send a header;
+- a request through the network or guest listener that LocalOnly already admitted with a paired device's token
+  (`formwav.remote`), so paired phones keep editing; /api/remote/pair stays reachable there for pairing;
+- a write carrying `x-formwav-agent` (formwav_mcp/server.py now sends it on every engine call): it goes through the
+  same `CONSENT.check` as /mcp, by "METHOD path", so under ask the window's card is shown (or it is refused with no
+  window), under block it is refused, under allow it passes. Before, these engine routes took the standalone MCP
+  server's writes with no consent at all.
+
+The bootstrap POST /api/window/key answers the key once per engine, then 409, and GET /api/agents/outside reports
+`secondWindowClaim`; with `FORMWAV_WINDOW_KEY_STDOUT=1` (the shell sets it) it answers 404 and desktop_entry.py prints
+`formwav-window-key: <key>` with flush before uvicorn starts. The terminal sockets (/api/terminal/{sid} and the older
+/api/terminal) accept and then need `{"type": "key", "key": ...}` as the first message within 10 s, else close 4403.
+
+The in-app token is one per Claude Code tab or chat run (`claude_code.issue`): a 0600 file in the data folder's
+AgentTokens, passed as `--mcp-config <file>`, removed when the tab closes (`terminals.close`) or the chat run ends;
+`INAPP_TOKEN` and `mcp_config()` (the token in the command line) are gone. The program run as the agent is
+FORMWAV_CLAUDE_BIN, an environment variable, not a setting, so no route can change it.
+
+`./formwav cli run` used POST /api/commands/{id}; it now calls the window's run_command tool through /mcp, so it
+follows the stored choice like any outside agent and prints the same result; it cannot change the choice
+(/api/agents is window-only).
+
+core/seal.py: agents.json gains `seal`, HMAC-SHA256 over `outside` with a 32-byte key in the system keychain (keyring,
+service "formwav", account "settings-seal", made on first use; keyring was already a dependency for provider keys).
+Written only by `Consent.keep` (the key-guarded policy route and the window's own "Always allow"). A missing or wrong
+seal with `outside` set to allow reads as ask, reported `seal: "broken"`, `sealBroken: true`; block or ask stand. No
+keychain (keyring missing, its fail or null backend, any error): the stored value stands and `seal: "unavailable"`.
+
+Verified by running, from scripts outside the repo: an OpenAPI sweep of the write operations with no key, before 2
+refused of 135 (the two terminal opens, refused only because the sweep set FORMWAV_TERMINAL=0), after 135 refused of
+137 (open: POST /api/window/key, POST /mcp); with the key the window's routes answered; ask, block and allow through
+/mcp, the CLI and the agent lane on a running engine with a stand-in window; terminals with and without the key on a
+running engine, including reattach; the key line printed once before the address and the bootstrap 404 in stdout
+mode; the seal with a file-backed stand-in keyring and with keyring's fail backend.
+
+Removed lines, quoted exactly:
+
+```python
+INAPP_TOKEN = secrets.token_urlsafe(24)
+def mcp_config(base: str) -> str:
+    return json.dumps({"mcpServers": {"formwav": {"type": "http", "url": f"{base}/mcp", "headers": {"x-formwav-inapp": INAPP_TOKEN}}}})
+        out = call("POST", f"/api/commands/{urllib.parse.quote(rest[0])}", {"params": params})
+```
+
 ## routers/claude.py Bridge.live · a window that never polled is not open on a machine that has just started (v2.26.3) {#bridge-live-clock}
 
 - refers-to: app/routers/claude.py :: Bridge.live, Bridge.seen, Bridge.call

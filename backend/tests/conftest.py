@@ -60,6 +60,17 @@ def client():
 
     from app.main import app
 
+    from app.core import window_key
+
+    return TestClient(app, base_url="http://127.0.0.1:8060", headers={"x-formwav-local": "1", window_key.HEADER: window_key.KEY})
+
+
+@pytest.fixture(scope="session")
+def bare(client):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
     return TestClient(app, base_url="http://127.0.0.1:8060", headers={"x-formwav-local": "1"})
 
 

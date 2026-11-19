@@ -2,12 +2,14 @@
 
 Two ways in, both the same program: the Agent column's chat runs `claude -p ... --output-format stream-json` once per
 message and streams what it says and does; the terminal's Claude Code button runs `claude` interactively in a PTY.
-Both get formwav's MCP server inline (`--mcp-config`), the engine's own /mcp over HTTP, carrying a token made fresh
-for each engine so the window can tell its own Claude from an outside agent.
+Both get formwav's MCP server through `--mcp-config`, a 0600 file naming the engine's own /mcp over HTTP and a token
+made fresh for that one tab or chat run, removed when it ends, so the window can tell its own Claude from an outside
+agent.
 """
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import secrets
@@ -17,7 +19,7 @@ import subprocess
 import time
 from pathlib import Path
 
-INAPP_TOKEN = secrets.token_urlsafe(24)
+TOKENS: dict[str, Path] = {}
 KEEP = {"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CONFIG_DIR"}
 DROP = {"ANTHROPIC_API_KEY", "FORMWAV_PORT", "FORMWAV_EXIT_WITH_STDIN", "FORMWAV_DATA_DIR", "FORMWAV_DIST"}
 INSTALL = "Claude Code is not installed: install it from https://claude.com/claude-code, run claude once in a terminal to sign in, then try again."
@@ -108,11 +110,37 @@ def workdir() -> Path:
     return path
 
 
-def mcp_config(base: str) -> str:
-    return json.dumps({"mcpServers": {"formwav": {"type": "http", "url": f"{base}/mcp", "headers": {"x-formwav-inapp": INAPP_TOKEN}}}})
+def issue(base: str) -> tuple[str, str]:
+    from ..core.paths import data_dir
+
+    token = secrets.token_urlsafe(32)
+    folder = data_dir() / "AgentTokens"
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = folder / f"mcp-{secrets.token_hex(8)}.json"
+    body = json.dumps({"mcpServers": {"formwav": {"type": "http", "url": f"{base}/mcp", "headers": {"x-formwav-inapp": token}}}})
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as out:
+        out.write(body)
+    TOKENS[token] = path
+    return token, str(path)
 
 
-def argv(base: str, prompt: str | None = None, resume: str | None = None, print_mode: bool = False) -> list[str]:
+def revoke(token: str) -> None:
+    path = TOKENS.pop(token, None)
+    if path is not None:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+def is_inapp(value) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    return any(hmac.compare_digest(value.encode("utf-8"), t.encode("utf-8")) for t in list(TOKENS))
+
+
+def argv(prompt: str | None = None, resume: str | None = None, print_mode: bool = False, mcp_file: str = "") -> list[str]:
     """The `claude` command line: formwav's tools inline and allowed, the note on working in formwav, a resumed session
     when there is one, and for the chat the streaming print mode."""
     path = cli()
@@ -121,7 +149,7 @@ def argv(base: str, prompt: str | None = None, resume: str | None = None, print_
     args = [path]
     if print_mode:
         args += ["-p", prompt or "", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
-    args += ["--mcp-config", mcp_config(base), "--allowedTools", "mcp__formwav", "--append-system-prompt", NOTE]
+    args += ["--mcp-config", mcp_file, "--allowedTools", "mcp__formwav", "--append-system-prompt", NOTE]
     if resume:
         args += ["--resume", resume]
     if prompt and not print_mode:

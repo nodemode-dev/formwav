@@ -9,6 +9,7 @@ from .core import trust
 from .core.config import cors_origins
 from .core.security import LocalOnly
 from .core.version import VERSION
+from .core.window_key import WindowKeyGuard
 from .routers import agent, agents, claude, cloud, extensions, health, remote, room, share, media, midi, models, native_audio, presets, projects, providers, render, terminal
 
 mimetypes.add_type("text/javascript", ".js")
@@ -25,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Samples-Per-Peak", "X-Channels", "X-Blocks"],
 )
+app.add_middleware(WindowKeyGuard)
 app.add_middleware(LocalOnly)
 app.include_router(health.router, prefix="/api")
 app.include_router(media.router, prefix="/api")

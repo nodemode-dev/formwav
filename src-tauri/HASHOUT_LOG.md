@@ -2,6 +2,22 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### src/main.rs · the window gets the engine's window key (unreleased, after v2.26.3)
+- refers-to: src/main.rs :: setup (the sidecar's env, the reading loop, the main window's builder)
+- kind: security
+- logged: unreleased · 2026-11-19
+
+The engine is started with `FORMWAV_WINDOW_KEY_STDOUT=1`, so it prints `formwav-window-key: <key>` to its standard
+output, flushed, before uvicorn starts (backend/desktop_entry.py). The reading loop takes the key from Stdout events
+only (pattern `formwav-window-key: ([A-Za-z0-9_-]{32,})`) and the port from either stream, and stops once it has both
+or when the engine ends. It cannot wait forever: the key line is written before the server exists, so by the time the
+address appears the key is already in the stdout pipe, and an engine that ends gives Terminated. The main window gets
+one `initialization_script` (tauri 2.12.1, the version in Cargo.lock: `WebviewWindowBuilder::initialization_script(impl
+Into<String>)`, read in the crate source) that sets `window.__FORMWAV_WINDOW_KEY` only when `location.origin` is the
+engine's own `http://127.0.0.1:<port>`; the page reads it once and deletes it (frontend/src/io/window-key.ts).
+Nothing here logs or forwards the engine's standard output. Not compiled here (no WebKit in the sandbox); `rustfmt
+--emit stdout` parses it.
+
 ### capabilities/default.json · a double click on the title row maximizes on Windows and Linux (v2.26.2)
 - refers-to: capabilities/default.json :: permissions (`core:window:allow-internal-toggle-maximize`), description; ../frontend/src/ui/desktop.ts :: the title row's `data-tauri-drag-region`
 - kind: fix

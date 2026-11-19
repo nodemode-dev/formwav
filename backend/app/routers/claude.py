@@ -82,16 +82,24 @@ class Consent:
 
         return data_dir() / "agents.json"
 
-    def policy(self) -> str:
+    def stored(self) -> dict:
+        from ..core import seal
+
         try:
-            value = json.loads(self._file().read_text()).get("outside", "ask")
-        except (OSError, ValueError, AttributeError):
-            value = "ask"
+            found = json.loads(self._file().read_text())
+        except (OSError, ValueError):
+            found = {}
+        return seal.effective(found if isinstance(found, dict) else {})
+
+    def policy(self) -> str:
+        value = self.stored().get("outside", "ask")
         return value if value in ("ask", "allow", "block") else "ask"
 
     def keep(self, value: str) -> None:
+        from ..core import seal
+
         try:
-            self._file().write_text(json.dumps({"outside": value}))
+            self._file().write_text(json.dumps(seal.sign({"outside": value})))
         except OSError:
             pass
 
@@ -130,7 +138,10 @@ CLIENTS: dict[str, str] = {}
 
 @router.get("/api/agents/outside")
 def outside_policy() -> dict:
-    return {"outside": CONSENT.policy(), "now": CONSENT.session}
+    from ..core import window_key
+
+    stored = CONSENT.stored()
+    return {"outside": CONSENT.policy(), "now": CONSENT.session, "seal": stored.get("seal"), "sealBroken": stored.get("sealBroken"), "secondWindowClaim": window_key.STATE["secondClaim"]}
 
 
 class Policy(BaseModel):
@@ -144,6 +155,25 @@ def set_outside_policy(body: Policy) -> dict:
     CONSENT.keep(body.outside)
     CONSENT.session = None
     return {"outside": body.outside}
+
+
+@router.post("/api/window/key")
+def claim_window_key() -> dict:
+    from ..core import window_key
+
+    if window_key.stdout_mode():
+        raise HTTPException(status_code=404, detail="Not Found")
+    key = window_key.claim()
+    if key is None:
+        raise HTTPException(status_code=409, detail="Another window already holds this engine's window key; use that window, or restart formwav")
+    return {"key": key}
+
+
+@router.post("/api/window/ticket")
+def window_ticket() -> dict:
+    from ..core import window_key
+
+    return {"ticket": window_key.ticket()}
 
 
 async def _run_tool(name: str, arguments: dict, who: str, client: str) -> tuple[bool, Any]:
@@ -252,7 +282,7 @@ async def mcp(request: Request) -> Response:
     method, id_, params = msg.get("method"), msg.get("id"), msg.get("params") or {}
     if id_ is None:
         return Response(status_code=202)
-    who = "inapp" if request.headers.get("x-formwav-inapp") == claude_code.INAPP_TOKEN else "outside"
+    who = "inapp" if claude_code.is_inapp(request.headers.get("x-formwav-inapp")) else "outside"
     if method == "initialize":
         info = params.get("clientInfo") or {}
         if info.get("name"):
@@ -405,7 +435,7 @@ def _finish(run: dict, started: float, tail: list[str]) -> None:
     CHAT.publish("done", error=reply["error"], meta=reply["meta"], usage=dict(usage))
 
 
-def _run_chat(argv: list[str], cwd: str) -> None:
+def _run_chat(argv: list[str], cwd: str, token: str = "") -> None:
     started = time.monotonic()
     tail: list[str] = []
     run: dict = {"reply": {"role": "assistant", "parts": [], "error": "", "meta": {}}, "result": None, "done_out": 0, "call_out": 0, "code": None}
@@ -440,6 +470,7 @@ def _run_chat(argv: list[str], cwd: str) -> None:
         finally:
             CHAT.proc = None
     finally:
+        claude_code.revoke(token)
         _finish(run, started, tail)
 
 
@@ -466,14 +497,15 @@ async def claude_chat(body: Message, request: Request) -> dict:
     shown = body.text.strip()
     note = (body.note or "").strip()
     text = shown + (f"\n\n({body.context})" if body.context else "")
-    argv = claude_code.argv(base, text, CHAT.session, print_mode=True)
+    token, mcp_file = claude_code.issue(base)
+    argv = claude_code.argv(text, CHAT.session, print_mode=True, mcp_file=mcp_file)
     with CHAT.lock:
         CHAT.busy = True
         CHAT.cancelled = False
         CHAT.messages.append({"role": "user", "text": shown, "note": note})
         del CHAT.messages[:-MAX_MESSAGES]
     CHAT.publish("start", text=shown, note=note)
-    threading.Thread(target=_run_chat, args=(argv, str(claude_code.workdir())), daemon=True).start()
+    threading.Thread(target=_run_chat, args=(argv, str(claude_code.workdir()), token), daemon=True).start()
     return {"started": True, "session": CHAT.session}
 
 

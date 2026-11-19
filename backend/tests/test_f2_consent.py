@@ -17,6 +17,7 @@ BLOCKED = "has blocked outside agents"
 DECLINED = "Blocked by the person using formwav"
 NOT_OPEN = "Open formwav and try again"
 AGENTS = data_dir() / "agents.json"
+KEYS: dict[str, str] = {}
 
 
 def reset(policy=None, window=False):
@@ -76,13 +77,13 @@ def test_allow_passes_the_ask_and_reaches_the_window_bridge(client):
 
 
 def test_the_inapp_token_skips_the_ask(client):
-    error, text = call(client, "set_tempo", {"x-formwav-inapp": claude_code.INAPP_TOKEN})
+    error, text = call(client, "set_tempo", {"x-formwav-inapp": claude_code.issue("http://127.0.0.1:8060")[0]})
     assert error and NOT_OPEN in text and NO_WINDOW not in text
 
 
 def test_the_inapp_token_is_not_stopped_by_block(client):
     reset("block")
-    assert BLOCKED not in call(client, "set_tempo", {"x-formwav-inapp": claude_code.INAPP_TOKEN})[1]
+    assert BLOCKED not in call(client, "set_tempo", {"x-formwav-inapp": claude_code.issue("http://127.0.0.1:8060")[0]})[1]
 
 
 @pytest.mark.parametrize("token", ["", "wrong-token", "x" * 64])
@@ -108,7 +109,9 @@ def test_the_policy_is_kept_only_as_ask_allow_or_block(client):
 class Window:
     def __init__(self, base):
         self.base = base
-        self.http = httpx.Client(base_url=base, headers={"x-formwav-local": "1"}, timeout=30)
+        if base not in KEYS:
+            KEYS[base] = httpx.post(base + "/api/window/key", headers={"x-formwav-local": "1"}, timeout=30).json()["key"]
+        self.http = httpx.Client(base_url=base, headers={"x-formwav-local": "1", "x-formwav-window-key": KEYS[base]}, timeout=30)
         self.http.post("/api/agents/outside", json={"outside": "ask"})
         self.http.post("/api/bridge/catalogue", json={"tools": TOOLS})
 
@@ -171,7 +174,7 @@ def test_allow_once_runs_the_tool_in_the_window_and_is_not_kept(window):
     window.answer(run, {"done": True})
     thread.join(10)
     assert out["error"] is False and json.loads(out["text"]) == {"done": True}
-    assert window.http.get("/api/agents/outside").json() == {"outside": "ask", "now": "allow"}
+    assert {k: v for k, v in window.http.get("/api/agents/outside").json().items() if k in ("outside", "now")} == {"outside": "ask", "now": "allow"}
 
 
 def test_always_allow_is_kept_in_the_data_folder(window):
@@ -179,5 +182,5 @@ def test_always_allow_is_kept_in_the_data_folder(window):
     window.answer(window.next(), "always")
     window.answer(window.next(), "ok")
     thread.join(10)
-    assert json.loads(AGENTS.read_text()) == {"outside": "allow"}
+    assert json.loads(AGENTS.read_text())["outside"] == "allow"
     assert window.http.get("/api/agents/outside").json()["outside"] == "allow"

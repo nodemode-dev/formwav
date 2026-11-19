@@ -4,10 +4,11 @@ import wave
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core import window_key
 from app.main import app
 from app.routers import remote, room
 
-desk = TestClient(app, base_url="http://127.0.0.1:8060", headers={"x-formwav-local": "1"})
+desk = TestClient(app, base_url="http://127.0.0.1:8060", headers={"x-formwav-local": "1", window_key.HEADER: window_key.KEY})
 
 
 def _phone():

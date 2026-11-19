@@ -5,6 +5,7 @@ import type { Engine } from "../engine";
 import { setClass, setText } from "../vendor/nodemode/dom-stable";
 import { ChatPane, el, engineCall, escapeHtml, q, setHidden } from "./chat-pane";
 import { agentIcon } from "./icons-agent";
+import { windowKey } from "../io/window-key";
 
 interface TermInfo {
   id: string;
@@ -149,7 +150,10 @@ export function mountTerminalDock(host: HTMLElement, engine: Engine): void {
   const connect = (t: Tab) => {
     const socket = new WebSocket(`${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/terminal/${encodeURIComponent(t.id)}`);
     t.socket = socket;
-    socket.addEventListener("open", () => sendSize(t));
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({ type: "key", key: windowKey() }));
+      sendSize(t);
+    });
     socket.addEventListener("message", (msg) => {
       const data = String(msg.data);
       if (data === '{"type": "exit"}') {

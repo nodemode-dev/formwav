@@ -191,6 +191,7 @@ class Session:
         self.chunks: deque[str] = deque()
         self.size = 0
         self.subscribers: set[asyncio.Queue] = set()
+        self.token = ""
 
     def describe(self) -> dict:
         return {"id": self.id, "title": self.title, "kind": self.kind, "alive": self.alive}
@@ -269,10 +270,17 @@ def open_shell(cols: int, rows: int) -> Session:
 
 
 def open_claude(base: str, prompt: str | None, resume: str | None, cols: int, rows: int) -> Session:
-    argv = claude_code.argv(base, prompt=prompt or None, resume=resume or None)
-    if os.name != "nt":
-        argv = claude_code.shell_wrapped(argv)
-    return _open("Claude Code", "claude", argv, str(claude_code.workdir()), cols, rows)
+    token, mcp_file = claude_code.issue(base)
+    try:
+        argv = claude_code.argv(prompt=prompt or None, resume=resume or None, mcp_file=mcp_file)
+        if os.name != "nt":
+            argv = claude_code.shell_wrapped(argv)
+        session = _open("Claude Code", "claude", argv, str(claude_code.workdir()), cols, rows)
+    except BaseException:
+        claude_code.revoke(token)
+        raise
+    session.token = token
+    return session
 
 
 def get(sid: str) -> Session:
@@ -284,4 +292,6 @@ def get(sid: str) -> Session:
 
 def close(sid: str) -> None:
     get(sid)
-    SESSIONS.pop(sid).close()
+    session = SESSIONS.pop(sid)
+    session.close()
+    claude_code.revoke(session.token)
