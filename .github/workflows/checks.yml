@@ -4,7 +4,7 @@ name: checks
 # passes its Rust tests; the engine, its MCP server and the built interface pass backend/tests; the desktop shell
 # compiles. Pushes to main and to compile_v* branches, and pull requests into main, run; a push that changes only
 # Markdown does not, while a pull request always does, so a ruleset that requires these checks never waits on one.
-# This repository builds no release: formcompiler (nodemode-ai/formcompiler) builds the app from a compile_vX.Y.Z
+# This repository builds no release: formcompiler (nodemode-dev/formcompiler) builds the app from a compile_vX.Y.Z
 # branch. The reasons for each step are in backend/HASHOUT_LOG.md (.github/workflows).
 
 on:
