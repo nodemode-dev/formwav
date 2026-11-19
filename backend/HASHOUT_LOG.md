@@ -140,6 +140,33 @@ backend/
 
 ---
 
+## desktop_entry.py, services/mcp_stdio.py, routers/agents.py · the stdio relay and Claude Code reach the running app when port 8060 is busy (unreleased, after v2.26.3) {#engine-port-file}
+
+- refers-to: desktop_entry.py :: main (the port choice and the engine-port file); app/services/mcp_stdio.py :: main; app/routers/agents.py :: claude_add, clients, install
+- kind: fix
+- logged: unreleased · 2026-11-19
+
+With 8060 taken by another program, the desktop engine passed port 0 to uvicorn and deleted `engine-port`, so
+`--mcp-stdio` fell back to 8060, the other program. Reproduced from a script outside the repo that made binding 8060
+fail: uvicorn got 0, no port file, the relay aimed at 8060. Now the engine picks the free port itself (a probe bound to
+port 0, as FormPDF does) and always writes it; the same script then showed the port, the file and the relay agreeing.
+The relay reads the file for every message, so a relay started before the app finds it. In the desktop app Claude
+Code is added with the stdio command (`claude mcp add --scope user formwav -- <engine> --mcp-stdio`), which has no
+port in it; from source it keeps the HTTP address of the fixed dev engine. Checked with a stand-in `claude` that
+records its arguments, with `sys.frozen` set and not set, and a ping relayed through `--mcp-stdio` to a running
+engine named in the file.
+
+Removed lines, quoted exactly:
+
+```python
+                port = 0
+        if port:
+            port_file.write_text(str(port))
+        else:
+            port_file.unlink(missing_ok=True)
+    target = url()
+```
+
 ## core/window_key.py, core/seal.py, routers/claude.py, routers/terminal.py, services/claude_code.py, services/terminals.py, desktop_entry.py, formwav_cli.py, formwav_mcp/server.py · only the formwav window can change things without asking (unreleased, after v2.26.3) {#window-key}
 
 - refers-to: app/core/window_key.py (new); app/core/seal.py (new); app/main.py :: WindowKeyGuard; app/routers/claude.py :: Consent.stored, policy, keep, outside_policy, claim_window_key, window_ticket, mcp, claude_chat, _run_chat; app/routers/terminal.py :: terminal, terminal_attach; app/services/claude_code.py :: TOKENS, issue, revoke, is_inapp, argv; app/services/terminals.py :: Session.token, open_claude, close; desktop_entry.py :: main; formwav_cli.py :: run; formwav_mcp/server.py :: _call

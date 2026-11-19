@@ -47,12 +47,11 @@ def relay(line: str, target: str) -> str | None:
 
 
 def main() -> int:
-    target = url()
     for line in sys.stdin:
         line = line.strip()
         if not line:
             continue
-        out = relay(line, target)
+        out = relay(line, url())
         if out:
             sys.stdout.write(out + "\n")
             sys.stdout.flush()

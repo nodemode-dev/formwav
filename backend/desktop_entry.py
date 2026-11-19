@@ -139,15 +139,12 @@ def main() -> int:
                 probe.bind(("127.0.0.1", 8060))
                 port = 8060
             except OSError:
-                port = 0
+                probe.bind(("127.0.0.1", 0))
+                port = probe.getsockname()[1]
     from app.services import mcp_stdio
 
-    port_file = data / mcp_stdio.PORT_FILE
     try:
-        if port:
-            port_file.write_text(str(port))
-        else:
-            port_file.unlink(missing_ok=True)
+        (data / mcp_stdio.PORT_FILE).write_text(str(port))
     except OSError:
         pass
     from app.core import window_key

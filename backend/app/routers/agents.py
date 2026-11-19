@@ -34,6 +34,13 @@ def server_command() -> tuple[str, list[str], dict[str, str]]:
     return str(BACKEND / "formwav_mcp" / "serve"), [], {}
 
 
+def claude_add(base: str) -> list[str]:
+    if getattr(sys, "frozen", False):
+        command, args, _env = server_command()
+        return ["mcp", "add", "--scope", "user", NAME, "--", command, *args]
+    return ["mcp", "add", "--transport", "http", "--scope", "user", NAME, f"{base}/mcp"]
+
+
 def _line(words: list[str]) -> str:
     return subprocess.list2cmdline(words) if os.name == "nt" else " ".join(shlex.quote(w) for w in words)
 
@@ -83,7 +90,7 @@ def clients(base: str = "http://127.0.0.1:8060") -> list[dict]:
     command, args, env = server_command()
     from ..services import claude_code
 
-    add = ["claude", "mcp", "add", "--transport", "http", "--scope", "user", NAME, f"{base}/mcp"]
+    add = ["claude", *claude_add(base)]
     return [
         {"id": "claude-code", "name": "Claude Code", "kind": "command", "file": None, "text": _line(add), "installable": claude_code.cli() is not None, "present": None},
         {"id": "codex", "name": "Codex", "kind": "file", "file": str(FILES["codex"]()), "text": _codex_block(), "installable": True, "present": _present("codex")},
@@ -118,7 +125,7 @@ def install(request: Request, body: dict = Body(...)) -> dict:
         claude = claude_code.cli()
         if not claude:
             raise HTTPException(409, claude_code.INSTALL)
-        run = subprocess.run([claude, "mcp", "add", "--transport", "http", "--scope", "user", NAME, f"http://{request.url.netloc}/mcp"], capture_output=True, text=True, timeout=60, check=False, env=claude_code.child_env())
+        run = subprocess.run([claude, *claude_add(f"http://{request.url.netloc}")], capture_output=True, text=True, timeout=60, check=False, env=claude_code.child_env())
         text = (run.stdout + run.stderr).strip()
         if run.returncode and "already exists" not in text:
             raise HTTPException(502, f"claude mcp add failed: {text[-400:]}")
