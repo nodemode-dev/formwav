@@ -7,7 +7,7 @@ description: "Editing the session open in formwav's window through the MCP serve
 
 ## Purpose
 
-The other 28 tools make and measure media; they never touch a session's tracks or timeline. Six tools reach the session open in formwav's window, where every change is one undoable step the person can see and take back. This sub-skill says which to use and in what order.
+The other 29 tools make and measure media; they never touch a session's tracks or timeline. Eight tools reach the session open in formwav's window, where every change is one undoable step the person can see and take back. This sub-skill says which to use and in what order.
 
 ## Preconditions
 

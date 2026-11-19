@@ -16,7 +16,7 @@ export function mountAgents(host: HTMLElement): void {
   dialog.className = "fw-export-dialog fw-agents-dialog";
   dialog.innerHTML = `<form method="dialog">
   <h2 class="fw-dialog-title">Agents</h2>
-  <p class="fw-agents-note">An agent reaches formwav through its MCP server: 28 tools for media, repair, speech, music, dubbing, recording, sessions and the cloud. The formwav-harness skill in this repository's .claude/skills teaches it to use them well. Add formwav to a client here, or copy its text into the client yourself; formwav must be running when the agent calls it.</p>
+  <p class="fw-agents-note">An agent reaches formwav through its MCP server: 37 tools for media, repair, speech, music, dubbing, recording, sessions and the cloud. The formwav-harness skill in this repository's .claude/skills teaches it to use them well. Add formwav to a client here, or copy its text into the client yourself; formwav must be running when the agent calls it.</p>
   <div class="fw-agents-list" data-a="list"><p class="fw-agents-note">Reading the clients...</p></div>
   <output class="fw-agents-state" data-a="state"></output>
   <div class="fw-dialog-actions"><button type="submit" class="fw-ibtn" value="close">Close</button></div>

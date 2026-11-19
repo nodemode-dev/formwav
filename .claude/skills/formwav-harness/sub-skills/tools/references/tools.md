@@ -1,6 +1,6 @@
 # formwav's MCP tools
 
-Generated from the server's own listing (37 tools) by the harness's generator; regenerate after any tool change rather than editing by hand (the generator refuses when this grouping and the server disagree). Names are exact and case sensitive.
+Written from the server's own listing (37 tools in backend/formwav_mcp/server.py). No generator for this file is kept in this repository, so update it by hand after any tool change and check its names against the server's. Names are exact and case sensitive.
 
 ## Contents
 
