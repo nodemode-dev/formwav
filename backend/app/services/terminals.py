@@ -268,12 +268,12 @@ class Session:
         self.deliver(None)
 
 
-def _open(title: str, kind: str, argv: list[str], cwd: str, cols: int, rows: int) -> Session:
+def _open(title: str, kind: str, argv: list[str], cwd: str, cols: int, rows: int, extra: dict[str, str] | None = None) -> Session:
     if not supported():
         raise Unavailable("The terminal is not available on this system")
     if len(SESSIONS) >= MAX_SESSIONS:
         raise Unavailable(f"At most {MAX_SESSIONS} terminals can be open; close one first")
-    session = Session(uuid.uuid4().hex[:12], title, kind, argv, cwd, claude_code.child_env(), max(10, min(cols, 1000)), max(4, min(rows, 500)))
+    session = Session(uuid.uuid4().hex[:12], title, kind, argv, cwd, {**claude_code.child_env(), **(extra or {})}, max(10, min(cols, 1000)), max(4, min(rows, 500)))
     session.start()
     SESSIONS[session.id] = session
     return session
@@ -291,6 +291,25 @@ def open_claude(base: str, prompt: str | None, resume: str | None, cols: int, ro
         if os.name != "nt":
             argv = claude_code.shell_wrapped(argv)
         session = _open("Claude Code", "claude", argv, str(claude_code.workdir()), cols, rows)
+    except BaseException:
+        claude_code.revoke(token)
+        raise
+    session.token = token
+    return session
+
+
+def open_agent(kind: str, base: str, cols: int, rows: int) -> Session:
+    from . import agent_programs
+
+    path = agent_programs.find(kind)
+    if path is None:
+        raise FileNotFoundError(agent_programs.missing(kind))
+    token = claude_code.issue_token()
+    try:
+        folder = claude_code.workdir()
+        agent_programs.configure(kind, base, folder)
+        argv = [path] if os.name == "nt" else claude_code.shell_wrapped([path])
+        session = _open(agent_programs.PROGRAMS[kind]["title"], kind, argv, str(folder), cols, rows, {agent_programs.TOKEN_VAR: token, agent_programs.URL_VAR: f"{base}/mcp"})
     except BaseException:
         claude_code.revoke(token)
         raise

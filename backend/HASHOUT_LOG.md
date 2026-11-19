@@ -140,6 +140,48 @@ backend/
 
 ---
 
+## services/agent_programs.py, routers/terminal.py, routers/claude.py · one call says which agent programs are here, and Codex and Cursor open as tabs (unreleased, after v2.26.3) {#agent-programs}
+
+- refers-to: app/services/agent_programs.py :: PROGRAMS, find, status, configure, TOKEN_VAR, URL_VAR, MARK; app/services/terminals.py :: open_agent, _open (extra); app/services/claude_code.py :: issue_token, TOKENS; app/routers/terminal.py :: terminal_agent, AgentBody; app/routers/claude.py :: agents_status; tests/test_agent_programs.py
+- kind: feat
+- logged: unreleased · 2026-11-19
+
+Two clauses of the family dock's contract, engine side; launch approach read from FormVis 365d62b2
+(`backend/app/services/agent_programs.py`). Nothing the present page calls is changed: `/api/claude/status` and
+`/api/claudecode/open` answer as before.
+
+- `GET /api/agents/status` answers `{claude, codex, cursor}`, each `{installed, path, version, signedIn, install,
+  title}`. `install` is a line a person can paste, never a sentence. `version` is the first line of `--version`.
+  `signedIn` is true, false or null (cannot tell): for Claude Code it is `CLAUDE_CODE_OAUTH_TOKEN` in the engine's
+  environment, else the `loggedIn` field of `claude auth status` (no model call); for Codex and Cursor always null. The
+  answer is kept for a minute. Nothing in the engine calls it: not start-up, not another route.
+- `POST /api/terminal/agent {kind: "codex" | "cursor", cols, rows}` starts the found program in a tab of that kind, in
+  the agent folder, through the login shell as Claude Code is. 424 with the install line when the program is missing,
+  422 for another kind; it is a write under `/api/terminal`, so it needs the window key. The tab gets a token of its own
+  (`claude_code.issue_token`, the same registry the Claude tabs use, so `/mcp` takes it as formwav's own) in the child's
+  environment as `FORMWAV_INAPP_TOKEN`, with `FORMWAV_MCP_URL` beside it; the command line is the program's path only;
+  a plain shell tab gets neither; the token is revoked when the tab is closed, as a Claude tab's is.
+- So that the program can reach formwav's MCP server with that token, `configure` leaves one small 0600 file in the
+  agent folder (`FORMWAV_AGENT_DIR`, else `~/formwav/Agent`) that holds no secret: `.cursor/mcp.json` with
+  `${env:FORMWAV_MCP_URL}` and `${env:FORMWAV_INAPP_TOKEN}`, or `.codex/config.toml` with the engine's address and
+  `env_http_headers` naming the variable. A file already there that formwav did not write is left as it is (the Codex
+  file is known by its first line, `MARK`; the Cursor file only when it equals what would be written). Nothing in the
+  person's home configuration is touched.
+
+Checked on an engine from source (port 34100) with stand-in scripts named `claude`, `codex` and `cursor-agent` on its
+PATH: the status listed all three with their version lines; both tabs opened, each child had the token and the address
+in its environment (read from /proc), no token in `ps -eo args`, no token in a shell tab's environment, both files
+0600; with the stored choice at Ask a call carrying the Codex tab's token reached the window with no question, and
+after the tab was closed the same token was asked like any outside agent; without the key 403, kind `vim` 422. Without
+the stand-ins: Codex and Cursor not installed with their install lines, the route 424, and the real Claude Code on this
+machine (2.1.328) reported `signedIn: false` from `claude auth status`. A `.cursor/mcp.json` holding other text was
+left as it was. tests/test_agent_programs.py states it.
+
+Not verified, because neither real program is on this machine: that Codex reads `.codex/config.toml` from the folder it
+is started in (it may ask for the folder to be trusted first) and takes `env_http_headers`; that Cursor's agent expands
+`${env:...}` in `url` and `headers` of a project `mcp.json` and what it asks before using it; either program's own
+sign-in state.
+
 ## routers/terminal.py · a page that asks gets the terminal's hello and exit as binary frames (unreleased, after v2.26.3) {#terminal-typed-control}
 
 - refers-to: app/routers/terminal.py :: terminal_attach (typed, control, outbound); tests/test_terminal_output.py

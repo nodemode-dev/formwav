@@ -17,6 +17,7 @@ import json
 import os
 import signal
 import struct
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -237,6 +238,21 @@ async def claudecode_open(request: Request, body: ClaudeBody | None = None) -> d
         return terminals.open_claude(f"http://{request.headers.get('host')}", body.prompt, body.resume, body.cols, body.rows).describe()
     except FileNotFoundError:
         raise HTTPException(status_code=424, detail=claude_code.INSTALL) from None
+    except terminals.Unavailable as err:
+        raise HTTPException(status_code=501, detail=str(err)) from None
+
+
+class AgentBody(OpenBody):
+    kind: Literal["codex", "cursor"]
+
+
+@router.post("/terminal/agent")
+async def terminal_agent(request: Request, body: AgentBody) -> dict:
+    _gate()
+    try:
+        return terminals.open_agent(body.kind, f"http://{request.headers.get('host')}", body.cols, body.rows).describe()
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=424, detail=str(err)) from None
     except terminals.Unavailable as err:
         raise HTTPException(status_code=501, detail=str(err)) from None
 

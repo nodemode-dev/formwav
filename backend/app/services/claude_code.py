@@ -19,7 +19,7 @@ import subprocess
 import time
 from pathlib import Path
 
-TOKENS: dict[str, Path] = {}
+TOKENS: dict[str, Path | None] = {}
 KEEP = {"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CONFIG_DIR"}
 DROP = {"ANTHROPIC_API_KEY", "FORMWAV_PORT", "FORMWAV_EXIT_WITH_STDIN", "FORMWAV_DATA_DIR", "FORMWAV_DIST"}
 INSTALL = "Claude Code is not installed: install it from https://claude.com/claude-code, run claude once in a terminal to sign in, then try again."
@@ -123,6 +123,12 @@ def issue(base: str) -> tuple[str, str]:
         out.write(body)
     TOKENS[token] = path
     return token, str(path)
+
+
+def issue_token() -> str:
+    token = secrets.token_urlsafe(32)
+    TOKENS[token] = None
+    return token
 
 
 def revoke(token: str) -> None:

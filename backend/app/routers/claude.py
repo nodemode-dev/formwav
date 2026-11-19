@@ -368,6 +368,13 @@ def claude_status() -> dict:
     return {**claude_code.info(), "window": BRIDGE.live(), "tools": len(BRIDGE.tools)}
 
 
+@router.get("/api/agents/status")
+def agents_status() -> dict:
+    from ..services import agent_programs
+
+    return agent_programs.status()
+
+
 MAX_MESSAGES = 200
 HIDDEN = {"ToolSearch"}
 
