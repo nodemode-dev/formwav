@@ -255,17 +255,28 @@ async def terminal_attach(ws: WebSocket, sid: str) -> None:
         await ws.close(code=4404)
         return
     backlog, queue = session.attach()
+    typed = ws.query_params.get("control") == "binary"
+
+    async def control(kind: str) -> None:
+        if typed:
+            await ws.send_bytes(json.dumps({"type": kind}).encode("utf-8"))
+        elif kind == "exit":
+            await ws.send_text(json.dumps({"type": "exit"}))
 
     async def outbound() -> None:
+        await control("hello")
         if backlog:
             await ws.send_text(backlog)
         if not session.alive:
-            await ws.send_text(json.dumps({"type": "exit"}))
+            await control("exit")
         while True:
             if queue.skipped and queue.empty():
                 await ws.send_text(queue.note())
             item = await queue.get()
-            await ws.send_text(json.dumps({"type": "exit"}) if item is None else item)
+            if item is None:
+                await control("exit")
+            else:
+                await ws.send_text(item)
 
     sender = asyncio.create_task(outbound())
     try:

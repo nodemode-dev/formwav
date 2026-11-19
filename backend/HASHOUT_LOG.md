@@ -140,6 +140,24 @@ backend/
 
 ---
 
+## routers/terminal.py · a page that asks gets the terminal's hello and exit as binary frames (unreleased, after v2.26.3) {#terminal-typed-control}
+
+- refers-to: app/routers/terminal.py :: terminal_attach (typed, control, outbound); tests/test_terminal_output.py
+- kind: feat
+- logged: unreleased · 2026-11-19
+
+The family dock's contract wants the end of a program to be told apart from output, and at least one frame on every
+attach. formwav sends output and the notice `{"type": "exit"}` as text frames alike, and the present page compares
+each text frame with that exact string, so nothing it receives may change. A page that attaches with
+`ws /api/terminal/{id}?control=binary` now gets control as binary frames holding JSON: `{"type": "hello"}` first on
+every attach (before the replayed scrollback), `{"type": "exit"}` when the program has ended or ends. Output, the
+replay and the skipped-output line stay text frames. Without the parameter the frames are what they were: no hello, exit
+as text.
+
+Checked on an engine from source (port 34100): a shell tab attached as the present page does, `exit` typed, every frame
+text and the last one `{"type": "exit"}`; the same with `?control=binary`, first frame binary hello, last frame binary
+exit, the two between text. tests/test_terminal_output.py has both, on an engine of its own.
+
 ## routers/claude.py, core/window_key.py · the outside-agent question carries what a dialog needs, and can be answered once or denied (unreleased, after v2.26.3) {#consent-contract}
 
 - refers-to: app/routers/claude.py :: Consent (LIMIT, PAUSE, ANSWERS, SESSION_ANSWERS, DENIED, ALL_BLOCKED, check), Bridge.withdraw, Bridge.notices, bridge_next, outside_policy, set_outside_policy, STORED_WORDS, _run_tool; app/core/window_key.py :: WindowKeyGuard; tests/test_f2_consent.py

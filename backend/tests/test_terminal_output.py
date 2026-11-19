@@ -1,10 +1,13 @@
 import asyncio
+import json
 import os
 import re
 
+import httpx
 import pytest
 
 from app.services import terminals
+from conftest import serve_engine
 
 NOTE = re.compile(r"\r\n\[formwav: (\d+) characters of output were skipped because this window fell behind\]\r\n")
 
@@ -80,3 +83,37 @@ def test_a_flood_from_a_real_shell_to_a_subscriber_that_does_not_read_loses_noth
     seen, kept, skipped = asyncio.run(go())
     assert seen > 30000000 and skipped > 0
     assert kept + skipped == seen
+
+
+@pytest.fixture(scope="module")
+def keyed_engine():
+    with serve_engine("engine-terminal.log") as url:
+        yield url, httpx.post(url + "/api/window/key", headers={"x-formwav-local": "1"}, timeout=30).json()["key"]
+
+
+def _frames_until_exit(url: str, key: str, query: str = "") -> list:
+    from websockets.sync.client import connect
+
+    http = httpx.Client(base_url=url, headers={"x-formwav-local": "1", "x-formwav-window-key": key}, timeout=30)
+    tab = http.post("/api/terminal/open", json={"cols": 80, "rows": 20}).json()
+    got: list = []
+    with connect(f"ws://{url.removeprefix('http://')}/api/terminal/{tab['id']}{query}", origin=url) as ws:
+        ws.send(json.dumps({"type": "key", "key": key}))
+        ws.send(json.dumps({"type": "input", "data": "exit\n"}))
+        while not got or got[-1] not in ('{"type": "exit"}', b'{"type": "exit"}'):
+            got.append(ws.recv(timeout=20))
+    http.post("/api/terminal/close", json={"id": tab["id"]})
+    return got
+
+
+@pytest.mark.skipif(os.name != "posix", reason="types exit into a POSIX shell")
+def test_the_end_of_a_program_is_a_text_frame_for_a_page_that_asks_for_nothing_else(keyed_engine):
+    got = _frames_until_exit(*keyed_engine)
+    assert all(isinstance(frame, str) for frame in got) and got[-1] == '{"type": "exit"}'
+
+
+@pytest.mark.skipif(os.name != "posix", reason="types exit into a POSIX shell")
+def test_a_page_that_asks_gets_hello_and_exit_as_binary_frames_and_output_as_text(keyed_engine):
+    got = _frames_until_exit(*keyed_engine, "?control=binary")
+    assert got[0] == b'{"type": "hello"}' and got[-1] == b'{"type": "exit"}'
+    assert len(got) > 2 and all(isinstance(frame, str) for frame in got[1:-1])
