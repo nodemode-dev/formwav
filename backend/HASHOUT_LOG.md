@@ -140,6 +140,30 @@ backend/
 
 ---
 
+## ffmpeg_fetch.py · ffmpeg comes from formai-binaries, with formcut-binaries as the fallback (unreleased, after v2.26.3) {#ffmpeg-formai-binaries}
+
+- refers-to: app/ffmpeg_fetch.py :: SOURCES, sources, fetch; ../NOTICE; ../LICENSES.md
+- kind: change
+- logged: unreleased · 2026-11-19
+
+The binaries repository is being renamed from nodemode-dev/formcut-binaries to nodemode-dev/formai-binaries. SOURCES
+names both, the new address first; `sources()` gives the archive's address under each (the same tag `ffmpeg-<RELEASE>`
+and asset name), or only FORMCUT_FFMPEG_RELEASE's when it is set. `fetch()` tries them in order: a download that fails,
+or an archive whose files do not match the SHA-256 record (the same record for every address), moves to the next, and
+nothing is installed unless it matches; when both fail the errors are joined. The shared install folder
+`formcut-binaries/ffmpeg-<RELEASE>` and the variable names are unchanged, as the same module in the other Form apps
+shares that folder. The same shape as formDAM's ffmpeg_fetch.py. Checked with a local stand-in server from a script
+outside the repo: tampered bytes at the first address then the recorded ones at the second installed the second; a
+404 first fell through; tampered bytes at both installed nothing; with the override set only it was tried. Today the
+real first address answers 404 and the second 302. Removed lines, quoted exactly:
+
+```python
+SOURCE = "https://github.com/nodemode-dev/formcut-binaries/releases/download"
+def source() -> str:
+    base = os.environ.get("FORMCUT_FFMPEG_RELEASE") or f"{SOURCE}/ffmpeg-{RELEASE}"
+        _download(source(), archive)
+```
+
 ## desktop_entry.py, services/mcp_stdio.py, routers/agents.py · the stdio relay and Claude Code reach the running app when port 8060 is busy (unreleased, after v2.26.3) {#engine-port-file}
 
 - refers-to: desktop_entry.py :: main (the port choice and the engine-port file); app/services/mcp_stdio.py :: main; app/routers/agents.py :: claude_add, clients, install
