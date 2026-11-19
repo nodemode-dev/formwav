@@ -140,6 +140,51 @@ backend/
 
 ---
 
+## routers/claude.py, core/window_key.py · the outside-agent question carries what a dialog needs, and can be answered once or denied (unreleased, after v2.26.3) {#consent-contract}
+
+- refers-to: app/routers/claude.py :: Consent (LIMIT, PAUSE, ANSWERS, SESSION_ANSWERS, DENIED, ALL_BLOCKED, check), Bridge.withdraw, Bridge.notices, bridge_next, outside_policy, set_outside_policy, STORED_WORDS, _run_tool; app/core/window_key.py :: WindowKeyGuard; tests/test_f2_consent.py
+- kind: feat
+- logged: unreleased · 2026-11-19
+
+Engine side of the family dock's contract (work/DOCK_SPEC_2.md sections A and D), added before the window is ported, so
+every change is additive: the present page sends and reads what it did.
+
+- The question item on `GET /api/bridge/next` keeps `id`, `consent`, `name`, `client` and `sealBroken` and gains
+  `agent` (the same text as `client`), `what` (plain words that complete "It asked to ...": `use set tempo` for a tool,
+  `call PUT /api/presets` for a write with the agent header), `answers` (`deny`, `once`, `always`), `sessionAnswers`
+  (`allow`, `block`: the two this app had already, both lasting until the engine stops), `alwaysScope` (`all`: one
+  stored choice for every outside agent, the engine has nothing finer), `expiresIn` (seconds) and `expiresAt` (epoch
+  milliseconds).
+- `POST /api/bridge/result` takes two more answers. `once`: this call runs and `Consent.session` is left alone, so the
+  next call asks again. `deny`: this call is refused and for `PAUSE` (600 s, FormVis's figure) every outside call is
+  refused with the same sentence without anyone being asked, so a refused agent that retries does not raise the question
+  again at once. `allow`, `always` and `block` mean what they did.
+- Withdrawal: a window that polls with `?notices=1` is sent `{id, withdrawn: true, reason}` on the same poll when a
+  question ends, `expired` after `LIMIT` (120 s) or `answered`. The item goes only to a window that asked: the present
+  page would take it for a tool call (it has no branch for it), so it never sees one.
+- `GET /api/agents/outside` also answers in the dock's words: `value` (`ask`, `allowed`, `blocked`), `changedOutside`,
+  `session` (`allowed`, `blocked` or null: the answer in force until the engine stops), `paused` (seconds left of the
+  pause after a deny), `answers`, `sessionAnswers`, `alwaysScope`, `blockedStopsOwnTabs`. `POST` takes `value` in those
+  words as well as `outside`, answers as before, and now also ends the pause. Setting it still needs the window key.
+- The stored choice `block` now refuses a call that carries an in-app token too (`ALL_BLOCKED`), so Blocked stops
+  formwav's own Chat and agent tabs. A Block given on the question (the session answer) still stops outside agents only:
+  the present window has no control that would undo it, so widening it would leave Chat dead until a restart.
+- The class docstring said Block is kept. Run: Block on the question, engine restarted on the same data folder, the next
+  call was asked again; `agents.json` is written only for Always allow. The README and the session skill say Block
+  lasts until formwav stops, so the code stays and the docstring now says the same.
+
+Checked on an engine from source (port 34100, a fresh data folder, a stand-in keyring) through `/mcp` as an outside
+agent: the fields above on the item; deny refused and the next call was refused unasked, `paused` 600, cleared by
+setting the choice; once ran and the next call asked; allow and always as before (`agents.json` sealed, allowed without
+asking after a restart); `withdrawn` arrived after an answer and, waited out once, after 120 s; a late answer changed
+nothing; a poll without `notices` got the item with the old fields, Block answered as before and no notice was queued
+(204 after 20 s); stored `blocked` refused an outside call and a call with a Codex tab's own token, `ask` let that token
+through with no question. tests/test_f2_consent.py states it; `test_the_inapp_token_is_not_stopped_by_block` became
+`test_the_stored_block_stops_formwavs_own_tabs_too` because that meaning changed on purpose.
+
+Left for the port: the window's control for the stored choice (the routes are ready), the dialog itself, and the Agent
+column's own API-key agent, which runs its tools in the page and so is not stopped by the engine's Blocked.
+
 ## services/terminals.py, routers/terminal.py · a terminal view that falls behind is told what was skipped (unreleased, after v2.26.3) {#terminal-skipped-note}
 
 - refers-to: app/services/terminals.py :: Subscriber, Session.deliver, Session.attach, SUBSCRIBER_CHUNKS; app/routers/terminal.py :: terminal_attach (outbound); tests/test_terminal_output.py

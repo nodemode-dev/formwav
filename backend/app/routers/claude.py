@@ -42,6 +42,11 @@ class Bridge:
         self.waiting: dict[str, asyncio.Future] = {}
         self.seen = 0.0
         self.ids = itertools.count(1)
+        self.notices = False
+
+    def withdraw(self, cid: str, reason: str) -> None:
+        if self.notices:
+            self.queue().put_nowait({"id": cid, "withdrawn": True, "reason": reason})
 
     def queue(self) -> asyncio.Queue:
         if self.pending is None:
@@ -69,14 +74,24 @@ BRIDGE = Bridge()
 
 class Consent:
     """PLAN_v14 W2: an agent from outside formwav (one added with claude mcp add, the command line, another program)
-    is asked about once: the window shows Allow, Always allow and Block; Always allow and Block are kept in the data
-    folder's agents.json (outside: ask, allow or block), Allow lasts until the engine stops. The Agent column's own
-    Claude Code carries the engine's token and is never asked."""
+    is asked about once: the window shows Allow, Always allow and Block; Always allow is kept in the data folder's
+    agents.json (outside: ask, allow or block), Allow and Block last until the engine stops. A window may also answer
+    once (this call runs, the next call asks again) or deny (this call is refused and nobody is asked again for PAUSE
+    seconds). A question nobody answers is dropped after LIMIT seconds. The Agent column's own Claude Code carries the
+    engine's token and is never asked; the stored choice block stops it too."""
+
+    LIMIT = 120.0
+    PAUSE = 600.0
+    ANSWERS = ("deny", "once", "always")
+    SESSION_ANSWERS = ("allow", "block")
+    DENIED = "The person using formwav said no to this request. formwav does not ask again for ten minutes; try again later."
+    ALL_BLOCKED = "Agents are blocked in formwav: the person using it set outside agents to Blocked, which stops formwav's own Chat and agent tabs too. They can change it in formwav."
 
     def __init__(self) -> None:
         self.session: str | None = None
         self.lock: asyncio.Lock | None = None
         self.told = False
+        self.paused = 0.0
 
     def _file(self):
         from ..core.paths import data_dir
@@ -105,33 +120,45 @@ class Consent:
             pass
         self.told = False
 
-    async def check(self, name: str, client: str) -> str | None:
+    async def check(self, name: str, client: str, what: str | None = None) -> str | None:
         policy = self.policy()
         if policy == "allow" or self.session == "allow":
             return None
         if policy == "block" or self.session == "block":
             return "The person using formwav has blocked outside agents (Settings > Agents, or the Agent column's prompt)."
+        if time.monotonic() < self.paused:
+            return self.DENIED
         if self.lock is None:
             self.lock = asyncio.Lock()
         async with self.lock:
             if self.session in ("allow", "block"):
                 return None if self.session == "allow" else "Blocked by the person using formwav."
+            if time.monotonic() < self.paused:
+                return self.DENIED
             if not BRIDGE.live():
                 return "formwav's window is not open: the session's tools run in it, and the person there is asked first."
             cid = str(next(BRIDGE.ids))
             fut: asyncio.Future = asyncio.get_running_loop().create_future()
             BRIDGE.waiting[cid] = fut
             card = {"id": cid, "consent": True, "name": name, "client": client}
+            card.update(agent=client, what=what or f"use {name.replace('_', ' ')}", answers=list(self.ANSWERS), sessionAnswers=list(self.SESSION_ANSWERS), alwaysScope="all", expiresIn=self.LIMIT, expiresAt=int((time.time() + self.LIMIT) * 1000))
             if not self.told and self.stored().get("sealBroken"):
                 card["sealBroken"] = True
                 self.told = True
             await BRIDGE.queue().put(card)
             try:
-                choice = await asyncio.wait_for(fut, timeout=120)
+                choice = await asyncio.wait_for(fut, timeout=self.LIMIT)
             except asyncio.TimeoutError:
+                BRIDGE.withdraw(cid, "expired")
                 return "Nobody answered formwav's prompt within two minutes; ask again when someone is at formwav."
             finally:
                 BRIDGE.waiting.pop(cid, None)
+            BRIDGE.withdraw(cid, "answered")
+            if choice == "once":
+                return None
+            if choice == "deny":
+                self.paused = time.monotonic() + self.PAUSE
+                return self.DENIED
             if choice == "always":
                 self.keep("allow")
             self.session = "block" if choice == "block" else "allow"
@@ -147,20 +174,40 @@ def outside_policy() -> dict:
     from ..core import window_key
 
     stored = CONSENT.stored()
-    return {"outside": CONSENT.policy(), "now": CONSENT.session, "seal": stored.get("seal"), "sealBroken": stored.get("sealBroken"), "secondWindowClaim": window_key.STATE["secondClaim"]}
+    policy = CONSENT.policy()
+    said = {
+        "value": STORED_WORDS[policy],
+        "changedOutside": bool(stored.get("sealBroken")),
+        "session": STORED_WORDS.get(CONSENT.session or ""),
+        "paused": max(0, round(CONSENT.paused - time.monotonic())),
+        "answers": list(CONSENT.ANSWERS),
+        "sessionAnswers": list(CONSENT.SESSION_ANSWERS),
+        "alwaysScope": "all",
+        "blockedStopsOwnTabs": True,
+    }
+    return {"outside": policy, "now": CONSENT.session, "seal": stored.get("seal"), "sealBroken": stored.get("sealBroken"), "secondWindowClaim": window_key.STATE["secondClaim"], **said}
+
+
+STORED_WORDS = {"ask": "ask", "allow": "allowed", "block": "blocked"}
 
 
 class Policy(BaseModel):
-    outside: str
+    outside: str | None = None
+    value: str | None = None
 
 
 @router.post("/api/agents/outside")
 def set_outside_policy(body: Policy) -> dict:
-    if body.outside not in ("ask", "allow", "block"):
+    if body.outside is not None:
+        chosen = body.outside if body.outside in STORED_WORDS else None
+    else:
+        chosen = {word: key for key, word in STORED_WORDS.items()}.get(body.value or "")
+    if chosen is None:
         raise HTTPException(status_code=400, detail="outside must be ask, allow or block")
-    CONSENT.keep(body.outside)
+    CONSENT.keep(chosen)
     CONSENT.session = None
-    return {"outside": body.outside}
+    CONSENT.paused = 0.0
+    return {"outside": chosen}
 
 
 @router.post("/api/window/key")
@@ -187,6 +234,8 @@ async def _run_tool(name: str, arguments: dict, who: str, client: str) -> tuple[
         refused = await CONSENT.check(name, client)
         if refused:
             return False, refused
+    elif CONSENT.policy() == "block":
+        return False, CONSENT.ALL_BLOCKED
     try:
         return True, await BRIDGE.call(name, arguments, who)
     except (RuntimeError, asyncio.TimeoutError) as err:
@@ -231,8 +280,9 @@ def bridge_catalogue(body: Catalogue) -> dict:
 
 
 @router.get("/api/bridge/next")
-async def bridge_next(request: Request) -> Response:
+async def bridge_next(request: Request, notices: int = 0) -> Response:
     BRIDGE.seen = time.monotonic()
+    BRIDGE.notices = bool(notices)
     try:
         item = await asyncio.wait_for(BRIDGE.queue().get(), timeout=20)
     except asyncio.TimeoutError:

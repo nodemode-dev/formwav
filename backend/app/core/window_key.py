@@ -109,7 +109,7 @@ class WindowKeyGuard:
         if agent and method not in READS and path.startswith("/api/") and not _window_only(path):
             from ..routers.claude import CONSENT
 
-            reason = await CONSENT.check(f"{method} {path}", agent[:60])
+            reason = await CONSENT.check(f"{method} {path}", agent[:60], f"call {method} {path}")
             if reason is None:
                 await self.app(scope, receive, send)
                 return

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import threading
 import time
@@ -14,6 +15,8 @@ HEADERS = {"host": "127.0.0.1:8060"}
 TOOLS = [{"name": "get_session", "description": "reads"}, {"name": "set_tempo", "description": "changes"}]
 NO_WINDOW = "and the person there is asked first"
 BLOCKED = "has blocked outside agents"
+ALL_BLOCKED = "stops formwav's own Chat and agent tabs too"
+DENIED = "said no to this request"
 DECLINED = "Blocked by the person using formwav"
 NOT_OPEN = "Open formwav and try again"
 AGENTS = data_dir() / "agents.json"
@@ -27,6 +30,8 @@ def reset(policy=None, window=False):
     bridge.BRIDGE.waiting.clear()
     bridge.CONSENT.session = None
     bridge.CONSENT.lock = None
+    bridge.CONSENT.paused = 0.0
+    bridge.BRIDGE.notices = False
     if policy is None:
         AGENTS.unlink(missing_ok=True)
     else:
@@ -81,9 +86,43 @@ def test_the_inapp_token_skips_the_ask(client):
     assert error and NOT_OPEN in text and NO_WINDOW not in text
 
 
-def test_the_inapp_token_is_not_stopped_by_block(client):
-    reset("block")
-    assert BLOCKED not in call(client, "set_tempo", {"x-formwav-inapp": claude_code.issue("http://127.0.0.1:8060")[0]})[1]
+def test_the_stored_block_stops_formwavs_own_tabs_too(client):
+    reset("block", window=True)
+    error, text = call(client, "set_tempo", {"x-formwav-inapp": claude_code.issue("http://127.0.0.1:8060")[0]})
+    assert error and ALL_BLOCKED in text
+
+
+def test_a_block_given_on_the_question_stops_outside_agents_only(client):
+    bridge.CONSENT.session = "block"
+    assert BLOCKED in call(client, "set_tempo")[1]
+    error, text = call(client, "set_tempo", {"x-formwav-inapp": claude_code.issue("http://127.0.0.1:8060")[0]})
+    assert error and NOT_OPEN in text
+
+
+def test_the_stored_choice_is_reported_and_set_in_the_dock_words_too(client, bare):
+    assert client.post("/api/agents/outside", json={"value": "blocked"}).json() == {"outside": "block"}
+    state = client.get("/api/agents/outside").json()
+    assert (state["outside"], state["value"], state["changedOutside"], state["session"]) == ("block", "blocked", False, None)
+    assert bare.post("/api/agents/outside", json={"value": "allowed"}).status_code == 403
+    assert client.post("/api/agents/outside", json={"value": "sometimes"}).status_code == 400
+    assert client.post("/api/agents/outside", json={"value": "ask"}).json() == {"outside": "ask"}
+    assert client.get("/api/agents/outside").json()["value"] == "ask"
+
+
+@pytest.mark.parametrize("notices", [True, False])
+def test_a_question_nobody_answers_is_dropped_and_a_window_that_asked_for_notices_is_told(monkeypatch, notices):
+    reset(window=True)
+    monkeypatch.setattr(bridge.Consent, "LIMIT", 0.2)
+    bridge.BRIDGE.notices = notices
+
+    async def ask():
+        refused = await bridge.CONSENT.check("set_tempo", "an agent")
+        queue = bridge.BRIDGE.queue()
+        return refused, [queue.get_nowait() for _ in range(queue.qsize())]
+
+    refused, items = asyncio.run(ask())
+    assert "Nobody answered" in refused and items[0]["consent"] is True
+    assert items[1:] == ([{"id": items[0]["id"], "withdrawn": True, "reason": "expired"}] if notices else [])
 
 
 @pytest.mark.parametrize("token", ["", "wrong-token", "x" * 64])
@@ -115,10 +154,10 @@ class Window:
         self.http.post("/api/agents/outside", json={"outside": "ask"})
         self.http.post("/api/bridge/catalogue", json={"tools": TOOLS})
 
-    def next(self, within=10.0):
+    def next(self, within=10.0, notices=False):
         deadline = time.monotonic() + within
         while time.monotonic() < deadline:
-            r = self.http.get("/api/bridge/next")
+            r = self.http.get("/api/bridge/next", params={"notices": 1} if notices else None)
             if r.status_code == 200:
                 return r.json()
         raise AssertionError("the engine asked the window for nothing")
@@ -184,3 +223,53 @@ def test_always_allow_is_kept_in_the_data_folder(window):
     thread.join(10)
     assert json.loads(AGENTS.read_text())["outside"] == "allow"
     assert window.http.get("/api/agents/outside").json()["outside"] == "allow"
+
+
+def test_the_question_says_who_asks_what_which_answers_there_are_and_when_it_ends(window):
+    thread, out = window.outside_call("set_tempo")
+    item = window.next()
+    said = {k: item[k] for k in ("agent", "what", "answers", "sessionAnswers", "alwaysScope", "expiresIn")}
+    assert said == {"agent": item["client"], "what": "use set tempo", "answers": ["deny", "once", "always"], "sessionAnswers": ["allow", "block"], "alwaysScope": "all", "expiresIn": 120}
+    assert 100 < item["expiresAt"] / 1000 - time.time() <= 120
+    window.answer(item, "once")
+    window.answer(window.next(), "ok")
+    thread.join(10)
+
+
+def test_once_runs_this_call_and_the_next_call_asks_again(window):
+    thread, out = window.outside_call("set_tempo")
+    window.answer(window.next(), "once")
+    window.answer(window.next(), {"done": True})
+    thread.join(10)
+    assert out["error"] is False and window.http.get("/api/agents/outside").json()["now"] is None
+    thread, again = window.outside_call("get_session")
+    item = window.next()
+    assert item["consent"] is True and item["name"] == "get_session"
+    window.answer(item, "once")
+    window.answer(window.next(), "ok")
+    thread.join(10)
+    assert again["error"] is False
+
+
+def test_deny_refuses_this_call_and_nobody_is_asked_again_for_a_while(window):
+    thread, out = window.outside_call("set_tempo")
+    window.answer(window.next(), "deny")
+    thread.join(10)
+    assert out["error"] and DENIED in out["text"]
+    thread, again = window.outside_call("get_session")
+    thread.join(10)
+    assert again["error"] and DENIED in again["text"]
+    state = window.http.get("/api/agents/outside").json()
+    assert state["now"] is None and state["outside"] == "ask" and 0 < state["paused"] <= 600
+    window.http.post("/api/agents/outside", json={"value": "ask"})
+    assert window.http.get("/api/agents/outside").json()["paused"] == 0
+
+
+def test_a_window_that_asks_for_notices_is_told_when_a_question_is_answered(window):
+    thread, out = window.outside_call("set_tempo")
+    item = window.next(notices=True)
+    window.answer(item, "once")
+    assert window.next(notices=True) == {"id": item["id"], "withdrawn": True, "reason": "answered"}
+    window.answer(window.next(notices=True), "ok")
+    thread.join(10)
+    assert out["error"] is False
