@@ -5,7 +5,9 @@ mod reveal;
 mod text_edit;
 mod traffic_lights;
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
@@ -57,6 +59,18 @@ fn close_splash(handle: &tauri::AppHandle) {
     if let Some(splash) = handle.get_webview_window("splash") {
         let _ = splash.close();
     }
+}
+
+const ENGINE_START_LIMIT: Duration = Duration::from_secs(10);
+
+fn engine_failed(handle: &tauri::AppHandle) -> ! {
+    close_splash(handle);
+    handle
+        .dialog()
+        .message("The formwav engine failed to start. Please relaunch formwav.")
+        .blocking_show();
+    kill_backend(handle);
+    std::process::exit(1);
 }
 
 fn main() {
@@ -111,6 +125,16 @@ fn main() {
                 .expect("the formwav engine failed to spawn");
             app.state::<Backend>().0.lock().unwrap().replace(child);
 
+            let started = Arc::new(AtomicBool::new(false));
+            let started_seen = started.clone();
+            let watch_handle = handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(ENGINE_START_LIMIT);
+                if !started_seen.load(Ordering::SeqCst) {
+                    engine_failed(&watch_handle);
+                }
+            });
+
             tauri::async_runtime::spawn(async move {
                 let pattern = regex::Regex::new(r"http://127\.0\.0\.1:(\d+)").unwrap();
                 let key_pattern = regex::Regex::new(r"formwav-window-key: ([A-Za-z0-9_-]{32,})").unwrap();
@@ -138,7 +162,8 @@ fn main() {
                         break;
                     }
                 }
-                match port {
+                started.store(true, Ordering::SeqCst);
+                match port.filter(|_| key.is_some()) {
                     Some(found) => {
                         let base: Url = format!("http://127.0.0.1:{found}/")
                             .parse()
@@ -197,15 +222,7 @@ fn main() {
                             Err(_) => close_splash(&handle),
                         }
                     }
-                    None => {
-                        close_splash(&handle);
-                        handle
-                            .dialog()
-                            .message("The formwav engine failed to start. Please relaunch formwav.")
-                            .blocking_show();
-                        kill_backend(&handle);
-                        std::process::exit(1);
-                    }
+                    None => engine_failed(&handle),
                 }
             });
             Ok(())

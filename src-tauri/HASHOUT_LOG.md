@@ -2,6 +2,24 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### src/main.rs · the wait for the engine's key line ends after 10 seconds (unreleased, after v2.26.3)
+- refers-to: src/main.rs :: ENGINE_START_LIMIT, engine_failed, setup (the watcher thread, the reading loop's end)
+- kind: security
+- logged: unreleased · 2026-11-19
+
+The earlier entry reasoned that the reading loop could not wait forever; that was an argument about the engine's order
+of output, not a limit, and an engine that stays alive but silent would have held the splash open for ever. A plain
+thread now sleeps `ENGINE_START_LIMIT` (10 seconds, the family value) and, if the loop has not finished by then (an
+`AtomicBool` the loop sets when it ends), takes the existing "The formwav engine failed to start" path: the splash
+closes, the dialog shows, the engine is told to end and the app exits. The path is now `engine_failed`, which the loop's
+own failure branch calls too. The window opens only when the loop has the port and the key: an engine that ended with a
+port but no key also takes the failure path. A thread and a flag rather than a timeout around `rx.recv()`, because
+that needs tokio's timer, which is not a direct dependency of this crate and adding it would change Cargo.lock; nothing
+is added to Cargo.toml or Cargo.lock. Risk to watch: a first start of the frozen engine on a slow disk or with a
+scanning antivirus can take more than 10 seconds before its first line. Not compiled here (no WebKit in the sandbox);
+`rustfmt --edition 2021 --check src/main.rs` parses it, and the only differences it reports are in lines this change
+does not touch.
+
 ### src/main.rs · the window gets the engine's window key (unreleased, after v2.26.3)
 - refers-to: src/main.rs :: setup (the sidecar's env, the reading loop, the main window's builder)
 - kind: security
