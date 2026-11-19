@@ -262,6 +262,8 @@ async def terminal_attach(ws: WebSocket, sid: str) -> None:
         if not session.alive:
             await ws.send_text(json.dumps({"type": "exit"}))
         while True:
+            if queue.skipped and queue.empty():
+                await ws.send_text(queue.note())
             item = await queue.get()
             await ws.send_text(json.dumps({"type": "exit"}) if item is None else item)
 

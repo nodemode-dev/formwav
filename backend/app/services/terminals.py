@@ -21,6 +21,7 @@ from pathlib import Path
 from . import claude_code
 
 SCROLLBACK = 256 * 1024
+SUBSCRIBER_CHUNKS = 4000
 MAX_SESSIONS = 16
 SESSIONS: dict[str, "Session"] = {}
 _tasks: set[asyncio.Task] = set()
@@ -181,6 +182,16 @@ class _Windows:
             pass
 
 
+class Subscriber(asyncio.Queue):
+    def __init__(self) -> None:
+        super().__init__()
+        self.skipped = 0
+
+    def note(self) -> str:
+        count, self.skipped = self.skipped, 0
+        return f"\r\n[formwav: {count} characters of output were skipped because this window fell behind]\r\n" if count else ""
+
+
 class Session:
     def __init__(self, sid: str, title: str, kind: str, argv: list[str], cwd: str, env: dict[str, str], cols: int, rows: int) -> None:
         self.id, self.title, self.kind = sid, title, kind
@@ -190,7 +201,7 @@ class Session:
         self.proc: _Posix | _Windows | None = None
         self.chunks: deque[str] = deque()
         self.size = 0
-        self.subscribers: set[asyncio.Queue] = set()
+        self.subscribers: set[Subscriber] = set()
         self.token = ""
 
     def describe(self) -> dict:
@@ -203,8 +214,12 @@ class Session:
 
     def deliver(self, item: str | None) -> None:
         for queue in list(self.subscribers):
-            if queue.qsize() < 4000:
-                queue.put_nowait(item)
+            if item is not None and queue.qsize() >= SUBSCRIBER_CHUNKS:
+                queue.skipped += len(item)
+                continue
+            if queue.skipped:
+                queue.put_nowait(queue.note())
+            queue.put_nowait(item)
 
     def emit(self, proc: object, text: str) -> None:
         if proc is not self.proc:
@@ -222,8 +237,8 @@ class Session:
         proc.stop()
         self.deliver(None)
 
-    def attach(self) -> tuple[str, asyncio.Queue]:
-        queue: asyncio.Queue = asyncio.Queue()
+    def attach(self) -> tuple[str, Subscriber]:
+        queue = Subscriber()
         self.subscribers.add(queue)
         return "".join(self.chunks), queue
 

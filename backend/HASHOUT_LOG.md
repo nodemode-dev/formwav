@@ -140,6 +140,36 @@ backend/
 
 ---
 
+## services/terminals.py, routers/terminal.py · a terminal view that falls behind is told what was skipped (unreleased, after v2.26.3) {#terminal-skipped-note}
+
+- refers-to: app/services/terminals.py :: Subscriber, Session.deliver, Session.attach, SUBSCRIBER_CHUNKS; app/routers/terminal.py :: terminal_attach (outbound); tests/test_terminal_output.py
+- kind: fix
+- logged: unreleased · 2026-11-18
+
+`Session.deliver` skipped a subscriber whose queue already held 4000 chunks and said nothing, so a view that did not
+keep up lost the middle of the output, the shell's last lines and, because the end-of-output item went through the
+same test, possibly the exit signal. Measured on an engine at the start of this session: a subscriber that does not
+read (in process, `yes ... | head -c 60000000`, 8 s) kept 4000 chunks and about 12 of 60 million characters; the end
+marker never arrived. Over the WebSocket the same flood arrived whole (counted by the pattern line, 0 of 2,702,702
+lines lost for 100 MB with a reader at full speed; 0 of 1,081,081 for 40 MB with a 3 ms pause per frame; 0 of
+10,810,810 for 400 MB with the client's loop blocked for 12 s), because the sender does not wait on a stalled client:
+the transport's own write buffer, not this queue, takes the data (so it grows in memory for as long as the client is
+stalled; not changed here). The queue fills only when the sender is slower than the reader for another reason, which
+is the case this fixes.
+
+Back-pressure was not chosen: pausing the read of the pseudo-terminal until a view catches up would stop a program
+(Claude Code, a build) for as long as a window is stalled or half open, and nobody is told. Instead each subscriber is a
+`Subscriber` (an `asyncio.Queue` that counts the characters it skipped): over the limit a chunk is skipped and counted;
+when there is room again the next chunk is preceded by one line, `[formwav: N characters of output were skipped because
+this window fell behind]`; the end-of-output item is never skipped; and the WebSocket's sender writes the line itself
+when the queue has emptied with a count pending, so it appears even when the output has stopped. The scrollback and a
+re-attach are unchanged. The limit is still 4000 chunks (`SUBSCRIBER_CHUNKS`, the old literal).
+
+Checked: tests/test_terminal_output.py (three tests: the count and the end item with 4050 chunks, the line's place before
+the next output, and a real shell flooding 30 MB to a subscriber that does not read: characters kept plus characters
+named in the lines equal the characters delivered). With the fixed engine on port 29102 the same socket floods again
+arrived whole. Not run: the page's terminal showing the line in xterm.
+
 ## ../scripts/agents.py, ../agents/manifest.json · the manifest says what formwav offers agents (unreleased, after v2.26.3) {#agent-manifest}
 
 - refers-to: ../scripts/agents.py :: mcp, skills, extensions, DOCK; ../agents/manifest.json; ../formwav (the `agents` case); tests/test_agent_manifest.py; ../AGENTS.md; ../CLAUDE.md
