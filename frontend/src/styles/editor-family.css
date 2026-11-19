@@ -134,6 +134,7 @@
   box-shadow: inset 4px 0 0 var(--fw-lane-color, var(--fw-audio));
 }
 .fw-shell .fw-lane:has(.fw-clip[aria-selected="true"]) .fw-lane-head { background: color-mix(in srgb, var(--accent-color) 8%, var(--surface-1)); }
+:root[data-oled] .fw-lane-head { --surface-1: var(--bg-primary); }
 .fw-shell .fw-lane .fw-lane-head .fw-lane-num { grid-area: 1 / 1; align-self: center; padding: 0; font-family: var(--font-mono); font-size: var(--fs-11); font-weight: 400; color: var(--text-muted); }
 .fw-shell .fw-lane .fw-lane-head .fw-lane-name { grid-area: 1 / 2; padding-inline-start: 0; font-size: var(--fs-13); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .fw-shell .fw-lane .fw-lane-head .fw-lane-name::before { content: none; }

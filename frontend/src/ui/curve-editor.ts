@@ -130,6 +130,7 @@ export function mountCurveEditor(box: HTMLElement, effect: string): void {
   canvas.addEventListener("pointerup", release);
   canvas.addEventListener("pointercancel", release);
   box.addEventListener("input", draw);
+  document.addEventListener("nm:ui-settings-changed", draw);
   new ResizeObserver(draw).observe(canvas);
   requestAnimationFrame(draw);
 }

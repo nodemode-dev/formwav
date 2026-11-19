@@ -192,6 +192,38 @@ frontend/
 
 ---
 
+## vendor/formvis/themes.ts, index.html, styles/tokens.css, styles/editor-family.css, i18n/added/amoled · AMOLED Black, a true-black theme for OLED screens (unreleased, after v2.26.3) {#amoled-theme}
+
+- refers-to: src/vendor/formvis/themes.ts :: ThemeProfile.oled, THEMES.amoled, applyTheme; index.html :: PROFILES.amoled, OLED, the data-oled line; src/styles/tokens.css :: :root[data-oled]; src/styles/editor-family.css :: :root[data-oled] .fw-lane-head; src/ui/spectrum.ts, curve-editor.ts, piano-roll.ts :: the nm:ui-settings-changed listener; src/i18n/added/amoled
+- kind: feature
+- logged: unreleased · 2026-11-19
+
+Themes are two tables, `THEMES` in the vendored themes.ts and the pre-paint `PROFILES` in index.html (a theme in one and
+not the other paints Studio Dark first). Both gain `amoled`: window, panels, node and canvas `#000000`, `--bg-tertiary`
+`#141414` (inputs, menus and selected rows have no other fill), borders `#262626` and `#3a3a3a`, text `#ededed`,
+`#a6a6a6`, `#858585`, the grid `rgba(255,255,255,0.10)` as High Contrast has it; the accent is the app's own. A profile
+flag `oled` makes `applyTheme` set `data-oled` on html (only when it changes) and the pre-paint script set it from
+`OLED = { amoled }` before the first paint. This app has no `data-theme`; light is `body.theme-light`, so only
+`data-oled` is new. Two files of the vendored folder are edited by hand for this (the flag and the row); the preset
+objects of the other profiles are untouched.
+
+`:root[data-oled]` in tokens.css: `--bg-hover` and `--border-soft` go to white at 10% and 12% (the 6% and 8% whites are
+too close to black to read), and `--line-0`, which the panes' borders and rules use and which is a mix of the window
+colour and black (so black on black), takes `--border-color`, as the light theme already does. In editor-family.css the
+track headers took `--surface-1`, a mix that comes out `#090909`; `:root[data-oled] .fw-lane-head` sets that token to
+the window colour for the header only, so the selected header's accent tint (which mixes into the same token) keeps
+working. Measured in headless Chrome (1440 by 900, the editor with one clip): the survey of what is painted under a
+grid of points found the track headers as the only large surface that was not black; what remains non-black is by
+design: the chips (`--surface-1`, `#090909`, bordered), inputs and selects and the active tab (`#141414`), and the
+master strip (`--bg-tertiary`, the family's emphasis). Canvases read their colours from tokens at draw time (spectrum,
+curve editor, piano roll through `--surface-0`, `--surface-1`, `--line-*`; the lanes and ruler from the element's own
+`color` and `outline-color`), not from constants. The lanes' waveforms and the ruler already repainted on
+`nm:ui-settings-changed`, which `setTheme` dispatches; the spectrum in its average mode (live mode redraws every frame),
+the curve editor and the piano roll drew only on their own events, so after a switch they kept the old colours until
+touched. Each now has one listener for that event that calls its own draw, so the same canvas element repaints in place
+(spectrum.ts, curve-editor.ts, piano-roll.ts). The theme's label is in the 25 tables under i18n/added/amoled because
+the picker's options are translated.
+
 ## io/window-key.ts, main.ts, ui/chat-pane.ts, ui/terminal-dock.ts · the page holds the window key (unreleased, after v2.26.3) {#window-key}
 
 - refers-to: io/window-key.ts :: loadWindowKey, windowKey, streamTicket; main.ts :: the fetch wrapper; ui/chat-pane.ts :: listen; ui/terminal-dock.ts :: connect
