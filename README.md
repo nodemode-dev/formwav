@@ -125,6 +125,8 @@ One registry of 141 commands, the menu bar's items and the session tools. The wi
 ./formwav cli run <id> key=value      # run one command by id
 ```
 
+formwav's window must be open, because the commands run in it. The first time an agent from outside formwav reaches the open session (formwav's own command line counts as one), the window asks: Allow (until formwav stops), Always allow (kept) or Block (outside agents are refused until formwav stops). Only the window can change that choice.
+
 `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The engine also serves MCP at `http://127.0.0.1:8060/mcp`, and `backend/formwav_mcp/serve` runs a standalone stdio server. See [`AGENTS.md`](AGENTS.md).
 
 ## Extensions
@@ -148,6 +150,8 @@ formwav loads extensions made to the Form Extension Contract: installed through 
 All FormWav builds are compiled and released from [FormCompiler](https://github.com/nodemode-dev/formcompiler); this repo holds the source.
 
 **Updates come through FormPortal.** FormWav does not update itself: install [FormPortal](https://formai.studio/formportal/) and it keeps FormWav up to date, or download the new version from the links above.
+
+**ffmpeg.** The downloaded app uses an ffmpeg on your PATH when there is one; when there is none, it downloads its own LGPL build on first run (see [`NOTICE`](NOTICE)).
 
 ## Demo
 
