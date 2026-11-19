@@ -2,7 +2,30 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
-### src/main.rs · the wait for the engine's key line ends after 10 seconds (unreleased, after v2.26.3)
+### src/main.rs · the engine has as long to start as before; the 10 seconds cover only the key (unreleased, after v2.26.3)
+- refers-to: src/main.rs :: KEY_WAIT_AFTER_ADDRESS, START_WAITING, START_SETTLED, START_TIMED_OUT, setup (the reading loop and its key timer)
+- kind: fix
+- logged: unreleased · 2026-11-19
+
+The entry below put a 10 second thread on the whole start, counted from the spawn. On origin/main the shell had no limit
+on how long the engine took to print its address, and a first launch of the frozen engine (cold disk, antivirus scan,
+unpacking) can take longer than 10 seconds, so a healthy app would have shown "failed to start". The rule now is the
+family's: no limit until the address line has arrived, then at most 10 seconds (`KEY_WAIT_AFTER_ADDRESS`) for the key,
+then the existing `engine_failed` path with no window. An engine that ends before its address still fails at once, as
+on origin/main. The engine prints the key on stdout, flushed, before uvicorn logs its address on stderr (seen by running
+backend/desktop_entry.py with the packaged-mode variable), but the two pipes are read as separate events, so the address
+event can be handled before the key event; the timer covers exactly that and an engine too old to print a key. The timer
+is a plain thread started once, when the address first arrives without a key. One `AtomicU8` decides who ends the wait:
+whoever moves it from `START_WAITING` first wins, by `compare_exchange`. The loop moves it to `START_SETTLED` after it
+ends and then opens the window or takes the failure path; the timer moves it to `START_TIMED_OUT` and then takes the
+failure path. The loser does nothing, so the failure path runs at most once, and once the window path has begun the
+timer can no longer fire. If the timer wins, the loop is still waiting on the receiver and returns without opening a
+window when it ends. Still only std plus what the shell already uses (tauri 2.12.1 and tauri-plugin-shell 2.4.0 in
+Cargo.lock); Cargo.toml and Cargo.lock are unchanged. Not compiled here (no WebKit): `rustfmt --edition 2021 --check`
+parses the file and reports differences only in lines this change does not touch. The loop's logic was copied into a
+scratch crate under /tmp (tokio 1.53.1 only) and run against fake event streams; see the build report.
+
+### src/main.rs · the wait for the engine's key line ends after 10 seconds (unreleased, after v2.26.3; replaced by the entry above)
 - refers-to: src/main.rs :: ENGINE_START_LIMIT, engine_failed, setup (the watcher thread, the reading loop's end)
 - kind: security
 - logged: unreleased · 2026-11-19

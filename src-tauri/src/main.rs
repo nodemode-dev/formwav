@@ -5,7 +5,7 @@ mod reveal;
 mod text_edit;
 mod traffic_lights;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -61,7 +61,10 @@ fn close_splash(handle: &tauri::AppHandle) {
     }
 }
 
-const ENGINE_START_LIMIT: Duration = Duration::from_secs(10);
+const KEY_WAIT_AFTER_ADDRESS: Duration = Duration::from_secs(10);
+const START_WAITING: u8 = 0;
+const START_SETTLED: u8 = 1;
+const START_TIMED_OUT: u8 = 2;
 
 fn engine_failed(handle: &tauri::AppHandle) -> ! {
     close_splash(handle);
@@ -125,21 +128,14 @@ fn main() {
                 .expect("the formwav engine failed to spawn");
             app.state::<Backend>().0.lock().unwrap().replace(child);
 
-            let started = Arc::new(AtomicBool::new(false));
-            let started_seen = started.clone();
-            let watch_handle = handle.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(ENGINE_START_LIMIT);
-                if !started_seen.load(Ordering::SeqCst) {
-                    engine_failed(&watch_handle);
-                }
-            });
+            let start_state = Arc::new(AtomicU8::new(START_WAITING));
 
             tauri::async_runtime::spawn(async move {
                 let pattern = regex::Regex::new(r"http://127\.0\.0\.1:(\d+)").unwrap();
                 let key_pattern = regex::Regex::new(r"formwav-window-key: ([A-Za-z0-9_-]{32,})").unwrap();
                 let mut port: Option<u16> = None;
                 let mut key: Option<String> = None;
+                let mut key_timer_armed = false;
                 while let Some(event) = rx.recv().await {
                     let line = match event {
                         CommandEvent::Stdout(bytes) => {
@@ -161,8 +157,27 @@ fn main() {
                     if port.is_some() && key.is_some() {
                         break;
                     }
+                    if port.is_some() && !key_timer_armed {
+                        key_timer_armed = true;
+                        let timer_state = start_state.clone();
+                        let timer_handle = handle.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(KEY_WAIT_AFTER_ADDRESS);
+                            if timer_state
+                                .compare_exchange(START_WAITING, START_TIMED_OUT, Ordering::SeqCst, Ordering::SeqCst)
+                                .is_ok()
+                            {
+                                engine_failed(&timer_handle);
+                            }
+                        });
+                    }
                 }
-                started.store(true, Ordering::SeqCst);
+                if start_state
+                    .compare_exchange(START_WAITING, START_SETTLED, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_err()
+                {
+                    return;
+                }
                 match port.filter(|_| key.is_some()) {
                     Some(found) => {
                         let base: Url = format!("http://127.0.0.1:{found}/")
