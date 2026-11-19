@@ -140,6 +140,19 @@ backend/
 
 ---
 
+## routers/claude.py · the Allow or Block card says once that the saved agent permission was reset (unreleased, after v2.26.3) {#seal-broken-card}
+
+- refers-to: app/routers/claude.py :: Consent.told, Consent.keep, Consent.check
+- kind: change
+- logged: unreleased · 2026-11-19
+
+When the stored agent choice was changed outside the app, `core/seal.py` already reads it as ask and reports
+`sealBroken`, but nothing the person looks at said so. The prompt card that `Consent.check` queues for the window now
+carries `sealBroken: true` the first time it is built while the seal is broken (`told` remembers that), and `keep()`,
+which writes a new sealed choice, clears `told`. The window shows one sentence in that card (frontend/HASHOUT_LOG.md
+#seal-broken-card). Checked with an engine, a stand-in keyring from a script outside the repo and a headless page: the
+file was edited by hand, an outside call made the card appear with the sentence, and Allow answered the call.
+
 ## ffmpeg_fetch.py · ffmpeg comes from formai-binaries, with formcut-binaries as the fallback (unreleased, after v2.26.3) {#ffmpeg-formai-binaries}
 
 - refers-to: app/ffmpeg_fetch.py :: SOURCES, sources, fetch; ../NOTICE; ../LICENSES.md

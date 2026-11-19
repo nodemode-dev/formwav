@@ -192,6 +192,19 @@ frontend/
 
 ---
 
+## ui/agent-pane.ts, styles/canvas.css, i18n/added/seal-broken · the Allow or Block card says the saved agent permission was reset (unreleased, after v2.26.3) {#seal-broken-card}
+
+- refers-to: ui/agent-pane.ts :: serve (the consent branch); styles/canvas.css :: .fw-agent-consent-note; i18n/added/seal-broken
+- kind: change
+- logged: unreleased · 2026-11-19
+
+The engine marks the first prompt card built after it found the stored agent choice changed outside the app
+(backend/HASHOUT_LOG.md #seal-broken-card). The card is built whole before it is appended to the Agent log, so the
+sentence is one more line inside a card that is being made anyway: no slot is added to anything on screen and no other
+node is touched. The text goes through `t()` because the log's children are skipped by the page translator
+(`.fw-agent-consent` is a direct child of `.fw-agent-log`); the sentence is in all 25 language tables under
+i18n/added/seal-broken, in the app's lower case name. The note takes `--text-secondary`.
+
 ## vendor/formvis/themes.ts, index.html, styles/tokens.css, styles/editor-family.css, i18n/added/amoled · AMOLED Black, a true-black theme for OLED screens (unreleased, after v2.26.3) {#amoled-theme}
 
 - refers-to: src/vendor/formvis/themes.ts :: ThemeProfile.oled, THEMES.amoled, applyTheme; index.html :: PROFILES.amoled, OLED, the data-oled line; src/styles/tokens.css :: :root[data-oled]; src/styles/editor-family.css :: :root[data-oled] .fw-lane-head; src/ui/spectrum.ts, curve-editor.ts, piano-roll.ts :: the nm:ui-settings-changed listener; src/i18n/added/amoled

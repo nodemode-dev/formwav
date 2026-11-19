@@ -76,6 +76,7 @@ class Consent:
     def __init__(self) -> None:
         self.session: str | None = None
         self.lock: asyncio.Lock | None = None
+        self.told = False
 
     def _file(self):
         from ..core.paths import data_dir
@@ -102,6 +103,7 @@ class Consent:
             self._file().write_text(json.dumps(seal.sign({"outside": value})))
         except OSError:
             pass
+        self.told = False
 
     async def check(self, name: str, client: str) -> str | None:
         policy = self.policy()
@@ -119,7 +121,11 @@ class Consent:
             cid = str(next(BRIDGE.ids))
             fut: asyncio.Future = asyncio.get_running_loop().create_future()
             BRIDGE.waiting[cid] = fut
-            await BRIDGE.queue().put({"id": cid, "consent": True, "name": name, "client": client})
+            card = {"id": cid, "consent": True, "name": name, "client": client}
+            if not self.told and self.stored().get("sealBroken"):
+                card["sealBroken"] = True
+                self.told = True
+            await BRIDGE.queue().put(card)
             try:
                 choice = await asyncio.wait_for(fut, timeout=120)
             except asyncio.TimeoutError:

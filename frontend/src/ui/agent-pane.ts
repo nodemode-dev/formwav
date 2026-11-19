@@ -11,6 +11,7 @@ import { patchList, setText } from "../vendor/nodemode/dom-stable";
 import { KINDS } from "./editor-tabs";
 import { PANEL_ICONS } from "./shell";
 import { agentIcon } from "./icons-agent";
+import { t } from "./i18n";
 import { PROCESSOR_BY_ID, PROCESSORS, processorValues } from "../engine/processors";
 
 /** The realtime effects a track's chain can hold, with each parameter's range, for the agent's tool description. */
@@ -692,13 +693,19 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
         const res = await fetch("/api/bridge/next");
         if (res.status === 204) continue;
         if (!res.ok) throw new Error(String(res.status));
-        const item = (await res.json()) as { id: string; name: string; arguments?: Json; who?: string; consent?: boolean; client?: string };
+        const item = (await res.json()) as { id: string; name: string; arguments?: Json; who?: string; consent?: boolean; client?: string; sealBroken?: boolean };
         if (item.consent) {
           if (dock.hidden) open();
           const li = document.createElement("li");
           li.className = "fw-agent-consent";
           li.innerHTML = `<span></span><span class="fw-agent-consent-acts"><button type="button" class="fw-ibtn" data-choice="allow">Allow</button><button type="button" class="fw-ibtn" data-choice="always">Always allow</button><button type="button" class="fw-ibtn" data-choice="block">Block</button></span>`;
           setText(li.firstElementChild, `${item.client || "An agent outside formwav"} asks to use formwav's tools on this session (first: ${item.name}).`);
+          if (item.sealBroken) {
+            const note = document.createElement("span");
+            note.className = "fw-agent-consent-note";
+            setText(note, t("The saved agent permission was changed outside formwav, so it is back to Ask."));
+            li.firstElementChild?.after(note);
+          }
           log.append(li);
           li.scrollIntoView({ block: "nearest" });
           const choice = await new Promise<string>((done) => li.addEventListener("click", (e) => {
