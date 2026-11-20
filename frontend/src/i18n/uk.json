@@ -402,7 +402,7 @@
  "Compress": "Стиснення",
  "Compressor": "Компресор",
  "Connect": "Підключити",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "Підключити ШІ-агента (Claude Code, Codex, Cursor, Claude Desktop) до MCP-сервера formwav",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "Підключити ШІ-агента (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) до MCP-сервера formwav",
  "Consolidate": "Об’єднати",
  "Convert to MIDI": "Перетворити на MIDI",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": {

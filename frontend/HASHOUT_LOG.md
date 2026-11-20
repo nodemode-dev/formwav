@@ -192,6 +192,12 @@ frontend/
 
 ---
 
+## dock/ (3 files), ui/agents.ts, i18n/*.json · the shared dock is module 2.2.1, and the Settings button's tooltip names Antigravity (unreleased, after v2.28.0) {#family-dock-2-2-1}
+
+The shared panel module is 2.2.1: every file of `src/dock/` was copied unchanged from FormVis commit 23b01889 (`git show 23b01889:frontend/src/dock/[file]`); three differ from 2.2.0 (MANIFEST.json, CONTRACT.md, strings.ts: the guide's two sentences now say that Codex, Cursor and Antigravity each get a button when they are installed). FormWav carries no translation of the panel's own sentences, so no table gains them. backend/tests/test_dock_manifest.py expects 2.2.1. The Settings button's tooltip in `ui/agents.ts` is the key of the 25 language tables, so the key and each table's value changed together: "Claude Code, Codex, Cursor, Antigravity, Claude Desktop" (the four agent programs in the family's order, then Claude Desktop); in Japanese and Chinese with the ideographic comma their lines already use. No native speaker has read them. The table check is tests/e2e/test_interface.py :: test_every_string_on_screen_has_a_translation_in_all_twenty_five_languages_and_english_comes_back_whole.
+
+---
+
 ## dock/ (16 files), dock-adapter.ts · the shared dock is module 2.2.0, and Antigravity is the fourth agent tab (unreleased, after v2.27.0) {#family-dock-2-2}
 
 `src/dock/` is the family's module 2.2.0, copied byte for byte from FormVis at commit ddc893ae (15 files and MANIFEST.json; `agents.ts` is new, nothing in the folder is edited here; `scripts/agents.py sync` checks every file against the manifest). In 2.2.0 the agent kinds are a list (`DOCK_AGENTS`: Claude Code, Codex, Cursor, Antigravity), and a kind is shown only when the adapter lists its id in `tabs().builtin` and `agentStatus()` reports it. Known differences in the DOM, not in the look: every control carries `data-dock-part`, agent tabs carry `is-program`.

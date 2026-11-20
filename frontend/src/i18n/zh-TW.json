@@ -377,7 +377,7 @@
  "Compress": "壓縮",
  "Compressor": "壓縮器",
  "Connect": "連線",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "將 AI 代理（Claude Code、Codex、Cursor、Claude Desktop）連線到 formwav 的 MCP 伺服器",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "將 AI 代理（Claude Code、Codex、Cursor、Antigravity、Claude Desktop）連線到 formwav 的 MCP 伺服器",
  "Consolidate": "合併",
  "Convert to MIDI": "轉換為 MIDI",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": "已在新音軌上、片段所在位置轉換為 {0} 個 MIDI 音符（{a}）",

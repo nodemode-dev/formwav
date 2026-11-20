@@ -377,7 +377,7 @@
  "Compress": "圧縮",
  "Compressor": "コンプレッサー",
  "Connect": "接続",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "AI エージェント（Claude Code、Codex、Cursor、Claude Desktop）を formwav の MCP サーバーに接続",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "AI エージェント（Claude Code、Codex、Cursor、Antigravity、Claude Desktop）を formwav の MCP サーバーに接続",
  "Consolidate": "統合",
  "Convert to MIDI": "MIDI に変換",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": "{0} 個の MIDI ノート（{a}）に変換し、クリップの位置の新規トラックに置きました",

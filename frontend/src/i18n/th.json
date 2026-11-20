@@ -377,7 +377,7 @@
  "Compress": "บีบอัด",
  "Compressor": "คอมเพรสเซอร์",
  "Connect": "เชื่อมต่อ",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "เชื่อมต่อเอเจนต์ AI (Claude Code, Codex, Cursor, Claude Desktop) กับเซิร์ฟเวอร์ MCP ของ formwav",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "เชื่อมต่อเอเจนต์ AI (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) กับเซิร์ฟเวอร์ MCP ของ formwav",
  "Consolidate": "รวม",
  "Convert to MIDI": "แปลงเป็น MIDI",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": "แปลงเป็นโน้ต MIDI {0} โน้ต ({a}) ในแทร็กใหม่ตรงตำแหน่งของคลิปแล้ว",

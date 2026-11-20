@@ -16,7 +16,7 @@ def _script():
 
 def test_every_file_of_the_shared_dock_matches_its_manifest():
     listed = json.loads((DOCK / "MANIFEST.json").read_text(encoding="utf-8"))
-    assert listed["module"] == "dock" and listed["version"] == "2.2.0"
+    assert listed["module"] == "dock" and listed["version"] == "2.2.1"
     for name, wanted in listed["files"].items():
         assert hashlib.sha256((DOCK / name).read_bytes()).hexdigest() == wanted, name
     assert sorted(p.name for p in DOCK.iterdir()) == sorted([*listed["files"], "MANIFEST.json"])

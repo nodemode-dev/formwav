@@ -377,7 +377,7 @@
  "Compress": "Kompresszió",
  "Compressor": "Compressor",
  "Connect": "Csatlakozás",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "AI-ügynök (Claude Code, Codex, Cursor, Claude Desktop) csatlakoztatása a formwav MCP-szerveréhez",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "AI-ügynök (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) csatlakoztatása a formwav MCP-szerveréhez",
  "Consolidate": "Consolidate",
  "Convert to MIDI": "Átalakítás MIDI-vé",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": "Átalakítva {0} MIDI hangjeggyé ({a}) új sávon a klip helyén",

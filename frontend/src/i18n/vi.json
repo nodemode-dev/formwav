@@ -377,7 +377,7 @@
  "Compress": "Nén",
  "Compressor": "Compressor",
  "Connect": "Kết nối",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "Kết nối tác tử AI (Claude Code, Codex, Cursor, Claude Desktop) với máy chủ MCP của formwav",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "Kết nối tác tử AI (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) với máy chủ MCP của formwav",
  "Consolidate": "Hợp nhất",
  "Convert to MIDI": "Chuyển sang MIDI",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": "Đã chuyển thành {0} nốt MIDI ({a}) trên một track mới tại vị trí của clip",

@@ -380,7 +380,7 @@
  "Compress": "Compresser",
  "Compressor": "Compresseur",
  "Connect": "Connecter",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "Connecter un agent IA (Claude Code, Codex, Cursor, Claude Desktop) au serveur MCP de formwav",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "Connecter un agent IA (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) au serveur MCP de formwav",
  "Consolidate": "Consolider",
  "Convert to MIDI": "Convertir en MIDI",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": "Converti en {0} note MIDI ({a}) sur une nouvelle piste, à la place du clip",
