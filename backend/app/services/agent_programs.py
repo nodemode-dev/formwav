@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import subprocess
 import time
 from pathlib import Path
@@ -93,8 +94,39 @@ def _tab_file(folder: Path) -> Path:
     return folder / ".agents" / "mcp_config.json"
 
 
+def _tabs_root() -> Path:
+    from ..core.paths import data_dir
+
+    return data_dir() / "agent-tabs" / "antigravity"
+
+
+def tab_folder() -> Path:
+    folder = _tabs_root() / secrets.token_hex(8)
+    folder.mkdir(parents=True, exist_ok=False)
+    return folder
+
+
+def drop_tab_folder(folder: Path) -> None:
+    if folder.parent != _tabs_root():
+        return
+    path = _tab_file(folder)
+    try:
+        if _servers(path) in ({}, {"mcpServers": {}}):
+            path.unlink(missing_ok=True)
+    except OSError:
+        return
+    for empty in (folder / ".agents", folder):
+        try:
+            empty.rmdir()
+        except OSError:
+            return
+
+
 def _servers(path: Path) -> dict:
-    data = json.loads(path.read_text(encoding="utf-8") or "{}") if path.exists() else {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8") or "{}") if path.exists() else {}
+    except ValueError:
+        data = None
     if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
         raise OSError(f"{path} is not an MCP servers file formwav can read, so it was left alone")
     return data

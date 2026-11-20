@@ -140,6 +140,18 @@ backend/
 
 ---
 
+## services/agent_programs.py, services/terminals.py · each Antigravity tab has a folder of its own (unreleased, after v2.28.0) {#antigravity-tab-folder}
+
+- refers-to: app/services/agent_programs.py :: tab_folder, drop_tab_folder, _servers; app/services/terminals.py :: open_agent, close; tests/test_agent_programs.py
+- kind: fix
+- logged: unreleased · 2026-11-20
+
+Antigravity reads its servers from `.agents/mcp_config.json` in its working folder, and every Antigravity tab ran in the one agent folder, so two tabs shared one `formwav_tab` entry: the second tab's token replaced the first's, and closing either took the entry away from the other. Each Antigravity tab now gets `[data folder]/agent-tabs/antigravity/[16 hex digits]`, made new for it (FormVis keeps its tab folder in its data folder too, so a token is never written into a folder the person uses); the entry is written there, agy starts there, and at close the entry is taken out with the tab's token, the file is removed when it holds no other server and no other key, and the folder and its `.agents` are removed when they are then empty. Anything else in the folder (a file agy wrote) keeps it. `drop_tab_folder` acts only on a folder directly under that root. A file that is not JSON is now the same sentence as a file of the wrong shape (an OSError), not a ValueError. Codex and Cursor tabs are unchanged (their file names variables, not the token). The cost: agy no longer starts in `~/formwav/Agent`; it reaches the session through formwav's tools.
+
+Seen on Linux with the stand-in `agy`: two tabs open at once each have their own folder, entry and token; closing the first removes its folder and leaves the second's entry as it was and its token valid; closing the second removes its folder; nothing is written in the agent folder. tests/test_agent_programs.py and test_agents.py: 17 passed, 1 skipped (an existing Windows skip).
+
+---
+
 ## app/core/startup.py, desktop_entry.py · one engine per data folder, a leftover is replaced, the engine leaves when its app is gone (unreleased, after v2.28.0) {#engine-start-lock}
 
 - refers-to: app/core/startup.py (the family's file); desktop_entry.py :: main, serve, run_engine, start_logging, log_config, give_up, watch_shell; tests/test_startup.py
