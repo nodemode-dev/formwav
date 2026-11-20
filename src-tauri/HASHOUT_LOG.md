@@ -2,6 +2,15 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### src/main.rs · the shell waits 90 seconds for the engine's address (unreleased, after v2.28.0) {#address-wait}
+- refers-to: src/main.rs :: ADDRESS_WAIT, setup (the address timer beside the key timer)
+- kind: fix
+- logged: unreleased · 2026-11-20
+
+The owner's decision for the family (D1): every shell waits 90 seconds for the engine's address. FormWav had no limit (the entry below this one's neighbour, "the engine has as long to start as before", took the 10 seconds off the address and left only the key's). A thread started with the engine sleeps ADDRESS_WAIT and then takes the same start state the key timer uses from START_WAITING to START_TIMED_OUT; only one of the reading loop, the key timer and this timer can settle it, so a start that ends in time, an engine that ended early, and a key that came late each still end the way they did. On a time-out the shell shows the dialog it shows for any failed start. A first start of a one-file engine unpacks it first; nobody measured that here on a slow Windows disk, so 90 seconds is the owner's number, not one seen. Not compiled here (rustfmt parses the file and reports no new place to format).
+
+The other half of that decision (D3, a Windows engine frozen with `--noconsole`) is not done in FormWav, on purpose: the shell starts the engine through tauri-plugin-shell 2.4.0, which spawns it with CREATE_NO_WINDOW (its `src/process/mod.rs`), so the engine already shows no console window, and the programs the engine starts (ffmpeg and the others, about forty places, none with CREATE_NO_WINDOW of their own) share that hidden console. Frozen with `--noconsole` the engine would have no console, and each of those programs would open a console window of its own while it runs.
+
 ### src/main.rs · the engine is told which process started it (unreleased, after v2.28.0) {#shell-pid}
 - refers-to: src/main.rs :: setup (the sidecar's environment)
 - kind: fix

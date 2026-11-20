@@ -61,6 +61,7 @@ fn close_splash(handle: &tauri::AppHandle) {
     }
 }
 
+const ADDRESS_WAIT: Duration = Duration::from_secs(90);
 const KEY_WAIT_AFTER_ADDRESS: Duration = Duration::from_secs(10);
 const START_WAITING: u8 = 0;
 const START_SETTLED: u8 = 1;
@@ -130,6 +131,17 @@ fn main() {
             app.state::<Backend>().0.lock().unwrap().replace(child);
 
             let start_state = Arc::new(AtomicU8::new(START_WAITING));
+            let address_state = start_state.clone();
+            let address_handle = handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(ADDRESS_WAIT);
+                if address_state
+                    .compare_exchange(START_WAITING, START_TIMED_OUT, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
+                    engine_failed(&address_handle);
+                }
+            });
 
             tauri::async_runtime::spawn(async move {
                 let pattern = regex::Regex::new(r"http://127\.0\.0\.1:(\d+)").unwrap();
