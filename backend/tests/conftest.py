@@ -20,7 +20,9 @@ sys.path.insert(0, str(BACKEND))
 for _paid in ("ELEVENLABS_API_KEY", "ELEVENLABS_BASE_URL", "FAL_KEY", "FAL_QUEUE_URL", "ANTHROPIC_API_KEY", "ACESTEP_API_URL", "ACESTEP_API_KEY"):
     os.environ.pop(_paid, None)
 
-_OWN_DATA = None if "FORMWAV_DATA_DIR" in os.environ else tempfile.mkdtemp(prefix="formwav-tests-")
+os.environ["PYTHON_KEYRING_BACKEND"] = "keyring.backends.fail.Keyring"
+
+_OWN_DATA =None if "FORMWAV_DATA_DIR" in os.environ else tempfile.mkdtemp(prefix="formwav-tests-")
 if _OWN_DATA:
     os.environ["FORMWAV_DATA_DIR"] = _OWN_DATA
     _runtime = BACKEND / "data" / "speech-runtime"
