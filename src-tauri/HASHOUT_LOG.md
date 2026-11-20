@@ -2,6 +2,13 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### src/main.rs · the engine is told which process started it (unreleased, after v2.28.0) {#shell-pid}
+- refers-to: src/main.rs :: setup (the sidecar's environment)
+- kind: fix
+- logged: unreleased · 2026-11-20
+
+The engine is spawned with FORMWAV_SHELL_PID set to the shell's own process id, one `.env` line beside the others, as FormCut's shell does (063b94fa). The engine of this version needs it (backend/HASHOUT_LOG.md #engine-start-lock): without it a packaged engine takes itself for one started alone and opens the app instead of serving; with it the engine leaves when the shell is gone and the next start can tell a leftover engine from a live one. `std::process::id()` is u32 and `to_string()` gives the String that `Command::env` takes as `AsRef<OsStr>`, like the other values there. Not compiled here: the shell cannot be built on this machine.
+
 ### src/main.rs · the engine has as long to start as before; the 10 seconds cover only the key (unreleased, after v2.26.3)
 - refers-to: src/main.rs :: KEY_WAIT_AFTER_ADDRESS, START_WAITING, START_SETTLED, START_TIMED_OUT, setup (the reading loop and its key timer)
 - kind: fix

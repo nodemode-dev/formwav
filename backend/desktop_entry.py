@@ -17,11 +17,19 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
+import copy
 import json
+import logging
 import shutil
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 APP_ID = "ai.nodemode.formwav"
+LOG_NAME = "formwav-engine.log"
+LOG_HANDLER = "formwav-file"
+LOG_BYTES = 1_048_576
+LOG_KEEP = 3
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 
 def resource_dir() -> str:
@@ -113,6 +121,105 @@ def main() -> int:
         from app.services import mcp_stdio
 
         return mcp_stdio.main()
+    try:
+        return serve()
+    except BaseException as err:
+        if not isinstance(err, SystemExit):
+            logging.getLogger("formwav").exception("the engine stopped on an error")
+        raise
+
+
+def start_logging(data: Path) -> Path:
+    folder = data / "Logs"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / LOG_NAME
+    for held in logging.getLogger("formwav").handlers:
+        if held.get_name() == LOG_HANDLER and getattr(held, "baseFilename", "") == os.path.abspath(path):
+            return path
+    handler = RotatingFileHandler(path, maxBytes=LOG_BYTES, backupCount=LOG_KEEP, encoding="utf-8")
+    handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    handler.set_name(LOG_HANDLER)
+    logger = logging.getLogger("formwav")
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.info("engine started, pid %s, data folder %s", os.getpid(), data)
+    return path
+
+
+def log_config() -> dict:
+    from uvicorn.config import LOGGING_CONFIG
+
+    held = next((h for h in logging.getLogger("formwav").handlers if h.get_name() == LOG_HANDLER), None)
+    config = copy.deepcopy(LOGGING_CONFIG)
+    if held is None:
+        return config
+    config["handlers"][LOG_HANDLER] = {"()": lambda: held}
+    for name in ("uvicorn", "uvicorn.access"):
+        config["loggers"][name]["handlers"].append(LOG_HANDLER)
+    return config
+
+
+def give_up(lock: Path) -> None:
+    from app.core import startup
+
+    try:
+        if startup.read_lock(lock).get("pid") == os.getpid():
+            lock.unlink()
+    except OSError:
+        pass
+
+
+def watch_shell(lock: Path) -> None:
+    from app.core import startup
+
+    shell = startup.shell_pid()
+    if shell <= 1:
+        return
+
+    def leave() -> None:
+        logging.getLogger("formwav").info("the app that started this engine is gone (process %s), stopping", shell)
+        give_up(lock)
+        os._exit(0)
+
+    startup.watch(shell, leave)
+
+
+def serve() -> int:
+    from app.core import startup
+
+    tool_path()
+    data = user_data_dir()
+    try:
+        data.mkdir(parents=True, exist_ok=True)
+        logs = start_logging(data).parent
+    except OSError as err:
+        print(f"formwav cannot use its data folder {data}: {err}", file=sys.stderr)
+        return 5
+    startup.keep_errors(logs)
+    log = logging.getLogger("formwav")
+    if startup.alone():
+        beside = startup.app_beside(Path(sys.executable))
+        if beside is not None and startup.open_app(beside):
+            log.info("started without its app, so it opened %s and stopped", beside)
+            return 0
+        log.error("started without its app, and no app program was found near %s", sys.executable)
+        print("formwav-engine is a part of FormWav and serves nothing on its own. Open FormWav instead.", file=sys.stderr)
+        return 4
+    try:
+        lock, replaced = startup.claim(data, startup.shell_pid())
+    except startup.Busy as err:
+        log.error("%s", err)
+        print(err, file=sys.stderr)
+        return 2
+    if replaced:
+        log.warning("an engine left running without its app was stopped (process %s)", replaced)
+    try:
+        return run_engine(data, lock)
+    finally:
+        give_up(lock)
+
+
+def run_engine(data: Path, lock: Path) -> int:
     if os.environ.get("FORMWAV_EXIT_WITH_STDIN") == "1":
         # The shell holds the write end of this stdin pipe; it closes however the shell ends (a quit, a crash, a
         # SIGKILL), and then the engine ends too. Its own kill alone cannot do it: SIGKILL reaches only the onefile
@@ -124,12 +231,11 @@ def main() -> int:
                 while sys.stdin.buffer.read(65536):
                     pass
             finally:
+                give_up(lock)
                 os._exit(0)
 
         threading.Thread(target=exit_with_shell, daemon=True).start()
-    tool_path()
-    data = user_data_dir()
-    data.mkdir(parents=True, exist_ok=True)
+    watch_shell(lock)
     os.environ.setdefault("FORMWAV_DATA_DIR", str(data))
     load_env(data / ".env")
     os.environ.setdefault("FORMWAV_MODELS_ROOT", str(data / "models"))
@@ -159,7 +265,7 @@ def main() -> int:
 
     if window_key.stdout_mode():
         print(window_key.LINE + window_key.KEY, flush=True)
-    uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info")
+    uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info", log_config=log_config())
     return 0
 
 

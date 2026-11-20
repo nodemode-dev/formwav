@@ -140,6 +140,22 @@ backend/
 
 ---
 
+## app/core/startup.py, desktop_entry.py · one engine per data folder, a leftover is replaced, the engine leaves when its app is gone (unreleased, after v2.28.0) {#engine-start-lock}
+
+- refers-to: app/core/startup.py (the family's file); desktop_entry.py :: main, serve, run_engine, start_logging, log_config, give_up, watch_shell; tests/test_startup.py
+- kind: feat
+- logged: unreleased · 2026-11-20
+
+The family's start and stop rules (FormTools 0.10.0, engine side; `/home/claude/form/work/WINDOWS_APP_SPEC.md` section 1). `app/core/startup.py` is FormTools's file at origin/main copied unchanged, `finished()` from FormCut c2c2e221 included, except the names at its top: APP formwav, NAMES formwav, FormWav and formwav-desktop (the Cargo package's name, in case a Linux package keeps it), FORMWAV_SHELL_PID, FORMWAV_NO_SHELL, formwav-engine-errors.log. PLACES is unchanged: the engine is a one-file sidecar beside the app's program on every system, which `.` covers.
+
+FormWav had no lock and no log file before. The serving path of `desktop_entry.py` now: the data folder is made and the log `Logs/formwav-engine.log` started (rotating, 1 MB, 3 kept), a folder that cannot be made is one sentence and exit 5; `keep_errors` points an absent standard error at `Logs/formwav-engine-errors.log`; a frozen engine with no shell process id opens the app beside it (exit 0) or says it serves nothing on its own (exit 4), with no lock; `claim` takes `engine.lock` in the data folder, a refusal is the sentence on standard error and in the log and exit 2; the watch on FORMWAV_SHELL_PID gives up the lock and ends the engine about two seconds after that process ends; the stdin watch the shell already used (FORMWAV_EXIT_WITH_STDIN) is kept as it was and gives up the lock too; an error that ends the serving path is written to the log before it is raised. `--selfcheck` and `--mcp-stdio` are decided before any of this, as before. uvicorn's own lines go to the same file through `log_config`: uvicorn's dictionary config with one more handler that is the engine's own handler object (so the file is opened once; uvicorn's setup closes it and it opens again at its next line), added to the uvicorn and uvicorn.access loggers.
+
+An engine of 2.28.0 or older holds no lock, so the first start after the update does not see one left running; it serves on another port beside it until that one's stdin closes. The shell gives its process id from this version on (src-tauri/HASHOUT_LOG.md #shell-pid); without it a frozen engine would take itself for one started alone.
+
+Seen on Linux with stand-ins (`sleep` as the shell, `python desktop_entry.py` on a port and data folder of their own): the second engine is refused with exit 2 and the sentence while the first one's shell lives, and the first keeps serving; the engine exits 0 within two seconds of its shell ending and the lock is gone; a holder whose shell is gone is ended and replaced; damaged locks are replaced; a lock naming an unrelated process is replaced and the process is left alone; with all three streams closed the engine serves and both log files exist; started alone (sys.frozen set through `python -c`) it opens a stand-in app beside it or exits 4 with the sentence. These are tests/test_startup.py, FormTools's tests with the names changed plus the second-engine refusal: 15 passed. Not run on Windows or macOS; no frozen engine was built.
+
+---
+
 ## desktop_entry.py · the engine starts when it has no output streams (unreleased, after v2.27.0) {#engine-none-streams}
 
 A Windows program built without a console is given no standard streams: `sys.stdin`, `sys.stdout` and `sys.stderr` are None. In another engine of the family a tester's Windows build stopped at start for that reason (a print, or uvicorn's logging setup, on a stream that is None). `desktop_entry.py` is the file PyInstaller freezes as `formwav-engine` (`build_linux_app`, `build_macos_app`, `build_windows_app.ps1`), so its first lines, before any other import, replace each stream that is None with the null device, as FormWeb's entry does. A stream that exists is left as it is, so the window key line and uvicorn's bind line the shell reads are unchanged. `FORMWAV_EXIT_WITH_STDIN` reads `sys.stdin.buffer`, which the null device has; with no stdin it reads end of file at once and the engine exits, which is that switch's meaning (the shell is gone).
