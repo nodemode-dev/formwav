@@ -537,6 +537,13 @@ def test_memory_locations_the_snap_dialog_and_a_range_pasted_on_another_track_ho
     assert _clean(page) == {"errors": [], "shift": 0, "shifts": []}
 
 
+def _pick(page, select: str, value: str) -> None:
+    page.focus(select)
+    page.keyboard.press("Shift")
+    page.select_option(select, value)
+    page.wait_for_function("([s, v]) => document.querySelector(s).value === v", arg=[select, value])
+
+
 def test_the_counters_read_every_timebase_and_the_rulers_stack_with_nothing_moving_unasked(page, app_url):
     page.set_viewport_size(SMALLEST)  # the Start, End and Length tray drops End at the smallest window
     _open(page, app_url)
@@ -550,11 +557,11 @@ def test_the_counters_read_every_timebase_and_the_rulers_stack_with_nothing_movi
     for mode, rate in (("timecode", None), ("timecode", "25"), ("feet", None), ("samples", None), ("bars", None)):
         if rate:
             page.select_option('.fw-counter-pop [data-c="rate"]', rate)
-        page.select_option('.fw-counter-pop [data-c="main"]', mode)
+        _pick(page, '.fw-counter-pop [data-c="main"]', mode)
         readings.append(page.evaluate(clock))
     assert readings == ["00:00:03:00", "00:00:03:00", "4+11", "144000", "2| 3| 000"]
-    page.select_option('.fw-counter-pop [data-c="main"]', "time")
-    page.select_option('.fw-counter-pop [data-c="sub"]', "timecode")
+    _pick(page, '.fw-counter-pop [data-c="main"]', "time")
+    _pick(page, '.fw-counter-pop [data-c="sub"]', "timecode")
     assert page.evaluate("[document.querySelector('.fw-subcounter').textContent, document.querySelector('.fw-st-length').hidden]") == ["Timecode 00:00:03:00", True]
     page.click('.fw-counter-pop [data-c="all"]')
     ruler = "Math.round(document.querySelector('.fw-ruler').getBoundingClientRect().height)"
@@ -1147,7 +1154,7 @@ def test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_
 
     _agent_tab(page, "history")
     _menu(page, "Event", "New note clip")
-    page.wait_for_function("!document.querySelector('.fw-piano').hidden")
+    page.wait_for_function("(() => { const p = document.querySelector('.fw-piano'); return !p.hidden && !p.inert; })()")
     page.click(".fw-piano [data-step]")
     for key in ("a", "s", "d", "Space", "k"):
         page.keyboard.press(key)

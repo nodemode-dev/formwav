@@ -332,16 +332,21 @@ export function mountNoteEvents(host: HTMLElement, engine: Engine, editor: NoteE
     const trackId = range?.trackId ?? (doc.tracks.some((t) => t.id === picked) ? picked : null);
     const at = range ? range.start : engine.get("transport").positionSamples;
     const length = range ? range.end - range.start : Math.round(((doc.sampleRate * 60) / tempo.bpm) * tempo.beatsPerBar);
+    openEditor();
+    editor.panel.inert = true;
+    editor.panel.setAttribute("aria-busy", "true");
     try {
       const media = await renderPlainNotes(engine, [], doc.sampleRate, length / doc.sampleRate, "Notes");
       const before = new Set(engine.get("document").tracks.flatMap((t) => t.clips.map((c) => c.id)));
       engine.dispatch({ type: "batch", commands: [{ type: "import-media", media, at, ...(trackId ? { trackId } : {}), notes: [] }], label: "New note clip" });
       const made = engine.get("document").tracks.flatMap((t) => t.clips.map((c) => c.id)).filter((id) => !before.has(id));
       host.dispatchEvent(new CustomEvent("fw-select-clips", { detail: made }));
-      openEditor();
       say("New note clip: click its grid to add notes");
     } catch (err) {
       say(`No note clip made: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      editor.panel.inert = false;
+      editor.panel.removeAttribute("aria-busy");
     }
   };
 

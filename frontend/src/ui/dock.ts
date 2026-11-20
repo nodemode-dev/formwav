@@ -330,6 +330,8 @@ export function mountDock(host: HTMLElement, engine: Engine): void {
     const fx = (track?.fx ?? []).filter((f) => !f.bypass).length;
     const color = track ? `var(--fw-color-${track.color ?? LANE_COLORS[index % LANE_COLORS.length]})` : "transparent";
     if (swatch && swatch.style.background !== color) swatch.style.background = color;
+    const none = !(tab === "synth" || tab === "pads") && !(track && clip);
+    if (trackName && (trackName.dataset.none === "true") !== none) trackName.dataset.none = String(none);
     if (tab === "synth" || tab === "pads") {
       if (swatch && swatch.style.background !== "var(--accent-color)") swatch.style.background = "var(--accent-color)";
       put(trackName, "Live instrument");
@@ -338,8 +340,8 @@ export function mountDock(host: HTMLElement, engine: Engine): void {
       put(trackName, track.name);
       put(detail, `${clip.name ?? (doc.media[clip.mediaId]?.name ?? "clip").replace(/\.[^.]+$/, "")}, ${fx === 0 ? "no effects" : fx === 1 ? "one effect live" : `${fx} effects live`}`);
     } else {
-      put(trackName, "");
-      put(detail, "No clip selected");
+      put(trackName, "No clip selected");
+      put(detail, "");
     }
     if (ask) ask.dataset.askAgent = track ? `On ${track.name}${clip ? `, ${(doc.media[clip.mediaId]?.name ?? "this clip").replace(/\.[^.]+$/, "")}` : ""}: ` : "";
   };
