@@ -1,3 +1,4 @@
+import json
 import os
 import socket
 import struct
@@ -46,6 +47,13 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+WINDOW = {"key": ""}
+
+
+def _give_key(page) -> None:
+    page.add_init_script(f"window.__FORMWAV_WINDOW_KEY = {json.dumps(WINDOW['key'])};")
+
+
 @pytest.fixture(scope="module")
 def model():
     server = anthropic.serve()
@@ -74,6 +82,8 @@ def app_url(model, tmp_path_factory):
             proc.kill()
             pytest.fail(f"the engine did not start; its log is {log.name}")
         time.sleep(0.2)
+    claim = urllib.request.Request(url + "/api/window/key", method="POST", headers={"x-formwav-local": "1"})
+    WINDOW["key"] = json.loads(urllib.request.urlopen(claim, timeout=10).read())["key"]
     yield url
     proc.terminate()
     try:
@@ -109,9 +119,10 @@ def browser(playwright):
 @pytest.fixture
 def page(browser, app_url):
     # an earlier test's autosave (kept every 30 s while a session has unsaved changes) would greet this one with Recover
-    urllib.request.urlopen(urllib.request.Request(app_url + "/api/autosave", method="DELETE", headers={"x-formwav-local": "1"}), timeout=10).close()
+    urllib.request.urlopen(urllib.request.Request(app_url + "/api/autosave", method="DELETE", headers={"x-formwav-local": "1", "x-formwav-window-key": WINDOW["key"]}), timeout=10).close()
     context = browser.new_context(viewport=DESIGN)
     page = context.new_page()
+    _give_key(page)
     page.add_init_script(WATCH)
     page.console_errors = []
     page.on("console", lambda m: page.console_errors.append(m.text) if m.type == "error" and not m.text.startswith("Failed to load resource") else None)
@@ -588,13 +599,13 @@ def test_consolidate_commit_and_make_inactive_each_in_one_step(page, app_url):
     assert _clean(page)["errors"] == []
 
 
-def test_settings_agents_lists_six_clients_and_does_not_move_as_they_load(page, app_url):
+def test_settings_agents_lists_seven_clients_and_does_not_move_as_they_load(page, app_url):
     _open(page, app_url)
     page.locator(".fw-settings-menu .fw-menu-btn").click()
     page.locator('.fw-settings-pop [data-action="agents"]').click()
     dialog = page.locator(".fw-agents-dialog")
     before = dialog.bounding_box()
-    page.wait_for_function("document.querySelectorAll('.fw-agents-dialog [data-client]').length === 6")
+    page.wait_for_function("document.querySelectorAll('.fw-agents-dialog [data-client]').length === 7")
     assert dialog.bounding_box() == before
     assert _clean(page)["errors"] == []
 
@@ -626,13 +637,13 @@ def _engine(app_url: str, method: str, path: str, body=None, headers=None):
     import json
 
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(app_url + path, data=data, method=method, headers={"content-type": "application/json", "x-formwav-local": "1", **(headers or {})})
+    req = urllib.request.Request(app_url + path, data=data, method=method, headers={"content-type": "application/json", "x-formwav-local": "1", "x-formwav-window-key": WINDOW["key"], **(headers or {})})
     with urllib.request.urlopen(req, timeout=60) as res:
         return json.loads(res.read() or b"null")
 
 
 def test_unsaved_work_is_offered_back_on_the_next_start_and_recovered_whole(page, app_url):
-    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "x-formwav-window-key": WINDOW["key"], "X-Filename": "jfk.wav"})
     import json
 
     ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
@@ -659,7 +670,7 @@ def test_unsaved_work_is_offered_back_on_the_next_start_and_recovered_whole(page
 def test_linked_faders_move_as_one_step_polarity_sits_on_the_strip_the_master_shows_lufs_media_folders_fold_and_selected_tracks_commit_together(page, app_url):
     import json
 
-    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "x-formwav-window-key": WINDOW["key"], "X-Filename": "jfk.wav"})
     ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
     frames = int(ref["frames"])
     doc = {"sampleRate": ref["sampleRate"], "media": {ref["id"]: ref}, "markers": [], "tracks": [
@@ -1019,6 +1030,7 @@ def test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes(bro
     _engine(app_url, "DELETE", "/api/autosave")
     context = browser.new_context(viewport={"width": size[0], "height": size[1]})
     page = context.new_page()
+    _give_key(page)
     try:
         _open(page, app_url)
         _import_speech(page)
@@ -1156,7 +1168,7 @@ def test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_
 def test_the_more_lanes_row_draws_mute_trim_vca_send_and_master_lanes_coalesces_a_vca_and_the_track_menu_moves_volume_each_in_one_step(page, app_url):
     import json
 
-    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "x-formwav-window-key": WINDOW["key"], "X-Filename": "jfk.wav"})
     ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
     frames = int(ref["frames"])
     doc = {"sampleRate": ref["sampleRate"], "media": {ref["id"]: ref}, "markers": [], "tracks": [
@@ -1209,7 +1221,7 @@ def test_the_more_lanes_row_draws_mute_trim_vca_send_and_master_lanes_coalesces_
 def test_every_send_shows_on_the_strip_with_pre_mute_and_pan_a_bus_plays_into_a_bus_and_groups_link_faders_and_ranges(page, app_url):
     import json
 
-    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "x-formwav-window-key": WINDOW["key"], "X-Filename": "jfk.wav"})
     ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
     frames = int(ref["frames"])
     track = lambda tid, name, gain: {"id": tid, "name": name, "channels": ref["channels"], "gainDb": gain, "mute": False, "solo": False, "clips": [{"id": f"c{tid}", "mediaId": ref["id"], "start": 0, "length": frames, "sourceIn": 0, "gainDb": 0}]}
@@ -1414,7 +1426,7 @@ def test_commands_focus_keys_shortcuts_window_clip_gain_paste_special_templates_
 def test_playlists_as_lanes_comp_merge_notes_clips_files_and_window_configurations(page, app_url, tmp_path):
     import json
 
-    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "x-formwav-window-key": WINDOW["key"], "X-Filename": "jfk.wav"})
     ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
     rate = ref["sampleRate"]
     clip = lambda cid, start, length, **more: {"id": cid, "mediaId": ref["id"], "start": start, "sourceIn": 0, "length": length, "gainDb": 0, **more}
@@ -1476,7 +1488,7 @@ def test_playlists_as_lanes_comp_merge_notes_clips_files_and_window_configuratio
 def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_and_out_on_the_fly(playwright, app_url):
     import json
 
-    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "x-formwav-window-key": WINDOW["key"], "X-Filename": "jfk.wav"})
     ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
     rate = ref["sampleRate"]
     doc = {"sampleRate": rate, "media": {ref["id"]: ref}, "markers": [], "loop": {"start": rate, "end": 2 * rate, "enabled": False}, "tracks": [
@@ -1486,6 +1498,7 @@ def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_
     mic = playwright.chromium.launch(args=["--autoplay-policy=no-user-gesture-required", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
     context = mic.new_context(viewport=SMALLEST, permissions=["microphone"])
     page = context.new_page()
+    _give_key(page)
     page.add_init_script(WATCH)
     page.console_errors = []
     page.on("console", lambda m: page.console_errors.append(m.text) if m.type == "error" and not m.text.startswith("Failed to load resource") else None)
@@ -1542,7 +1555,7 @@ def test_a_punch_rolls_on_for_its_post_roll_and_record_while_playing_punches_in_
 def test_a_note_track_plays_the_drum_and_subtractive_synths_and_a_tracks_effects_render_into_its_clips(page, app_url):
     import json
 
-    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "X-Filename": "jfk.wav"})
+    req = urllib.request.Request(app_url + "/api/media", data=(FIXTURES / "jfk.wav").read_bytes(), method="POST", headers={"x-formwav-local": "1", "x-formwav-window-key": WINDOW["key"], "X-Filename": "jfk.wav"})
     ref = json.loads(urllib.request.urlopen(req, timeout=60).read())
     rate = ref["sampleRate"]
     beat = [{"at": i * rate // 4, "length": rate // 8, "pitch": p, "velocity": 100} for i, p in enumerate((36, 42, 38, 42))]
