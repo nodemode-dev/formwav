@@ -8,7 +8,7 @@ from pathlib import Path
 from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
-ENGINE, JFK, BACKEND, OUT = sys.argv[1], sys.argv[2], sys.argv[3], Path(sys.argv[4])
+ENGINE, JFK, BACKEND, OUT, WINDOW_KEY = sys.argv[1], sys.argv[2], sys.argv[3], Path(sys.argv[4]), sys.argv[5]
 results: dict = {}
 
 
@@ -21,7 +21,7 @@ def absent(name, reason):
 
 
 def engine(method, path, body=None):
-    request = urllib.request.Request(ENGINE + path, method=method, data=json.dumps(body).encode() if body is not None else None, headers={"Content-Type": "application/json", "x-formwav-local": "1"})
+    request = urllib.request.Request(ENGINE + path, method=method, data=json.dumps(body).encode() if body is not None else None, headers={"Content-Type": "application/json", "x-formwav-local": "1", "x-formwav-window-key": WINDOW_KEY})
     return json.loads(urllib.request.urlopen(request, timeout=600).read() or b"{}")
 
 
