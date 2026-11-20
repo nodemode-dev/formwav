@@ -22,6 +22,9 @@ serde = { version = "1", features = ["derive"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSButton", "NSControl", "NSView", "NSResponder", "objc2-core-foundation", "NSColor"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
 [profile.release]
 # not stripped: on macOS 27 Xcode 27's strip can misalign a Mach-O's LINKEDIT, which dyld refuses; this binary loaded
 # by luck while the engine's core did not ("mis-aligned LINKEDIT string pool"), so nothing here relies on that luck
