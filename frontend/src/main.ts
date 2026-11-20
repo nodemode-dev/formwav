@@ -12,7 +12,9 @@ import "./styles/frame.css";
 import "./styles/surfaces.css";
 import "./styles/canvas.css";
 import "./styles/scrollbars.css";
-import "./styles/terminal-dock.css";
+import "./dock/dock.css";
+import "./styles/dock-tokens.css";
+import "./styles/chat.css";
 import "./styles/home.css";
 import "./styles/prefs.css";
 import "./styles/desktop.css";
@@ -29,7 +31,7 @@ import { mountTransport } from "./ui/transport";
 import { mountLoop } from "./ui/loop";
 import { mountExport } from "./ui/export";
 import { mountNormalize } from "./ui/normalize";
-import { mountTerminalDock } from "./ui/terminal-dock";
+import { mountFamilyDock } from "./dock-adapter";
 import { mountAgent } from "./ui/agent-pane";
 import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
@@ -204,7 +206,7 @@ if (host) {
   mountBrowser(host, engine);
   mountExtensions(host, engine); // Form Extension Contract API 1: the Extensions menu, panel and agent tools
   mountDock(host, engine);
-  mountTerminalDock(host, engine);
+  mountFamilyDock(host, engine);
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();
   bindInputs(engine); // track inputs live in the session (Track.input)
   mountProjects(host, engine, player);

@@ -5,6 +5,7 @@
  * own configuration beside everything else in it, the previous file kept as a backup. The formwav-harness skill in
  * .claude/skills teaches the agent to use the tools; the dialog says so.
  */
+import { outsideAgents } from "../dock-adapter";
 import { setText } from "../vendor/nodemode/dom-stable";
 
 type Client = { id: string; name: string; kind: "command" | "file"; file: string | null; text: string; installable: boolean; present: boolean | null };
@@ -17,6 +18,8 @@ export function mountAgents(host: HTMLElement): void {
   dialog.innerHTML = `<form method="dialog">
   <h2 class="fw-dialog-title">Agents</h2>
   <p class="fw-agents-note">An agent reaches formwav through its MCP server: 37 tools for media, repair, speech, music, dubbing, recording, sessions and the cloud. The formwav-harness skill in this repository's .claude/skills teaches it to use them well. Add formwav to a client here, or copy its text into the client yourself; formwav must be running when the agent calls it.</p>
+  <label class="fw-agents-outside"><span>Outside agents</span><select class="fw-dock-select" data-a="outside"><option value="ask">Ask each time</option><option value="allowed">Always allow</option><option value="blocked">Blocked</option></select></label>
+  <p class="fw-agents-note">What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.</p>
   <div class="fw-agents-list" data-a="list"><p class="fw-agents-note">Reading the clients...</p></div>
   <output class="fw-agents-state" data-a="state"></output>
   <div class="fw-dialog-actions"><button type="submit" class="fw-ibtn" value="close">Close</button></div>
@@ -25,6 +28,15 @@ export function mountAgents(host: HTMLElement): void {
   const list = dialog.querySelector<HTMLElement>('[data-a="list"]') as HTMLElement;
   const state = dialog.querySelector<HTMLElement>('[data-a="state"]');
   let clients: Client[] = [];
+  const outside = dialog.querySelector<HTMLSelectElement>('[data-a="outside"]') as HTMLSelectElement;
+  const readOutside = () => outsideAgents.get().then((s) => { if (outside.value !== s.value) outside.value = s.value; }, () => undefined);
+  outside.addEventListener("change", () => {
+    const value = outside.value === "allowed" || outside.value === "blocked" ? outside.value : "ask";
+    outsideAgents.set(value).then(() => setText(state, value === "blocked" ? "Agents are blocked" : value === "allowed" ? "Outside agents are always allowed" : "formwav asks each time an outside agent calls"), (err) => {
+      setText(state, `Could not change it: ${err instanceof Error ? err.message : String(err)}`);
+      void readOutside();
+    });
+  });
 
   const draw = () => {
     list.innerHTML = clients
@@ -92,6 +104,7 @@ export function mountAgents(host: HTMLElement): void {
   item.addEventListener("click", () => {
     if (!dialog.open) dialog.showModal();
     setText(state, "");
+    void readOutside();
     void load();
   });
 }

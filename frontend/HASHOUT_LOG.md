@@ -192,6 +192,51 @@ frontend/
 
 ---
 
+## dock/ (15 files), dock-adapter.ts, styles/dock-tokens.css, styles/chat.css, index.html, main.ts, ui/agent-pane.ts, ui/agents.ts, ui/i18n.ts · the terminal panel is the family's shared dock, module 2.1.0 (unreleased, after v2.27.0) {#family-dock}
+
+- refers-to: src/dock/* (copied byte for byte from formvis 8bbdf61b, never edited here; MANIFEST.json holds each file's sha256); src/dock-adapter.ts :: formwavDock, mountFamilyDock, outsideAgents, dockCombo, oldHeight, DOCK_KEY; src/styles/dock-tokens.css; index.html (the head script); ui/agent-pane.ts :: serve, run; ui/agents.ts :: the Outside agents select; ui/i18n.ts :: SKIP
+- kind: change, with removed code
+- logged: unreleased · 2026-11-19
+
+What changed. `ui/terminal-dock.ts` (409 lines, `mountTerminalDock`, root `.fw-tdock`) is removed and `new Dock(formwavDock(...))` from the shared folder takes its place, mounted at the same point (before `.fw-dock-anchor` in `.fw-pane-timeline`). The adapter is the only file that knows both sides.
+
+Decisions and their reasons:
+
+- Chat stays formwav's own pane (`chat: { pane, ask: 'line' }`): `ui/chat-pane.ts` has Markdown replies, the usage meter, "From Claude Code..." and the note under a message, none of which the module's Chat draws. The module's ask line is the one input: on Chat it calls the pane's `send` with the selection as hidden context and note, on any other tab it opens Claude Code with the prompt and "(Looking at track, clip)" added in `terminal.open('claude')`. A text that arrives by `fw-dock-chat` or `fw-dock-claude` is passed as given (`asGiven`), as before.
+- Chords. `dockCombo` is the old `combo` unchanged: Cmd+J on a Mac and Ctrl+J elsewhere, and Ctrl+backtick on both, show and hide the panel (`isDockChord`); Shift and Alt with the same J open Claude Code and Chat and are named in `passKey`, so they leave a terminal and reach the one `window` listener in `mountFamilyDock`. On a Mac Cmd+J had no other meaning in formwav and Ctrl+J stays the shell's line feed.
+- Storage. `formwav.dock` was free. `formwav.terminalHeight` held a bare number, so `oldHeight` is a reader of its own (the module's JSON reader would have dropped the height); it is moved once and the old key removed. The old panel was closed at every launch; open or closed, the side and both sizes are now kept, and the head script puts them on the root before the first paint.
+- The right side is a column inside the timeline pane: the pane gets `padding-inline-end` of the dock's width and the dock is placed over that padding, so no grid track of the workspace changes and the node is never moved or rebuilt. `sizes.maxWidth` keeps 360 px of timeline (`DOCK_KEEP_TIMELINE`, the same figure as `MIN_TIMELINE` in ui/workspace-layout.ts) and `sizes.maxHeight` keeps the old limit, three quarters of the pane.
+- The outside-agent question is the module's dialog. The consent branch is cut out of the Agent column's bridge loop: an item with `consent` goes to `outsideAgents.asked` and the loop goes on at once (it used to wait on the card's click, so nothing else was served meanwhile); an item with `withdrawn` closes its dialog. The poll asks for notices, and the first poll of a page asks for a question that is still open (`again=1`), so a reload shows it again. Answers are Deny, Allow once and Always allow, as the engine offers them; the Agent column still gets one line per answer ("name: allowed once").
+- Outside agents has a control now: a select in Settings > Agents (Ask each time, Always allow, Blocked) on `GET` and `POST /api/agents/outside`; the dock's menu opens it. The Agent column's own API-key agent runs its tools in the page, so it reads the stored choice itself and does not start under Blocked.
+- The module's sentences are given to the page in English (`t` returns the English) and formwav's page translator takes them from there where a table has them; no table was changed. `.ft-notranslate` and `.ft-term` are added to the translator's skip list.
+- `@xterm/xterm` is 6.0.0 exactly (the module passes `overviewRuler` and styles 6.0's scroll bar).
+
+Removed, quoted in short (the whole file is at 5b340bee:frontend/src/ui/terminal-dock.ts):
+
+```ts
+const HEIGHT_KEY = "formwav.terminalHeight";
+export function mountTerminalDock(host: HTMLElement, engine: Engine): void {
+  const root = el(`<section class="fw-tdock" aria-label="Terminal" hidden> ... </section>`);
+  const connect = (t: Tab) => { /* ws /api/terminal/{id}, first message {type:"key"}, exit matched as the text '{"type": "exit"}' */ };
+  const mount = (info: TermInfo, show: boolean) => { /* new Terminal({ fontSize: 13, lineHeight: 1.2, scrollback: 5000 }), FitAddon, a tab button */ };
+  const setHeight = (px: number) => { /* at least 140, at most 75% of the pane, kept as a bare number */ };
+  window.addEventListener("keydown", (e) => { const k = combo(e); if (!k) return; e.preventDefault(); if (k === "toggle") toggle(); else if (k === "claude") void showClaude(); else void showChat(); });
+  listen("fw-dock-toggle", toggle); listen("fw-dock-new", ...); listen("fw-dock-chat", ...); listen("fw-dock-claude", ...); listen("fw-terminal", ...);
+}
+```
+
+From `styles/terminal-dock.css` (now `styles/chat.css`, which keeps the Chat pane's and Markdown's rules): every `.fw-tdock*` rule except `.fw-tdock-spacer` and `.fw-tdock-text`, which the Chat bar still uses. From ui/agent-pane.ts, the card:
+
+```ts
+li.innerHTML = `<span></span><span class="fw-agent-consent-acts"><button type="button" class="fw-ibtn" data-choice="allow">Allow</button><button type="button" class="fw-ibtn" data-choice="always">Always allow</button><button type="button" class="fw-ibtn" data-choice="block">Block</button></span>`;
+const choice = await new Promise<string>((done) => li.addEventListener("click", ...));
+await postJson("/api/bridge/result", { id: item.id, ok: true, result: choice });
+```
+
+Left for later: the dead "Terminal" entry of the editor dock (ui/dock.ts) and the `.fw-agent-consent-note` and `-acts` rules in styles/canvas.css, which nothing draws now.
+
+---
+
 ## ui/agent-pane.ts, styles/canvas.css, i18n/added/seal-broken · the Allow or Block card says the saved agent permission was reset (unreleased, after v2.26.3) {#seal-broken-card}
 
 - refers-to: ui/agent-pane.ts :: serve (the consent branch); styles/canvas.css :: .fw-agent-consent-note; i18n/added/seal-broken

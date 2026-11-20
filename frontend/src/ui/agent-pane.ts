@@ -12,6 +12,7 @@ import { KINDS } from "./editor-tabs";
 import { PANEL_ICONS } from "./shell";
 import { agentIcon } from "./icons-agent";
 import { t } from "./i18n";
+import { outsideAgents, type AskedItem } from "../dock-adapter";
 import { PROCESSOR_BY_ID, PROCESSORS, processorValues } from "../engine/processors";
 
 /** The realtime effects a track's chain can hold, with each parameter's range, for the agent's tool description. */
@@ -683,6 +684,8 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
     window.dispatchEvent(new CustomEvent("fw-dock-chat", { detail: { text: instruction + (looked ? `\n\n(${looked})` : "") } }));
   };
   let posted = 0;
+  let again = true;
+  outsideAgents.onRecord((line) => entry("consent", line));
   const serve = async () => {
     for (;;) {
       try {
@@ -690,31 +693,17 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
           await postJson("/api/bridge/catalogue", { tools: definitions });
           posted = Date.now();
         }
-        const res = await fetch("/api/bridge/next");
+        const res = await fetch(again ? "/api/bridge/next?notices=1&again=1" : "/api/bridge/next?notices=1");
+        again = false;
         if (res.status === 204) continue;
         if (!res.ok) throw new Error(String(res.status));
-        const item = (await res.json()) as { id: string; name: string; arguments?: Json; who?: string; consent?: boolean; client?: string; sealBroken?: boolean };
+        const item = (await res.json()) as AskedItem & { name: string; arguments?: Json; who?: string; consent?: boolean; withdrawn?: boolean };
+        if (item.withdrawn) {
+          outsideAgents.gone(item.id);
+          continue;
+        }
         if (item.consent) {
-          if (dock.hidden) open();
-          const li = document.createElement("li");
-          li.className = "fw-agent-consent";
-          li.innerHTML = `<span></span><span class="fw-agent-consent-acts"><button type="button" class="fw-ibtn" data-choice="allow">Allow</button><button type="button" class="fw-ibtn" data-choice="always">Always allow</button><button type="button" class="fw-ibtn" data-choice="block">Block</button></span>`;
-          setText(li.firstElementChild, `${item.client || "An agent outside formwav"} asks to use formwav's tools on this session (first: ${item.name}).`);
-          if (item.sealBroken) {
-            const note = document.createElement("span");
-            note.className = "fw-agent-consent-note";
-            setText(note, t("The saved agent permission was changed outside formwav, so it is back to Ask."));
-            li.firstElementChild?.after(note);
-          }
-          log.append(li);
-          li.scrollIntoView({ block: "nearest" });
-          const choice = await new Promise<string>((done) => li.addEventListener("click", (e) => {
-            const pick = (e.target as HTMLElement).closest<HTMLElement>("[data-choice]")?.dataset.choice;
-            if (pick) done(pick);
-          }));
-          for (const b of li.querySelectorAll("button")) b.disabled = true;
-          setText(li.firstElementChild, `${item.client || "An outside agent"}: ${choice === "block" ? "blocked" : choice === "always" ? "always allowed" : "allowed until formwav closes"}`);
-          await postJson("/api/bridge/result", { id: item.id, ok: true, result: choice });
+          outsideAgents.asked(item);
           continue;
         }
         const tool = byName.get(item.name);
@@ -744,6 +733,10 @@ export function mountAgent(host: HTMLElement, engine: Engine): void {
     if (!instruction || running) return;
     if (viaSelect.value === "code") return sendChat(instruction);
     running = true;
+    if ((await outsideAgents.get().catch(() => null))?.value === "blocked") {
+      running = false;
+      return entry("failed", "Agents are blocked in formwav. Change Outside agents under Settings > Agents to let this agent work.");
+    }
     stopAsked = false;
     control("run").disabled = true;
     control("stop").disabled = false;

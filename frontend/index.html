@@ -81,6 +81,20 @@ body.app-ready #app { visibility: visible; }
     var navW = parseInt(localStorage.getItem('formwav.homeNavW') || '', 10);
     if (navW >= 180 && navW <= 420) root.style.setProperty('--fw-home-nav-w', navW + 'px');
   } catch (e) { /* storage blocked: the default width */ }
+  /* The terminal panel (the family's shared dock keeps its place under formwav.dock; formwav.terminalHeight is the
+     height the app's own panel kept): open or closed, its side and both sizes are on the root before the first paint */
+  try {
+    var dockRaw = localStorage.getItem('formwav.dock'), dockOld = Number(localStorage.getItem('formwav.terminalHeight')), dk = {};
+    if (dockRaw) dk = JSON.parse(dockRaw) || {}; else if (dockOld > 0) dk = { h: dockOld };
+    var dockH = Math.round(Math.max(140, Math.min(window.innerHeight * 0.75, typeof dk.h === 'number' ? dk.h : 300)));
+    var dockW = Math.round(Math.max(320, Math.min(window.innerWidth * 0.5, typeof dk.w === 'number' ? dk.w : 420)));
+    root.setAttribute('data-ft-dock', dk.open === true ? 'open' : 'closed');
+    root.setAttribute('data-ft-dock-side', dk.side === 'right' ? 'right' : 'bottom');
+    root.setAttribute('data-ft-dock-h', String(dockH));
+    root.setAttribute('data-ft-dock-w', String(dockW));
+    root.style.setProperty('--ft-dock-size', dockH + 'px');
+    root.style.setProperty('--ft-dock-wsize', dockW + 'px');
+  } catch (e) { root.setAttribute('data-ft-dock', 'closed'); }
   if (LIGHT[theme]) {
     root.classList.add('theme-light-pending');
     var apply = function () { if (document.body) { document.body.classList.add('theme-light'); root.classList.remove('theme-light-pending'); return true; } return false; };
