@@ -7,10 +7,18 @@ beside the code: media, sessions and transcripts go to the per-user data folder 
 engine's keys are read from a .env in that folder (KEY=VALUE lines, never overriding the environment).
 """
 
-import json
 import os
-import shutil
 import sys
+
+if sys.stdin is None:
+    sys.stdin = open(os.devnull, encoding="utf-8")
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+import json
+import shutil
 from pathlib import Path
 
 APP_ID = "ai.nodemode.formwav"
