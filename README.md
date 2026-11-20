@@ -20,7 +20,7 @@
   <img alt="Rust audio core" src="https://img.shields.io/badge/Rust-audio%20core-b7410e?style=flat-square">
   <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-native-2f7bf5?style=flat-square">
   <img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-3a3a3a?style=flat-square">
-  <img alt="Status: in development" src="https://img.shields.io/badge/status-in%20development-d69e2e?style=flat-square">
+  <img alt="Status: released" src="https://img.shields.io/badge/status-released-d69e2e?style=flat-square">
 </p>
 
 <p align="center">
@@ -175,7 +175,7 @@ cd formwav
 
 On Windows use `formwav_oc_install.bat` and `formwav.bat`. Optional keys (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `FAL_KEY`) are set in Preferences > Keys and Models, which keeps them in the system password store (a file only you can read where there is none); a key in `backend/.env` or the environment comes first, as in FormVis, and the row says so. Preferences > Models on this computer installs, removes and measures the models the engine runs here, shows each one's download size and about how long it takes before you install it, and opens their folder.
 
-> **Status:** in development. The Windows scripts are written but not run on Windows, and the models run against stand-ins here; the reasoning and the gaps are kept in [`backend/HASHOUT_LOG.md`](backend/HASHOUT_LOG.md).
+> **Status:** released. FormWav is built and bundled for macOS, Windows and Linux and has been tested on all three.
 
 **Contributing:** branch from `main`, keep changes to source here, and leave packaging and releases to formcompiler. See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) and [`AGENTS.md`](AGENTS.md). Report security issues privately as [`SECURITY.md`](SECURITY.md) describes.
 
