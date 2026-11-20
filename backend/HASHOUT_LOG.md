@@ -140,6 +140,18 @@ backend/
 
 ---
 
+## routers/claude.py · a page that reloads is given the open question again, and a caller that goes away withdraws it (unreleased, after v2.27.0) {#consent-again}
+
+- refers-to: app/routers/claude.py :: Consent.open, Consent.check, bridge_next (again)
+- kind: feat
+- logged: unreleased · 2026-11-19
+
+The window takes a question off the bridge queue when it polls; a page that reloaded after that had no way to see it and the agent waited out the two minutes. `Consent.open` holds the card while it waits, and `GET /api/bridge/next?again=1` answers with it at once; the page sends `again=1` on its first poll only and ignores an id it already shows. While a question waits, the engine looks once a second whether the caller's request is still connected (`request.is_disconnected`, passed down from `/mcp` as `gone`); when it is not, the window is told `{withdrawn: true, reason: "gone"}` so its dialog closes unanswered, and the next caller's question can be asked at once instead of after the two minutes. A direct REST write by an outside agent is not watched this way. No new route.
+
+The entry the engine writes for its own tabs (Claude Code tab, Chat, Codex and Cursor tabs) is named `formwav_tab` (`claude_code.TAB_ENTRY`, `--allowedTools mcp__formwav_tab`, `.cursor/mcp.json`, `.codex/config.toml`), so it cannot be mistaken for the `formwav` entry a person adds for an outside agent with Settings > Agents or `./formwav claude`. `_tool_name` strips either prefix. The refusal sentence under Blocked names Settings > Agents, Outside agents, where the choice now is.
+
+---
+
 ## services/agent_programs.py, routers/terminal.py, routers/claude.py · one call says which agent programs are here, and Codex and Cursor open as tabs (unreleased, after v2.26.3) {#agent-programs}
 
 - refers-to: app/services/agent_programs.py :: PROGRAMS, find, status, configure, TOKEN_VAR, URL_VAR, MARK; app/services/terminals.py :: open_agent, _open (extra); app/services/claude_code.py :: issue_token, TOKENS; app/routers/terminal.py :: terminal_agent, AgentBody; app/routers/claude.py :: agents_status; tests/test_agent_programs.py

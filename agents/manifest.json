@@ -107,15 +107,15 @@
   "dock": {
     "present": true,
     "positions": [
-      "right",
-      "bottom"
+      "bottom",
+      "right"
     ],
     "tabs": [
-      "terminal",
-      "claude-code",
       "chat",
-      "agent",
-      "history"
+      "terminal",
+      "claude",
+      "codex",
+      "cursor"
     ]
   },
   "extensions": {

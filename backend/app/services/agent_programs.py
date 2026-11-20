@@ -97,7 +97,7 @@ def _keep(path: Path, text: str, ours) -> bool:
 
 def configure(kind: str, base: str, folder: Path) -> bool:
     if kind == "cursor":
-        text = json.dumps({"mcpServers": {"formwav": {"url": "${env:%s}" % URL_VAR, "headers": {"x-formwav-inapp": "${env:%s}" % TOKEN_VAR}}}}, indent=2) + "\n"
+        text = json.dumps({"mcpServers": {"formwav_tab": {"url": "${env:%s}" % URL_VAR, "headers": {"x-formwav-inapp": "${env:%s}" % TOKEN_VAR}}}}, indent=2) + "\n"
         return _keep(folder / ".cursor" / "mcp.json", text, lambda found: found == text)
-    text = f'{MARK}\n[mcp_servers.formwav]\nurl = {json.dumps(base + "/mcp")}\nenv_http_headers = {{ "x-formwav-inapp" = "{TOKEN_VAR}" }}\n'
+    text = f'{MARK}\n[mcp_servers.formwav_tab]\nurl ={json.dumps(base + "/mcp")}\nenv_http_headers = {{ "x-formwav-inapp" = "{TOKEN_VAR}" }}\n'
     return _keep(folder / ".codex" / "config.toml", text, lambda found: found.startswith(MARK))

@@ -26,9 +26,34 @@ SKILLS = ROOT / ".claude" / "skills"
 TRANSPORT_NAMES = {"stdio": "stdio", "streamable-http": "http"}
 DOCK = {
     "present": True,
-    "positions": ["right", "bottom"],
-    "tabs": ["terminal", "claude-code", "chat", "agent", "history"],
+    "positions": ["bottom", "right"],
+    "tabs": ["chat", "terminal", "claude", "codex", "cursor"],
 }
+DOCK_FOLDER = ROOT / "frontend" / "src" / "dock"
+
+
+def dock_problems() -> list[str]:
+    import hashlib
+    import re
+
+    shown = DOCK_FOLDER.relative_to(ROOT).as_posix()
+    listed = DOCK_FOLDER / "MANIFEST.json"
+    if not listed.is_file():
+        return [f"{shown}/MANIFEST.json is missing"]
+    files = json.loads(listed.read_text(encoding="utf-8")).get("files", {})
+    found = []
+    for name, wanted in sorted(files.items()):
+        path = DOCK_FOLDER / name
+        if not path.is_file():
+            found.append(f"{shown}/{name} is missing")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != wanted:
+            found.append(f"{shown}/{name} does not match MANIFEST.json; the shared dock folder is copied from formvis and never edited here")
+    for path in sorted(DOCK_FOLDER.iterdir()):
+        if path.name != "MANIFEST.json" and path.name not in files:
+            found.append(f"{shown}/{path.name} is not a file of the shared dock (MANIFEST.json does not list it)")
+        if path.suffix == ".ts" and re.search(r"""(?:from|import)\s*\(?\s*['"]\.\./""", path.read_text(encoding="utf-8")):
+            found.append(f"{shown}/{path.name} imports from outside the dock folder")
+    return found
 
 
 def _tree(path: Path) -> ast.Module:
@@ -161,6 +186,10 @@ def main(argv: list[str]) -> int:
     if not argv or argv[0] != "sync" or any(a != "--check" for a in argv[1:]):
         print("usage: agents.py sync [--check]", file=sys.stderr)
         return 2
+    wrong = dock_problems()
+    if wrong:
+        print("\n".join(wrong), file=sys.stderr)
+        return 1
     wanted = text()
     shown = TARGET.relative_to(ROOT).as_posix()
     if "--check" in argv:

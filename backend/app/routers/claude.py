@@ -92,6 +92,7 @@ class Consent:
         self.lock: asyncio.Lock | None = None
         self.told = False
         self.paused = 0.0
+        self.open: dict | None = None
 
     def _file(self):
         from ..core.paths import data_dir
@@ -120,12 +121,12 @@ class Consent:
             pass
         self.told = False
 
-    async def check(self, name: str, client: str, what: str | None = None) -> str | None:
+    async def check(self, name: str, client: str, what: str | None = None, gone: Any = None) -> str | None:
         policy = self.policy()
         if policy == "allow" or self.session == "allow":
             return None
         if policy == "block" or self.session == "block":
-            return "The person using formwav has blocked outside agents (Settings > Agents, or the Agent column's prompt)."
+            return "The person using formwav has blocked outside agents (Settings > Agents, Outside agents)."
         if time.monotonic() < self.paused:
             return self.DENIED
         if self.lock is None:
@@ -145,13 +146,25 @@ class Consent:
             if not self.told and self.stored().get("sealBroken"):
                 card["sealBroken"] = True
                 self.told = True
+            self.open = card
             await BRIDGE.queue().put(card)
+            until = time.monotonic() + self.LIMIT
             try:
-                choice = await asyncio.wait_for(fut, timeout=self.LIMIT)
+                while True:
+                    try:
+                        choice = await asyncio.wait_for(asyncio.shield(fut), timeout=max(0.05, min(1.0, until - time.monotonic())))
+                        break
+                    except asyncio.TimeoutError:
+                        if time.monotonic() >= until:
+                            raise
+                        if gone is not None and await gone():
+                            BRIDGE.withdraw(cid, "gone")
+                            return "The caller went away before anyone at formwav answered."
             except asyncio.TimeoutError:
                 BRIDGE.withdraw(cid, "expired")
                 return "Nobody answered formwav's prompt within two minutes; ask again when someone is at formwav."
             finally:
+                self.open = None
                 BRIDGE.waiting.pop(cid, None)
             BRIDGE.withdraw(cid, "answered")
             if choice == "once":
@@ -229,9 +242,9 @@ def window_ticket() -> dict:
     return {"ticket": window_key.ticket()}
 
 
-async def _run_tool(name: str, arguments: dict, who: str, client: str) -> tuple[bool, Any]:
+async def _run_tool(name: str, arguments: dict, who: str, client: str, gone: Any = None) -> tuple[bool, Any]:
     if who == "outside":
-        refused = await CONSENT.check(name, client)
+        refused = await CONSENT.check(name, client, gone=gone)
         if refused:
             return False, refused
     elif CONSENT.policy() == "block":
@@ -280,9 +293,11 @@ def bridge_catalogue(body: Catalogue) -> dict:
 
 
 @router.get("/api/bridge/next")
-async def bridge_next(request: Request, notices: int = 0) -> Response:
+async def bridge_next(request: Request, notices: int = 0, again: int = 0) -> Response:
     BRIDGE.seen = time.monotonic()
     BRIDGE.notices = bool(notices)
+    if again and CONSENT.open is not None:
+        return JSONResponse(CONSENT.open)
     try:
         item = await asyncio.wait_for(BRIDGE.queue().get(), timeout=20)
     except asyncio.TimeoutError:
@@ -357,7 +372,7 @@ async def mcp(request: Request) -> Response:
         if not any(t["name"] == name for t in BRIDGE.tools):
             return _rpc(id_, {"content": [{"type": "text", "text": f"There is no formwav tool named {name}; call tools/list." if BRIDGE.live() else "formwav's window is not open: the session's tools run in it."}], "isError": True})
         client = request.headers.get("x-formwav-agent") or CLIENTS.get(request.client.host if request.client else "?", "An agent outside formwav")
-        ok, out = await _run_tool(name, params.get("arguments") or {}, who, client)
+        ok, out = await _run_tool(name, params.get("arguments") or {}, who, client, request.is_disconnected)
         text = out if isinstance(out, str) else json.dumps(out)
         return _rpc(id_, {"content": [{"type": "text", "text": text}], "isError": not ok})
     return _rpc(id_, error=(-32601, f"no method {method}"))
@@ -417,7 +432,7 @@ def _usage_of(u: dict) -> tuple[int, int]:
 
 
 def _tool_name(name: str) -> str:
-    return name.replace("mcp__formwav__", "")
+    return name.replace("mcp__formwav_tab__", "").replace("mcp__formwav__", "")
 
 
 def _consume(ev: dict, run: dict) -> None:

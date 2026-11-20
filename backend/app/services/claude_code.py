@@ -22,9 +22,10 @@ from pathlib import Path
 TOKENS: dict[str, Path | None] = {}
 KEEP = {"CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CONFIG_DIR"}
 DROP = {"ANTHROPIC_API_KEY", "FORMWAV_PORT", "FORMWAV_EXIT_WITH_STDIN", "FORMWAV_DATA_DIR", "FORMWAV_DIST"}
+TAB_ENTRY = "formwav_tab"
 INSTALL = "Claude Code is not installed: install it from https://claude.com/claude-code, run claude once in a terminal to sign in, then try again."
 NOTE = (
-    "You are working inside formwav, an audio editor, on the session the user has open. Its tools (mcp__formwav__*) act "
+    "You are working inside formwav, an audio editor, on the session the user has open. Its tools (mcp__formwav_tab__* in a tab formwav started, mcp__formwav__* elsewhere) act "
     "on that session: call get_session first for the track and clip ids; times are seconds and levels dB. Measure with "
     "analyze_clip before changing levels or repairing. Make the smallest set of changes that does what was asked; every "
     "change is one undo step in formwav's History. Finish with one or two sentences on what you changed."
@@ -117,7 +118,7 @@ def issue(base: str) -> tuple[str, str]:
     folder = data_dir() / "AgentTokens"
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = folder / f"mcp-{secrets.token_hex(8)}.json"
-    body = json.dumps({"mcpServers": {"formwav": {"type": "http", "url": f"{base}/mcp", "headers": {"x-formwav-inapp": token}}}})
+    body = json.dumps({"mcpServers": {TAB_ENTRY: {"type": "http", "url": f"{base}/mcp", "headers": {"x-formwav-inapp": token}}}})
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as out:
         out.write(body)
@@ -155,7 +156,7 @@ def argv(prompt: str | None = None, resume: str | None = None, print_mode: bool 
     args = [path]
     if print_mode:
         args += ["-p", prompt or "", "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
-    args += ["--mcp-config", mcp_file, "--allowedTools", "mcp__formwav", "--append-system-prompt", NOTE]
+    args += ["--mcp-config", mcp_file, "--allowedTools", f"mcp__{TAB_ENTRY}", "--append-system-prompt", NOTE]
     if resume:
         args += ["--resume", resume]
     if prompt and not print_mode:
