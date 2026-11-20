@@ -1,4 +1,5 @@
 import json
+import os
 import re
 
 import httpx
@@ -108,13 +109,16 @@ def test_the_bootstrap_answers_once_then_refuses(engine_url):
     with connect(ws_url, origin=engine_url, open_timeout=10) as sock:
         sock.send(json.dumps({"type": "key", "key": first.json()["key"]}))
         sock.send(json.dumps({"type": "input", "data": "echo key-$((40+2))\n"}))
-        seen = ""
-        for _ in range(50):
-            seen += sock.recv(timeout=5)
-            if "key-42" in seen:
+        seen = sock.recv(timeout=5)
+        for _ in range(49):
+            if "key-42" in seen or os.name != "posix":
                 break
-        assert "key-42" in seen
+            seen += sock.recv(timeout=5)
     httpx.post(engine_url + "/api/terminal/close", json={"id": sid.json()["id"]}, headers=key, timeout=30)
+    assert seen
+    if os.name != "posix":
+        pytest.skip("types echo into a POSIX shell")
+    assert "key-42" in seen
 
 
 class _Store:
