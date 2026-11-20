@@ -1,0 +1,15 @@
+{
+"Always allow": "Selalu izinkan",
+"Antigravity": "Antigravity",
+"Ask each time": "Tanya setiap kali",
+"Blocked": "Diblokir",
+"Dismiss": "Tutup",
+"Hide Terminal": "Sembunyikan terminal",
+"Hide Terminal (Ctrl+J); programs keep running": "Sembunyikan terminal (Ctrl+J); program tetap berjalan",
+"More agents": "Agen lainnya",
+"Move the terminal to the right": "Pindahkan terminal ke kanan",
+"Outside agents": "Agen luar",
+"Send to Claude Code": "Kirim ke Claude Code",
+"Show me around": "Ajak saya berkeliling",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "Apa yang dilakukan formwav saat program AI yang tidak dimulainya meminta untuk menggunakan alat-alatnya. Diblokir juga menghentikan Chat dan tab agen milik formwav sendiri."
+}

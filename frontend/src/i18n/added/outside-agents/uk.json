@@ -1,0 +1,15 @@
+{
+"Always allow": "Завжди дозволяти",
+"Antigravity": "Antigravity",
+"Ask each time": "Питати щоразу",
+"Blocked": "Заблоковано",
+"Dismiss": "Закрити",
+"Hide Terminal": "Сховати термінал",
+"Hide Terminal (Ctrl+J); programs keep running": "Сховати термінал (Ctrl+J); програми працюють далі",
+"More agents": "Інші агенти",
+"Move the terminal to the right": "Перемістити термінал праворуч",
+"Outside agents": "Зовнішні агенти",
+"Send to Claude Code": "Надіслати до Claude Code",
+"Show me around": "Показати огляд",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "Що робить formwav, коли програма ШІ, яку він не запускав, просить дозволу використовувати його інструменти. «Заблоковано» також зупиняє власний Чат і вкладки агентів formwav."
+}

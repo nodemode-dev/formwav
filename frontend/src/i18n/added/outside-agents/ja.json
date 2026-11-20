@@ -1,0 +1,15 @@
+{
+"Always allow": "常に許可",
+"Antigravity": "Antigravity",
+"Ask each time": "毎回確認する",
+"Blocked": "ブロック",
+"Dismiss": "閉じる",
+"Hide Terminal": "ターミナルを隠す",
+"Hide Terminal (Ctrl+J); programs keep running": "ターミナルを隠す (Ctrl+J)。プログラムは動作し続けます",
+"More agents": "その他のエージェント",
+"Move the terminal to the right": "ターミナルを右に移動",
+"Outside agents": "外部エージェント",
+"Send to Claude Code": "Claude Code に送る",
+"Show me around": "使い方を見る",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "formwav が起動していない AI プログラムがツールの使用を求めたときの formwav の動作です。「ブロック」にすると、formwav 自身のチャットとエージェントのタブも停止します。"
+}

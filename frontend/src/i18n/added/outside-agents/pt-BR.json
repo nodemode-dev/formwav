@@ -1,0 +1,15 @@
+{
+"Always allow": "Permitir sempre",
+"Antigravity": "Antigravity",
+"Ask each time": "Perguntar sempre",
+"Blocked": "Bloqueado",
+"Dismiss": "Dispensar",
+"Hide Terminal": "Ocultar terminal",
+"Hide Terminal (Ctrl+J); programs keep running": "Ocultar terminal (Ctrl+J); os programas continuam em execução",
+"More agents": "Mais agentes",
+"Move the terminal to the right": "Mover o terminal para a direita",
+"Outside agents": "Agentes externos",
+"Send to Claude Code": "Enviar para o Claude Code",
+"Show me around": "Fazer um tour",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "O que o formwav faz quando um programa de IA que ele não iniciou pede para usar suas ferramentas. Bloqueado também interrompe o Chat e as abas de agente do próprio formwav."
+}

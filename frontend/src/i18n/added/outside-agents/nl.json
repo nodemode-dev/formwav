@@ -1,0 +1,15 @@
+{
+"Always allow": "Altijd toestaan",
+"Antigravity": "Antigravity",
+"Ask each time": "Elke keer vragen",
+"Blocked": "Geblokkeerd",
+"Dismiss": "Sluiten",
+"Hide Terminal": "Terminal verbergen",
+"Hide Terminal (Ctrl+J); programs keep running": "Terminal verbergen (Ctrl+J); programma's blijven actief",
+"More agents": "Meer agents",
+"Move the terminal to the right": "Terminal naar rechts verplaatsen",
+"Outside agents": "Externe agents",
+"Send to Claude Code": "Naar Claude Code sturen",
+"Show me around": "Rondleiding starten",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "Wat formwav doet wanneer een AI-programma dat het niet zelf heeft gestart, vraagt om zijn tools te gebruiken. Geblokkeerd stopt ook de eigen Chat en agenttabbladen van formwav."
+}

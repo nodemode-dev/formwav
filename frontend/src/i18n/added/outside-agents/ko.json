@@ -1,0 +1,15 @@
+{
+"Always allow": "항상 허용",
+"Antigravity": "Antigravity",
+"Ask each time": "매번 묻기",
+"Blocked": "차단됨",
+"Dismiss": "닫기",
+"Hide Terminal": "터미널 숨기기",
+"Hide Terminal (Ctrl+J); programs keep running": "터미널 숨기기 (Ctrl+J); 프로그램은 계속 실행됩니다",
+"More agents": "다른 에이전트",
+"Move the terminal to the right": "터미널을 오른쪽으로 이동",
+"Outside agents": "외부 에이전트",
+"Send to Claude Code": "Claude Code로 보내기",
+"Show me around": "둘러보기",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "formwav가 시작하지 않은 AI 프로그램이 도구 사용을 요청할 때 formwav가 하는 동작입니다. 차단됨을 선택하면 formwav 자체의 채팅과 에이전트 탭도 중지됩니다."
+}

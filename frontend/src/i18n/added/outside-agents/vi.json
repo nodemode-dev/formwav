@@ -1,0 +1,15 @@
+{
+"Always allow": "Luôn cho phép",
+"Antigravity": "Antigravity",
+"Ask each time": "Hỏi mỗi lần",
+"Blocked": "Bị chặn",
+"Dismiss": "Bỏ qua",
+"Hide Terminal": "Ẩn terminal",
+"Hide Terminal (Ctrl+J); programs keep running": "Ẩn terminal (Ctrl+J); các chương trình vẫn tiếp tục chạy",
+"More agents": "Tác nhân khác",
+"Move the terminal to the right": "Chuyển terminal sang phải",
+"Outside agents": "Tác nhân bên ngoài",
+"Send to Claude Code": "Gửi đến Claude Code",
+"Show me around": "Hướng dẫn tôi",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "Điều formwav làm khi một chương trình AI mà nó không khởi chạy yêu cầu dùng các công cụ của nó. Bị chặn cũng dừng Chat và các thẻ tác nhân của chính formwav."
+}

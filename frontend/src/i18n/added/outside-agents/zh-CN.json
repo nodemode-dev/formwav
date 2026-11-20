@@ -1,0 +1,15 @@
+{
+"Always allow": "始终允许",
+"Antigravity": "Antigravity",
+"Ask each time": "每次询问",
+"Blocked": "已阻止",
+"Dismiss": "关闭",
+"Hide Terminal": "隐藏终端",
+"Hide Terminal (Ctrl+J); programs keep running": "隐藏终端 (Ctrl+J)；程序继续运行",
+"More agents": "更多代理",
+"Move the terminal to the right": "将终端移到右侧",
+"Outside agents": "外部代理",
+"Send to Claude Code": "发送到 Claude Code",
+"Show me around": "带我看看",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "当并非由 formwav 启动的 AI 程序请求使用其工具时，formwav 的处理方式。“已阻止”还会停止 formwav 自己的聊天和代理标签页。"
+}
