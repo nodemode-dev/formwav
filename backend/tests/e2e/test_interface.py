@@ -538,10 +538,9 @@ def test_memory_locations_the_snap_dialog_and_a_range_pasted_on_another_track_ho
 
 
 def _pick(page, select: str, value: str) -> None:
-    steps = page.evaluate("([s, v]) => { const el = document.querySelector(s); return [...el.options].findIndex((o) => o.value === v) - el.selectedIndex; }", [select, value])
     page.focus(select)
-    for _ in range(abs(steps)):
-        page.keyboard.press("ArrowDown" if steps > 0 else "ArrowUp")
+    page.keyboard.press("Shift")
+    page.select_option(select, value)
     page.wait_for_function("([s, v]) => document.querySelector(s).value === v", arg=[select, value])
 
 
