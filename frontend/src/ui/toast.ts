@@ -29,6 +29,25 @@ const ensure = (): HTMLElement => {
   return layer;
 };
 
+const place = (root: HTMLElement, el: HTMLElement): void => {
+  const gap = parseFloat(getComputedStyle(root).rowGap) || 8;
+  const height = el.offsetHeight;
+  const taken = [...root.querySelectorAll<HTMLElement>(".fw-toast")]
+    .filter((t) => t !== el)
+    .map((t) => {
+      const y = Number(t.dataset.y ?? 0);
+      return [y, y + t.offsetHeight] as const;
+    })
+    .sort((a, b) => a[0] - b[0]);
+  let y = 0;
+  for (const [low, high] of taken) {
+    if (y + height + gap <= low) break;
+    y = Math.max(y, high + gap);
+  }
+  el.dataset.y = String(y);
+  el.style.setProperty("--fw-toast-y", `${y}px`);
+};
+
 /** Show a toast; `kind` defaults to the app's own, and a message that reads as a failure is shown as an error. */
 export function toast(text: string, kind?: ToastKind): HTMLElement | null {
   const message = text.trim();
@@ -47,6 +66,7 @@ export function toast(text: string, kind?: ToastKind): HTMLElement | null {
   el.setAttribute("translate", "no");
   root.append(el);
   while (root.children.length > MAX) root.firstElementChild?.remove();
+  place(root, el);
   const done = () => {
     el.dataset.leaving = "";
     window.setTimeout(() => el.remove(), 240);

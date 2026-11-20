@@ -496,7 +496,7 @@ body:not(:has(.fw-spectral-toggle[aria-pressed="true"])) .fw-needs-spectral { di
 .fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]) { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; column-gap: 10px; inline-size: 100%; min-block-size: 30px; block-size: auto; padding: 4px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-primary); font: inherit; font-size: var(--fs-13); text-align: start; }
 .fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]) > span:last-child { grid-column: 2; }
 .fw-dock-more .fw-menu-pop :is(.fw-ibtn, [role^="menuitem"]):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--text-primary) 10%, transparent); color: var(--text-primary); outline: none; }
-.fw-dock-context { margin-inline-start: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; align-content: flex-start; min-inline-size: 0; block-size: 18px; overflow: hidden; font-size: var(--fs-12); line-height: 18px; color: var(--text-secondary); white-space: nowrap; }
+.fw-dock-context { flex: 1 1 0; margin-inline-start: 8px; display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; align-content: flex-start; min-inline-size: 0; block-size: 18px; overflow: hidden; font-size: var(--fs-12); line-height: 18px; color: var(--text-secondary); white-space: nowrap; }
 .fw-dock-context::before { content: ""; flex: none; inline-size: 1px; block-size: 18px; }
 .fw-dock-who { flex: none; display: flex; align-items: center; gap: 6px; }
 .fw-dock-swatch { flex: none; inline-size: 9px; block-size: 9px; border-radius: 3px; }
