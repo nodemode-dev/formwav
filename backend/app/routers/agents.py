@@ -53,7 +53,11 @@ def _desktop_file() -> Path:
     return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
 
 
-FILES = {"codex": lambda: Path.home() / ".codex" / "config.toml", "cursor": lambda: Path.home() / ".cursor" / "mcp.json", "claude-desktop": _desktop_file}
+FILES = {"codex": lambda: Path.home() / ".codex" / "config.toml", "cursor": lambda: Path.home() / ".cursor" / "mcp.json", "antigravity": lambda: Path.home() / ".gemini" / "config" / "mcp_config.json", "claude-desktop": _desktop_file}
+
+
+def _older_antigravity() -> Path:
+    return Path.home() / ".gemini" / "antigravity-cli" / "mcp_config.json"
 
 
 def _stdio() -> dict:
@@ -95,6 +99,7 @@ def clients(base: str = "http://127.0.0.1:8060") -> list[dict]:
         {"id": "claude-code", "name": "Claude Code", "kind": "command", "file": None, "text": _line(add), "installable": claude_code.cli() is not None, "present": None},
         {"id": "codex", "name": "Codex", "kind": "file", "file": str(FILES["codex"]()), "text": _codex_block(), "installable": True, "present": _present("codex")},
         {"id": "cursor", "name": "Cursor", "kind": "file", "file": str(FILES["cursor"]()), "text": json.dumps({"mcpServers": {NAME: _stdio()}}, indent=2), "installable": True, "present": _present("cursor")},
+        {"id": "antigravity", "name": "Antigravity", "kind": "file", "file": str(FILES["antigravity"]()), "text": json.dumps({"mcpServers": {NAME: _stdio()}}, indent=2), "installable": True, "present": _present("antigravity")},
         {"id": "claude-desktop", "name": "Claude Desktop", "kind": "file", "file": str(_desktop_file()), "text": json.dumps({"mcpServers": {NAME: _stdio()}}, indent=2), "installable": True, "present": _present("claude-desktop")},
         {"id": "vscode", "name": "VS Code", "kind": "file", "file": ".vscode/mcp.json (in your project)", "text": json.dumps({"servers": {NAME: {"type": "stdio", **_stdio()}}}, indent=2), "installable": False, "present": None},
         {"id": "any", "name": "Any other client", "kind": "command", "file": None, "text": _line([command, *args]), "installable": False, "present": None},
@@ -120,18 +125,18 @@ def install(request: Request, body: dict = Body(...)) -> dict:
     client = str(body.get("client", ""))
     command, args, env = server_command()
     if client == "claude-code":
-        from ..services import claude_code
+        from ..services import agent_lookup, claude_code
 
-        claude = claude_code.cli()
-        if not claude:
-            raise HTTPException(409, claude_code.INSTALL)
-        run = subprocess.run([claude, *claude_add(f"http://{request.url.netloc}")], capture_output=True, text=True, timeout=60, check=False, env=claude_code.child_env())
+        found = claude_code.usable("claude")
+        if found.state != "runs":
+            raise HTTPException(409, claude_code.said(found))
+        run = agent_lookup.run([found.path, *claude_add(f"http://{request.url.netloc}")], claude_code.child_env(found.path), 60)
         text = (run.stdout + run.stderr).strip()
         if run.returncode and "already exists" not in text:
             raise HTTPException(502, f"claude mcp add failed: {text[-400:]}")
         return {"client": client, "written": f"claude mcp add {NAME} --scope user", "present": "already exists" in text}
     if client not in FILES:
-        raise HTTPException(400, "client must be claude-code, codex, cursor or claude-desktop")
+        raise HTTPException(400, "client must be claude-code, codex, cursor, antigravity or claude-desktop")
     path = FILES[client]()
     existing = path.read_text(encoding="utf-8") if path.is_file() else ""
     if client == "codex":
@@ -150,8 +155,22 @@ def install(request: Request, body: dict = Body(...)) -> dict:
             raise HTTPException(409, f"{path} is not valid JSON, so formwav left it alone: fix it or move it aside, then add formwav again") from err
         if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
             raise HTTPException(409, f"{path} does not hold an mcpServers table formwav can add to; it was left alone")
+        theirs = data.get("mcpServers", {}).get(NAME)
+        if client == "antigravity" and theirs is not None and theirs != _stdio() and not (isinstance(theirs, dict) and Path(str(theirs.get("command", ""))).name == Path(command).name):
+            raise HTTPException(409, f"{path} already holds a server named {NAME} that formwav did not write; it was left alone")
         data.setdefault("mcpServers", {})[NAME] = _stdio()
         rebuilt = json.dumps(data, indent=2) + "\n"
+    if client == "antigravity":
+        older = _older_antigravity()
+        note = f"an older file, {older}, was seen and left alone" if older.is_file() and not existing else None
+        if theirs != _stdio():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if existing:
+                path.with_name(path.name + ".bak").write_text(existing, encoding="utf-8")
+            part = path.with_name(path.name + f".part-{os.getpid()}")
+            part.write_text(rebuilt, encoding="utf-8")
+            os.replace(part, path)
+        return {"client": client, "written": str(path), "present": _present(client), "backup": str(path.with_name(path.name + ".bak")) if existing and theirs != _stdio() else None, "note": note}
     path.parent.mkdir(parents=True, exist_ok=True)
     backup = None
     if existing:

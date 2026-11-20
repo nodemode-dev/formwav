@@ -12,7 +12,7 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="the stand-ins are shell
 def stand_ins(tmp_path, monkeypatch):
     folder = tmp_path / "bin"
     folder.mkdir()
-    for name in ("codex", "cursor-agent"):
+    for name in ("codex", "cursor-agent", "agy"):
         script = folder / name
         script.write_text(f'#!/bin/sh\nif [ "$1" = "--version" ]; then echo "{name} 1.2.3"; exit 0; fi\necho started\nread line\n')
         script.chmod(0o755)
@@ -31,18 +31,24 @@ def none_found(tmp_path, monkeypatch):
 
 def test_one_call_says_which_agent_programs_are_here(client, stand_ins):
     found = client.get("/api/agents/status").json()
-    assert set(found) == {"claude", "codex", "cursor"}
-    assert found["codex"] == {"installed": True, "path": str(stand_ins / "codex"), "version": "codex 1.2.3", "signedIn": None, "install": "npm install -g @openai/codex", "title": "Codex"}
-    assert found["cursor"]["path"] == str(stand_ins / "cursor-agent") and found["cursor"]["version"] == "cursor-agent 1.2.3"
+    assert set(found) == {"claude", "codex", "cursor", "antigravity"}
+    codex = found["codex"]
+    assert (codex["installed"], codex["path"], codex["version"], codex["finding"], codex["how"]) == (True, str(stand_ins / "codex"), "1.2.3", "runs", "path")
+    assert (codex["signedIn"], codex["install"], codex["title"], codex["error"]) == (None, "npm install -g @openai/codex", "Codex", "")
+    assert found["cursor"]["path"] == str(stand_ins / "cursor-agent") and found["cursor"]["version"] == "1.2.3"
+    assert found["antigravity"]["path"] == str(stand_ins / "agy") and found["antigravity"]["title"] == "Antigravity" and found["antigravity"]["signedIn"] is None
     assert found["claude"]["install"] and found["claude"]["signedIn"] in (True, False, None)
 
 
 def test_a_missing_program_comes_with_the_line_that_installs_it(client, none_found):
     found = client.get("/api/agents/status").json()
-    for kind in ("codex", "cursor"):
+    for kind in ("claude", "codex", "cursor", "antigravity"):
         assert found[kind]["installed"] is False and found[kind]["path"] is None and found[kind]["install"]
+        assert found[kind]["finding"] == "missing" and found[kind]["said"].startswith(f"{found[kind]['title']} was not found. Looked in: PATH (")
     refused = client.post("/api/terminal/agent", json={"kind": "codex"})
     assert refused.status_code == 424 and "npm install -g @openai/codex" in refused.json()["detail"]
+    refused = client.post("/api/terminal/agent", json={"kind": "antigravity"})
+    assert refused.status_code == 424 and refused.json()["detail"].startswith("Antigravity was not found.")
     assert client.post("/api/terminal/agent", json={"kind": "vim"}).status_code == 422
 
 
@@ -62,6 +68,30 @@ def test_a_codex_or_cursor_tab_gets_its_own_token_in_its_environment_until_it_is
     config = tmp_path / "agent" / file
     assert config.stat().st_mode & 0o777 == 0o600 and token not in config.read_text() and "FORMWAV_INAPP_TOKEN" in config.read_text()
     assert not claude_code.is_inapp(token)
+
+
+def test_an_antigravity_tab_gets_its_entry_in_the_agent_folder_until_it_is_closed(stand_ins, tmp_path):
+    import json
+
+    file = tmp_path / "agent" / ".agents" / "mcp_config.json"
+    file.parent.mkdir(parents=True)
+    seed = {"mcpServers": {"other": {"command": "/bin/true", "args": []}}, "theme": "kept"}
+    file.write_text(json.dumps(seed, indent=2) + "\n")
+
+    async def go():
+        session = terminals.open_agent("antigravity", "http://127.0.0.1:8060", 80, 20)
+        try:
+            token = session.env["FORMWAV_INAPP_TOKEN"]
+            return session.describe(), token, claude_code.is_inapp(token), json.loads(file.read_text()), file.stat().st_mode & 0o777, list(session.argv)
+        finally:
+            terminals.close(session.id)
+
+    described, token, inapp, during, mode, argv = asyncio.run(go())
+    assert described["kind"] == "antigravity" and described["title"] == "Antigravity" and described["alive"] is True
+    assert inapp and mode == 0o600 and all(token not in part for part in argv)
+    assert during["mcpServers"]["formwav_tab"] == {"serverUrl": "http://127.0.0.1:8060/mcp", "headers": {"x-formwav-inapp": token}}
+    assert during["mcpServers"]["other"] == seed["mcpServers"]["other"] and during["theme"] == "kept"
+    assert json.loads(file.read_text()) == seed and not claude_code.is_inapp(token)
 
 
 def test_a_plain_shell_tab_gets_no_token():

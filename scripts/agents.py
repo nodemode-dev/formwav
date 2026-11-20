@@ -27,9 +27,27 @@ TRANSPORT_NAMES = {"stdio": "stdio", "streamable-http": "http"}
 DOCK = {
     "present": True,
     "positions": ["bottom", "right"],
-    "tabs": ["chat", "terminal", "claude", "codex", "cursor"],
+    "tabs": ["chat", "terminal", "claude", "codex", "cursor", "antigravity"],
 }
 DOCK_FOLDER = ROOT / "frontend" / "src" / "dock"
+LOOKUP = ROOT / "backend" / "app" / "services" / "agent_lookup.py"
+LOOKUP_HASHES = {"1.0.0": "252ea9bb9419d4990f174f91914f09800497bc69e98f849f5643bbf4217cc3f3", "1.0.1": "62667f9b68b7d101e1896ce617240424e33b7e498c560bc79d45f0ab26c77d51"}
+
+
+def lookup_problems() -> list[str]:
+    import hashlib
+    import re
+
+    rel = LOOKUP.relative_to(ROOT).as_posix()
+    try:
+        raw = LOOKUP.read_bytes()
+    except OSError:
+        return [f"{rel}: missing (the shared finder for the agent programs)"]
+    said = re.search(rb'^VERSION = "([^"\r\n]+)"\r?$', raw, re.M)
+    version = said.group(1).decode("ascii", "replace") if said else "unknown"
+    if LOOKUP_HASHES.get(version) != hashlib.sha256(raw).hexdigest():
+        return [f"{rel}: does not match the hash recorded for version {version} (the shared finder changes only as a whole new version)"]
+    return []
 
 
 def dock_problems() -> list[str]:
@@ -186,7 +204,7 @@ def main(argv: list[str]) -> int:
     if not argv or argv[0] != "sync" or any(a != "--check" for a in argv[1:]):
         print("usage: agents.py sync [--check]", file=sys.stderr)
         return 2
-    wrong = dock_problems()
+    wrong = dock_problems() + lookup_problems()
     if wrong:
         print("\n".join(wrong), file=sys.stderr)
         return 1

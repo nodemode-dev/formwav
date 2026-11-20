@@ -232,18 +232,16 @@ async def terminal_close(body: IdBody) -> dict:
 async def claudecode_open(request: Request, body: ClaudeBody | None = None) -> dict:
     _gate()
     body = body or ClaudeBody()
-    if not claude_code.cli():
-        raise HTTPException(status_code=424, detail=claude_code.INSTALL)
     try:
         return terminals.open_claude(f"http://{request.headers.get('host')}", body.prompt, body.resume, body.cols, body.rows).describe()
-    except FileNotFoundError:
-        raise HTTPException(status_code=424, detail=claude_code.INSTALL) from None
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=424, detail=str(err)) from None
     except terminals.Unavailable as err:
         raise HTTPException(status_code=501, detail=str(err)) from None
 
 
 class AgentBody(OpenBody):
-    kind: Literal["codex", "cursor"]
+    kind: Literal["codex", "cursor", "antigravity"]
 
 
 @router.post("/terminal/agent")

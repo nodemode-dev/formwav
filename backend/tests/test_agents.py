@@ -25,9 +25,9 @@ def _files(home):
     return {"codex": home / ".codex" / "config.toml", "cursor": home / ".cursor" / "mcp.json", "desktop": agents._desktop_file()}
 
 
-def test_six_clients_are_shown_and_the_servers_command_exists(client, home):
+def test_seven_clients_are_shown_and_the_servers_command_exists(client, home):
     shown = client.get("/api/agents/connect").json()
-    assert [c["id"] for c in shown["clients"]] == ["claude-code", "codex", "cursor", "claude-desktop", "vscode", "any"]
+    assert [c["id"] for c in shown["clients"]] == ["claude-code", "codex", "cursor", "antigravity", "claude-desktop", "vscode", "any"]
     assert shown["ready"] is True
     assert all(c["present"] in (False, None) for c in shown["clients"])
 
@@ -69,11 +69,27 @@ def test_a_broken_file_is_refused_and_left_byte_for_byte(client, home):
 
 
 def test_claude_code_without_its_command_says_so(client, home, monkeypatch):
-    from app.services import claude_code
-
-    monkeypatch.setattr(claude_code, "cli", lambda: None)
+    monkeypatch.setenv("PATH", str(home))
+    monkeypatch.setenv("SHELL", "/bin/false")
     reply = client.post("/api/agents/install", json={"client": "claude-code"})
-    assert reply.status_code == 409 and "Claude Code" in reply.json()["detail"]
+    assert reply.status_code == 409 and reply.json()["detail"].startswith("Claude Code was not found. Looked in: PATH (")
+
+
+def test_antigravity_gets_formwav_beside_other_servers_and_a_foreign_entry_is_left_alone(client, home):
+    path = home / ".gemini" / "config" / "mcp_config.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"mcpServers": {"github": {"command": "gh-mcp"}}, "theme": "kept"}))
+    first = client.post("/api/agents/install", json={"client": "antigravity"})
+    assert first.status_code == 200 and first.json()["written"] == str(path)
+    written = path.read_text()
+    assert json.loads(written)["mcpServers"]["formwav"]["command"] == agents.server_command()[0]
+    assert json.loads(written)["mcpServers"]["github"] == {"command": "gh-mcp"} and json.loads(written)["theme"] == "kept"
+    again = client.post("/api/agents/install", json={"client": "antigravity"})
+    assert again.status_code == 200 and again.json()["backup"] is None and path.read_text() == written
+    foreign = json.dumps({"mcpServers": {"formwav": {"command": "/somewhere/else/tool", "args": ["x"]}}})
+    path.write_text(foreign)
+    refused = client.post("/api/agents/install", json={"client": "antigravity"})
+    assert refused.status_code == 409 and "did not write" in refused.json()["detail"] and path.read_text() == foreign
 
 
 def test_a_paired_device_is_refused(home):

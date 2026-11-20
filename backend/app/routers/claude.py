@@ -384,10 +384,10 @@ def claude_status() -> dict:
 
 
 @router.get("/api/agents/status")
-def agents_status() -> dict:
+def agents_status(fresh: bool = False) -> dict:
     from ..services import agent_programs
 
-    return agent_programs.status()
+    return agent_programs.status(fresh)
 
 
 MAX_MESSAGES = 200
@@ -519,7 +519,7 @@ def _run_chat(argv: list[str], cwd: str, token: str = "") -> None:
     run: dict = {"reply": {"role": "assistant", "parts": [], "error": "", "meta": {}}, "result": None, "done_out": 0, "call_out": 0, "code": None}
     try:
         try:
-            proc = subprocess.Popen(claude_code.shell_wrapped(argv), cwd=cwd, env=claude_code.child_env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding="utf-8", errors="replace")
+            proc = subprocess.Popen(claude_code.shell_wrapped(argv), cwd=cwd, env=claude_code.child_env(argv[0]), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding="utf-8", errors="replace")
             CHAT.proc = proc
             assert proc.stdout is not None and proc.stderr is not None
 
@@ -568,8 +568,9 @@ def claude_state() -> dict:
 async def claude_chat(body: Message, request: Request) -> dict:
     if CHAT.busy:
         raise HTTPException(status_code=409, detail="Claude Code is still answering the last message; Stop it first")
-    if not claude_code.cli():
-        raise HTTPException(status_code=424, detail=claude_code.INSTALL)
+    found = claude_code.usable("claude")
+    if found.state != "runs":
+        raise HTTPException(status_code=424, detail=claude_code.said(found))
     CHAT.loop = asyncio.get_running_loop()
     base = f"http://{request.url.netloc}"
     shown = body.text.strip()
