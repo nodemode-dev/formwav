@@ -64,12 +64,15 @@ if (Test-Path wheels) { Remove-Item -Recurse -Force wheels }
 Run ".venv-package\Scripts\maturin.exe" @("build", "--release", "-m", "..\native\formwav-dsp\Cargo.toml", "--features", "python,native", "-o", "wheels")
 Run $Py @("-m", "pip", "install", "--force-reinstall", (Get-ChildItem wheels\*.whl | Select-Object -First 1).FullName)
 # PyInstaller's data separator on Windows is ;
-Run ".venv-package\Scripts\pyinstaller.exe" @("--clean", "--noconfirm", "--onefile", "--name", "formwav-engine",
+$Windowed = if ($env:FORMWAV_ENGINE_WINDOWED -eq "0") { @() } else { @("--noconsole") }
+Run ".venv-package\Scripts\pyinstaller.exe" ($Windowed + @("--clean", "--noconfirm", "--onefile", "--name", "formwav-engine",
   "--collect-all", "uvicorn", "--collect-all", "formwav_dsp", "--collect-all", "app", "--collect-all", "keyring", "--hidden-import", "app.main", "--collect-all", "winpty",
   "--add-data", "..\frontend\dist;frontend_dist",
   "--add-data", "..\native\formwav-nyquist\runtime;nyquist_runtime",
-  "desktop_entry.py")
-Run "dist\formwav-engine.exe" @("--selfcheck")
+  "desktop_entry.py"))
+$Check = Start-Process -FilePath "dist\formwav-engine.exe" -ArgumentList "--selfcheck" -Wait -PassThru -NoNewWindow -RedirectStandardOutput "dist\selfcheck.out" -RedirectStandardError "dist\selfcheck.err"
+Get-Content "dist\selfcheck.out", "dist\selfcheck.err" | Write-Host
+if ($Check.ExitCode -ne 0) { throw "failed ($($Check.ExitCode)): dist\formwav-engine.exe --selfcheck" }
 Pop-Location
 
 Say "Placing the engine and the helpers for this machine's target triple"
