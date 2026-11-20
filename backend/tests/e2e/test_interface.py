@@ -854,6 +854,7 @@ def _new_note_clip(page) -> None:
     _menu(page, "Event", "New note clip")
     page.wait_for_function("document.querySelectorAll('.fw-lane .fw-clip').length === 1 && !document.querySelector('.fw-piano').hidden")
     page.wait_for_function(f"{NOTES_STATE} === 'Notes · 0 notes'")
+    page.wait_for_function("(() => { const c = document.querySelector('.fw-piano-canvas'); return c.clientWidth > Number(c.dataset.keyW) && Number(c.dataset.pxPerFrame) > 1e-6; })()")
 
 
 def _step(page, label: str) -> None:
