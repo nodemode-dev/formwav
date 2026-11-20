@@ -1,10 +1,11 @@
-"""The agent programs formwav can run in a terminal tab: Claude Code, Codex and Cursor's agent.
+"""The agent programs formwav can run in a terminal tab: Claude Code, Codex, Cursor's agent and Antigravity (Google's agy).
 
 status() answers in one call which of them are on this computer, each with its version, whether it is signed in when
-that can be told without a model call, and the line that installs it. Codex and Cursor tabs get a token of their own
-in the child's environment (FORMWAV_INAPP_TOKEN, with FORMWAV_MCP_URL beside it), never on a command line, and the
-token ends when the tab is closed. configure() leaves a small file in the agent folder that names formwav's MCP server
-through those two variables, so the file itself holds no secret.
+that can be told without a model call, and the line that installs it. Codex, Cursor and Antigravity tabs get a token of
+their own in the child's environment (FORMWAV_INAPP_TOKEN, with FORMWAV_MCP_URL beside it), never on a command line, and
+the token ends when the tab is closed. configure() leaves a small file in the agent folder that names formwav's MCP
+server through those two variables, so the file itself holds no secret. Antigravity reads its servers from a file that
+cannot name a variable, so write_tab_entry() puts the tab's own entry there and remove_tab_entry() takes it out at close.
 """
 
 from __future__ import annotations

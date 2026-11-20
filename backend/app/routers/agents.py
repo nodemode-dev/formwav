@@ -2,7 +2,7 @@
 agent_connect.py, the same author's). Every MCP client starts a local server the same way, a command and its arguments,
 and formwav's is backend/formwav_mcp/serve (from any working directory; on Windows the server's Python with the module
 and PYTHONPATH, since serve is a shell script). This answers with that command for this copy of formwav and the exact
-text each client wants, and adds formwav to Claude Code, Codex, Cursor or Claude Desktop in one click: Claude Code
+text each client wants, and adds formwav to Claude Code, Codex, Cursor, Antigravity or Claude Desktop in one click: Claude Code
 through its own `claude mcp add`, the others by merging into their configuration files, keeping every other server,
 leaving a backup beside the file, and refusing a file that is not valid rather than overwriting it. These are the
 person's own files: a request through the network listener (a paired device) is refused.

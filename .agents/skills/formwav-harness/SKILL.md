@@ -19,7 +19,7 @@ formwav-harness/
     session/                    editing the open session: its tools, the command catalogue, batches, the headless CLI
     clean-noises/               finding clicks and crackle, selecting each with a box, healing explicitly, checking
     workflows/                  every workflow step by step; references/workflows.md
-    setup/                      connecting Claude Code, Codex, Cursor and Claude Desktop; the troubleshooting checklist
+    setup/                      connecting Claude Code, Codex, Cursor, Antigravity and Claude Desktop; the troubleshooting checklist
     development/                adding or changing a tool; the tool-change checklist
 ```
 

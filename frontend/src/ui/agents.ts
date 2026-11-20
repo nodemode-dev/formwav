@@ -1,7 +1,7 @@
 /**
  * Settings > Agents (PLAN_v11 3.2, routers/agents.py; formcut's Settings, Connections the model): connecting an AI agent
  * to formwav's MCP server. Each client shows where its configuration goes, whether formwav is in it already, the exact
- * text to paste (Copy), and, for Claude Code, Codex, Cursor and Claude Desktop, Add: formwav merged into the client's
+ * text to paste (Copy), and, for Claude Code, Codex, Cursor, Antigravity and Claude Desktop, Add: formwav merged into the client's
  * own configuration beside everything else in it, the previous file kept as a backup. The formwav-harness skill in
  * .claude/skills teaches the agent to use the tools; the dialog says so.
  */
