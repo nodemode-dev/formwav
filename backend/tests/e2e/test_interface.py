@@ -1147,7 +1147,7 @@ def test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_
 
     _agent_tab(page, "history")
     _menu(page, "Event", "New note clip")
-    page.wait_for_function("!document.querySelector('.fw-piano').hidden")
+    page.wait_for_function("(() => { const p = document.querySelector('.fw-piano'); return !p.hidden && !p.inert; })()")
     page.click(".fw-piano [data-step]")
     for key in ("a", "s", "d", "Space", "k"):
         page.keyboard.press(key)

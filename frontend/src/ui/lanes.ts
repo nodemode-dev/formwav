@@ -1474,7 +1474,7 @@ export function mountLanes(host: HTMLElement, engine: Engine): void {
     const r = clip.getBoundingClientRect();
     const x = e.clientX - r.left;
     const onHandle = !!(e.target as HTMLElement).closest(".fw-gain-line, .fw-fade-handle, .fw-take");
-    const zone = onHandle || x < EDGE_PX || x > r.width - EDGE_PX ? "" : spectralTrack(clip.closest<HTMLElement>(".fw-lane")?.dataset.key) || e.clientY - r.top < r.height / 2 ? "range" : "grab";
+    const zone = onHandle ? "" : x < EDGE_PX || x > r.width - EDGE_PX ? "trim" : spectralTrack(clip.closest<HTMLElement>(".fw-lane")?.dataset.key) || e.clientY - r.top < r.height / 2 ? "range" : "grab";
     if ((clip.dataset.zone ?? "") !== zone) {
       if (zone) clip.dataset.zone = zone;
       else delete clip.dataset.zone;

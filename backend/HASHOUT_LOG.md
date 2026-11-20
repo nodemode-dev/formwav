@@ -3266,6 +3266,13 @@ The sidecar's verify_three_way.py made a test. A stereo mix of known parts: the 
 
 ## tests/e2e/test_interface.py {#tests-e2e-interface}
 
+### tests/e2e/test_interface.py · Step input waits for its new note clip
+- refers-to: tests/e2e/test_interface.py :: `test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_score_and_step_input_adds_notes`; frontend/src/ui/note-events.ts :: `newClip`
+- kind: fix
+- logged: v2.31.0 · 2026-11-20
+
+The note editor now opens at the press of New note clip and stays inert until the engine's answer has made the clip. The test waited only for the editor to show, so with every /api/midi/render answer held 800 ms it pressed Step input and typed its notes before the clip existed, and its 30 s wait for the "Step input" history entry ran out. It now waits, with Playwright's 30 s limit, for the editor to show and not be inert, which is the moment a person can use it.
+
 ### tests/e2e/test_interface.py · nothing clipped, wrapped, cut or hidden at three sizes
 - refers-to: tests/e2e/test_interface.py :: `CUT`, `ACTIONS_IN_VIEW`, `STATES`, `test_no_label_or_control_is_clipped_wrapped_cut_or_hidden_at_three_sizes`; sidecar verification/interface/audit.js (its origin)
 - kind: rationale
