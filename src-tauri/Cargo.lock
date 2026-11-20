@@ -853,7 +853,7 @@ dependencies = [
 
 [[package]]
 name = "formwav-desktop"
-version = "2.28.0"
+version = "2.29.0"
 dependencies = [
  "objc2",
  "objc2-app-kit",
