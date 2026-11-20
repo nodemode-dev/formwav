@@ -3266,6 +3266,20 @@ The sidecar's verify_three_way.py made a test. A stereo mix of known parts: the 
 
 ## tests/e2e/test_interface.py {#tests-e2e-interface}
 
+### app/services/media.py · a rendering is stored even while its file is being read on Windows
+- refers-to: app/services/media.py :: `_replace`, `_write_atomic`, `import_wav`; routers/midi.py :: `_render`
+- kind: fix
+- logged: v2.31.0 · 2026-11-20
+
+The Windows engine job of the 2.31.0 pull request failed once in `test_the_event_menu_and_list_quantize_edit_name_chords_and_split_each_in_one_step` with `500 POST /api/midi/render` and nothing else; the server's traceback was not in the log, so the cause below is the likely one, not a seen one. A rendering is stored under the hash of its bytes, and `import_wav` wrote the `.json` beside it on every call through `os.replace`. On Windows `os.replace` raises PermissionError while another thread or process has the destination open, which lasts milliseconds; on macOS and Linux it never does. Rendering the same notes again (the MIDI effects step does it three times) meets the same two file names while the window is reading them. Two changes: `import_wav` leaves the `.json` alone when it already holds exactly what would be written, and `_replace` tries again on PermissionError on Windows only, every 25 ms for up to one second, then raises as before. Seen here: with `os.replace` made to refuse three times and the system name set to Windows, the file was written on the fourth try; refused forever, it gave up after 40 tries; on Linux a PermissionError passes through at once and the temporary file is removed. Not seen: Windows itself.
+
+### tests/e2e/test_interface.py · the counters are switched after a real key press, on every system
+- refers-to: tests/e2e/test_interface.py :: `_pick`
+- kind: fix
+- logged: v2.31.0 · 2026-11-20
+
+This replaces the arrow keys of the entry below, the same day. The macOS engine job of the 2.31.0 pull request timed out in `_pick` (30 s) waiting for the select's value: on macOS the arrow keys open a select's menu instead of changing its value. `_pick` now focuses the select, presses Shift (a real key press, which the browser counts as input and which changes nothing in a select on any system) and then makes the choice with select_option. What the test asserts is unchanged and nothing waits longer. Seen on Linux: the test alone 5 passed in a row; with a 700 ms pause before each switch 3 passed in a row, and the same pause without the key press failed, so the key press is what the layout-shift watch forgives. Not seen: macOS.
+
 ### tests/e2e/test_interface.py · the counters are switched with the keyboard, as a person does
 - refers-to: tests/e2e/test_interface.py :: `_pick`, `test_the_counters_read_every_timebase_and_the_rulers_stack_with_nothing_moving_unasked`; frontend/src/ui/counters.ts :: the selection box's `data-w`
 - kind: fix

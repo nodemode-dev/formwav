@@ -3,6 +3,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -35,6 +36,17 @@ def _require_core():
     return core
 
 
+def _replace(tmp: str, path: Path) -> None:
+    for attempt in range(40):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if os.name != "nt" or attempt == 39:
+                raise
+            time.sleep(0.025)
+
+
 def _write_atomic(path: Path, data: bytes) -> None:
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-")
     try:
@@ -42,7 +54,7 @@ def _write_atomic(path: Path, data: bytes) -> None:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        os.replace(tmp, path)
+        _replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
@@ -67,7 +79,14 @@ def import_wav(name: str, data: bytes) -> dict:
     if not audio.exists():
         _write_atomic(audio, data)
     info = {"id": media_id, "name": name, "sampleRate": rate, "channels": channels, "frames": frames, "format": fmt, **_bwf_meta(data, rate)}
-    _write_atomic(folder / f"{media_id}.json", json.dumps(info).encode())
+    meta = folder / f"{media_id}.json"
+    payload = json.dumps(info).encode()
+    try:
+        same = meta.read_bytes() == payload
+    except OSError:
+        same = False
+    if not same:
+        _write_atomic(meta, payload)
     return info
 
 
