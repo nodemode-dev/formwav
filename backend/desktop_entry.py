@@ -114,6 +114,9 @@ def selfcheck() -> int:
 
 
 def main() -> int:
+    from app.core import no_window
+
+    no_window.install()
     if "--selfcheck" in sys.argv:
         return selfcheck()
     if "--mcp-stdio" in sys.argv:
