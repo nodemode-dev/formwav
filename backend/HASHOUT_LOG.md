@@ -3266,6 +3266,13 @@ The sidecar's verify_three_way.py made a test. A stereo mix of known parts: the 
 
 ## tests/e2e/test_interface.py {#tests-e2e-interface}
 
+### tests/e2e/test_interface.py · the counters are switched with the keyboard, as a person does
+- refers-to: tests/e2e/test_interface.py :: `_pick`, `test_the_counters_read_every_timebase_and_the_rulers_stack_with_nothing_moving_unasked`; frontend/src/ui/counters.ts :: the selection box's `data-w`
+- kind: fix
+- logged: v2.31.0 · 2026-11-20
+
+Switching the main counter's timebase resizes the selection box to that timebase's widest reading (data-w 9 or 10, so its columns hold still while the figures change within one timebase) and the clock's reading, and the transport's Speed and Record buttons follow: the change the person asked for. The test made the switch with Playwright's select_option, which the browser does not count as input, so the layout-shift watch forgave it only while it fell within 500 ms of the click on the clock; in the whole-suite run of 2026-11-20 it came later (fw-sel-box 1044,47,232,25 to 1064,47,212,25, Speed and Record 312 and 384 to 341 and 413) and the test failed, and a 700 ms pause before the switches failed it every time, on this branch and on b46233c9. `_pick` focuses the select and moves it with the arrow keys, each a key press the browser counts as input, and waits (30 s limit) for the value. The frame rate stays select_option: changing it moves nothing (the timecode reads 00:00:03:00 at 30 and at 25) and the arrow keys would pass through 29.97 and 30 drop on the way, each a frame rate change of its own in History. Seen: the test alone 5 passed in a row, and 2 passed with the 700 ms pause.
+
 ### tests/e2e/test_interface.py · Step input waits for its new note clip
 - refers-to: tests/e2e/test_interface.py :: `test_a_midi_file_becomes_named_note_tracks_that_export_as_midi_and_musicxml_score_and_step_input_adds_notes`; frontend/src/ui/note-events.ts :: `newClip`
 - kind: fix
