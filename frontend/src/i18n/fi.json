@@ -377,7 +377,7 @@
  "Compress": "Pakkaa",
  "Compressor": "Compressor",
  "Connect": "Yhdistä",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "Yhdistä tekoälyagentti (Claude Code, Codex, Cursor, Claude Desktop) formwavin MCP-palvelimeen",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "Yhdistä tekoälyagentti (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) formwavin MCP-palvelimeen",
  "Consolidate": "Yhdistä",
  "Convert to MIDI": "Muunna MIDIksi",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": "Muunnettiin {0} MIDI-nuotiksi ({a}) uudelle raidalle klipin kohtaan",

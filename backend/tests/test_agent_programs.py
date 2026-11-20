@@ -70,28 +70,61 @@ def test_a_codex_or_cursor_tab_gets_its_own_token_in_its_environment_until_it_is
     assert not claude_code.is_inapp(token)
 
 
-def test_an_antigravity_tab_gets_its_entry_in_the_agent_folder_until_it_is_closed(stand_ins, tmp_path):
+def test_two_antigravity_tabs_each_keep_their_own_entry_and_closing_one_leaves_the_other(stand_ins, tmp_path, monkeypatch):
     import json
 
-    file = tmp_path / "agent" / ".agents" / "mcp_config.json"
+    from app.core.paths import data_dir
+
+    monkeypatch.setenv("FORMWAV_DATA_DIR", str(tmp_path / "data"))
+    shared = tmp_path / "agent" / ".agents" / "mcp_config.json"
+    root = data_dir() / "agent-tabs" / "antigravity"
+
+    async def go():
+        first = terminals.open_agent("antigravity", "http://127.0.0.1:8060", 80, 20)
+        second = terminals.open_agent("antigravity", "http://127.0.0.1:8060", 80, 20)
+        try:
+            tabs = []
+            for session in (first, second):
+                token = session.env["FORMWAV_INAPP_TOKEN"]
+                file = tmp_path / session.cwd / ".agents" / "mcp_config.json"
+                tabs.append((session.describe(), token, file, json.loads(file.read_text()), file.stat().st_mode & 0o777, list(session.argv), session.cwd))
+            terminals.close(first.id)
+            after = json.loads(tabs[1][2].read_text())
+            return tabs, after, claude_code.is_inapp(tabs[0][1]), claude_code.is_inapp(tabs[1][1])
+        finally:
+            for session in (first, second):
+                if session.id in terminals.SESSIONS:
+                    terminals.close(session.id)
+
+    tabs, after, first_live, second_live = asyncio.run(go())
+    assert tabs[0][6] != tabs[1][6] and all(os.path.dirname(tab[6]) == str(root) for tab in tabs)
+    for described, token, file, during, mode, argv, cwd in tabs:
+        assert described["kind"] == "antigravity" and described["title"] == "Antigravity" and described["alive"] is True
+        assert mode == 0o600 and all(token not in part for part in argv)
+        assert during == {"mcpServers": {"formwav_tab": {"serverUrl": "http://127.0.0.1:8060/mcp", "headers": {"x-formwav-inapp": token}}}}
+    assert after == tabs[1][3] and not first_live and second_live
+    assert not os.path.exists(tabs[0][6])
+    assert not os.path.exists(tabs[1][6]) and not claude_code.is_inapp(tabs[1][1])
+    assert not shared.exists()
+
+
+def test_a_tab_entry_keeps_every_other_entry_and_a_damaged_file_is_left_alone(tmp_path):
+    import json
+
+    file = tmp_path / ".agents" / "mcp_config.json"
     file.parent.mkdir(parents=True)
     seed = {"mcpServers": {"other": {"command": "/bin/true", "args": []}}, "theme": "kept"}
     file.write_text(json.dumps(seed, indent=2) + "\n")
-
-    async def go():
-        session = terminals.open_agent("antigravity", "http://127.0.0.1:8060", 80, 20)
-        try:
-            token = session.env["FORMWAV_INAPP_TOKEN"]
-            return session.describe(), token, claude_code.is_inapp(token), json.loads(file.read_text()), file.stat().st_mode & 0o777, list(session.argv)
-        finally:
-            terminals.close(session.id)
-
-    described, token, inapp, during, mode, argv = asyncio.run(go())
-    assert described["kind"] == "antigravity" and described["title"] == "Antigravity" and described["alive"] is True
-    assert inapp and mode == 0o600 and all(token not in part for part in argv)
-    assert during["mcpServers"]["formwav_tab"] == {"serverUrl": "http://127.0.0.1:8060/mcp", "headers": {"x-formwav-inapp": token}}
+    agent_programs.write_tab_entry(tmp_path, "http://127.0.0.1:8060", "tok")
+    during = json.loads(file.read_text())
+    assert during["mcpServers"]["formwav_tab"] == {"serverUrl": "http://127.0.0.1:8060/mcp", "headers": {"x-formwav-inapp": "tok"}}
     assert during["mcpServers"]["other"] == seed["mcpServers"]["other"] and during["theme"] == "kept"
-    assert json.loads(file.read_text()) == seed and not claude_code.is_inapp(token)
+    agent_programs.remove_tab_entry(tmp_path, "tok")
+    assert json.loads(file.read_text()) == seed
+    file.write_text("not json at all")
+    with pytest.raises(OSError, match="is not an MCP servers file formwav can read, so it was left alone"):
+        agent_programs.write_tab_entry(tmp_path, "http://127.0.0.1:8060", "tok")
+    assert file.read_text() == "not json at all"
 
 
 def test_a_plain_shell_tab_gets_no_token():

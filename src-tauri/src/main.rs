@@ -61,6 +61,7 @@ fn close_splash(handle: &tauri::AppHandle) {
     }
 }
 
+const ADDRESS_WAIT: Duration = Duration::from_secs(90);
 const KEY_WAIT_AFTER_ADDRESS: Duration = Duration::from_secs(10);
 const START_WAITING: u8 = 0;
 const START_SETTLED: u8 = 1;
@@ -124,11 +125,23 @@ fn main() {
                 .env("FORMWAV_FWLV2", std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(if cfg!(windows) { "fwlv2.exe" } else { "fwlv2" }))).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default())
                 .env("FORMWAV_EXIT_WITH_STDIN", "1")
                 .env("FORMWAV_WINDOW_KEY_STDOUT", "1")
+                .env("FORMWAV_SHELL_PID", std::process::id().to_string())
                 .spawn()
                 .expect("the formwav engine failed to spawn");
             app.state::<Backend>().0.lock().unwrap().replace(child);
 
             let start_state = Arc::new(AtomicU8::new(START_WAITING));
+            let address_state = start_state.clone();
+            let address_handle = handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(ADDRESS_WAIT);
+                if address_state
+                    .compare_exchange(START_WAITING, START_TIMED_OUT, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
+                    engine_failed(&address_handle);
+                }
+            });
 
             tauri::async_runtime::spawn(async move {
                 let pattern = regex::Regex::new(r"http://127\.0\.0\.1:(\d+)").unwrap();

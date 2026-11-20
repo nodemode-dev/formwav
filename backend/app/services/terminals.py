@@ -303,7 +303,11 @@ def open_agent(kind: str, base: str, cols: int, rows: int) -> Session:
     if found.state != "runs":
         raise FileNotFoundError(agent_programs.said(found))
     token = claude_code.issue_token()
-    folder = claude_code.workdir()
+    try:
+        folder = agent_programs.tab_folder() if kind == "antigravity" else claude_code.workdir()
+    except BaseException:
+        claude_code.revoke(token)
+        raise
     try:
         if kind == "antigravity":
             agent_programs.write_tab_entry(folder, base, token)
@@ -314,6 +318,7 @@ def open_agent(kind: str, base: str, cols: int, rows: int) -> Session:
         claude_code.revoke(token)
         if kind == "antigravity":
             agent_programs.remove_tab_entry(folder, token)
+            agent_programs.drop_tab_folder(folder)
         raise
     session.token = token
     return session
@@ -335,3 +340,4 @@ def close(sid: str) -> None:
         from . import agent_programs
 
         agent_programs.remove_tab_entry(Path(session.cwd), session.token)
+        agent_programs.drop_tab_folder(Path(session.cwd))

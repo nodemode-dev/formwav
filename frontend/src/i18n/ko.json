@@ -377,7 +377,7 @@
  "Compress": "압축",
  "Compressor": "컴프레서",
  "Connect": "연결",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "AI 에이전트(Claude Code, Codex, Cursor, Claude Desktop)를 formwav의 MCP 서버에 연결",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "AI 에이전트(Claude Code, Codex, Cursor, Antigravity, Claude Desktop)를 formwav의 MCP 서버에 연결",
  "Consolidate": "통합",
  "Convert to MIDI": "MIDI로 변환",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": "MIDI 노트 {0}개({a})로 변환해 클립 위치의 새 트랙에 놓았습니다",

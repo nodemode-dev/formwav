@@ -98,7 +98,7 @@ export function mountAgents(host: HTMLElement): void {
   item.type = "button";
   item.setAttribute("role", "menuitem");
   item.dataset.action = "agents";
-  item.title = "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server";
+  item.title = "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server";
   item.innerHTML = "<span>Agents</span>";
   host.querySelector('.fw-settings-pop [data-action="devices"]')?.after(item);
   item.addEventListener("click", () => {

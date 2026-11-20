@@ -377,7 +377,7 @@
  "Compress": "Sıkıştır",
  "Compressor": "Compressor",
  "Connect": "Bağlan",
- "Connect an AI agent (Claude Code, Codex, Cursor, Claude Desktop) to formwav's MCP server": "Bir AI ajanını (Claude Code, Codex, Cursor, Claude Desktop) formwav'ın MCP sunucusuna bağla",
+ "Connect an AI agent (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) to formwav's MCP server": "Bir AI ajanını (Claude Code, Codex, Cursor, Antigravity, Claude Desktop) formwav'ın MCP sunucusuna bağla",
  "Consolidate": "Consolidate",
  "Convert to MIDI": "MIDI'ye dönüştür",
  "Converted to {0} MIDI note ({a}) on a new track at the clip's place": "Klibin yerinde yeni bir ize {0} MIDI notasına ({a}) dönüştürüldü",

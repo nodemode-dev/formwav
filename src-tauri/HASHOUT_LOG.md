@@ -2,6 +2,22 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### src/main.rs · the shell waits 90 seconds for the engine's address (unreleased, after v2.28.0) {#address-wait}
+- refers-to: src/main.rs :: ADDRESS_WAIT, setup (the address timer beside the key timer)
+- kind: fix
+- logged: unreleased · 2026-11-20
+
+The owner's decision for the family (D1): every shell waits 90 seconds for the engine's address. FormWav had no limit (the entry below this one's neighbour, "the engine has as long to start as before", took the 10 seconds off the address and left only the key's). A thread started with the engine sleeps ADDRESS_WAIT and then takes the same start state the key timer uses from START_WAITING to START_TIMED_OUT; only one of the reading loop, the key timer and this timer can settle it, so a start that ends in time, an engine that ended early, and a key that came late each still end the way they did. On a time-out the shell shows the dialog it shows for any failed start. A first start of a one-file engine unpacks it first; nobody measured that here on a slow Windows disk, so 90 seconds is the owner's number, not one seen. Not compiled here (rustfmt parses the file and reports no new place to format).
+
+The other half of that decision (D3, a Windows engine frozen with `--noconsole`) is not done in FormWav, on purpose: the shell starts the engine through tauri-plugin-shell 2.4.0, which spawns it with CREATE_NO_WINDOW (its `src/process/mod.rs`), so the engine already shows no console window, and the programs the engine starts (ffmpeg and the others, about forty places, none with CREATE_NO_WINDOW of their own) share that hidden console. Frozen with `--noconsole` the engine would have no console, and each of those programs would open a console window of its own while it runs.
+
+### src/main.rs · the engine is told which process started it (unreleased, after v2.28.0) {#shell-pid}
+- refers-to: src/main.rs :: setup (the sidecar's environment)
+- kind: fix
+- logged: unreleased · 2026-11-20
+
+The engine is spawned with FORMWAV_SHELL_PID set to the shell's own process id, one `.env` line beside the others, as FormCut's shell does (063b94fa). The engine of this version needs it (backend/HASHOUT_LOG.md #engine-start-lock): without it a packaged engine takes itself for one started alone and opens the app instead of serving; with it the engine leaves when the shell is gone and the next start can tell a leftover engine from a live one. `std::process::id()` is u32 and `to_string()` gives the String that `Command::env` takes as `AsRef<OsStr>`, like the other values there. Not compiled here: the shell cannot be built on this machine.
+
 ### src/main.rs · the engine has as long to start as before; the 10 seconds cover only the key (unreleased, after v2.26.3)
 - refers-to: src/main.rs :: KEY_WAIT_AFTER_ADDRESS, START_WAITING, START_SETTLED, START_TIMED_OUT, setup (the reading loop and its key timer)
 - kind: fix
