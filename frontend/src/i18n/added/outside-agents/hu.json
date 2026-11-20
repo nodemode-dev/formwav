@@ -1,0 +1,15 @@
+{
+"Always allow": "Mindig engedélyezve",
+"Antigravity": "Antigravity",
+"Ask each time": "Kérdezzen minden alkalommal",
+"Blocked": "Letiltva",
+"Dismiss": "Elvetés",
+"Hide Terminal": "Terminál elrejtése",
+"Hide Terminal (Ctrl+J); programs keep running": "Terminál elrejtése (Ctrl+J); a programok tovább futnak",
+"More agents": "További ügynökök",
+"Move the terminal to the right": "A terminál áthelyezése jobbra",
+"Outside agents": "Külső ügynökök",
+"Send to Claude Code": "Küldés a Claude Code-nak",
+"Show me around": "Körbevezetés",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "Mit tesz a formwav, ha egy MI-program, amelyet nem ő indított, az eszközeit szeretné használni. A Letiltva a formwav saját Chat- és ügynöklapjait is leállítja."
+}

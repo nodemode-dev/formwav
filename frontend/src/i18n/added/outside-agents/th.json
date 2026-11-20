@@ -1,0 +1,15 @@
+{
+"Always allow": "อนุญาตเสมอ",
+"Antigravity": "Antigravity",
+"Ask each time": "ถามทุกครั้ง",
+"Blocked": "บล็อก",
+"Dismiss": "ปิด",
+"Hide Terminal": "ซ่อนเทอร์มินัล",
+"Hide Terminal (Ctrl+J); programs keep running": "ซ่อนเทอร์มินัล (Ctrl+J) โปรแกรมยังทำงานต่อไป",
+"More agents": "เอเจนต์อื่นๆ",
+"Move the terminal to the right": "ย้ายเทอร์มินัลไปทางขวา",
+"Outside agents": "เอเจนต์ภายนอก",
+"Send to Claude Code": "ส่งไปยัง Claude Code",
+"Show me around": "พาชมการใช้งาน",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "สิ่งที่ formwav ทำเมื่อโปรแกรม AI ที่ formwav ไม่ได้เริ่มเองขอใช้เครื่องมือของ formwav การเลือก บล็อก จะหยุดแชทและแท็บเอเจนต์ของ formwav เองด้วย"
+}

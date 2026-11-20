@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import BACKEND, FIXTURES
+from conftest import BACKEND, FIXTURES, serve_engine
 
 MCP_PYTHON = BACKEND / "formwav_mcp" / "venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 CHECKS = [
@@ -23,11 +23,20 @@ CHECKS = [
 
 
 @pytest.fixture(scope="module")
-def probe(engine_url, tmp_path_factory):
+def probe(tmp_path_factory):
     if not MCP_PYTHON.exists():
         pytest.skip("needs the MCP server's venv (backend/oc_install makes it)")
+    import httpx
+
     out = tmp_path_factory.mktemp("mcp")
-    done = subprocess.run([str(MCP_PYTHON), str(Path(__file__).with_name("mcp_probe.py")), engine_url, str(FIXTURES / "jfk.wav"), str(BACKEND), str(out)], capture_output=True, text=True, timeout=1800)
+    with serve_engine("engine-mcp.log") as url:
+        key = httpx.post(url + "/api/window/key", headers={"x-formwav-local": "1"}, timeout=30).json()["key"]
+        window = {"x-formwav-local": "1", "x-formwav-window-key": key}
+        assert httpx.post(url + "/api/agents/outside", json={"outside": "allow"}, headers=window, timeout=30).json() == {"outside": "allow"}
+        try:
+            done = subprocess.run([str(MCP_PYTHON), str(Path(__file__).with_name("mcp_probe.py")), url, str(FIXTURES / "jfk.wav"), str(BACKEND), str(out), key], capture_output=True, text=True, timeout=1800)
+        finally:
+            httpx.post(url + "/api/agents/outside", json={"outside": "ask"}, headers=window, timeout=30)
     assert done.returncode == 0 and done.stdout.strip(), done.stderr[-1500:]
     return json.loads(done.stdout.strip().splitlines()[-1]), out
 

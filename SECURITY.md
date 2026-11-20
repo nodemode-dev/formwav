@@ -7,7 +7,7 @@ check whether the problem is still there.
 
 | Version | Supported |
 | --- | --- |
-| 2.21.x (latest release) | Yes |
+| 2.26.x (latest release) | Yes |
 | Anything older | No |
 
 ## Reporting a vulnerability
@@ -35,6 +35,11 @@ something outside it could get in:
   the recording room.
 - **The desktop window**: the page calling any desktop command beyond the few it is
   allowed.
+- **The window key**: every change through the engine needs a per-launch key that only
+  the formwav window holds, except /mcp, where outside agents arrive and the Allow or
+  Block card applies. Anything else that changes a session, a setting or agent access,
+  answers that card, or drives the terminal without the key is in scope. Run from
+  source, the first page to ask gets the key once; that mode is weaker by nature.
 - **Provider keys and cloud sign-ins** kept by the engine: anything that leaks them or
   sends them to the page.
 - **Files and downloads**: importing, downloading or extracting media, models or

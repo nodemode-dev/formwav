@@ -21,6 +21,7 @@ from pathlib import Path
 from . import claude_code
 
 SCROLLBACK = 256 * 1024
+SUBSCRIBER_CHUNKS = 4000
 MAX_SESSIONS = 16
 SESSIONS: dict[str, "Session"] = {}
 _tasks: set[asyncio.Task] = set()
@@ -181,6 +182,16 @@ class _Windows:
             pass
 
 
+class Subscriber(asyncio.Queue):
+    def __init__(self) -> None:
+        super().__init__()
+        self.skipped = 0
+
+    def note(self) -> str:
+        count, self.skipped = self.skipped, 0
+        return f"\r\n[formwav: {count} characters of output were skipped because this window fell behind]\r\n" if count else ""
+
+
 class Session:
     def __init__(self, sid: str, title: str, kind: str, argv: list[str], cwd: str, env: dict[str, str], cols: int, rows: int) -> None:
         self.id, self.title, self.kind = sid, title, kind
@@ -190,7 +201,8 @@ class Session:
         self.proc: _Posix | _Windows | None = None
         self.chunks: deque[str] = deque()
         self.size = 0
-        self.subscribers: set[asyncio.Queue] = set()
+        self.subscribers: set[Subscriber] = set()
+        self.token = ""
 
     def describe(self) -> dict:
         return {"id": self.id, "title": self.title, "kind": self.kind, "alive": self.alive}
@@ -202,8 +214,12 @@ class Session:
 
     def deliver(self, item: str | None) -> None:
         for queue in list(self.subscribers):
-            if queue.qsize() < 4000:
-                queue.put_nowait(item)
+            if item is not None and queue.qsize() >= SUBSCRIBER_CHUNKS:
+                queue.skipped += len(item)
+                continue
+            if queue.skipped:
+                queue.put_nowait(queue.note())
+            queue.put_nowait(item)
 
     def emit(self, proc: object, text: str) -> None:
         if proc is not self.proc:
@@ -221,8 +237,8 @@ class Session:
         proc.stop()
         self.deliver(None)
 
-    def attach(self) -> tuple[str, asyncio.Queue]:
-        queue: asyncio.Queue = asyncio.Queue()
+    def attach(self) -> tuple[str, Subscriber]:
+        queue = Subscriber()
         self.subscribers.add(queue)
         return "".join(self.chunks), queue
 
@@ -252,12 +268,12 @@ class Session:
         self.deliver(None)
 
 
-def _open(title: str, kind: str, argv: list[str], cwd: str, cols: int, rows: int) -> Session:
+def _open(title: str, kind: str, argv: list[str], cwd: str, cols: int, rows: int, extra: dict[str, str] | None = None, program: str | None = None) -> Session:
     if not supported():
         raise Unavailable("The terminal is not available on this system")
     if len(SESSIONS) >= MAX_SESSIONS:
         raise Unavailable(f"At most {MAX_SESSIONS} terminals can be open; close one first")
-    session = Session(uuid.uuid4().hex[:12], title, kind, argv, cwd, claude_code.child_env(), max(10, min(cols, 1000)), max(4, min(rows, 500)))
+    session = Session(uuid.uuid4().hex[:12], title, kind, argv, cwd, {**claude_code.child_env(program), **(extra or {})}, max(10, min(cols, 1000)), max(4, min(rows, 500)))
     session.start()
     SESSIONS[session.id] = session
     return session
@@ -269,10 +285,38 @@ def open_shell(cols: int, rows: int) -> Session:
 
 
 def open_claude(base: str, prompt: str | None, resume: str | None, cols: int, rows: int) -> Session:
-    argv = claude_code.argv(base, prompt=prompt or None, resume=resume or None)
-    if os.name != "nt":
-        argv = claude_code.shell_wrapped(argv)
-    return _open("Claude Code", "claude", argv, str(claude_code.workdir()), cols, rows)
+    token, mcp_file = claude_code.issue(base)
+    try:
+        argv = claude_code.argv(prompt=prompt or None, resume=resume or None, mcp_file=mcp_file)
+        session = _open("Claude Code", "claude", claude_code.shell_wrapped(argv), str(claude_code.workdir()), cols, rows, None, argv[0])
+    except BaseException:
+        claude_code.revoke(token)
+        raise
+    session.token = token
+    return session
+
+
+def open_agent(kind: str, base: str, cols: int, rows: int) -> Session:
+    from . import agent_programs
+
+    found = claude_code.usable(kind)
+    if found.state != "runs":
+        raise FileNotFoundError(agent_programs.said(found))
+    token = claude_code.issue_token()
+    folder = claude_code.workdir()
+    try:
+        if kind == "antigravity":
+            agent_programs.write_tab_entry(folder, base, token)
+        else:
+            agent_programs.configure(kind, base, folder)
+        session = _open(agent_programs.PROGRAMS[kind]["title"], kind, claude_code.shell_wrapped([found.path]), str(folder), cols, rows, {agent_programs.TOKEN_VAR: token, agent_programs.URL_VAR: f"{base}/mcp"}, found.path)
+    except BaseException:
+        claude_code.revoke(token)
+        if kind == "antigravity":
+            agent_programs.remove_tab_entry(folder, token)
+        raise
+    session.token = token
+    return session
 
 
 def get(sid: str) -> Session:
@@ -284,4 +328,10 @@ def get(sid: str) -> Session:
 
 def close(sid: str) -> None:
     get(sid)
-    SESSIONS.pop(sid).close()
+    session = SESSIONS.pop(sid)
+    session.close()
+    claude_code.revoke(session.token)
+    if session.kind == "antigravity":
+        from . import agent_programs
+
+        agent_programs.remove_tab_entry(Path(session.cwd), session.token)

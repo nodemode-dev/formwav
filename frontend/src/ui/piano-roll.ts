@@ -811,6 +811,7 @@ export function mountPianoRoll(host: HTMLElement, engine: Engine): NoteEditor | 
     notify();
   });
   new ResizeObserver(() => draw()).observe(canvas);
+  document.addEventListener("nm:ui-settings-changed", () => draw());
   load();
   return {
     view: () => ({ notes, owner, selected, targets, origin }),

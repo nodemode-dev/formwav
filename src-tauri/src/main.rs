@@ -5,7 +5,9 @@ mod reveal;
 mod text_edit;
 mod traffic_lights;
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
@@ -59,6 +61,21 @@ fn close_splash(handle: &tauri::AppHandle) {
     }
 }
 
+const KEY_WAIT_AFTER_ADDRESS: Duration = Duration::from_secs(10);
+const START_WAITING: u8 = 0;
+const START_SETTLED: u8 = 1;
+const START_TIMED_OUT: u8 = 2;
+
+fn engine_failed(handle: &tauri::AppHandle) -> ! {
+    close_splash(handle);
+    handle
+        .dialog()
+        .message("The formwav engine failed to start. Please relaunch formwav.")
+        .blocking_show();
+    kill_backend(handle);
+    std::process::exit(1);
+}
+
 fn main() {
     reveal::mark_launch();
     let launched_with = std::env::args().nth(1).filter(|arg| arg.ends_with(".fmw"));
@@ -106,29 +123,62 @@ fn main() {
                 // AU-27: the LV2 host sits there too
                 .env("FORMWAV_FWLV2", std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(if cfg!(windows) { "fwlv2.exe" } else { "fwlv2" }))).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default())
                 .env("FORMWAV_EXIT_WITH_STDIN", "1")
+                .env("FORMWAV_WINDOW_KEY_STDOUT", "1")
                 .spawn()
                 .expect("the formwav engine failed to spawn");
             app.state::<Backend>().0.lock().unwrap().replace(child);
 
+            let start_state = Arc::new(AtomicU8::new(START_WAITING));
+
             tauri::async_runtime::spawn(async move {
                 let pattern = regex::Regex::new(r"http://127\.0\.0\.1:(\d+)").unwrap();
+                let key_pattern = regex::Regex::new(r"formwav-window-key: ([A-Za-z0-9_-]{32,})").unwrap();
                 let mut port: Option<u16> = None;
+                let mut key: Option<String> = None;
+                let mut key_timer_armed = false;
                 while let Some(event) = rx.recv().await {
                     let line = match event {
-                        CommandEvent::Stdout(bytes) | CommandEvent::Stderr(bytes) => {
-                            String::from_utf8_lossy(&bytes).into_owned()
+                        CommandEvent::Stdout(bytes) => {
+                            let text = String::from_utf8_lossy(&bytes).into_owned();
+                            if key.is_none() {
+                                key = key_pattern.captures(&text).map(|found| found[1].to_string());
+                            }
+                            text
                         }
+                        CommandEvent::Stderr(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
                         CommandEvent::Terminated(_) => break,
                         _ => continue,
                     };
-                    if let Some(captures) = pattern.captures(&line) {
-                        port = captures[1].parse().ok();
-                        if port.is_some() {
-                            break;
+                    if port.is_none() {
+                        if let Some(captures) = pattern.captures(&line) {
+                            port = captures[1].parse().ok();
                         }
                     }
+                    if port.is_some() && key.is_some() {
+                        break;
+                    }
+                    if port.is_some() && !key_timer_armed {
+                        key_timer_armed = true;
+                        let timer_state = start_state.clone();
+                        let timer_handle = handle.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(KEY_WAIT_AFTER_ADDRESS);
+                            if timer_state
+                                .compare_exchange(START_WAITING, START_TIMED_OUT, Ordering::SeqCst, Ordering::SeqCst)
+                                .is_ok()
+                            {
+                                engine_failed(&timer_handle);
+                            }
+                        });
+                    }
                 }
-                match port {
+                if start_state
+                    .compare_exchange(START_WAITING, START_SETTLED, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_err()
+                {
+                    return;
+                }
+                match port.filter(|_| key.is_some()) {
                     Some(found) => {
                         let base: Url = format!("http://127.0.0.1:{found}/")
                             .parse()
@@ -161,6 +211,13 @@ fn main() {
                         .center()
                         // Files dropped on the window reach the page as ordinary DOM drop events.
                         .disable_drag_drop_handler();
+                        let origin = format!("http://127.0.0.1:{found}");
+                        let builder = match &key {
+                            Some(value) => builder.initialization_script(format!(
+                                "if (window.location.origin === {origin:?}) {{ window.__FORMWAV_WINDOW_KEY = {value:?}; }}"
+                            )),
+                            None => builder,
+                        };
                         // macOS: the page's 38 px title row is the title bar (traffic lights over it, native title hidden).
                         #[cfg(target_os = "macos")]
                         let builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
@@ -180,15 +237,7 @@ fn main() {
                             Err(_) => close_splash(&handle),
                         }
                     }
-                    None => {
-                        close_splash(&handle);
-                        handle
-                            .dialog()
-                            .message("The formwav engine failed to start. Please relaunch formwav.")
-                            .blocking_show();
-                        kill_backend(&handle);
-                        std::process::exit(1);
-                    }
+                    None => engine_failed(&handle),
                 }
             });
             Ok(())

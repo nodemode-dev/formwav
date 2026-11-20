@@ -28,7 +28,7 @@ from mcp.types import ToolAnnotations
 
 logging.getLogger("httpx").setLevel(logging.WARNING)  # one INFO line per engine request is noise on the client's stderr
 ENGINE = os.environ.get("FORMWAV_ENGINE", "http://127.0.0.1:8060").rstrip("/")
-VERSION = "2.26.3"
+VERSION = "2.28.0"
 READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 MAKES_MEDIA = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 WRITES_FILE = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
@@ -54,7 +54,7 @@ mcp = MCPServer(
 async def _call(method: str, path: str, *, content: bytes | None = None, headers: dict[str, str] | None = None, timeout: float = 600.0) -> httpx.Response:
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            res = await client.request(method, f"{ENGINE}{path}", content=content, headers={**(headers or {}), "x-formwav-local": "1"})
+            res = await client.request(method, f"{ENGINE}{path}", content=content, headers={"x-formwav-agent": "formwav's MCP server", **(headers or {}), "x-formwav-local": "1"})
     except httpx.ConnectError as err:
         raise ToolError(f"The formwav engine is not running at {ENGINE}. Start formwav (or its engine with backend/boot_backend), then retry.") from err
     if res.status_code >= 400:

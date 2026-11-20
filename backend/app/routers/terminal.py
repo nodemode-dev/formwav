@@ -17,10 +17,12 @@ import json
 import os
 import signal
 import struct
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from ..core import window_key
 from ..core.config import cors_origins
 from ..services import claude_code, terminals
 
@@ -56,16 +58,24 @@ async def terminal(ws: WebSocket) -> None:
         from ..services import claude_code, winpty_relay
 
         await ws.accept()
-        argv, cwd = winpty_relay.shell(), os.path.expanduser("~")
+        if not await window_key.socket_key(ws):
+            await ws.close(code=4403)
+            return
+        argv, cwd, token = winpty_relay.shell(), os.path.expanduser("~"), ""
         if ws.query_params.get("run") == "claude":
             try:
-                argv = claude_code.argv(f"http://{ws.headers.get('host')}", resume=ws.query_params.get("resume") or None)
+                token, mcp_file = claude_code.issue(f"http://{ws.headers.get('host')}")
+                argv = claude_code.argv(resume=ws.query_params.get("resume") or None, mcp_file=mcp_file)
                 cwd = str(claude_code.workdir())
             except FileNotFoundError as err:
+                claude_code.revoke(token)
                 await ws.send_bytes(f"\r\n{err}\r\n".encode())
                 await ws.close()
                 return
-        await winpty_relay.relay(ws, argv, cwd, claude_code.child_env())
+        try:
+            await winpty_relay.relay(ws, argv, cwd, claude_code.child_env())
+        finally:
+            claude_code.revoke(token)
         return
     import fcntl
     import pty
@@ -74,15 +84,21 @@ async def terminal(ws: WebSocket) -> None:
     from ..services import claude_code
 
     await ws.accept()
+    if not await window_key.socket_key(ws):
+        await ws.close(code=4403)
+        return
     shell = os.environ.get("SHELL") or "/bin/bash"
     run_claude = ws.query_params.get("run") == "claude"
     argv = [shell, "-l"]
     cwd = os.path.expanduser("~")
+    token = ""
     if run_claude:
         try:
-            argv = claude_code.shell_wrapped(claude_code.argv(f"http://{ws.headers.get('host')}", resume=ws.query_params.get("resume") or None))
+            token, mcp_file = claude_code.issue(f"http://{ws.headers.get('host')}")
+            argv = claude_code.shell_wrapped(claude_code.argv(resume=ws.query_params.get("resume") or None, mcp_file=mcp_file))
             cwd = str(claude_code.workdir())
         except FileNotFoundError as err:
+            claude_code.revoke(token)
             await ws.send_bytes(f"\r\n{err}\r\n".encode())
             await ws.close()
             return
@@ -159,6 +175,7 @@ async def terminal(ws: WebSocket) -> None:
             except (ProcessLookupError, ChildProcessError):
                 pass
         os.close(fd)
+        claude_code.revoke(token)
         try:
             await ws.close()
         except RuntimeError:
@@ -215,12 +232,25 @@ async def terminal_close(body: IdBody) -> dict:
 async def claudecode_open(request: Request, body: ClaudeBody | None = None) -> dict:
     _gate()
     body = body or ClaudeBody()
-    if not claude_code.cli():
-        raise HTTPException(status_code=424, detail=claude_code.INSTALL)
     try:
         return terminals.open_claude(f"http://{request.headers.get('host')}", body.prompt, body.resume, body.cols, body.rows).describe()
-    except FileNotFoundError:
-        raise HTTPException(status_code=424, detail=claude_code.INSTALL) from None
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=424, detail=str(err)) from None
+    except terminals.Unavailable as err:
+        raise HTTPException(status_code=501, detail=str(err)) from None
+
+
+class AgentBody(OpenBody):
+    kind: Literal["codex", "cursor", "antigravity"]
+
+
+@router.post("/terminal/agent")
+async def terminal_agent(request: Request, body: AgentBody) -> dict:
+    _gate()
+    try:
+        return terminals.open_agent(body.kind, f"http://{request.headers.get('host')}", body.cols, body.rows).describe()
+    except FileNotFoundError as err:
+        raise HTTPException(status_code=424, detail=str(err)) from None
     except terminals.Unavailable as err:
         raise HTTPException(status_code=501, detail=str(err)) from None
 
@@ -231,20 +261,36 @@ async def terminal_attach(ws: WebSocket, sid: str) -> None:
         await ws.close(code=4403)
         return
     await ws.accept()
+    if not await window_key.socket_key(ws):
+        await ws.close(code=4403)
+        return
     session = terminals.SESSIONS.get(sid)
     if session is None:
         await ws.close(code=4404)
         return
     backlog, queue = session.attach()
+    typed = ws.query_params.get("control") == "binary"
+
+    async def control(kind: str) -> None:
+        if typed:
+            await ws.send_bytes(json.dumps({"type": kind}).encode("utf-8"))
+        elif kind == "exit":
+            await ws.send_text(json.dumps({"type": "exit"}))
 
     async def outbound() -> None:
+        await control("hello")
         if backlog:
             await ws.send_text(backlog)
         if not session.alive:
-            await ws.send_text(json.dumps({"type": "exit"}))
+            await control("exit")
         while True:
+            if queue.skipped and queue.empty():
+                await ws.send_text(queue.note())
             item = await queue.get()
-            await ws.send_text(json.dumps({"type": "exit"}) if item is None else item)
+            if item is None:
+                await control("exit")
+            else:
+                await ws.send_text(item)
 
     sender = asyncio.create_task(outbound())
     try:

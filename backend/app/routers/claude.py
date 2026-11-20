@@ -42,6 +42,11 @@ class Bridge:
         self.waiting: dict[str, asyncio.Future] = {}
         self.seen = 0.0
         self.ids = itertools.count(1)
+        self.notices = False
+
+    def withdraw(self, cid: str, reason: str) -> None:
+        if self.notices:
+            self.queue().put_nowait({"id": cid, "withdrawn": True, "reason": reason})
 
     def queue(self) -> asyncio.Queue:
         if self.pending is None:
@@ -69,55 +74,104 @@ BRIDGE = Bridge()
 
 class Consent:
     """PLAN_v14 W2: an agent from outside formwav (one added with claude mcp add, the command line, another program)
-    is asked about once: the window shows Allow, Always allow and Block; Always allow and Block are kept in the data
-    folder's agents.json (outside: ask, allow or block), Allow lasts until the engine stops. The Agent column's own
-    Claude Code carries the engine's token and is never asked."""
+    is asked about once: the window shows Allow, Always allow and Block; Always allow is kept in the data folder's
+    agents.json (outside: ask, allow or block), Allow and Block last until the engine stops. A window may also answer
+    once (this call runs, the next call asks again) or deny (this call is refused and nobody is asked again for PAUSE
+    seconds). A question nobody answers is dropped after LIMIT seconds. The Agent column's own Claude Code carries the
+    engine's token and is never asked; the stored choice block stops it too."""
+
+    LIMIT = 120.0
+    PAUSE = 600.0
+    ANSWERS = ("deny", "once", "always")
+    SESSION_ANSWERS = ("allow", "block")
+    DENIED = "The person using formwav said no to this request. formwav does not ask again for ten minutes; try again later."
+    ALL_BLOCKED = "Agents are blocked in formwav: the person using it set outside agents to Blocked, which stops formwav's own Chat and agent tabs too. They can change it in formwav."
 
     def __init__(self) -> None:
         self.session: str | None = None
         self.lock: asyncio.Lock | None = None
+        self.told = False
+        self.paused = 0.0
+        self.open: dict | None = None
 
     def _file(self):
         from ..core.paths import data_dir
 
         return data_dir() / "agents.json"
 
-    def policy(self) -> str:
+    def stored(self) -> dict:
+        from ..core import seal
+
         try:
-            value = json.loads(self._file().read_text()).get("outside", "ask")
-        except (OSError, ValueError, AttributeError):
-            value = "ask"
+            found = json.loads(self._file().read_text())
+        except (OSError, ValueError):
+            found = {}
+        return seal.effective(found if isinstance(found, dict) else {})
+
+    def policy(self) -> str:
+        value = self.stored().get("outside", "ask")
         return value if value in ("ask", "allow", "block") else "ask"
 
     def keep(self, value: str) -> None:
+        from ..core import seal
+
         try:
-            self._file().write_text(json.dumps({"outside": value}))
+            self._file().write_text(json.dumps(seal.sign({"outside": value})))
         except OSError:
             pass
+        self.told = False
 
-    async def check(self, name: str, client: str) -> str | None:
+    async def check(self, name: str, client: str, what: str | None = None, gone: Any = None) -> str | None:
         policy = self.policy()
         if policy == "allow" or self.session == "allow":
             return None
         if policy == "block" or self.session == "block":
-            return "The person using formwav has blocked outside agents (Settings > Agents, or the Agent column's prompt)."
+            return "The person using formwav has blocked outside agents (Settings > Agents, Outside agents)."
+        if time.monotonic() < self.paused:
+            return self.DENIED
         if self.lock is None:
             self.lock = asyncio.Lock()
         async with self.lock:
             if self.session in ("allow", "block"):
                 return None if self.session == "allow" else "Blocked by the person using formwav."
+            if time.monotonic() < self.paused:
+                return self.DENIED
             if not BRIDGE.live():
                 return "formwav's window is not open: the session's tools run in it, and the person there is asked first."
             cid = str(next(BRIDGE.ids))
             fut: asyncio.Future = asyncio.get_running_loop().create_future()
             BRIDGE.waiting[cid] = fut
-            await BRIDGE.queue().put({"id": cid, "consent": True, "name": name, "client": client})
+            card = {"id": cid, "consent": True, "name": name, "client": client}
+            card.update(agent=client, what=what or f"use {name.replace('_', ' ')}", answers=list(self.ANSWERS), sessionAnswers=list(self.SESSION_ANSWERS), alwaysScope="all", expiresIn=self.LIMIT, expiresAt=int((time.time() + self.LIMIT) * 1000))
+            if not self.told and self.stored().get("sealBroken"):
+                card["sealBroken"] = True
+                self.told = True
+            self.open = card
+            await BRIDGE.queue().put(card)
+            until = time.monotonic() + self.LIMIT
             try:
-                choice = await asyncio.wait_for(fut, timeout=120)
+                while True:
+                    try:
+                        choice = await asyncio.wait_for(asyncio.shield(fut), timeout=max(0.05, min(1.0, until - time.monotonic())))
+                        break
+                    except asyncio.TimeoutError:
+                        if time.monotonic() >= until:
+                            raise
+                        if gone is not None and await gone():
+                            BRIDGE.withdraw(cid, "gone")
+                            return "The caller went away before anyone at formwav answered."
             except asyncio.TimeoutError:
+                BRIDGE.withdraw(cid, "expired")
                 return "Nobody answered formwav's prompt within two minutes; ask again when someone is at formwav."
             finally:
+                self.open = None
                 BRIDGE.waiting.pop(cid, None)
+            BRIDGE.withdraw(cid, "answered")
+            if choice == "once":
+                return None
+            if choice == "deny":
+                self.paused = time.monotonic() + self.PAUSE
+                return self.DENIED
             if choice == "always":
                 self.keep("allow")
             self.session = "block" if choice == "block" else "allow"
@@ -130,27 +184,71 @@ CLIENTS: dict[str, str] = {}
 
 @router.get("/api/agents/outside")
 def outside_policy() -> dict:
-    return {"outside": CONSENT.policy(), "now": CONSENT.session}
+    from ..core import window_key
+
+    stored = CONSENT.stored()
+    policy = CONSENT.policy()
+    said = {
+        "value": STORED_WORDS[policy],
+        "changedOutside": bool(stored.get("sealBroken")),
+        "session": STORED_WORDS.get(CONSENT.session or ""),
+        "paused": max(0, round(CONSENT.paused - time.monotonic())),
+        "answers": list(CONSENT.ANSWERS),
+        "sessionAnswers": list(CONSENT.SESSION_ANSWERS),
+        "alwaysScope": "all",
+        "blockedStopsOwnTabs": True,
+    }
+    return {"outside": policy, "now": CONSENT.session, "seal": stored.get("seal"), "sealBroken": stored.get("sealBroken"), "secondWindowClaim": window_key.STATE["secondClaim"], **said}
+
+
+STORED_WORDS = {"ask": "ask", "allow": "allowed", "block": "blocked"}
 
 
 class Policy(BaseModel):
-    outside: str
+    outside: str | None = None
+    value: str | None = None
 
 
 @router.post("/api/agents/outside")
 def set_outside_policy(body: Policy) -> dict:
-    if body.outside not in ("ask", "allow", "block"):
+    if body.outside is not None:
+        chosen = body.outside if body.outside in STORED_WORDS else None
+    else:
+        chosen = {word: key for key, word in STORED_WORDS.items()}.get(body.value or "")
+    if chosen is None:
         raise HTTPException(status_code=400, detail="outside must be ask, allow or block")
-    CONSENT.keep(body.outside)
+    CONSENT.keep(chosen)
     CONSENT.session = None
-    return {"outside": body.outside}
+    CONSENT.paused = 0.0
+    return {"outside": chosen}
 
 
-async def _run_tool(name: str, arguments: dict, who: str, client: str) -> tuple[bool, Any]:
+@router.post("/api/window/key")
+def claim_window_key() -> dict:
+    from ..core import window_key
+
+    if window_key.stdout_mode():
+        raise HTTPException(status_code=404, detail="Not Found")
+    key = window_key.claim()
+    if key is None:
+        raise HTTPException(status_code=409, detail="Another window already holds this engine's window key; use that window, or restart formwav")
+    return {"key": key}
+
+
+@router.post("/api/window/ticket")
+def window_ticket() -> dict:
+    from ..core import window_key
+
+    return {"ticket": window_key.ticket()}
+
+
+async def _run_tool(name: str, arguments: dict, who: str, client: str, gone: Any = None) -> tuple[bool, Any]:
     if who == "outside":
-        refused = await CONSENT.check(name, client)
+        refused = await CONSENT.check(name, client, gone=gone)
         if refused:
             return False, refused
+    elif CONSENT.policy() == "block":
+        return False, CONSENT.ALL_BLOCKED
     try:
         return True, await BRIDGE.call(name, arguments, who)
     except (RuntimeError, asyncio.TimeoutError) as err:
@@ -195,8 +293,11 @@ def bridge_catalogue(body: Catalogue) -> dict:
 
 
 @router.get("/api/bridge/next")
-async def bridge_next(request: Request) -> Response:
+async def bridge_next(request: Request, notices: int = 0, again: int = 0) -> Response:
     BRIDGE.seen = time.monotonic()
+    BRIDGE.notices = bool(notices)
+    if again and CONSENT.open is not None:
+        return JSONResponse(CONSENT.open)
     try:
         item = await asyncio.wait_for(BRIDGE.queue().get(), timeout=20)
     except asyncio.TimeoutError:
@@ -252,7 +353,7 @@ async def mcp(request: Request) -> Response:
     method, id_, params = msg.get("method"), msg.get("id"), msg.get("params") or {}
     if id_ is None:
         return Response(status_code=202)
-    who = "inapp" if request.headers.get("x-formwav-inapp") == claude_code.INAPP_TOKEN else "outside"
+    who = "inapp" if claude_code.is_inapp(request.headers.get("x-formwav-inapp")) else "outside"
     if method == "initialize":
         info = params.get("clientInfo") or {}
         if info.get("name"):
@@ -271,7 +372,7 @@ async def mcp(request: Request) -> Response:
         if not any(t["name"] == name for t in BRIDGE.tools):
             return _rpc(id_, {"content": [{"type": "text", "text": f"There is no formwav tool named {name}; call tools/list." if BRIDGE.live() else "formwav's window is not open: the session's tools run in it."}], "isError": True})
         client = request.headers.get("x-formwav-agent") or CLIENTS.get(request.client.host if request.client else "?", "An agent outside formwav")
-        ok, out = await _run_tool(name, params.get("arguments") or {}, who, client)
+        ok, out = await _run_tool(name, params.get("arguments") or {}, who, client, request.is_disconnected)
         text = out if isinstance(out, str) else json.dumps(out)
         return _rpc(id_, {"content": [{"type": "text", "text": text}], "isError": not ok})
     return _rpc(id_, error=(-32601, f"no method {method}"))
@@ -280,6 +381,13 @@ async def mcp(request: Request) -> Response:
 @router.get("/api/claude/status")
 def claude_status() -> dict:
     return {**claude_code.info(), "window": BRIDGE.live(), "tools": len(BRIDGE.tools)}
+
+
+@router.get("/api/agents/status")
+def agents_status(fresh: bool = False) -> dict:
+    from ..services import agent_programs
+
+    return agent_programs.status(fresh)
 
 
 MAX_MESSAGES = 200
@@ -324,7 +432,7 @@ def _usage_of(u: dict) -> tuple[int, int]:
 
 
 def _tool_name(name: str) -> str:
-    return name.replace("mcp__formwav__", "")
+    return name.replace("mcp__formwav_tab__", "").replace("mcp__formwav__", "")
 
 
 def _consume(ev: dict, run: dict) -> None:
@@ -405,13 +513,13 @@ def _finish(run: dict, started: float, tail: list[str]) -> None:
     CHAT.publish("done", error=reply["error"], meta=reply["meta"], usage=dict(usage))
 
 
-def _run_chat(argv: list[str], cwd: str) -> None:
+def _run_chat(argv: list[str], cwd: str, token: str = "") -> None:
     started = time.monotonic()
     tail: list[str] = []
     run: dict = {"reply": {"role": "assistant", "parts": [], "error": "", "meta": {}}, "result": None, "done_out": 0, "call_out": 0, "code": None}
     try:
         try:
-            proc = subprocess.Popen(claude_code.shell_wrapped(argv), cwd=cwd, env=claude_code.child_env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding="utf-8", errors="replace")
+            proc = subprocess.Popen(claude_code.shell_wrapped(argv), cwd=cwd, env=claude_code.child_env(argv[0]), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, encoding="utf-8", errors="replace")
             CHAT.proc = proc
             assert proc.stdout is not None and proc.stderr is not None
 
@@ -440,6 +548,7 @@ def _run_chat(argv: list[str], cwd: str) -> None:
         finally:
             CHAT.proc = None
     finally:
+        claude_code.revoke(token)
         _finish(run, started, tail)
 
 
@@ -459,21 +568,23 @@ def claude_state() -> dict:
 async def claude_chat(body: Message, request: Request) -> dict:
     if CHAT.busy:
         raise HTTPException(status_code=409, detail="Claude Code is still answering the last message; Stop it first")
-    if not claude_code.cli():
-        raise HTTPException(status_code=424, detail=claude_code.INSTALL)
+    found = claude_code.usable("claude")
+    if found.state != "runs":
+        raise HTTPException(status_code=424, detail=claude_code.said(found))
     CHAT.loop = asyncio.get_running_loop()
     base = f"http://{request.url.netloc}"
     shown = body.text.strip()
     note = (body.note or "").strip()
     text = shown + (f"\n\n({body.context})" if body.context else "")
-    argv = claude_code.argv(base, text, CHAT.session, print_mode=True)
+    token, mcp_file = claude_code.issue(base)
+    argv = claude_code.argv(text, CHAT.session, print_mode=True, mcp_file=mcp_file)
     with CHAT.lock:
         CHAT.busy = True
         CHAT.cancelled = False
         CHAT.messages.append({"role": "user", "text": shown, "note": note})
         del CHAT.messages[:-MAX_MESSAGES]
     CHAT.publish("start", text=shown, note=note)
-    threading.Thread(target=_run_chat, args=(argv, str(claude_code.workdir())), daemon=True).start()
+    threading.Thread(target=_run_chat, args=(argv, str(claude_code.workdir()), token), daemon=True).start()
     return {"started": True, "session": CHAT.session}
 
 

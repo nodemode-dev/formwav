@@ -20,17 +20,69 @@ sys.path.insert(0, str(BACKEND))
 for _paid in ("ELEVENLABS_API_KEY", "ELEVENLABS_BASE_URL", "FAL_KEY", "FAL_QUEUE_URL", "ANTHROPIC_API_KEY", "ACESTEP_API_URL", "ACESTEP_API_KEY"):
     os.environ.pop(_paid, None)
 
-_OWN_DATA = None if "FORMWAV_DATA_DIR" in os.environ else tempfile.mkdtemp(prefix="formwav-tests-")
+os.environ["PYTHON_KEYRING_BACKEND"] = "keyring.backends.fail.Keyring"
+
+_OWN_DATA =None if "FORMWAV_DATA_DIR" in os.environ else tempfile.mkdtemp(prefix="formwav-tests-")
 if _OWN_DATA:
     os.environ["FORMWAV_DATA_DIR"] = _OWN_DATA
     _runtime = BACKEND / "data" / "speech-runtime"
     if _runtime.is_dir():
         os.symlink(_runtime, Path(_OWN_DATA) / "speech-runtime", target_is_directory=True)
 
+AGENT_STAND_INS = ("claude", "codex", "cursor-agent", "agy")
+AGENT_SHELL = """#!/bin/sh
+login=0; inter=0; script=""
+while [ $# -gt 0 ]; do
+  case "$1" in -l) login=1 ;; -i) inter=1 ;; -c) shift; script="$1" ;; esac
+  shift
+done
+if [ "$login" = 1 ] && [ -f "$HOME/.zprofile-path" ]; then PATH="$(cat "$HOME/.zprofile-path"):$PATH"; fi
+if [ "$inter" = 1 ] && [ -f "$HOME/.zshrc-path" ]; then PATH="$(cat "$HOME/.zshrc-path"):$PATH"; fi
+export PATH
+if [ -n "$script" ]; then exec /bin/sh -c "$script"; fi
+exec /bin/sh
+"""
+_AGENTS = Path(tempfile.mkdtemp(prefix="formwav-agents-"))
+AGENT_CALLS = _AGENTS / "agent-calls.log"
+_agent_calls: list[str] = []
+if os.name != "nt":
+    for _name in ("bin", "shell", "home"):
+        (_AGENTS / _name).mkdir()
+    for _name in AGENT_STAND_INS:
+        (_AGENTS / "bin" / _name).write_text(f'#!/bin/sh\necho "{_name} $*" >> "{AGENT_CALLS}"\nif [ "$1" = "--version" ]; then echo "0.0.0 (stand-in)"; exit 0; fi\nexit 1\n')
+        (_AGENTS / "bin" / _name).chmod(0o755)
+    (_AGENTS / "shell" / "zsh").write_text(AGENT_SHELL)
+    (_AGENTS / "shell" / "zsh").chmod(0o755)
+    os.environ["SHELL"] = str(_AGENTS / "shell" / "zsh")
+    os.environ["PATH"] = os.pathsep.join([str(_AGENTS / "bin"), os.environ.get("PATH", "")])
+    for _key in ("NPM_CONFIG_PREFIX", "npm_config_prefix", "PNPM_HOME", "VOLTA_HOME", "BUN_INSTALL", "NVM_SYMLINK"):
+        os.environ.pop(_key, None)
+
+
+@pytest.fixture(autouse=True)
+def only_stand_in_agent_programs(monkeypatch):
+    from app.services import agent_lookup, agent_programs, claude_code
+
+    known = agent_lookup.folders
+    monkeypatch.setattr(agent_lookup, "system_folders", lambda platform=None: [])
+    monkeypatch.setattr(agent_lookup, "folders", lambda program, home=None, env=None, platform=None: known(program, _AGENTS / "home" if home is None or Path(home) == Path.home() else home, env, platform))
+    monkeypatch.setitem(claude_code._info, "value", None)
+    monkeypatch.setitem(agent_programs._status, "value", None)
+    agent_lookup.forget()
+
 
 def pytest_sessionfinish(session, exitstatus):
+    try:
+        _agent_calls.extend(AGENT_CALLS.read_text(encoding="utf-8").splitlines())
+    except OSError:
+        pass
+    shutil.rmtree(_AGENTS, ignore_errors=True)
     if _OWN_DATA:
         shutil.rmtree(_OWN_DATA, ignore_errors=True)
+
+
+def pytest_terminal_summary(terminalreporter):
+    terminalreporter.write_line(f"agent program stand-ins started {len(_agent_calls)} time(s): " + (", ".join(sorted(set(_agent_calls))) or "none"))
 
 
 needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg on the PATH")
@@ -56,6 +108,17 @@ def whisper(*names: str) -> None:
 
 @pytest.fixture(scope="session")
 def client():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    from app.core import window_key
+
+    return TestClient(app, base_url="http://127.0.0.1:8060", headers={"x-formwav-local": "1", window_key.HEADER: window_key.KEY})
+
+
+@pytest.fixture(scope="session")
+def bare(client):
     from fastapi.testclient import TestClient
 
     from app.main import app

@@ -82,7 +82,17 @@ def main(argv: list[str]) -> int:
                 sys.exit(f"formwav: give parameters as key=value, not {pair}")
             k, v = pair.split("=", 1)
             params[k] = value(v)
-        out = call("POST", f"/api/commands/{urllib.parse.quote(rest[0])}", {"params": params})
+        reply = call("POST", "/mcp", {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "run_command", "arguments": {"id": rest[0], "params": params}}})
+        result = (reply or {}).get("result") or {}
+        text = "".join(p.get("text", "") for p in result.get("content") or [] if isinstance(p, dict))
+        try:
+            found = json.loads(text) if text else None
+        except ValueError:
+            found = None
+        if result.get("isError") or "error" in (reply or {}):
+            out = {"ok": False, "error": text or str(((reply or {}).get("error") or {}).get("message") or "failed")}
+        else:
+            out = {"ok": True, **found} if isinstance(found, dict) else {"ok": True, "result": found if found is not None else text}
         print(json.dumps(out, indent=2))
         return 0 if out.get("ok") else 1
     sys.exit("formwav: cli list [group] | describe <id> | run <id> key=value ... | extensions | extension <id> <command> key=value ... | commands [words] | headless run (--in FILE.fmw | --demo) [--cmd JSON]... [--bounce OUT.wav] [--save OUT.fmw] [--inspect]")

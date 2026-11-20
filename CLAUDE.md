@@ -65,7 +65,7 @@ Agents drive formwav through two surfaces; extend them rather than adding a thir
 registers it for Claude Code, `.codex/config.toml` for Codex, `.cursor/mcp.json` for Cursor) gives 37 tools over the engine's HTTP API, eight of which reach the open window's session (its 39 tools through `POST /mcp`, the catalogue through `/api/commands`, batches rolled back on failure); the in-app
 agent (`frontend/src/ui/agent-pane.ts`) gives 39 tools over the session's commands (33 tools, the 4 command tools and the 2 extension tools; PLAN_v13 S12 added the whole session's state and the engine's own commands, listed with their parameters by `frontend/src/engine/catalogue.ts`), placing what it makes on tracks. With no window, `./formwav cli headless run --in FILE.fmw|--demo --cmd JSON --bounce OUT.wav` applies the same engine commands to a saved session (`backend/app/headless.py`). The project skill
 `.claude/skills/formwav-harness` teaches an agent to use the MCP tools well: what to check first, which tool fits, the
-order of steps and how to recover; load it before driving formwav, and update its tools reference whenever a tool changes.
+order of steps and how to recover; load it before driving formwav, and update its tools reference whenever a tool changes. After a tool, a skill or the dock changes, run `./formwav agents sync`: it rewrites `agents/manifest.json` (the server's tools, which are read-only, which wait for the person's Allow, the skills, the dock), and `./formwav agents sync --check` fails when the committed file is stale.
 `.agents/skills/formwav-harness` is the same skill for agents that do not read `.claude`; copy the folder over it whenever
 the skill changes, so the two stay byte for byte equal.
 

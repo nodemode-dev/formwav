@@ -139,6 +139,9 @@ export function mountSpectrum(host: HTMLElement, engine: Engine, player: Player)
     } else void average();
   };
   panel.addEventListener("change", refresh);
+  document.addEventListener("nm:ui-settings-changed", () => {
+    if (!panel.hidden && avg && pickValue("mode") === "avg") draw(avg.db, avg.binHz);
+  });
   toggle.addEventListener("click", () => {
     panel.hidden = !panel.hidden;
     toggle.setAttribute("aria-pressed", String(!panel.hidden));

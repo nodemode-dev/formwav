@@ -1,0 +1,15 @@
+{
+"Always allow": "Vždy povolit",
+"Antigravity": "Antigravity",
+"Ask each time": "Pokaždé se zeptat",
+"Blocked": "Blokováno",
+"Dismiss": "Zavřít",
+"Hide Terminal": "Skrýt terminál",
+"Hide Terminal (Ctrl+J); programs keep running": "Skrýt terminál (Ctrl+J); programy běží dál",
+"More agents": "Další agenti",
+"Move the terminal to the right": "Přesunout terminál doprava",
+"Outside agents": "Vnější agenti",
+"Send to Claude Code": "Odeslat do Claude Code",
+"Show me around": "Provést aplikací",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "Co formwav udělá, když program s umělou inteligencí, který sám nespustil, požádá o použití jeho nástrojů. Blokováno zastaví také vlastní Chat a karty agentů formwav."
+}

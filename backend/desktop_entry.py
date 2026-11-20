@@ -7,10 +7,18 @@ beside the code: media, sessions and transcripts go to the per-user data folder 
 engine's keys are read from a .env in that folder (KEY=VALUE lines, never overriding the environment).
 """
 
-import json
 import os
-import shutil
 import sys
+
+if sys.stdin is None:
+    sys.stdin = open(os.devnull, encoding="utf-8")
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+import json
+import shutil
 from pathlib import Path
 
 APP_ID = "ai.nodemode.formwav"
@@ -139,17 +147,18 @@ def main() -> int:
                 probe.bind(("127.0.0.1", 8060))
                 port = 8060
             except OSError:
-                port = 0
+                probe.bind(("127.0.0.1", 0))
+                port = probe.getsockname()[1]
     from app.services import mcp_stdio
 
-    port_file = data / mcp_stdio.PORT_FILE
     try:
-        if port:
-            port_file.write_text(str(port))
-        else:
-            port_file.unlink(missing_ok=True)
+        (data / mcp_stdio.PORT_FILE).write_text(str(port))
     except OSError:
         pass
+    from app.core import window_key
+
+    if window_key.stdout_mode():
+        print(window_key.LINE + window_key.KEY, flush=True)
     uvicorn.run(fastapi_app, host="127.0.0.1", port=port, log_level="info")
     return 0
 

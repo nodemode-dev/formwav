@@ -179,6 +179,12 @@
   --z-debug: 100000;      /* development only */
 }
 
+:root[data-oled] {
+  --bg-hover: rgba(255, 255, 255, 0.1);
+  --border-soft: rgba(255, 255, 255, 0.12);
+  --line-0: var(--border-color);
+}
+
 body.theme-light {
   color-scheme: light;
   /* The redesign's black header strips and white primary buttons, as the light profiles need them. */

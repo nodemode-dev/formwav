@@ -10,6 +10,7 @@ case "${1:-}" in
   install) shift; exec ./formwav_oc_install "$@" ;;
   build) cd frontend && exec npm run build ;;
   cli) shift; exec python3 backend/formwav_cli.py "$@" ;;
+  agents) shift; exec python3 scripts/agents.py "$@" ;;
   claude)
     shift
     port="${FORMWAV_PORT:-8060}"
@@ -31,6 +32,7 @@ case "${1:-}" in
     echo "./formwav cli list|describe <id>|run <id> key=value   formwav's commands on the open session"
     echo "./formwav cli extensions | extension <id> <command>   the extensions loaded in the window, and their commands"
     echo "./formwav cli headless run --in FILE.fmw|--demo --cmd JSON --bounce OUT.wav   engine commands with no window"
+    echo "./formwav agents sync [--check]   write agents/manifest.json, or check that it is current"
     echo "./formwav doctor       what is installed"
     exit 0 ;;
 esac

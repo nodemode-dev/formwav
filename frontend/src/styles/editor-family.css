@@ -134,6 +134,7 @@
   box-shadow: inset 4px 0 0 var(--fw-lane-color, var(--fw-audio));
 }
 .fw-shell .fw-lane:has(.fw-clip[aria-selected="true"]) .fw-lane-head { background: color-mix(in srgb, var(--accent-color) 8%, var(--surface-1)); }
+:root[data-oled] .fw-lane-head { --surface-1: var(--bg-primary); }
 .fw-shell .fw-lane .fw-lane-head .fw-lane-num { grid-area: 1 / 1; align-self: center; padding: 0; font-family: var(--font-mono); font-size: var(--fs-11); font-weight: 400; color: var(--text-muted); }
 .fw-shell .fw-lane .fw-lane-head .fw-lane-name { grid-area: 1 / 2; padding-inline-start: 0; font-size: var(--fs-13); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .fw-shell .fw-lane .fw-lane-head .fw-lane-name::before { content: none; }
@@ -314,7 +315,7 @@
 .fw-pane-media .fw-browse-search { flex: none; margin: 8px 10px; }
 .fw-pane-media .fw-browse[data-panel="media"] { flex: 1 1 auto; min-block-size: 0; overflow: hidden auto; padding: 0; }
 .fw-pane-media .fw-browse[data-panel="media"] > :is(.fw-browse-head, .fw-fx-groups, .fw-agent-card) { display: none; }
-.fw-pane-media .fw-browse[data-panel="media"] > .fw-browse-hint { order: 3; margin: 0; padding: 10px 12px; font-size: var(--fs-11); line-height: 1.4; color: var(--text-muted); }
+.fw-pane-media .fw-browse[data-panel="media"] > .fw-browse-hint { order: 3; margin: auto 0 0; padding: 10px 12px; font-size: var(--fs-11); line-height: 1.4; color: var(--text-muted); }
 .fw-media-cols { display: grid; grid-template-columns: minmax(0, 1fr) 44px 52px; column-gap: 6px; align-items: center; min-block-size: 22px; padding: 0 12px 0 10px; background: var(--group-head); border-block: 1px solid var(--line-0); font-size: var(--fs-11); color: var(--text-muted); }
 .fw-media-cols > :last-child { text-align: end; }
 .fw-pane-media .fw-media-list { block-size: auto; max-block-size: none; }
@@ -327,7 +328,7 @@
 .fw-media-foot .fw-icon-btn { display: grid; place-items: center; inline-size: 26px; block-size: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); }
 .fw-media-foot .fw-icon-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .fw-media-foot .fw-ico { inline-size: 15px; block-size: 15px; }
-.fw-media-count { margin-inline-start: auto; color: var(--text-muted); }
+.fw-media-count { margin-inline-start: auto; min-inline-size: 9ch; text-align: end; color: var(--text-muted); }
 
 /* ---- the transport row and the status line ----------------------------------------------------------------------- */
 .fw-shell { grid-template-rows: var(--fw-titlebar-h) minmax(0, 1fr) var(--fw-status-h); }
@@ -378,6 +379,11 @@
 }
 .fw-toast {
   --fw-t: var(--fw-hue);
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: var(--fw-toast-y, 0px);
+  inline-size: fit-content;
+  margin-inline: auto;
   display: inline-flex;
   align-items: center;
   gap: 10px;

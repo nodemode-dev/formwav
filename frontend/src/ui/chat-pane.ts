@@ -1,6 +1,7 @@
 import { setClass, setText } from "../vendor/nodemode/dom-stable";
 import { agentIcon } from "./icons-agent";
 import { MarkdownStream } from "./markdown";
+import { streamTicket } from "../io/window-key";
 
 export function el<T extends HTMLElement = HTMLElement>(html: string): T {
   const t = document.createElement("template");
@@ -121,7 +122,15 @@ export class ChatPane {
     q(this.root, ".fw-chat-new").addEventListener("click", () => void engineCall("/api/claude/reset", {}).catch((e) => this.onFail(e)));
     q(this.root, ".fw-chat-handoff").addEventListener("click", () => void this.handoff());
     q(this.root, ".fw-chat-adopt").addEventListener("click", () => void this.adopt());
-    const source = new EventSource("/api/claude/events");
+    void this.listen();
+  }
+
+  private async listen(): Promise<void> {
+    const ticket = await streamTicket();
+    const source = new EventSource(`/api/claude/events?ticket=${encodeURIComponent(ticket)}`);
+    source.onerror = () => {
+      if (source.readyState === EventSource.CLOSED) window.setTimeout(() => void this.listen(), 1500);
+    };
     source.onmessage = (m) => {
       try {
         this.event(JSON.parse(m.data) as ChatEvent);

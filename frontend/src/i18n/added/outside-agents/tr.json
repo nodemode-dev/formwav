@@ -1,0 +1,15 @@
+{
+"Always allow": "Her zaman izin ver",
+"Antigravity": "Antigravity",
+"Ask each time": "Her seferinde sor",
+"Blocked": "Engellendi",
+"Dismiss": "Kapat",
+"Hide Terminal": "Terminali gizle",
+"Hide Terminal (Ctrl+J); programs keep running": "Terminali gizle (Ctrl+J); programlar çalışmaya devam eder",
+"More agents": "Diğer ajanlar",
+"Move the terminal to the right": "Terminali sağa taşı",
+"Outside agents": "Dış ajanlar",
+"Send to Claude Code": "Claude Code'a gönder",
+"Show me around": "Bana etrafı göster",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "formwav'ın başlatmadığı bir yapay zekâ programı araçlarını kullanmak istediğinde formwav'ın ne yapacağı. Engellendi, formwav'ın kendi Sohbet ve ajan sekmelerini de durdurur."
+}

@@ -1,0 +1,15 @@
+{
+"Always allow": "Tillåt alltid",
+"Antigravity": "Antigravity",
+"Ask each time": "Fråga varje gång",
+"Blocked": "Blockerad",
+"Dismiss": "Avfärda",
+"Hide Terminal": "Dölj terminalen",
+"Hide Terminal (Ctrl+J); programs keep running": "Dölj terminalen (Ctrl+J); programmen fortsätter att köras",
+"More agents": "Fler agenter",
+"Move the terminal to the right": "Flytta terminalen till höger",
+"Outside agents": "Externa agenter",
+"Send to Claude Code": "Skicka till Claude Code",
+"Show me around": "Visa mig runt",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "Vad formwav gör när ett AI-program som det inte självt har startat ber om att få använda dess verktyg. Blockerad stoppar även formwavs egen Chat och agentflikar."
+}

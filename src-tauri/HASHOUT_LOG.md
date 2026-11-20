@@ -2,6 +2,63 @@
 
 Context for the desktop shell lives here rather than in code comments.
 
+### src/main.rs · the engine has as long to start as before; the 10 seconds cover only the key (unreleased, after v2.26.3)
+- refers-to: src/main.rs :: KEY_WAIT_AFTER_ADDRESS, START_WAITING, START_SETTLED, START_TIMED_OUT, setup (the reading loop and its key timer)
+- kind: fix
+- logged: unreleased · 2026-11-19
+
+The entry below put a 10 second thread on the whole start, counted from the spawn. On origin/main the shell had no limit
+on how long the engine took to print its address, and a first launch of the frozen engine (cold disk, antivirus scan,
+unpacking) can take longer than 10 seconds, so a healthy app would have shown "failed to start". The rule now is the
+family's: no limit until the address line has arrived, then at most 10 seconds (`KEY_WAIT_AFTER_ADDRESS`) for the key,
+then the existing `engine_failed` path with no window. An engine that ends before its address still fails at once, as
+on origin/main. The engine prints the key on stdout, flushed, before uvicorn logs its address on stderr (seen by running
+backend/desktop_entry.py with the packaged-mode variable), but the two pipes are read as separate events, so the address
+event can be handled before the key event; the timer covers exactly that and an engine too old to print a key. The timer
+is a plain thread started once, when the address first arrives without a key. One `AtomicU8` decides who ends the wait:
+whoever moves it from `START_WAITING` first wins, by `compare_exchange`. The loop moves it to `START_SETTLED` after it
+ends and then opens the window or takes the failure path; the timer moves it to `START_TIMED_OUT` and then takes the
+failure path. The loser does nothing, so the failure path runs at most once, and once the window path has begun the
+timer can no longer fire. If the timer wins, the loop is still waiting on the receiver and returns without opening a
+window when it ends. Still only std plus what the shell already uses (tauri 2.12.1 and tauri-plugin-shell 2.4.0 in
+Cargo.lock); Cargo.toml and Cargo.lock are unchanged. Not compiled here (no WebKit): `rustfmt --edition 2021 --check`
+parses the file and reports differences only in lines this change does not touch. The loop's logic was copied into a
+scratch crate under /tmp (tokio 1.53.1 only) and run against fake event streams; see the build report.
+
+### src/main.rs · the wait for the engine's key line ends after 10 seconds (unreleased, after v2.26.3; replaced by the entry above)
+- refers-to: src/main.rs :: ENGINE_START_LIMIT, engine_failed, setup (the watcher thread, the reading loop's end)
+- kind: security
+- logged: unreleased · 2026-11-19
+
+The earlier entry reasoned that the reading loop could not wait forever; that was an argument about the engine's order
+of output, not a limit, and an engine that stays alive but silent would have held the splash open for ever. A plain
+thread now sleeps `ENGINE_START_LIMIT` (10 seconds, the family value) and, if the loop has not finished by then (an
+`AtomicBool` the loop sets when it ends), takes the existing "The formwav engine failed to start" path: the splash
+closes, the dialog shows, the engine is told to end and the app exits. The path is now `engine_failed`, which the loop's
+own failure branch calls too. The window opens only when the loop has the port and the key: an engine that ended with a
+port but no key also takes the failure path. A thread and a flag rather than a timeout around `rx.recv()`, because
+that needs tokio's timer, which is not a direct dependency of this crate and adding it would change Cargo.lock; nothing
+is added to Cargo.toml or Cargo.lock. Risk to watch: a first start of the frozen engine on a slow disk or with a
+scanning antivirus can take more than 10 seconds before its first line. Not compiled here (no WebKit in the sandbox);
+`rustfmt --edition 2021 --check src/main.rs` parses it, and the only differences it reports are in lines this change
+does not touch.
+
+### src/main.rs · the window gets the engine's window key (unreleased, after v2.26.3)
+- refers-to: src/main.rs :: setup (the sidecar's env, the reading loop, the main window's builder)
+- kind: security
+- logged: unreleased · 2026-11-19
+
+The engine is started with `FORMWAV_WINDOW_KEY_STDOUT=1`, so it prints `formwav-window-key: <key>` to its standard
+output, flushed, before uvicorn starts (backend/desktop_entry.py). The reading loop takes the key from Stdout events
+only (pattern `formwav-window-key: ([A-Za-z0-9_-]{32,})`) and the port from either stream, and stops once it has both
+or when the engine ends. It cannot wait forever: the key line is written before the server exists, so by the time the
+address appears the key is already in the stdout pipe, and an engine that ends gives Terminated. The main window gets
+one `initialization_script` (tauri 2.12.1, the version in Cargo.lock: `WebviewWindowBuilder::initialization_script(impl
+Into<String>)`, read in the crate source) that sets `window.__FORMWAV_WINDOW_KEY` only when `location.origin` is the
+engine's own `http://127.0.0.1:<port>`; the page reads it once and deletes it (frontend/src/io/window-key.ts).
+Nothing here logs or forwards the engine's standard output. Not compiled here (no WebKit in the sandbox); `rustfmt
+--emit stdout` parses it.
+
 ### capabilities/default.json · a double click on the title row maximizes on Windows and Linux (v2.26.2)
 - refers-to: capabilities/default.json :: permissions (`core:window:allow-internal-toggle-maximize`), description; ../frontend/src/ui/desktop.ts :: the title row's `data-tauri-drag-region`
 - kind: fix

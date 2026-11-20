@@ -12,7 +12,9 @@ import "./styles/frame.css";
 import "./styles/surfaces.css";
 import "./styles/canvas.css";
 import "./styles/scrollbars.css";
-import "./styles/terminal-dock.css";
+import "./dock/dock.css";
+import "./styles/dock-tokens.css";
+import "./styles/chat.css";
 import "./styles/home.css";
 import "./styles/prefs.css";
 import "./styles/desktop.css";
@@ -29,7 +31,7 @@ import { mountTransport } from "./ui/transport";
 import { mountLoop } from "./ui/loop";
 import { mountExport } from "./ui/export";
 import { mountNormalize } from "./ui/normalize";
-import { mountTerminalDock } from "./ui/terminal-dock";
+import { mountFamilyDock } from "./dock-adapter";
 import { mountAgent } from "./ui/agent-pane";
 import { mountRuler } from "./ui/ruler";
 import { mountGrid } from "./ui/grid";
@@ -89,17 +91,23 @@ import { mountAgents } from "./ui/agents";
 import { Player, type OutputChoice } from "./audio/player";
 import { revealApp } from "./vendor/nodemode/dom-stable";
 import { applyTheme } from "./vendor/formvis/themes";
+import { loadWindowKey, windowKey, WINDOW_KEY_HEADER } from "./io/window-key";
 
 // The engine refuses a change (POST, PUT, PATCH, DELETE under /api) without x-formwav-local, which a foreign page
 // cannot send; every request this app makes goes through fetch, so the header is added here once, for its own origin.
 const nativeFetch = window.fetch.bind(window);
+const keyReady = loadWindowKey(nativeFetch);
 window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(input instanceof Request ? input.url : String(input), location.href);
   const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-  if (url.origin !== location.origin || !url.pathname.startsWith("/api/") || method === "GET" || method === "HEAD") return nativeFetch(input, init);
-  const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-  headers.set("x-formwav-local", "1");
-  return nativeFetch(input, { ...init, headers });
+  if (url.origin !== location.origin || !url.pathname.startsWith("/api/")) return nativeFetch(input, init);
+  return keyReady.then(() => {
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    if (method !== "GET" && method !== "HEAD") headers.set("x-formwav-local", "1");
+    const key = windowKey();
+    if (key) headers.set(WINDOW_KEY_HEADER, key);
+    return nativeFetch(input, { ...init, headers });
+  });
 };
 
 applyTheme();
@@ -198,7 +206,7 @@ if (host) {
   mountBrowser(host, engine);
   mountExtensions(host, engine); // Form Extension Contract API 1: the Extensions menu, panel and agent tools
   mountDock(host, engine);
-  mountTerminalDock(host, engine);
+  mountFamilyDock(host, engine);
   host.querySelector<HTMLButtonElement>(".fw-tool-tray [data-cliptab]")?.click();
   bindInputs(engine); // track inputs live in the session (Track.input)
   mountProjects(host, engine, player);

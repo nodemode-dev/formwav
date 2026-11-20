@@ -1,0 +1,15 @@
+{
+"Always allow": "Salli aina",
+"Antigravity": "Antigravity",
+"Ask each time": "Kysy joka kerta",
+"Blocked": "Estetty",
+"Dismiss": "Hylkää",
+"Hide Terminal": "Piilota pääte",
+"Hide Terminal (Ctrl+J); programs keep running": "Piilota pääte (Ctrl+J); ohjelmat jatkavat toimintaansa",
+"More agents": "Lisää agentteja",
+"Move the terminal to the right": "Siirrä pääte oikealle",
+"Outside agents": "Ulkopuoliset agentit",
+"Send to Claude Code": "Lähetä Claude Codelle",
+"Show me around": "Esittele sovellus",
+"What formwav does when an AI program it did not start asks to use its tools. Blocked also stops formwav's own Chat and agent tabs.": "Mitä formwav tekee, kun tekoälyohjelma, jota se ei itse käynnistänyt, pyytää saada käyttää sen työkaluja. Estetty pysäyttää myös formwavin oman Chatin ja agenttivälilehdet."
+}

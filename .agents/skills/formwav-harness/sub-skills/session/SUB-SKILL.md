@@ -7,17 +7,17 @@ description: "Editing the session open in formwav's window through the MCP serve
 
 ## Purpose
 
-The other 28 tools make and measure media; they never touch a session's tracks or timeline. Six tools reach the session open in formwav's window, where every change is one undoable step the person can see and take back. This sub-skill says which to use and in what order.
+formwav's MCP server lists 37 tools. Eight of them reach the session open in formwav's window, where every change is one undoable step the person can see and take back; the other 29 make and measure media and never touch a session's tracks or timeline. This sub-skill says which of the eight to use and in what order.
 
 ## Preconditions
 
-formwav is running with its window open (the desktop app, or `./formwav` and the page at localhost:3060). The six tools relay through the engine to that window; with no window they fail with "formwav's window is not open". The first call from an agent outside formwav shows the person Allow, Always allow and Block in the window; say so before the first call, and wait for them rather than retrying.
+formwav is running with its window open (the desktop app, or `./formwav` and the page at localhost:3060). The six tools in the first table and the two extension tools further down relay through the engine to that window; with no window they fail with "formwav's window is not open". The first call from an agent outside formwav (formwav's own command line counts as one) shows the person Allow, Always allow and Block in the window: Allow lasts until formwav stops, Always allow is kept, and Block refuses outside agents until formwav stops. Only the window can change the choice. Say so before the first call, and wait for the person rather than retrying.
 
-## The six tools
+## The session and command tools
 
 | Tool | Use it to |
 | --- | --- |
-| `formwav_open_session_tools` | list the window's own session tools (37 at v2.18.0: get_session, set_track_gain, split_clip, apply_effect_to_clip, get_transcript, delete_words, generate_music placed on a track, and the rest) with their input schemas |
+| `formwav_open_session_tools` | list the window's own session tools (the window registers them while it is open, so they are not among the server's 37: get_session, set_track_gain, split_clip, apply_effect_to_clip, get_transcript, delete_words, generate_music placed on a track, and the rest) with their input schemas |
 | `formwav_open_session_call` | run one of those tools by name with its arguments |
 | `formwav_list_commands` | find catalogue commands by `group` (File, Edit, View, Track, Clip, Event, Transport, Settings, Session) or by words in `text` |
 | `formwav_describe_command` | read one command's parameters before running it |
@@ -45,7 +45,7 @@ Starting points (all `risky`: they replace the open session, so confirm with the
 
 ## With no window
 
-`./formwav cli headless commands [words]` lists the engine's document commands (122 at v2.18.0) with their parameters; `./formwav cli headless run --in FILE.fmw --cmd '{"type": "set-track-gain", "trackId": "t1", "gainDb": -6}' --bounce OUT.wav --save OUT.fmw --inspect` applies them to a saved session and bounces it, the same reducer the window uses. `--demo` starts from the demo session. Use this for batch work on files when the person does not need to watch.
+`./formwav cli headless commands [words]` lists the engine's document commands (the list is the count) with their parameters; `./formwav cli headless run --in FILE.fmw --cmd '{"type": "set-track-gain", "trackId": "t1", "gainDb": -6}' --bounce OUT.wav --save OUT.fmw --inspect` applies them to a saved session and bounces it, the same reducer the window uses. `--demo` starts from the demo session. Use this for batch work on files when the person does not need to watch.
 
 ## Extensions
 
