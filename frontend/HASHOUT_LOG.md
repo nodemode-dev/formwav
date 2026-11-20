@@ -192,6 +192,14 @@ frontend/
 
 ---
 
+## dock/ (16 files), dock-adapter.ts · the shared dock is module 2.2.0, and Antigravity is the fourth agent tab (unreleased, after v2.27.0) {#family-dock-2-2}
+
+`src/dock/` is the family's module 2.2.0, copied byte for byte from FormVis at commit ddc893ae (15 files and MANIFEST.json; `agents.ts` is new, nothing in the folder is edited here; `scripts/agents.py sync` checks every file against the manifest). In 2.2.0 the agent kinds are a list (`DOCK_AGENTS`: Claude Code, Codex, Cursor, Antigravity), and a kind is shown only when the adapter lists its id in `tabs().builtin` and `agentStatus()` reports it. Known differences in the DOM, not in the look: every control carries `data-dock-part`, agent tabs carry `is-program`.
+
+`dock-adapter.ts`: the adapter is `DockAdapter<"antigravity">` and the dock `Dock<"antigravity">`; `tabs().builtin` lists `antigravity`; `agentStatus()` passes the engine's fourth program through and, for any program whose `finding` is not `runs`, gives the engine's sentence as `note` (where formwav looked and how to install it), which the module shows in the row in place of its own; `terminal.open("antigravity", ...)` goes to `POST /api/terminal/agent` as Codex and Cursor do, and a record of kind `antigravity` is kept as that kind. Steps 2 to 5 of the 2.2.0 notes (dropping `keyHeaders`, part names for automation, a status line, `note` for the other kinds' own words) were not taken beyond the `note` above.
+
+Checked: `tsc --noEmit` with the repository's own settings. Not looked at in a browser: no window, no pixels, no throttled load was run for this change; the engine side was seen with a stand-in `agy` (see backend/HASHOUT_LOG.md, #agent-finder). The language tables are untouched; the module's sentences for the fourth kind show in English, as its other sentences do.
+
 ## dock/ (15 files), dock-adapter.ts, styles/dock-tokens.css, styles/chat.css, index.html, main.ts, ui/agent-pane.ts, ui/agents.ts, ui/i18n.ts · the terminal panel is the family's shared dock, module 2.1.0 (unreleased, after v2.27.0) {#family-dock}
 
 - refers-to: src/dock/* (copied byte for byte from formvis 8bbdf61b, never edited here; MANIFEST.json holds each file's sha256); src/dock-adapter.ts :: formwavDock, mountFamilyDock, outsideAgents, dockCombo, oldHeight, DOCK_KEY; src/styles/dock-tokens.css; index.html (the head script); ui/agent-pane.ts :: serve, run; ui/agents.ts :: the Outside agents select; ui/i18n.ts :: SKIP

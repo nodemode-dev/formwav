@@ -141,8 +141,8 @@ interface TermInfo {
   kind?: string;
   alive?: boolean;
 }
-const KINDS: PtyKind[] = ["shell", "claude", "codex", "cursor"];
-const termRecord = (info: TermInfo): DockTerminal => ({ id: info.id, title: info.title, alive: info.alive !== false, kind: KINDS.find((k) => k === info.kind) ?? "shell" });
+const KINDS: (PtyKind | "antigravity")[] = ["shell", "claude", "codex", "cursor", "antigravity"];
+const termRecord = (info: TermInfo): DockTerminal<"antigravity"> => ({ id: info.id, title: info.title, alive: info.alive !== false, kind: KINDS.find((k) => k === info.kind) ?? "shell" });
 
 export interface DockDeps {
   host: HTMLElement;
@@ -155,7 +155,7 @@ export interface DockDeps {
   homeShowing(): boolean;
 }
 
-export function formwavDock(deps: DockDeps): DockAdapter {
+export function formwavDock(deps: DockDeps): DockAdapter<"antigravity"> {
   return {
     words: {
       app: "formwav",
@@ -182,7 +182,7 @@ export function formwavDock(deps: DockDeps): DockAdapter {
     passKey: (e) => dockCombo(e) !== null,
     isDockChord: (e) => dockCombo(e) === "toggle",
     chordLabel: () => (isMac ? "Cmd+J" : "Ctrl+J"),
-    tabs: () => ({ builtin: ["chat", "shell", "claude", "codex", "cursor"] }),
+    tabs: () => ({ builtin: ["chat", "shell", "claude", "codex", "cursor", "antigravity"] }),
     classes: { iconButton: "fw-ibtn fw-ibtn-icon", button: "fw-ibtn", primaryButton: "fw-dock-primary", input: "fw-dock-input", select: "fw-dock-select", note: "fw-dock-note" },
     t: (_key, english) => english,
     onTheme: (handler) => document.addEventListener("nm:ui-settings-changed", handler),
@@ -217,11 +217,11 @@ export function formwavDock(deps: DockDeps): DockAdapter {
       scrollback: 5000,
     },
     agentStatus: async () => {
-      const said = await call<Record<string, { installed?: boolean; version?: string | null; install?: string; signedIn?: boolean | null } | undefined>>("/api/agents/status");
-      const out: DockAgentStatus = {};
-      for (const kind of ["claude", "codex", "cursor"] as const) {
+      const said = await call<Record<string, { installed?: boolean; version?: string | null; install?: string; signedIn?: boolean | null; finding?: string; said?: string } | undefined>>("/api/agents/status");
+      const out: DockAgentStatus<"antigravity"> = {};
+      for (const kind of ["claude", "codex", "cursor", "antigravity"] as const) {
         const p = said[kind];
-        if (p) out[kind] = { installed: p.installed === true, version: p.version ?? null, install: p.install ?? "", signedIn: p.signedIn ?? null };
+        if (p) out[kind] = { installed: p.installed === true, version: p.version ?? null, install: p.install ?? "", signedIn: p.signedIn ?? null, ...(p.finding && p.finding !== "runs" && p.said ? { note: p.said } : {}) };
       }
       return out;
     },
@@ -253,7 +253,7 @@ export function formwavDock(deps: DockDeps): DockAdapter {
   };
 }
 
-export function mountFamilyDock(host: HTMLElement, engine: Engine): Dock {
+export function mountFamilyDock(host: HTMLElement, engine: Engine): Dock<"antigravity"> {
   const pane = host.querySelector<HTMLElement>(".fw-pane-timeline");
   const anchor = host.querySelector<HTMLElement>(".fw-dock-anchor");
   const button = el<HTMLButtonElement>(`<button type="button" class="fw-ibtn" data-action="terminal" aria-pressed="false" title="A real shell on this machine (Ctrl+\`)">${agentIcon("terminal", 14)}<span>Terminal</span></button>`);
@@ -281,7 +281,7 @@ export function mountFamilyDock(host: HTMLElement, engine: Engine): Dock {
     }
   };
 
-  const dock: Dock = new Dock(
+  const dock: Dock<"antigravity"> = new Dock(
     formwavDock({
       host,
       pane,

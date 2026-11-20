@@ -16,11 +16,45 @@ def _script():
 
 def test_every_file_of_the_shared_dock_matches_its_manifest():
     listed = json.loads((DOCK / "MANIFEST.json").read_text(encoding="utf-8"))
-    assert listed["module"] == "dock" and listed["version"] == "2.1.0"
+    assert listed["module"] == "dock" and listed["version"] == "2.2.0"
     for name, wanted in listed["files"].items():
         assert hashlib.sha256((DOCK / name).read_bytes()).hexdigest() == wanted, name
     assert sorted(p.name for p in DOCK.iterdir()) == sorted([*listed["files"], "MANIFEST.json"])
     assert _script().dock_problems() == []
+
+
+def _finder_version(path):
+    import re
+
+    return re.search(r'^VERSION = "([^"]+)"$', path.read_text(encoding="utf-8"), re.M).group(1)
+
+
+def test_the_shared_finder_is_the_recorded_file():
+    script = _script()
+    version = _finder_version(script.LOOKUP)
+    assert script.LOOKUP_HASHES[version] == hashlib.sha256(script.LOOKUP.read_bytes()).hexdigest()
+    assert script.lookup_problems() == []
+
+
+def test_the_sync_names_the_shared_finder_edited_in_place_or_missing(tmp_path):
+    script = _script()
+    copy = tmp_path / "agent_lookup.py"
+    copy.write_bytes(script.LOOKUP.read_bytes())
+    version = _finder_version(copy)
+    script.ROOT, script.LOOKUP = tmp_path, copy
+    assert script.lookup_problems() == []
+    with open(copy, "a", encoding="utf-8") as out:
+        out.write("\n")
+    assert script.lookup_problems() == [f"agent_lookup.py: does not match the hash recorded for version {version} (the shared finder changes only as a whole new version)"]
+    copy.unlink()
+    assert script.lookup_problems() == ["agent_lookup.py: missing (the shared finder for the agent programs)"]
+
+
+def test_the_shared_finder_imports_nothing_from_the_app():
+    import re
+
+    imports = set(re.findall(r"^\s*(?:from|import)\s+([\w.]+)", _script().LOOKUP.read_text(encoding="utf-8"), re.M))
+    assert imports == {"__future__", "dataclasses", "os", "pathlib", "re", "shutil", "signal", "subprocess", "sys", "threading", "time", "winreg"}
 
 
 def test_the_sync_names_a_dock_file_that_was_changed(tmp_path):
