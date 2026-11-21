@@ -10,7 +10,7 @@
 <p align="center">
   <b>Audio editing and music; the multitrack studio of the Form family.</b><br>
   Record, edit, repair, mix and export on your own machine,<br>
-  with no account, no upload and no usage meter. Claude Code works inside it over MCP.
+  with no account, no upload and no usage meter. Claude Code, Codex, Cursor and Antigravity work inside it over MCP.
 </p>
 
 <p align="center">
@@ -127,7 +127,9 @@ One registry of 141 commands, the menu bar's items and the session tools. The wi
 
 formwav's window must be open, because the commands run in it. The first time an agent from outside formwav reaches the open session (formwav's own command line counts as one), the window asks: Allow (until formwav stops), Always allow (kept) or Block (outside agents are refused until formwav stops). Only the window can change that choice.
 
-`.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The engine also serves MCP at `http://127.0.0.1:8060/mcp`, and `backend/formwav_mcp/serve` runs a standalone stdio server. See [`AGENTS.md`](AGENTS.md).
+In the window, the Terminal button opens a terminal dock with shell tabs, a Chat tab and tabs for Claude Code, Codex, Cursor and Antigravity: each runs your own installed program, already connected to formwav's tools with a token of its own, so the window does not ask about it; setting Outside agents to Blocked in Settings > Agents stops these tabs too.
+
+`.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo, and Settings > Agents adds formwav to Claude Code, Codex, Cursor, Antigravity or Claude Desktop for your user account in one click. The engine also serves MCP at `http://127.0.0.1:8060/mcp`, and `backend/formwav_mcp/serve` runs a standalone stdio server. See [`AGENTS.md`](AGENTS.md).
 
 ## Extensions
 

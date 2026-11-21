@@ -59,6 +59,7 @@ tools are the open window's (the in-app agent's tools, relayed through `/api/bri
 session as undoable steps. A new session tool is added once, in `frontend/src/ui/agent-pane.ts`, and reaches both.
 Every menu bar item and session tool is a command in `frontend/src/ui/commands.ts` (W2): a new menu item becomes a
 command by itself (menu.words), so give it clear words and a title; agents reach commands through `run_command`.
+The terminal dock (`frontend/src/dock/agents.ts`, `frontend/src/dock-adapter.ts`) offers tabs for Claude Code, Codex, Cursor and Antigravity (`agy`), started by `backend/app/services/terminals.py` with a token per tab (`agent_programs.py`), so the window never asks about them; Settings > Agents connects any of the four, or Claude Desktop (`backend/app/routers/agents.py`).
 
 Agents drive formwav through two surfaces; extend them rather than adding a third. The MCP server in
 `backend/formwav_mcp` (started by `backend/formwav_mcp/serve`, or from a checkout by `mcp/formwav_mcp.py`; `.mcp.json`
