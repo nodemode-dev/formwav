@@ -140,6 +140,20 @@ backend/
 
 ---
 
+## ../build_windows_app.ps1 · the engine freeze gets its arguments one by one again (v2.31.1) {#windows-freeze-args}
+
+- refers-to: ../build_windows_app.ps1 :: `$Windowed`, the PyInstaller `Run` line; ../formwav.bat, ../formwav_oc_install.bat, oc_install.bat, ../frontend/oc_install.bat (read)
+- kind: fix
+- logged: v2.31.1 · 2026-11-20
+
+The owner's windows_x64 release build of 2.31.0 stopped twice at the freeze with `ERROR: Script file '--noconsole--clean --noconfirm --onefile --name formwav-engine ... desktop_entry.py' does not exist.`
+
+Cause: line 67 was `$Windowed = if ($env:FORMWAV_ENGINE_WINDOWED -eq "0") { @() } else { @("--noconsole") }`. PowerShell unrolls the output of an `if` used as an expression, so the one-element array arrived as the plain string `--noconsole` (and the empty one as `$null`). On the next line `$Windowed + @(...)` was then string plus array, which PowerShell reads as string concatenation: every argument was joined into one string, `Run` passed that single string to PyInstaller, and PyInstaller took it as the name of its script. The no-console change (#no-window, commit 5fda9e48) brought it in; no release has built on Windows since v2.28.0, so no build showed it before 2.31.0.
+
+The fix: `$Windowed = @()`, then `if ($env:FORMWAV_ENGINE_WINDOWED -ne "0") { $Windowed = @("--noconsole") }`. An assignment inside the `if` is a statement, not the `if`'s output, so `$Windowed` is an array of zero or one element and `$Windowed + @(...)` is an array again. The rest of the script was read for the same pitfall: `$Msys` (line 22) is a string used as one; `$Tauri` (line 39) has two or three elements in both branches, which stay an array, and is used as `$Tauri[0]` and `@($Tauri[1..($Tauri.Length - 1)])`, wrapped in `@()` whatever the slice gives; `$ConfigArgs` is set by plain assignments; no string is added to an array. `formwav.bat`, `formwav_oc_install.bat` and the `oc_install.bat` files they call were read token by token: their maturin and cargo lines have every token apart, and no `.bat` runs PyInstaller. CRLF line endings kept.
+
+Not seen: Windows itself; no PowerShell on the build machine; the first proof is the windows_x64 release build.
+
 ## app/core/no_window.py, desktop_entry.py, tests/test_no_window.py, ../build_windows_app.ps1 · on Windows no program the engine starts opens a console window, and the engine is built with none (unreleased, after v2.29.0) {#no-window}
 
 The owner's decision for the family (D3): a Windows engine is packaged with no console window. 2.29.0 held it because the engine starts console programs in many places (2.29.0's report counted about forty; the walk below finds 105 calls) (ffmpeg, ffprobe, the plug-in, Nyquist, Vamp and LV2 helpers, taskkill, git and the rest); an engine with a console shares it with them and the shell starts the engine with CREATE_NO_WINDOW (tauri-plugin-shell 2.4.0), so nothing shows today, but an engine with no console at all would let each of them open a console window of its own while it runs.

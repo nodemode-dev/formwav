@@ -64,7 +64,8 @@ if (Test-Path wheels) { Remove-Item -Recurse -Force wheels }
 Run ".venv-package\Scripts\maturin.exe" @("build", "--release", "-m", "..\native\formwav-dsp\Cargo.toml", "--features", "python,native", "-o", "wheels")
 Run $Py @("-m", "pip", "install", "--force-reinstall", (Get-ChildItem wheels\*.whl | Select-Object -First 1).FullName)
 # PyInstaller's data separator on Windows is ;
-$Windowed = if ($env:FORMWAV_ENGINE_WINDOWED -eq "0") { @() } else { @("--noconsole") }
+$Windowed = @()
+if ($env:FORMWAV_ENGINE_WINDOWED -ne "0") { $Windowed = @("--noconsole") }
 Run ".venv-package\Scripts\pyinstaller.exe" ($Windowed + @("--clean", "--noconfirm", "--onefile", "--name", "formwav-engine",
   "--collect-all", "uvicorn", "--collect-all", "formwav_dsp", "--collect-all", "app", "--collect-all", "keyring", "--hidden-import", "app.main", "--collect-all", "winpty",
   "--add-data", "..\frontend\dist;frontend_dist",
